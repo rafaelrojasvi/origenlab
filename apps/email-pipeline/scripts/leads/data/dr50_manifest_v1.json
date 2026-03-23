@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "payload_file": "dr50_payload_v1.json",
+  "expected_sha256": "62666d962b966587f240d92344e804ffd6202b8e720ef5820838a99bf0bbf3e4",
+  "row_count": 23
+}

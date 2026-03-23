@@ -18,8 +18,9 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Local data dirs (real PST/mbox/SQLite live outside repo; see .env.example)
-data/
+# App-root local data only (PST/mbox/SQLite live outside repo; see .env.example).
+# Use leading slash so we do NOT ignore scripts/leads/data/ (versioned DR50 JSON manifests).
+/data/
 tmp/
 logs/
 scripts/leads/input/*
