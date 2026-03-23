@@ -6,6 +6,15 @@ This folder is the **default** destination for generated reports (HTML + JSON).
 
 **Command reference:** [docs/RUNBOOK.md](../../docs/RUNBOOK.md#m-eprun-path).
 
+<a id="m-repout-operational-trust"></a>
+### Operational trust scorecard (`active/`)
+
+[`scripts/qa/audit_operational_trust.py`](../../scripts/qa/audit_operational_trust.py) (y [`publish_gate.py`](../../scripts/qa/publish_gate.py)) escriben **`reports/out/active/operational_trust_scorecard.json`**: resultado JSON de checks (`check_id`, `ok`, `critical`, `message`, `details`). Es un **artefacto generado** en la carpeta operativa `active/` (no es histórico por timestamp); conviene regenerarlo al ejecutar el audit.
+
+El resumen legible en Markdown es **[`docs/generated/operational_trust_scorecard.md`](../../docs/generated/operational_trust_scorecard.md)** (también generado; no editar a mano salvo que el proceso cambie).
+
+**Contraste:** Carpetas `full_*` u otros informes bajo `reports/out/` son **runs** de informe de correo; `client_pack_latest/` es el **último paquete leads** para cliente; `active/` agrega **CSV operativos** + este scorecard JSON como señales de coherencia inmediata. Ver [REPORTING — QA](../../docs/REPORTING.md#m-eprep-leads-qa).
+
 - Generate a new run:
 
 ```bash

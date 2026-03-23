@@ -205,6 +205,10 @@ Roll many `lead_master` rows (tenders) into **accounts** without deleting or rew
 
 See **[LEAD_ACCOUNT_LAYER.md](LEAD_ACCOUNT_LAYER.md)** for tables, CLI, and sample SQL.
 
+## Publication QA (operational trust)
+
+Before treating the static **client pack** and **`reports/out/active/`** lead exports as ready for external sharing, run the publication gate ([`publish_gate.py`](../../scripts/qa/publish_gate.py)). It checks consistency between SQLite, [`summary.json`](../REPORTING.md#m-eprep-leads), top20/readiness/hunt CSVs, and (unless skipped) evidence URLs. Procedure and failure handling: **[RUNBOOK.md §4](../RUNBOOK.md#m-eprun-publish-qa)**; reporting context: **[REPORTING.md — QA leads](../REPORTING.md#m-eprep-leads-qa)**.
+
 ## Planned for v2
 
 - Streamlit “Prospección” / “Leads externos” tab.

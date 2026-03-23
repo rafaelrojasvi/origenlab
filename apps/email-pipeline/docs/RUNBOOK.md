@@ -154,6 +154,71 @@ uv run python scripts/reports/generate_client_report.py --out reports/out/client
 
 ---
 
+<a id="m-eprun-publish-qa"></a>
+## 4. Publish-safe QA (operational trust gate)
+
+Scripts live under [`scripts/qa/`](../scripts/qa/). Shared checks and helpers: [`operational_trust.py`](../src/origenlab_email_pipeline/operational_trust.py). A **PASS** means every **critical** check in the executed steps succeeded (exit code `0`). A **FAIL** means at least one critical check failed (exit code `1`). Some checks are **non-critical** (they print `FAIL` but do not alone fail the step); the scripts only use **critical** outcomes for exit codes.
+
+**What the gate does *not* do:** It does not prove commercial claims, email deliverability, or that every business fact in a narrative is true. It validates **internal consistency** between the SQLite DB, the latest client pack snapshot, the operational hunt/readiness CSVs, URL shape, and (unless skipped) live HTTP responses for collected links.
+
+### Recommended sequence before sharing lead/client artifacts
+
+1. Regenerate the client pack if the DB or lead inventory changed: [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py) → [`reports/out/client_pack_latest/`](../reports/out/README.md).
+2. Run the full gate (from `apps/email-pipeline/`):
+
+   ```bash
+   uv run python scripts/qa/publish_gate.py
+   ```
+
+3. Treat **external** handoff of the pack + related CSVs as **publish-safe only if the gate PASS** (with evidence HTTP enabled — see below).
+
+### Commands
+
+**Full gate** (runs verify → audit → evidence checks):
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/qa/publish_gate.py
+```
+
+Common options (forwarded / used by substeps):
+
+| Flag | Effect |
+|------|--------|
+| `--db PATH` | SQLite for comparisons (default: `ORIGENLAB_SQLITE_PATH` / settings) |
+| `--max-pack-age-hours N` | Client pack `summary.json` `generated_at_utc` must be ≤ `N` hours old (default `168`; used in audit) |
+| `--skip-evidence-http` | **Skips** [`check_evidence_links.py`](../scripts/qa/check_evidence_links.py) entirely (exit `0` for that step). Use for quick internal runs **without** live URL probes. **Do not treat a run with this flag as final publication validation** — external sharing should use a full run **without** `--skip-evidence-http` so evidence URLs are checked. |
+| `--evidence-timeout`, `--evidence-max-failures`, `--evidence-max-fail-ratio` | Passed into the evidence step (per-URL timeout, max failing URLs, max failure ratio) |
+
+**Individual scripts** (same working directory):
+
+```bash
+uv run python scripts/qa/verify_client_pack_consistency.py
+uv run python scripts/qa/audit_operational_trust.py
+uv run python scripts/qa/check_evidence_links.py
+```
+
+### What each step checks (high level)
+
+| Script | Reads (typical) | Writes | Exit `1` when |
+|--------|-----------------|--------|----------------|
+| [`verify_client_pack_consistency.py`](../scripts/qa/verify_client_pack_consistency.py) | [`reports/out/client_pack_latest/summary.json`](../reports/out/README.md), SQLite `lead_master`, [`reports/out/active/leads_top20_for_client_report.csv`](../reports/out/README.md), hunt + readiness CSVs under `active/` | stdout only | Any **critical** check fails (pack vs DB totals/fit buckets, top20 vs readiness/hunt/DB, cohort partition) |
+| [`audit_operational_trust.py`](../scripts/qa/audit_operational_trust.py) | Same `active/` paths + [`docs/generated/CONTACT_READINESS_AUDIT.md`](generated/CONTACT_READINESS_AUDIT.md) for DB path line | [`reports/out/active/operational_trust_scorecard.json`](../reports/out/README.md), [`docs/generated/operational_trust_scorecard.md`](generated/operational_trust_scorecard.md) | Any **critical** check fails (cohort/readiness, stale pack, merged vs current hunt IDs, etc.) |
+| [`check_evidence_links.py`](../scripts/qa/check_evidence_links.py) | URL columns in top20 + hunt CSVs | stdout only | Invalid `http(s)` URL strings and/or HTTP probe failures beyond [`--max-failures` / `--max-fail-ratio`](../scripts/qa/check_evidence_links.py) |
+
+### When something fails
+
+- **Pack vs DB mismatch** — Regenerate the pack after DB changes: `uv run python scripts/reports/build_leads_client_pack.py`.
+- **Stale client pack** — Regenerate the pack or raise `--max-pack-age-hours` only if you intentionally accept an older snapshot.
+- **Hunt merged vs current `id_lead` mismatch** — Re-align merged to the current cohort (see [`merge_contact_hunt_enrichment.py`](../scripts/leads/merge_contact_hunt_enrichment.py) docstring and [`RUNBOOK.md`](RUNBOOK.md#m-eprun-publish-qa) / [`scripts/README.md`](../scripts/README.md)).
+- **Readiness / top20 / cohort** — Re-run [`audit_contact_readiness.py`](../scripts/leads/audit_contact_readiness.py) and related lead scripts so `active/` exports match the hunt.
+- **Evidence URLs** — Fix or remove bad URLs in the CSVs; adjust thresholds only with care (they are safety limits, not business rules).
+- **Provenance / taxonomy warnings** — Some checks are **non-critical**; read the line marked `FAIL` without `[critical]` as advisory.
+
+Further detail: [`REPORTING.md`](REPORTING.md#m-eprep-leads-qa), [`scripts/README.md`](../scripts/README.md).
+
+---
+
 <a id="m-eprun-legacy"></a>
 ## Legacy filenames
 

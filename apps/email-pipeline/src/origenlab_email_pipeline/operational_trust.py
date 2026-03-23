@@ -107,12 +107,31 @@ def load_client_pack_summary(path: Path) -> dict[str, Any] | None:
         return None
 
 
+# Same expression as build_leads_client_pack: empty/whitespace fit_bucket counts as low_fit.
+_FIT_BUCKET_GROUP_SQL = "COALESCE(NULLIF(TRIM(fit_bucket), ''), 'low_fit')"
+
+
+def normalized_fit_bucket_counts(raw: dict[str, Any]) -> dict[str, int]:
+    """Merge summary/DB fit_bucket maps for comparison (case-fold, trim, '' → low_fit)."""
+    out: dict[str, int] = {}
+    for k, v in raw.items():
+        label = str(k).strip().lower() if k is not None else ""
+        if not label:
+            label = "low_fit"
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            n = int(float(v))
+        out[label] = out.get(label, 0) + n
+    return out
+
+
 def db_lead_totals(conn: sqlite3.Connection) -> dict[str, Any]:
     ensure_leads_tables(conn)
     total = conn.execute("SELECT COUNT(*) FROM lead_master").fetchone()[0]
     fit_rows = conn.execute(
-        """
-        SELECT COALESCE(fit_bucket, 'low_fit') AS fb, COUNT(*)
+        f"""
+        SELECT {_FIT_BUCKET_GROUP_SQL} AS fb, COUNT(*)
         FROM lead_master GROUP BY fb
         """
     ).fetchall()
@@ -386,14 +405,21 @@ def verify_client_pack_against_db(
     )
     exp_fit = totals.get("fit_bucket") or {}
     live_fit = live["fit_bucket"]
-    fit_ok = exp_fit == live_fit
+    norm_exp = normalized_fit_bucket_counts(exp_fit)
+    norm_live = normalized_fit_bucket_counts(live_fit)
+    fit_ok = norm_exp == norm_live
     checks.append(
         TrustCheck(
             "pack_vs_db_fit_buckets",
             ok=fit_ok,
             critical=True,
             message="summary fit_bucket matches DB" if fit_ok else "fit_bucket mismatch",
-            details={"summary": exp_fit, "db": live_fit},
+            details={
+                "summary": exp_fit,
+                "db": live_fit,
+                "summary_normalized": norm_exp,
+                "db_normalized": norm_live,
+            },
         )
     )
     return checks
@@ -607,6 +633,57 @@ def collect_urls_from_csvs(
 
 def any_critical_failed(checks: Iterable[TrustCheck]) -> bool:
     return any(not c.ok and c.critical for c in checks)
+
+
+@dataclass(frozen=True)
+class LeadsActivePaths:
+    """Standard repo locations for hunt, readiness exports, top20, client pack."""
+
+    repo_root: Path
+    hunt: Path
+    ready: Path
+    needs: Path
+    not_ready: Path
+    top20: Path
+    merged_hunt: Path
+    contact_audit_md: Path
+    client_pack_summary: Path
+
+
+def leads_active_paths(repo_root: Path) -> LeadsActivePaths:
+    active = repo_root / "reports" / "out" / "active"
+    return LeadsActivePaths(
+        repo_root=repo_root,
+        hunt=active / "leads_contact_hunt_current.csv",
+        ready=active / "leads_ready_to_contact.csv",
+        needs=active / "leads_needs_contact_research.csv",
+        not_ready=active / "leads_not_ready.csv",
+        top20=active / "leads_top20_for_client_report.csv",
+        merged_hunt=active / "leads_contact_hunt_current_merged.csv",
+        contact_audit_md=repo_root / "docs" / "generated" / "CONTACT_READINESS_AUDIT.md",
+        client_pack_summary=repo_root / "reports" / "out" / "client_pack_latest" / "summary.json",
+    )
+
+
+def dedupe_urls(urls: list[str]) -> list[str]:
+    return list(dict.fromkeys((u or "").strip() for u in urls if (u or "").strip()))
+
+
+def check_evidence_url_formats(urls: list[str]) -> TrustCheck:
+    """Reject non-http(s) URL strings collected from CSV columns (mailto:, relative, etc.)."""
+    bad: list[str] = []
+    for u in dedupe_urls(urls):
+        if not is_valid_http_url(u):
+            bad.append(u[:400])
+    return TrustCheck(
+        "evidence_url_format",
+        ok=len(bad) == 0,
+        critical=True,
+        message="All collected evidence URLs use http(s) scheme with host"
+        if not bad
+        else f"Invalid URL format(s): {len(bad)} (showing first 5): {bad[:5]}",
+        details={"invalid": bad[:30], "invalid_count": len(bad)},
+    )
 
 
 def trust_summary(checks: list[TrustCheck]) -> dict[str, Any]:

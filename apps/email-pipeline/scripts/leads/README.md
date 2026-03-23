@@ -21,7 +21,21 @@ File-based ingest and normalization for Chile external leads. Run from **repo ro
 15. **DR50 ready-8 → hunt + top20 informe** — `apply_ready8_contact_patch.py` (actualiza `leads_contact_hunt_current.csv` desde `leads_dr50_ready_candidates.csv`, escribe `leads_contact_hunt_current_ready8_patch.csv`, `leads_top20_for_client_report.csv`, `docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md`). Luego import + `audit_contact_readiness.py`.
 16. **Reconciliación DR 50 filas (solo análisis)** — `reconcile_deepresearch_50_with_current_cohort.py` → CSVs `leads_dr50_*` y `docs/generated/DEEP_RESEARCH_RECONCILIATION.md`.
 
-Or run the full pipeline. Sample CSVs in `samples/` let you run without real data:
+Or run the full pipeline.
+
+<a id="m-leads-dr50-payload"></a>
+### DR50 payload (versionado, no hardcoded)
+
+[`reconcile_deepresearch_50_with_current_cohort.py`](reconcile_deepresearch_50_with_current_cohort.py) carga las filas de contacto del lote DR50 desde JSON versionado bajo [`scripts/leads/data/`](data/) (no están embebidas en el script):
+
+| Archivo | Rol |
+|---------|-----|
+| [`data/dr50_manifest_v1.json`](data/dr50_manifest_v1.json) | Apunta al fichero payload, `row_count`, y `expected_sha256` sobre **bytes** del JSON |
+| [`data/dr50_payload_v1.json`](data/dr50_payload_v1.json) | Array de objetos fila (p. ej. `id_lead`, contactos DR) |
+
+Carga verificada: [`origenlab_email_pipeline/dr50_payload_loader.py`](../../src/origenlab_email_pipeline/dr50_payload_loader.py) — rechaza checksum incorrecto, conteo distinto o `id_lead` duplicado. **Por qué:** reproducibilidad y trazabilidad cuando el CSV de DR cambia (actualizar payload + manifest; recalcular SHA256 del fichero tal cual en disco).
+
+**Gate QA:** la capa operational trust no valida el payload DR50; solo documenta aquí el contrato de datos del script de reconciliación. Publicación / coherencia leads: [`docs/RUNBOOK.md`](../../docs/RUNBOOK.md#m-eprun-publish-qa). Sample CSVs in `samples/` let you run without real data:
 
 ```bash
 export LEADS_CHILECOMPRA_FILE=scripts/leads/samples/chilecompra_sample.csv

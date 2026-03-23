@@ -2,7 +2,7 @@
 
 HTML/JSON outputs usually go under **`~/data/origenlab-email/reports/`** (see `.env.example` and `ORIGENLAB_REPORTS_DIR`).
 
-**How to generate and what each artifact means:** [docs/RUNBOOK.md](../docs/RUNBOOK.md#m-eprun-path) and [docs/reporting/OUTPUTS_OVERVIEW.md](../docs/reporting/OUTPUTS_OVERVIEW.md).
+**How to generate and what each artifact means:** [docs/RUNBOOK.md](../docs/RUNBOOK.md#m-eprun-path) and [docs/reporting/OUTPUTS_OVERVIEW.md](../docs/reporting/OUTPUTS_OVERVIEW.md). **Pre-share validation (client pack + active CSVs):** [RUNBOOK §4](../docs/RUNBOOK.md#m-eprun-publish-qa).
 
 **Open the latest report from the repo:**
 

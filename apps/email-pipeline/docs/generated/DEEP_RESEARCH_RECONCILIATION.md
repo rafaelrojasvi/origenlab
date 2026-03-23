@@ -5,7 +5,7 @@
 | Cohort | Typical `id_lead` | Repo examples | Overlap with current hunt (200 ids) |
 |--------|-------------------|---------------|-------------------------------------|
 | **Legacy / non-current** | Small integers (1, 294, 302, 624, …) | `reports/out/reference/*DEEPRESEARCH*.csv` | **0** matching ids: `[]` |
-| **Current-style DR batch (this note)** | 607xxx–622xxx | Embedded in `scripts/leads/reconcile_deepresearch_50_with_current_cohort.py` (`DR50_ROWS`) | First **50** rows of `leads_contact_hunt_for_deepsearch.csv` — **all 50** are in `leads_contact_hunt_current.csv` |
+| **Current-style DR batch (this note)** | 607xxx–622xxx | `scripts/leads/data/dr50_payload_v1.json` (SHA256 in `dr50_manifest_v1.json`) | First **50** rows of `leads_contact_hunt_for_deepsearch.csv` — **all 50** are in `leads_contact_hunt_current.csv` |
 
 Legacy files are useful as **historical examples** only. They must **not** be used to mark readiness for the present 200-id operational cohort except where `id_lead` literally matches (here: **none**).
 

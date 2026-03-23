@@ -329,6 +329,7 @@ origenlab-email-pipeline/
 │   ├── validation/               # phase checks, attachment extraction
 │   ├── ml/                       # embeddings, clusters, ML explore
 │   ├── tools/                    # inspect DB, dedupe, export, env checks
+│   ├── qa/                       # operational trust / publish gate (see docs/RUNBOOK.md §4)
 │   └── README.md
 ├── src/origenlab_email_pipeline/
 │   ├── config.py
@@ -343,4 +344,4 @@ origenlab-email-pipeline/
 └── tests/                        # pytest (test_parse_mbox_body, test_business_mart_app_ux, etc.)
 ```
 
-All one-off and pipeline commands live in `scripts/`; they are not installed as package entrypoints. See **scripts/README.md** for categories and main commands.
+All one-off and pipeline commands live in `scripts/`; they are not installed as package entrypoints. See **scripts/README.md** for categories and main commands. **Lead/client pack publish-safe check:** `uv run python scripts/qa/publish_gate.py` — [docs/RUNBOOK.md](docs/RUNBOOK.md#m-eprun-publish-qa).

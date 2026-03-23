@@ -8,6 +8,15 @@ Assumptions:
 Default behavior:
 - Only fill fields in the base sheet when the base value is empty.
 - Does not guess emails/phones.
+
+Cohort drift: if ``leads_contact_hunt_current_merged.csv`` was built from an older id set than
+``leads_contact_hunt_current.csv``, re-base merged onto current while keeping overlapping
+enrichment by ``id_lead``::
+
+    uv run python scripts/leads/merge_contact_hunt_enrichment.py \\
+      -b reports/out/active/leads_contact_hunt_current.csv \\
+      -e reports/out/active/leads_contact_hunt_current_merged.csv \\
+      -o reports/out/active/leads_contact_hunt_current_merged.csv
 """
 
 from __future__ import annotations

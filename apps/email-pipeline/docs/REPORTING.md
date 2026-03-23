@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-03-23
+Last reviewed: 2026-03-24
 
 Un solo lugar para **cómo generar informes** y **dónde quedan**. El alcance legal/comercial del informe de correo sigue en **[REPORT_SCOPE_CLIENT.md](REPORT_SCOPE_CLIENT.md)** ([`generate_client_report.py`](../scripts/reports/generate_client_report.py) lo copia tal cual a cada carpeta como `ALCANCE_INFORME.md`).
 
@@ -113,3 +113,23 @@ uv run python scripts/leads/prepare_active_workspace.py
 ```
 
 Más detalle del pipeline de leads: **[leads/LEAD_PIPELINE.md](leads/LEAD_PIPELINE.md)**. Vista de arquitectura: **[ARCHITECTURE.md](ARCHITECTURE.md)**, contexto de negocio: **[BUSINESS_CONTEXT.md](BUSINESS_CONTEXT.md)**.
+
+<a id="m-eprep-leads-qa"></a>
+### QA operativa / publicación (coherencia de artefactos)
+
+Los informes y CSVs de leads son **instantáneas**: pueden quedar desalineados respecto a la base si no se regeneran. La capa de **operational trust** ([`operational_trust.py`](../src/origenlab_email_pipeline/operational_trust.py) + [`scripts/qa/`](../scripts/qa/)) contrasta:
+
+- **[`reports/out/client_pack_latest/summary.json`](#m-eprep-leads)** — totales `lead_master_rows` y `fit_bucket` frente al **SQLite** usado por el gate (mismo criterio que [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py): `fit_bucket` vacío tras `TRIM` cuenta como `low_fit`; la verificación también normaliza claves al comparar).
+- **[`reports/out/active/leads_top20_for_client_report.csv`](../reports/out/README.md)** — filas, `id_lead` únicos, alineación con `leads_ready_to_contact.csv`, subconjunto del hunt, existencia en `lead_master`, campos mínimos.
+- **Cohorte hunt + readiness** — [`leads_contact_hunt_current.csv`](../reports/out/README.md), [`leads_ready_to_contact.csv`](../reports/out/README.md), [`leads_needs_contact_research.csv`](../reports/out/README.md), [`leads_not_ready.csv`](../reports/out/README.md): partición de IDs, sumas, duplicados en hunt.
+
+**Scorecards generados** (al ejecutar [`audit_operational_trust.py`](../scripts/qa/audit_operational_trust.py), también vía [`publish_gate.py`](../scripts/qa/publish_gate.py)):
+
+- JSON: [`reports/out/active/operational_trust_scorecard.json`](../reports/out/README.md)
+- Markdown: [`docs/generated/operational_trust_scorecard.md`](generated/operational_trust_scorecard.md)
+
+**Frescura del pack (`client_pack_freshness`):** el audit comprueba que `summary.json` tenga `generated_at_utc` parseable y que su antigüedad no supere `--max-pack-age-hours` (por defecto 168 h). Es una comprobación de **snapshot reciente**, no de calidad de negocio.
+
+**Enlaces de evidencia:** [`check_evidence_links.py`](../scripts/qa/check_evidence_links.py) valida formato `http(s)` y, salvo `--skip-evidence-http` en el gate, hace peticiones HTTP con umbrales configurables.
+
+**Flujo recomendado** antes de compartir el paquete cliente: regenerar pack si cambió la DB → ejecutar el gate → solo entregar si **PASS**. Procedimiento: **[RUNBOOK.md §4](RUNBOOK.md#m-eprun-publish-qa)**.

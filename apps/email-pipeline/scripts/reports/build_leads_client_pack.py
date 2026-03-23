@@ -35,6 +35,10 @@ from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
 
+# Align with operational_trust.db_lead_totals / publish_gate (blank fit → low_fit).
+_LM_FIT = "COALESCE(NULLIF(TRIM(lm.fit_bucket), ''), 'low_fit')"
+_FIT_GROUP = "COALESCE(NULLIF(TRIM(fit_bucket), ''), 'low_fit')"
+
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     row = conn.execute(
@@ -121,8 +125,8 @@ def main() -> int:
 
     total_leads = conn.execute("SELECT COUNT(*) FROM lead_master").fetchone()[0]
     fit_rows = conn.execute(
-        """
-        SELECT COALESCE(fit_bucket, 'low_fit') AS fb, COUNT(*)
+        f"""
+        SELECT {_FIT_GROUP} AS fb, COUNT(*)
         FROM lead_master GROUP BY fb
         """
     ).fetchall()
@@ -155,8 +159,8 @@ def main() -> int:
     regions = [(str(r[0]), int(r[1])) for r in region_rows]
 
     top_orgs = conn.execute(
-        """
-        SELECT lm.id, lm.org_name, COALESCE(lm.fit_bucket, 'low_fit'),
+        f"""
+        SELECT lm.id, lm.org_name, {_LM_FIT},
                COALESCE(lm.priority_score, 0), lm.buyer_kind,
                COALESCE(m.already_in_archive_flag, 0)
         FROM lead_master lm
@@ -172,12 +176,12 @@ def main() -> int:
         """
     ).fetchall()
 
-    annex_sql = """
+    annex_sql = f"""
     SELECT
       lm.id AS id_lead,
       lm.org_name AS organizacion,
       lm.priority_score,
-      COALESCE(lm.fit_bucket, 'low_fit') AS fit_bucket,
+      {_LM_FIT} AS fit_bucket,
       COALESCE(m.already_in_archive_flag, 0) AS already_in_archive_flag,
       lm.source_url,
       lm.evidence_summary,
@@ -199,7 +203,7 @@ def main() -> int:
       )
     ) m ON m.lead_id = lm.id
     ORDER BY
-      CASE COALESCE(lm.fit_bucket, 'low_fit')
+      CASE {_LM_FIT}
         WHEN 'high_fit' THEN 0 WHEN 'medium_fit' THEN 1 ELSE 2 END,
       COALESCE(m.already_in_archive_flag, 0) ASC,
       COALESCE(lm.priority_score, 0) DESC,

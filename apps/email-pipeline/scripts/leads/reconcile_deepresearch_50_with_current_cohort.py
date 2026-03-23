@@ -282,9 +282,10 @@ def main() -> None:
         missing = sorted(set(first50) - cohort_ids)
         raise SystemExit(f"First-50 deepsearch ids not all in current hunt: {missing[:20]}")
 
-    dr_by_id = {int(r["id_lead"]): r for r in DR50_ROWS}
-    if len(dr_by_id) != len(DR50_ROWS):
-        raise SystemExit("Duplicate id_lead in DR50_ROWS")
+    dr50_rows = _load_dr50_rows()
+    dr_by_id = {int(r["id_lead"]): r for r in dr50_rows}
+    if len(dr_by_id) != len(dr50_rows):
+        raise SystemExit("Duplicate id_lead in verified DR50 payload")
     enriched_ids = set(dr_by_id)
     if len(enriched_ids) != 23:
         raise SystemExit(f"Expected 23 enriched DR rows, got {len(enriched_ids)}")
@@ -361,7 +362,7 @@ def main() -> None:
 | Cohort | Typical `id_lead` | Repo examples | Overlap with current hunt (200 ids) |
 |--------|-------------------|---------------|-------------------------------------|
 | **Legacy / non-current** | Small integers (1, 294, 302, 624, …) | `reports/out/reference/*DEEPRESEARCH*.csv` | **{legacy_n}** matching ids: `{legacy_list}` |
-| **Current-style DR batch (this note)** | 607xxx–622xxx | Embedded in `scripts/leads/reconcile_deepresearch_50_with_current_cohort.py` (`DR50_ROWS`) | First **50** rows of `leads_contact_hunt_for_deepsearch.csv` — **all 50** are in `leads_contact_hunt_current.csv` |
+| **Current-style DR batch (this note)** | 607xxx–622xxx | `scripts/leads/data/dr50_payload_v1.json` (SHA256 in `dr50_manifest_v1.json`) | First **50** rows of `leads_contact_hunt_for_deepsearch.csv` — **all 50** are in `leads_contact_hunt_current.csv` |
 
 Legacy files are useful as **historical examples** only. They must **not** be used to mark readiness for the present 200-id operational cohort except where `id_lead` literally matches (here: **none**).
 
