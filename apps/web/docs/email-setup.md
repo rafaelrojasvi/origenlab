@@ -2,6 +2,8 @@
 
 **Source of truth:** Titan is the primary mailbox provider for the domain origenlab.cl. Do not treat HostGator/cPanel webmail as the main system for this address.
 
+**Checklist de despliegue del sitio:** [deployment.md](deployment.md) remite aquí para comprobar que **contacto@** funciona; el sitio estático y el DNS pueden vivir en HostGator sin que el buzón se gestione como “correo cPanel”.
+
 ---
 
 ## Primary configuration

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # OrigenLab repo-wide rules
 
-This repository is for the OrigenLab website.
+This workspace folder is **`apps/web/`** — the OrigenLab marketing site inside the **monorepo** (sibling: `apps/email-pipeline/` at repo root).
 
 ## Business constraints
 
@@ -81,8 +81,9 @@ Avoid:
 Use these defaults unless updated:
 - contacto@origenlab.cl
 - +56 9 6256 7816
-- Oettinger 51, depto 206, Valdivia, Chile
 - horario 09:00–18:00
+
+**Address policy:** For **public** site copy and default quotations, use **`locationPublic`** from `src/data/contact.ts` (Valdivia, Chile — no street). Full street (**Oettinger 51, depto 206, …**) is **`addressLine`** — internal / legal / logistics only unless the business explicitly publishes it. See `AGENTS.md` and `docs/company-scope.md`.
 
 ## Review behavior
 

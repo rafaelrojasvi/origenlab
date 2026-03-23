@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import sqlite3
 
+from origenlab_email_pipeline.bi_views import refresh_lead_match_summary_view
+from origenlab_email_pipeline.pipeline_meta_schema import ensure_pipeline_meta_tables
+
 LEAD_ACCOUNT_SCHEMA_SQL = """
 -- CRM-style account rollup over lead_master (one account -> many tenders/leads).
 CREATE TABLE IF NOT EXISTS lead_account_master (
@@ -85,8 +88,10 @@ CREATE TABLE IF NOT EXISTS lead_account_matches_existing_orgs (
   evidence_json TEXT,
   review_status TEXT NOT NULL DEFAULT 'auto',
   created_at TEXT NOT NULL,
+  pipeline_run_id INTEGER,
   UNIQUE(lead_account_id, organization_domain),
-  FOREIGN KEY(lead_account_id) REFERENCES lead_account_master(id) ON DELETE CASCADE
+  FOREIGN KEY(lead_account_id) REFERENCES lead_account_master(id) ON DELETE CASCADE,
+  FOREIGN KEY(pipeline_run_id) REFERENCES pipeline_run(id)
 );
 -- organization_domain should match organization_master.domain when mart exists (no FK: mart may be empty).
 
@@ -94,6 +99,7 @@ CREATE INDEX IF NOT EXISTS idx_lead_account_matches_account
   ON lead_account_matches_existing_orgs(lead_account_id);
 CREATE INDEX IF NOT EXISTS idx_lead_account_matches_org_domain
   ON lead_account_matches_existing_orgs(organization_domain);
+-- pipeline_run_id index: created after ALTER migration (older DBs lack the column).
 
 CREATE TABLE IF NOT EXISTS lead_account_overrides (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,5 +124,19 @@ CREATE INDEX IF NOT EXISTS idx_lead_account_overrides_type
 
 def ensure_lead_account_tables(conn: sqlite3.Connection) -> None:
     """Create lead account rollup tables if missing. Idempotent."""
+    ensure_pipeline_meta_tables(conn)
     conn.executescript(LEAD_ACCOUNT_SCHEMA_SQL)
+    try:
+        conn.execute("ALTER TABLE lead_account_matches_existing_orgs ADD COLUMN pipeline_run_id INTEGER")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lead_account_matches_pipeline_run ON lead_account_matches_existing_orgs(pipeline_run_id)"
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
+    refresh_lead_match_summary_view(conn)

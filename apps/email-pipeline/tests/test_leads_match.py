@@ -37,9 +37,10 @@ def test_match_leads_to_mart_domain() -> None:
            VALUES (1, 'chilecompra', 'tid-1', 'Comprador Publico', 'buyer.gob.cl')"""
     )
     conn.commit()
-    n = match_leads_to_mart(conn)
+    org_n, contact_n = match_leads_to_mart(conn)
     conn.close()
-    assert n >= 1
+    assert org_n >= 1
+    assert contact_n >= 0
     conn2 = sqlite3.connect(str(tmp))
     rows = conn2.execute("SELECT lead_id, matched_domain, match_type FROM lead_matches_existing_orgs").fetchall()
     conn2.close()
@@ -59,7 +60,7 @@ def test_match_no_mart_table() -> None:
     )
     conn.commit()
     # organization_master does not exist
-    n = match_leads_to_mart(conn)
+    org_n, contact_n = match_leads_to_mart(conn)
     conn.close()
-    assert n == 0
+    assert (org_n, contact_n) == (0, 0)
     tmp.unlink()

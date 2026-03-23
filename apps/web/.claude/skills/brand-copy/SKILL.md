@@ -37,8 +37,8 @@ Do not use this skill to invent missing business facts.
 - Contact:
   - contacto@origenlab.cl
   - +56 9 6256 7816
-  - Oettinger 51, depto 206, Valdivia, Chile
   - horario 09:00–18:00
+  - **Public location (default copy):** Valdivia, Chile — use `contact.locationPublic` / `site.location`; **do not** add street unless the task explicitly asks for internal/legal addressing (`contact.addressLine`).
 
 ## Hard constraints
 

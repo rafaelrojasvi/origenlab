@@ -93,5 +93,5 @@ Contact-hunt CSV id_lead populations do not match.
 Regenerate the merged file from the current hunt export, or re-export current from the same lead set before import.
 ```
 
-**Base de datos usada:** `/home/rafael/data/origenlab-email/sqlite/emails.sqlite`  
+**Base de datos:** SQLite según `ORIGENLAB_SQLITE_PATH` o el default del proyecto (`~/data/origenlab-email/sqlite/emails.sqlite`). La ruta absoluta de una corrida concreta se imprime en consola al ejecutar el script; no se incrusta aquí para evitar rutas personales en el repo.  
 **Generado:** audit automático (`scripts/leads/audit_contact_readiness.py`).

@@ -1,6 +1,6 @@
 # Guía para colaboradores (y uso con Claude / Cursor)
 
-Este repo es **un solo proyecto**: un sitio estático Astro para OrigenLab (Chile). No es un monorepo con varios paquetes; todo el código del sitio vive aquí, con documentación y reglas para que tanto personas como asistentes IA (Claude, Cursor) sigan las mismas fuentes de verdad.
+Estás en **`apps/web/`**: la app **sitio Astro** de OrigenLab (Chile). El **repositorio Git** es un **monorepo**: la raíz del clone contiene también **`apps/email-pipeline/`** y otros archivos compartidos — ver [README del monorepo](../../README.md) y [`docs/MONOREPO.md`](../../docs/MONOREPO.md). Todo el código **del sitio** vive bajo `apps/web/`; la documentación y reglas de esta carpeta aplican a esa app.
 
 ---
 
@@ -16,10 +16,12 @@ Este repo es **un solo proyecto**: un sitio estático Astro para OrigenLab (Chil
 
 ---
 
-## Estructura del repo (una sola app)
+## Estructura de `apps/web/` (esta app)
+
+Ruta desde la raíz del monorepo: **`apps/web/`**. Árbol principal:
 
 ```
-origenlab-web/
+apps/web/
 ├── src/                    # Código del sitio Astro
 │   ├── data/               # Fuente de verdad: company, contact, categories, services, etc.
 │   ├── components/
@@ -29,15 +31,15 @@ origenlab-web/
 │   └── styles/
 ├── public/                 # Assets estáticos (favicon, .htaccess, robots, sitemap)
 ├── docs/                   # Documentación (deploy, seguridad, alcance, email)
-├── .github/                # Plantilla de PR para revisión
-├── .cursor/rules/          # Reglas para Cursor (siempre aplicadas en este repo)
-├── .claude/skills/         # Skills para Claude (deploy, copy, etc.)
+├── .github/                # Plantilla de PR para revisión (esta app)
+├── .cursor/rules/          # Reglas Cursor para el sitio
+├── .claude/skills/         # Skills Claude (deploy, copy, etc.)
 ├── AGENTS.md               # Instrucciones para agentes IA (reglas, datos, tono)
 ├── CLAUDE.md               # Router rápido para Claude
 ├── CONTRIBUTING.md         # Este archivo
 ├── LICENSE                 # MIT — ver README
-├── .editorconfig           # Estilo de código consistente
-├── .gitattributes          # Line endings y binarios
+├── .editorconfig
+├── .gitattributes
 └── .nvmrc                  # Node 20 (opcional: nvm use)
 ```
 
@@ -66,7 +68,7 @@ Las reglas en **`.cursor/rules/`** se aplican automáticamente en este workspace
 - **astro-deploy.mdc** — Build, `dist/` y despliegue estático (se activa con archivos de Astro/public).
 - **marketing-pages.mdc** — Páginas de contenido y copy (se activa con las rutas correspondientes).
 
-Al abrir el repo en Cursor, esas reglas ya orientan las respuestas hacia los datos en `src/data/` y la documentación en `docs/`.
+Al abrir **`apps/web/`** (o el monorepo con reglas que apunten aquí) en Cursor, esas reglas orientan las respuestas hacia `src/data/` y `docs/` de **esta** app.
 
 ---
 

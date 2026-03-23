@@ -1,5 +1,7 @@
 # OrigenLab — Sitio web
 
+Este directorio (**`apps/web/`**) es la aplicación **marketing site** dentro del [monorepo raíz](../../README.md). El otro paquete principal es **`apps/email-pipeline/`** (Python). Desarrollo del sitio: siempre con cwd en **`apps/web/`** (o rutas equivalentes) para `npm`.
+
 Sitio estático para **OrigenLab**, empresa de equipamiento y soluciones para laboratorio (Valdivia, Chile).  
 **Stack:** Astro + Tailwind CSS. Contenido en español. Despliegue manual a HostGator (public_html).
 
@@ -50,9 +52,9 @@ Checklist completo y pasos: [docs/deployment.md](docs/deployment.md). Estado act
 
 ## Repo y ramas
 
-- **GitHub:** repo remoto configurado.
-- **Ramas:** `main`, `dev`. Desarrollo en `dev`.
-- **Un solo proyecto:** un sitio Astro en este repo (no es un monorepo con varios paquetes).
+- **Git:** el remoto es el **monorepo** (raíz del clone); este sitio vive bajo `apps/web/`.
+- **Ramas:** suele usarse `main` y `dev` a nivel monorepo; desarrollo del sitio en la rama acordada del equipo.
+- **Alcance de esta carpeta:** solo la app Astro; el monorepo incluye además `apps/email-pipeline/` y documentación en la raíz ([`docs/MONOREPO.md`](../../docs/MONOREPO.md)).
 
 **Colaboradores y uso con Claude/Cursor:** ver [CONTRIBUTING.md](CONTRIBUTING.md) (estructura, dónde está cada cosa, reglas en `.cursor/rules/`, skills en `.claude/skills/`, alcance en `docs/company-scope.md`).
 

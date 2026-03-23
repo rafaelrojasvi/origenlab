@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from origenlab_email_pipeline.business_mart_schema import BUSINESS_MART_SCHEMA_SQL
+from origenlab_email_pipeline.pipeline_meta_schema import ensure_pipeline_meta_tables
 
 
 SCHEMA_SQL = """
@@ -84,6 +85,7 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
+    ensure_pipeline_meta_tables(conn)
     conn.executescript(SCHEMA_SQL)
     conn.executescript(BUSINESS_MART_SCHEMA_SQL)
     # Additive migrations for business mart tables (safe on older DBs)

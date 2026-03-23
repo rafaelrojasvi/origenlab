@@ -13,7 +13,7 @@ Files under `docs/` are **not** loaded into context automatically. When a task m
 **Canonical business data (prefer these over hardcoded page text):**
 
 - `src/data/company.ts` — narrative, audience, safe framing
-- `src/data/contact.ts` — email, phone, WhatsApp, address, hours
+- `src/data/contact.ts` — email, phone, WhatsApp, hours; **public location** = `locationPublic`; **full street** = `addressLine` (internal/legal/logistics only — see “Contact / address policy” below)
 - `src/data/services.ts` — support/service lines
 - `src/data/categories.ts` — product categories and buyer copy
 - `src/data/brands.ts` — brands (conservative until formal list exists)
@@ -81,9 +81,13 @@ Use these details unless explicitly updated in the repo:
 - Email: contacto@origenlab.cl
 - Phone: +56 9 6256 7816
 - WhatsApp: +56 9 6256 7816
-- Address: Oettinger 51, depto 206, Valdivia, Chile
-- Hours: 09:00 to 18:00
+- Hours: 09:00–18:00 (same as `contact.hours` in code)
 - Geography: all Chile
+
+### Contact / address policy
+
+- **Public-facing default** (website, generic quotations, marketing copy): use **`locationPublic`** from `src/data/contact.ts` — currently **Valdivia, Chile** — and **do not** put the street in that material. `site.ts` already maps `site.location` from `locationPublic`.
+- **Full street** (**Oettinger 51, depto 206, Valdivia, Chile**): **`contact.addressLine` in code** — for **internal**, **legal**, **logistics**, or any artifact that explicitly requires a postal address. Do not copy the street into new public web sections or public quote PDFs unless the business decides otherwise; align with `docs/company-scope.md`.
 
 If Instagram is mentioned, only include it when the exact handle is available in repo data.
 

@@ -28,6 +28,7 @@ from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.leads_ingest import now_iso
 from origenlab_email_pipeline.lead_accounts_schema import ensure_lead_account_tables
+from origenlab_email_pipeline.pipeline_run_recorder import finish_run, set_kv, start_run
 from origenlab_email_pipeline.org_normalize import normalize_domain, normalize_org_name
 
 
@@ -99,122 +100,136 @@ def main() -> int:
     conn.execute("PRAGMA busy_timeout=300000")
     ensure_lead_account_tables(conn)
 
+    run_id = start_run(
+        conn,
+        script_name="scripts/match_lead_accounts_to_existing_orgs.py",
+        notes="match lead_account_master to organization_master",
+    )
+
     try:
-        conn.execute("SELECT 1 FROM organization_master LIMIT 1")
-    except sqlite3.OperationalError:
-        print("organization_master missing; build mart first.", file=sys.stderr)
-        return 1
+        try:
+            conn.execute("SELECT 1 FROM organization_master LIMIT 1")
+        except sqlite3.OperationalError:
+            print("organization_master missing; build mart first.", file=sys.stderr)
+            return 1
 
-    name_to_domain, pairs = _norm_name_map(conn)
-    aliases = _aliases_by_account(conn)
-    ts = now_iso()
+        name_to_domain, pairs = _norm_name_map(conn)
+        aliases = _aliases_by_account(conn)
+        ts = now_iso()
 
-    conn.execute("DELETE FROM lead_account_matches_existing_orgs")
-    conn.commit()
+        conn.execute("DELETE FROM lead_account_matches_existing_orgs")
+        conn.commit()
 
-    accounts = conn.execute(
-        """
-        SELECT id, primary_domain, official_website, normalized_name, canonical_name
-        FROM lead_account_master
-        """
-    ).fetchall()
+        accounts = conn.execute(
+            """
+            SELECT id, primary_domain, official_website, normalized_name, canonical_name
+            FROM lead_account_master
+            """
+        ).fetchall()
 
-    inserted = 0
-    for aid, pdom, oweb, norm_name, canonical in accounts:
-        pdom = (pdom or "").strip().lower()
-        web_dom = normalize_domain(oweb or "") or ""
-        nn = norm_name or normalize_org_name(canonical or "")
+        inserted = 0
+        for aid, pdom, oweb, norm_name, canonical in accounts:
+            pdom = (pdom or "").strip().lower()
+            web_dom = normalize_domain(oweb or "") or ""
+            nn = norm_name or normalize_org_name(canonical or "")
 
-        chosen: tuple[str, str, float, str, str] | None = None  # domain, method, conf, review, evidence_json
+            chosen: tuple[str, str, float, str, str] | None = None  # domain, method, conf, review, evidence_json
 
-        # 1) Primary domain
-        if pdom:
-            row = conn.execute(
-                "SELECT 1 FROM organization_master WHERE lower(domain) = ?", (pdom,)
-            ).fetchone()
-            if row:
-                chosen = (
-                    pdom,
-                    "domain_exact",
-                    1.0,
-                    "auto",
-                    json.dumps({"primary_domain": pdom}, ensure_ascii=False),
-                )
+            # 1) Primary domain
+            if pdom:
+                row = conn.execute(
+                    "SELECT 1 FROM organization_master WHERE lower(domain) = ?", (pdom,)
+                ).fetchone()
+                if row:
+                    chosen = (
+                        pdom,
+                        "domain_exact",
+                        1.0,
+                        "auto",
+                        json.dumps({"primary_domain": pdom}, ensure_ascii=False),
+                    )
 
-        # 2) Website host
-        if chosen is None and web_dom:
-            row = conn.execute(
-                "SELECT 1 FROM organization_master WHERE lower(domain) = ?", (web_dom,)
-            ).fetchone()
-            if row:
-                chosen = (
-                    web_dom,
-                    "official_website_domain",
-                    0.98,
-                    "auto",
-                    json.dumps({"website_domain": web_dom}, ensure_ascii=False),
-                )
+            # 2) Website host
+            if chosen is None and web_dom:
+                row = conn.execute(
+                    "SELECT 1 FROM organization_master WHERE lower(domain) = ?", (web_dom,)
+                ).fetchone()
+                if row:
+                    chosen = (
+                        web_dom,
+                        "official_website_domain",
+                        0.98,
+                        "auto",
+                        json.dumps({"website_domain": web_dom}, ensure_ascii=False),
+                    )
 
-        # 3) Exact normalized org name
-        if chosen is None and nn:
-            dom = name_to_domain.get(nn)
-            if dom:
-                chosen = (
-                    dom,
-                    "normalized_name_exact",
-                    0.95,
-                    "auto",
-                    json.dumps({"normalized_name": nn}, ensure_ascii=False),
-                )
-
-        # 4) Aliases
-        if chosen is None and nn:
-            for al in aliases.get(int(aid), []):
-                dom = name_to_domain.get(al)
+            # 3) Exact normalized org name
+            if chosen is None and nn:
+                dom = name_to_domain.get(nn)
                 if dom:
                     chosen = (
                         dom,
-                        "alias_normalized_exact",
-                        0.93,
+                        "normalized_name_exact",
+                        0.95,
                         "auto",
-                        json.dumps({"normalized_alias": al}, ensure_ascii=False),
+                        json.dumps({"normalized_name": nn}, ensure_ascii=False),
                     )
-                    break
 
-        # 5) Fuzzy
-        if chosen is None and args.allow_fuzzy and nn:
-            fz = _pick_fuzzy(nn, pairs)
-            if fz:
-                dom, ratio = fz
-                chosen = (
-                    dom,
-                    "fuzzy_name_high_threshold",
-                    round(0.75 + 0.2 * ratio, 4),
-                    "needs_review",
-                    json.dumps({"normalized_name": nn, "fuzzy_ratio": ratio}, ensure_ascii=False),
+            # 4) Aliases
+            if chosen is None and nn:
+                for al in aliases.get(int(aid), []):
+                    dom = name_to_domain.get(al)
+                    if dom:
+                        chosen = (
+                            dom,
+                            "alias_normalized_exact",
+                            0.93,
+                            "auto",
+                            json.dumps({"normalized_alias": al}, ensure_ascii=False),
+                        )
+                        break
+
+            # 5) Fuzzy
+            if chosen is None and args.allow_fuzzy and nn:
+                fz = _pick_fuzzy(nn, pairs)
+                if fz:
+                    dom, ratio = fz
+                    chosen = (
+                        dom,
+                        "fuzzy_name_high_threshold",
+                        round(0.75 + 0.2 * ratio, 4),
+                        "needs_review",
+                        json.dumps({"normalized_name": nn, "fuzzy_ratio": ratio}, ensure_ascii=False),
+                    )
+
+            if chosen is None:
+                continue
+
+            dom, method, conf, review, evid = chosen
+            evid_obj = json.loads(evid) if evid else {}
+            evid_obj["match_script"] = "match_lead_accounts_to_existing_orgs.py"
+            evid_obj["rule_order"] = method
+            evid_out = json.dumps(evid_obj, ensure_ascii=False)
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO lead_account_matches_existing_orgs (
+                      lead_account_id, organization_domain, match_method, confidence, evidence_json, review_status, created_at, pipeline_run_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (aid, dom, method, conf, evid_out, review, ts, run_id),
                 )
+                inserted += 1
+            except sqlite3.IntegrityError:
+                pass
 
-        if chosen is None:
-            continue
-
-        dom, method, conf, review, evid = chosen
-        try:
-            conn.execute(
-                """
-                INSERT INTO lead_account_matches_existing_orgs (
-                  lead_account_id, organization_domain, match_method, confidence, evidence_json, review_status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (aid, dom, method, conf, evid, review, ts),
-            )
-            inserted += 1
-        except sqlite3.IntegrityError:
-            pass
-
-    conn.commit()
-    conn.close()
-    print(f"Inserted {inserted} lead_account -> organization_master matches.")
-    return 0
+        conn.commit()
+        set_kv(conn, "last_account_match_run_id", str(run_id))
+        print(f"Inserted {inserted} lead_account -> organization_master matches.")
+        return 0
+    finally:
+        finish_run(conn, run_id)
+        conn.close()
 
 
 if __name__ == "__main__":

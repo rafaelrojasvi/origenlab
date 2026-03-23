@@ -14,6 +14,7 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.lead_identity_norm import compute_lead_norm_fields
 from origenlab_email_pipeline.leads_normalize import pick_contact_field_for_upsert, raw_to_normalized
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
 
@@ -23,11 +24,14 @@ LEAD_MASTER_COLS = [
     "region", "city", "lead_type", "organization_type_guess", "equipment_match_tags",
     "buyer_kind", "lab_context_score", "lab_context_tags",
     "evidence_summary", "first_seen_at", "last_seen_at", "status",
+    "email_norm", "domain_norm", "org_name_norm",
 ]
 
 
 def upsert_lead(conn, row: dict) -> None:
     """Update existing lead by (source_name, source_record_id) or insert."""
+    norms = compute_lead_norm_fields(row.get("email"), row.get("domain"), row.get("org_name"))
+    row = {**row, **norms}
     cur = conn.execute(
         "SELECT id FROM lead_master WHERE source_name = ? AND source_record_id = ?",
         (row["source_name"], row.get("source_record_id") or ""),
@@ -49,7 +53,8 @@ def upsert_lead(conn, row: dict) -> None:
               source_type = ?, source_url = ?, org_name = ?, contact_name = ?, email = ?, phone = ?, website = ?,
               domain = ?, region = ?, city = ?, lead_type = ?, organization_type_guess = ?, equipment_match_tags = ?,
               buyer_kind = ?, lab_context_score = ?, lab_context_tags = ?,
-              evidence_summary = ?, last_seen_at = ?
+              evidence_summary = ?, last_seen_at = ?,
+              email_norm = ?, domain_norm = ?, org_name_norm = ?
             WHERE id = ?
             """,
             (
@@ -58,6 +63,7 @@ def upsert_lead(conn, row: dict) -> None:
                 row.get("region"), row.get("city"), row.get("lead_type"), row.get("organization_type_guess"),
                 row.get("equipment_match_tags"), row.get("buyer_kind"), row.get("lab_context_score"), row.get("lab_context_tags"),
                 row.get("evidence_summary"), row.get("last_seen_at"),
+                row.get("email_norm"), row.get("domain_norm"), row.get("org_name_norm"),
                 lead_id,
             ),
         )

@@ -517,13 +517,14 @@ Se marca **ready** solo si, para un `id_lead` del cohorte hunt:
 {align_msg if not align_ok else "OK: mismos id_lead en current y merged."}
 ```
 
-**Base de datos usada:** `{db_path}`  
+**Base de datos:** SQLite según `ORIGENLAB_SQLITE_PATH` o el default del proyecto (`~/data/origenlab-email/sqlite/emails.sqlite`). La ruta absoluta de una corrida concreta se imprime en consola al ejecutar el script; no se incrusta aquí para evitar rutas personales en el repo.  
 **Generado:** audit automático (`scripts/leads/audit_contact_readiness.py`).
 """
 
     DOCS_OUT.parent.mkdir(parents=True, exist_ok=True)
     DOCS_OUT.write_text(md, encoding="utf-8")
 
+    print(f"SQLite used: {db_path}")
     print(f"Wrote {DOCS_OUT}")
     print(f"Ready: {len(ready_rows)}, needs research: {len(needs_rows)}, not ready: {len(not_ready_rows)}")
     return 0

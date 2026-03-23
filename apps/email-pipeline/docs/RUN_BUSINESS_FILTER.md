@@ -1,6 +1,6 @@
 # What to run (in order) — business filter & report
 
-Checked against your DB: `~/data/origenlab-email/sqlite/emails.sqlite` (216,037 rows). Table `emails` has `id`, `sender`, `recipients`, `subject`, `body` — the filter uses exactly these.
+The filter expects table `emails` with at least `id`, `sender`, `recipients`, `subject`, `body`. Point **`ORIGENLAB_SQLITE_PATH`** (or the default under `~/data/origenlab-email/sqlite/emails.sqlite`) at your DB; row counts vary by environment — use `inspect_sqlite.py` to see yours.
 
 ---
 
@@ -44,7 +44,7 @@ uv run python scripts/reports/generate_business_filter_report.py --out reports/o
 
 Output under `reports/out/bf_sample/`: `business_filter_summary.json`, `business_only_sample.json`, `category_counts.csv`, `sender_domain_by_view.csv`.
 
-**Full DB (all 216k rows):**
+**Full DB (all rows, no `--limit`):**
 
 ```bash
 uv run python scripts/reports/generate_business_filter_report.py --out reports/out/bf_full
