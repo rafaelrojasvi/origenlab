@@ -1,6 +1,14 @@
 # Deployment status — OrigenLab
 
-**Current state:** The site is live and working at origenlab.cl on HostGator shared hosting.
+Status: canonical  
+Owner: web-maintainers  
+Last reviewed: 2026-03-24
+
+**External / operational snapshot:** Live hosting, DNS, and cPanel state are **not provable from git**. Treat this file as a **human-maintained** record. Re-check HostGator/cPanel/DNS before acting on “current state” claims.
+
+**Last verified externally:** 2026-03-24 *(update when you have confirmed hosting/DNS in the real control panels).*
+
+**Current state (as documented, not guaranteed by repo):** The site is described as live at origenlab.cl on HostGator shared hosting.
 
 ---
 

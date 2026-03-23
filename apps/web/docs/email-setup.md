@@ -1,6 +1,14 @@
 # Email setup — OrigenLab (contacto@origenlab.cl)
 
-**Source of truth:** Titan is the primary mailbox provider for the domain origenlab.cl. Do not treat HostGator/cPanel webmail as the main system for this address.
+Status: canonical  
+Owner: web-maintainers  
+Last reviewed: 2026-03-24
+
+**External / operational:** Mailbox provider, DNS, and deliverability are **not verifiable from this repository**. This doc is a **human-maintained** runbook; confirm settings in Titan / DNS panels before relying on them.
+
+**Last verified externally:** 2026-03-24 *(update after checking Titan and DNS.)*
+
+**Operational assumption (confirm externally):** Titan is the primary mailbox provider for contacto@origenlab.cl. Do not treat HostGator/cPanel webmail as the main system for this address unless that changes in practice.
 
 **Checklist de despliegue del sitio:** [deployment.md](deployment.md) remite aquí para comprobar que **contacto@** funciona; el sitio estático y el DNS pueden vivir en HostGator sin que el buzón se gestione como “correo cPanel”.
 

@@ -1,9 +1,9 @@
 # OrigenLab — Sitio web
 
-Este directorio (**`apps/web/`**) es la aplicación **marketing site** dentro del [monorepo raíz](../../README.md). El otro paquete principal es **`apps/email-pipeline/`** (Python). Desarrollo del sitio: siempre con cwd en **`apps/web/`** (o rutas equivalentes) para `npm`.
+Este directorio (**`apps/web/`**) es la aplicación **marketing site** dentro del [monorepo raíz](../../README.md). El otro paquete principal es [`apps/email-pipeline/`](../email-pipeline/) ([README](../email-pipeline/README.md)). Desarrollo del sitio: siempre con cwd en **`apps/web/`** (o rutas equivalentes) para `npm`.
 
 Sitio estático para **OrigenLab**, empresa de equipamiento y soluciones para laboratorio (Valdivia, Chile).  
-**Stack:** Astro + Tailwind CSS. Contenido en español. Despliegue manual a HostGator (public_html).
+**Stack:** Astro + Tailwind CSS ([`package.json`](package.json)). Contenido en español. Despliegue manual a HostGator (public_html).
 
 **Alcance del negocio:** venta de equipos para laboratorios de servicio e investigación en Chile; líneas en alimentos, control de calidad y laboratorio clínico. Audiencia: laboratorios, universidades, clínicas, hospitales, I+D. Datos completos (contacto, servicios, tono, prompt para cotizaciones): [docs/company-scope.md](docs/company-scope.md). Código fuente de verdad: `src/data/*`.
 
@@ -38,14 +38,19 @@ Checklist completo y pasos: [docs/deployment.md](docs/deployment.md). Estado act
 
 ## Documentación
 
+Índice principal: [docs/README.md](docs/README.md)
+Inicio rápido para agentes: [docs/APP_CONTEXT.md](docs/APP_CONTEXT.md)
+
 | Documento | Contenido |
 |-----------|-----------|
+| [docs/README.md](docs/README.md) | Índice canónico (gobernanza, arquitectura, operaciones, features, histórico) |
 | [docs/deployment.md](docs/deployment.md) | Pasos de despliegue y checklist antes del lanzamiento |
 | [docs/deployment-status.md](docs/deployment-status.md) | Estado actual, hosting, DNS, advertencias |
 | [docs/email-setup.md](docs/email-setup.md) | Email contacto@origenlab.cl (Titan, IMAP/SMTP, DKIM) |
-| [docs/legacy-mail-migration-notes.md](docs/legacy-mail-migration-notes.md) | Notas sobre migración de correo legacy (LabDelivery; proyecto aparte) |
 | [docs/company-scope.md](docs/company-scope.md) | Alcance, contacto, servicios, tono y prompt para redactar cotizaciones |
-| [docs/email-archive-locations.md](docs/email-archive-locations.md) | Ubicaciones del archivo de correo (raw PST, SQLite, rutas Windows/WSL) |
+| [docs/compat/legacy-mail-migration-notes.md](docs/compat/legacy-mail-migration-notes.md) | Stub histórico: referencia al dominio email-pipeline |
+| [docs/compat/email-archive-locations.md](docs/compat/email-archive-locations.md) | Stub histórico: referencia al dominio email-pipeline |
+| [docs/compat/EMAIL_BUSINESS_SIGNAL_PROMPT.md](docs/compat/EMAIL_BUSINESS_SIGNAL_PROMPT.md) | Stub: prompt en `apps/email-pipeline/docs/ml/AI_ML_IMPLEMENTED_SUMMARY.md` (apéndice) |
 | [docs/security-audit-v1.md](docs/security-audit-v1.md) | Auditoría de seguridad y arquitectura v1 |
 | [CLAUDE.md](CLAUDE.md) | Instrucciones para asistencia con IA |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Guía para colaboradores y uso con Claude/Cursor (reglas, skills, alcance) |

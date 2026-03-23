@@ -5,7 +5,7 @@ Prueba varios modelos no supervisados sobre una muestra de correos + extracción
   uv sync --group ml
   uv run python scripts/ml/email_ml_explore.py --limit 5000 --kmeans 14 --out reports/out/ml_explore.json
 
-Supervisado: no incluido aquí (hace falta etiquetas). Ver docs/ML_EMAIL_OPTIONS.md
+Supervisado: no incluido aquí (hace falta etiquetas). Ver docs/ml/AI_ML_IMPLEMENTED_SUMMARY.md
 """
 from __future__ import annotations
 

@@ -18,27 +18,17 @@ Use this skill for:
 
 Do not use this skill to invent missing business facts.
 
-## Company facts currently safe to use
+## Company facts source
 
-- Company name: OrigenLab
-- Operates in Chile
-- Sells laboratory equipment
-- Serves service labs, research labs, universities, clinics, hospitals, and I+D industries
-- Known categories include:
-  - equipos para alimentos
-  - equipos para control de calidad
-  - equipos para laboratorio clínico
-- Offers:
-  - soporte
-  - asesorías
-  - garantía
-  - instalación
-  - puesta en marcha de equipos más complejos
-- Contact:
-  - contacto@origenlab.cl
-  - +56 9 6256 7816
-  - horario 09:00–18:00
-  - **Public location (default copy):** Valdivia, Chile — use `contact.locationPublic` / `site.location`; **do not** add street unless the task explicitly asks for internal/legal addressing (`contact.addressLine`).
+Do not rely on hardcoded facts in this skill.
+
+Always load current values from:
+
+- `docs/APP_CONTEXT.md`
+- `docs/BUSINESS_CONTEXT.md`
+- `AGENTS.md` (policy and precedence)
+- `src/data/*` (canonical business/contact/category/service facts)
+- `docs/company-scope.md` (human-facing summary)
 
 ## Hard constraints
 

@@ -198,6 +198,282 @@ def _split_tags(value: object) -> list[str]:
     return tags
 
 
+def _normalize_query(value: str) -> str:
+    return " ".join((value or "").strip().lower().split())
+
+
+def _consume_nav_flag(key: str, default: bool = False) -> bool:
+    """Consume one-shot navigation flags so quick-actions do not stick forever."""
+    if key in st.session_state:
+        return bool(st.session_state.pop(key))
+    return default
+
+
+def _search_relevance_score(df: pd.DataFrame, query: str, columns: list[str]) -> pd.Series:
+    q = _normalize_query(query)
+    if not q or df.empty:
+        return pd.Series([0.0] * len(df), index=df.index)
+
+    score = pd.Series([0.0] * len(df), index=df.index)
+    for col in columns:
+        if col not in df.columns:
+            continue
+        s = df[col].fillna("").astype(str).str.lower()
+        score += s.eq(q).astype(float) * 120.0
+        score += s.str.startswith(q, na=False).astype(float) * 80.0
+        score += s.str.contains(q, na=False).astype(float) * 30.0
+
+    # Bonus when all tokens appear somewhere in searchable text.
+    searchable = pd.Series([""] * len(df), index=df.index)
+    for col in columns:
+        if col in df.columns:
+            searchable = searchable + " " + df[col].fillna("").astype(str).str.lower()
+    for tok in [t for t in q.split(" ") if t]:
+        score += searchable.str.contains(tok, na=False).astype(float) * 8.0
+    return score
+
+
+def _render_equipment_page(conn: sqlite3.Connection) -> None:
+    """Dedicated equipment explorer (moved out of executive summary)."""
+    st.subheader("Explorar por equipo")
+    st.caption(
+        "Seleccione un tipo de equipo para ver organizaciones, contactos, documentos y señales históricas "
+        "relacionadas con ese tema."
+    )
+
+    tags: set[str] = set()
+    org_tags_df = _load_df(
+        conn,
+        "SELECT DISTINCT top_equipment_tags FROM organization_master WHERE top_equipment_tags IS NOT NULL",
+    )
+    contact_tags_df = _load_df(
+        conn,
+        "SELECT DISTINCT top_equipment_tags FROM contact_master WHERE top_equipment_tags IS NOT NULL",
+    )
+    doc_tags_df = _load_df(
+        conn,
+        "SELECT DISTINCT equipment_tags FROM document_master WHERE equipment_tags IS NOT NULL",
+    )
+    for df_tags in (org_tags_df, contact_tags_df, doc_tags_df):
+        for val in df_tags.iloc[:, 0].dropna():
+            for t in _split_tags(val):
+                tags.add(t)
+
+    if not tags:
+        st.info(
+            "Por ahora no se detectan tags de equipos en el mart actual. "
+            "Cuando existan, aquí se podrá explorar por equipo."
+        )
+        return
+
+    preferred_order = [
+        "autoclave",
+        "balanza",
+        "termobalanza",
+        "osmometro",
+        "centrifuga",
+        "cromatografia_hplc",
+        "espectrofotometro",
+        "horno_mufla",
+        "humedad_granos",
+        "incubadora",
+        "liofilizador",
+        "microscopio",
+        "phmetro",
+        "pipetas",
+        "titulador",
+        "sonicador",
+    ]
+    preferred_in_data = [t for t in preferred_order if t in tags]
+    remaining = sorted([t for t in tags if t not in preferred_in_data], key=lambda x: x.lower())
+    ordered_tags = preferred_in_data + remaining
+
+    display_to_tag: dict[str, str] = {}
+    display_options: list[str] = []
+    for tag in ordered_tags:
+        info = EQUIPMENT_INFO.get(tag, {})
+        label = info.get("label", tag)
+        display = f"{label} ({tag})" if label != tag else label
+        display_to_tag[display] = tag
+        display_options.append(display)
+
+    selected_display = st.selectbox("Seleccionar equipo o tema", options=display_options)
+    selected_tag = display_to_tag[selected_display] if selected_display else ""
+    if not selected_tag:
+        return
+
+    info = EQUIPMENT_INFO.get(selected_tag, {})
+    label = info.get("label", selected_tag)
+    st.markdown(f"Mostrando actividad histórica relacionada con **{label}**.")
+    if desc := info.get("description"):
+        st.caption(desc)
+
+    st.markdown("#### Organizaciones relacionadas con este equipo")
+    org_eq = _load_df(
+        conn,
+        """
+        SELECT
+          domain AS dominio,
+          organization_name_guess AS organizacion,
+          organization_type_guess AS tipo_org,
+          first_seen_at AS primera,
+          last_seen_at AS ultima,
+          total_emails AS total,
+          quote_email_count AS cotiz_email,
+          invoice_email_count AS factura_email,
+          purchase_email_count AS compra_email,
+          business_doc_email_count AS doc_emails,
+          top_equipment_tags AS equipos
+        FROM organization_master
+        """,
+    )
+    mask_org_eq = org_eq["equipos"].fillna("").str.contains(selected_tag, case=False, na=False)
+    org_eq = org_eq[mask_org_eq]
+    if org_eq.empty:
+        st.info("No se encontraron organizaciones claramente asociadas a este equipo.")
+    else:
+        org_eq_display = org_eq.copy()
+        org_eq_display["tipo_org"] = org_eq_display["tipo_org"].apply(
+            lambda x: _friendly_org_type(str(x)) if pd.notna(x) else _friendly_org_type(None)
+        )
+        org_eq_display = org_eq_display.rename(
+            columns={
+                "dominio": "Dominio",
+                "organizacion": "Organización",
+                "tipo_org": "Tipo de organización",
+                "primera": "Primera actividad",
+                "ultima": "Última actividad",
+                "total": "Total de correos",
+                "cotiz_email": "Correos con cotización",
+                "factura_email": "Correos con factura",
+                "compra_email": "Correos de compra/pedido",
+                "doc_emails": "Correos con documentos comerciales",
+                "equipos": "Equipos asociados (heurístico)",
+            }
+        )
+        st.dataframe(org_eq_display.head(50), use_container_width=True, hide_index=True)
+
+    st.markdown("#### Contactos relacionados con este equipo")
+    contact_eq = _load_df(
+        conn,
+        """
+        SELECT
+          email,
+          domain AS dominio,
+          organization_name_guess AS organizacion,
+          organization_type_guess AS tipo_org,
+          first_seen_at AS primera,
+          last_seen_at AS ultima,
+          total_emails AS total,
+          quote_email_count AS cotiz_email,
+          invoice_email_count AS factura_email,
+          business_doc_email_count AS doc_emails,
+          top_equipment_tags AS equipos
+        FROM contact_master
+        """,
+    )
+    mask_contact_eq = contact_eq["equipos"].fillna("").str.contains(selected_tag, case=False, na=False)
+    contact_eq = contact_eq[mask_contact_eq]
+    if contact_eq.empty:
+        st.info("No se encontraron contactos claramente asociados a este equipo.")
+    else:
+        contact_eq_display = contact_eq.copy()
+        contact_eq_display["tipo_org"] = contact_eq_display["tipo_org"].apply(
+            lambda x: _friendly_org_type(str(x)) if pd.notna(x) else _friendly_org_type(None)
+        )
+        contact_eq_display = contact_eq_display.rename(
+            columns={
+                "email": "Contacto (email)",
+                "dominio": "Dominio",
+                "organizacion": "Organización",
+                "tipo_org": "Tipo de organización",
+                "primera": "Primera actividad",
+                "ultima": "Última actividad",
+                "total": "Total de correos",
+                "cotiz_email": "Correos con cotización",
+                "factura_email": "Correos con factura",
+                "doc_emails": "Correos con documentos comerciales",
+                "equipos": "Equipos asociados (heurístico)",
+            }
+        )
+        st.dataframe(contact_eq_display.head(80), use_container_width=True, hide_index=True)
+
+    st.markdown("#### Documentos comerciales relacionados con este equipo")
+    doc_eq = _load_df(
+        conn,
+        """
+        SELECT
+          attachment_id,
+          sent_at,
+          doc_type,
+          filename,
+          sender_domain,
+          equipment_tags
+        FROM document_master
+        """,
+    )
+    mask_doc_eq = doc_eq["equipment_tags"].fillna("").str.contains(selected_tag, case=False, na=False)
+    doc_eq = doc_eq[mask_doc_eq]
+    if doc_eq.empty:
+        st.info("No se encontraron documentos explícitamente asociados a este equipo.")
+    else:
+        doc_eq_display = doc_eq.copy()
+        doc_eq_display["doc_type"] = doc_eq_display["doc_type"].apply(
+            lambda x: _friendly_doc_type(str(x)) if pd.notna(x) else _friendly_doc_type(None)
+        )
+        doc_eq_display = doc_eq_display.rename(
+            columns={
+                "sent_at": "Fecha envío",
+                "doc_type": "Tipo de documento",
+                "filename": "Archivo",
+                "sender_domain": "Dominio remitente",
+                "equipment_tags": "Equipos mencionados",
+            }
+        )
+        st.dataframe(doc_eq_display.head(80), use_container_width=True, hide_index=True)
+
+    st.markdown("#### Señales heurísticas relacionadas con este equipo")
+    signals_eq = _load_df(
+        conn,
+        """
+        SELECT signal_type, entity_kind, entity_key, score, details_json, created_at
+        FROM opportunity_signals
+        WHERE details_json LIKE ?
+        ORDER BY score DESC, created_at DESC
+        """,
+        (f"%{selected_tag}%",),
+    )
+    if signals_eq.empty:
+        st.info(
+            "No se encontraron señales heurísticas donde el detalle haga referencia explícita a este equipo."
+        )
+    else:
+        signals_eq["señal"] = signals_eq["signal_type"].apply(lambda x: _signal_label(str(x))[0])
+        signals_eq["explicación"] = signals_eq["signal_type"].apply(lambda x: _signal_label(str(x))[1])
+        signals_display = signals_eq[
+            ["señal", "explicación", "entity_kind", "entity_key", "score", "created_at"]
+        ].copy()
+        signals_display["Entidad"] = signals_display["entity_kind"].map(
+            {"contact": "Contacto", "organization": "Organización"}
+        ).fillna(signals_display["entity_kind"])
+        signals_display = signals_display.rename(
+            columns={
+                "entity_key": "Clave (email/dominio)",
+                "score": "Intensidad de la señal",
+                "created_at": "Detectado el",
+            }
+        ).drop(columns=["entity_kind"])
+        st.dataframe(signals_display.head(80), use_container_width=True, hide_index=True)
+        with st.expander("Ver detalles técnicos de las señales por equipo"):
+            st.dataframe(
+                signals_eq[
+                    ["signal_type", "entity_kind", "entity_key", "details_json", "score", "created_at"]
+                ].head(200),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+
 def main() -> None:
     st.set_page_config(page_title="OrigenLab — Base Comercial", layout="wide")
     st.title("OrigenLab — Base comercial")
@@ -226,7 +502,7 @@ def main() -> None:
         else:
             default_page = "Resumen"
 
-        pages = ["Resumen", "Contactos", "Organizaciones", "Documentos", "Oportunidades"]
+        pages = ["Resumen", "Oportunidades", "Equipos", "Organizaciones", "Contactos", "Documentos"]
         if default_page not in pages:
             default_page = "Resumen"
 
@@ -533,260 +809,23 @@ def main() -> None:
                     "son candidatas para reactivación comercial."
                 )
 
-            # Explorador por equipo: vista agregada por categoría de equipo.
             st.divider()
-            st.markdown("### Explorar por equipo")
-            st.caption(
-                "Seleccione un tipo de equipo para ver organizaciones, contactos, documentos y señales históricas "
-                "relacionadas con ese tema."
-            )
+            st.markdown("### Explorador por equipo")
+            st.caption("Ahora está en una sección dedicada para una navegación más clara.")
+            if st.button("Ir a Equipos", key="go_to_equipos"):
+                _navigate_to("Equipos")
 
-            # Reunir tags de equipo desde las distintas tablas del mart.
-            tags: set[str] = set()
-            org_tags_df = _load_df(
-                conn,
-                "SELECT DISTINCT top_equipment_tags FROM organization_master WHERE top_equipment_tags IS NOT NULL",
-            )
-            contact_tags_df = _load_df(
-                conn,
-                "SELECT DISTINCT top_equipment_tags FROM contact_master WHERE top_equipment_tags IS NOT NULL",
-            )
-            doc_tags_df = _load_df(
-                conn,
-                "SELECT DISTINCT equipment_tags FROM document_master WHERE equipment_tags IS NOT NULL",
-            )
-            for df_tags in (org_tags_df, contact_tags_df, doc_tags_df):
-                for val in df_tags.iloc[:, 0].dropna():
-                    for t in _split_tags(val):
-                        tags.add(t)
+            return
 
-            if not tags:
-                st.info(
-                    "Por ahora no se detectan tags de equipos en el mart actual. "
-                    "Cuando existan, aquí se podrá explorar por equipo."
-                )
-            else:
-                # Ordenar primero los equipos más típicos de catálogo, luego el resto alfabéticamente.
-                preferred_order = [
-                    "autoclave",
-                    "balanza",
-        "termobalanza",
-        "osmometro",
-                    "centrifuga",
-                    "cromatografia_hplc",
-                    "espectrofotometro",
-                    "horno_mufla",
-                    "humedad_granos",
-                    "incubadora",
-                    "liofilizador",
-                    "microscopio",
-                    "phmetro",
-                    "pipetas",
-                    "titulador",
-                    "sonicador",
-                ]
-                preferred_in_data = [t for t in preferred_order if t in tags]
-                remaining = sorted([t for t in tags if t not in preferred_in_data], key=lambda x: x.lower())
-                ordered_tags = preferred_in_data + remaining
-
-                # Mostrar etiqueta amigable en el selector, pero usar el tag interno como valor.
-                display_to_tag: dict[str, str] = {}
-                display_options: list[str] = []
-                for tag in ordered_tags:
-                    info = EQUIPMENT_INFO.get(tag, {})
-                    label = info.get("label", tag)
-                    display = f"{label} ({tag})" if label != tag else label
-                    display_to_tag[display] = tag
-                    display_options.append(display)
-
-                selected_display = st.selectbox("Seleccionar equipo o tema", options=display_options)
-                selected_tag = display_to_tag[selected_display] if selected_display else ""
-                if selected_tag:
-                    info = EQUIPMENT_INFO.get(selected_tag, {})
-                    label = info.get("label", selected_tag)
-                    st.markdown(f"Mostrando actividad histórica relacionada con **{label}**.")
-                    if desc := info.get("description"):
-                        st.caption(desc)
-
-                    # Organizaciones relacionadas con el equipo.
-                    st.markdown("#### Organizaciones relacionadas con este equipo")
-                    org_eq = _load_df(
-                        conn,
-                        """
-                        SELECT
-                          domain AS dominio,
-                          organization_name_guess AS organizacion,
-                          organization_type_guess AS tipo_org,
-                          first_seen_at AS primera,
-                          last_seen_at AS ultima,
-                          total_emails AS total,
-                          quote_email_count AS cotiz_email,
-                          invoice_email_count AS factura_email,
-                          purchase_email_count AS compra_email,
-                          business_doc_email_count AS doc_emails,
-                          top_equipment_tags AS equipos
-                        FROM organization_master
-                        """,
-                    )
-                    mask_org_eq = org_eq["equipos"].fillna("").str.contains(selected_tag, case=False, na=False)
-                    org_eq = org_eq[mask_org_eq]
-                    if org_eq.empty:
-                        st.info("No se encontraron organizaciones claramente asociadas a este equipo.")
-                    else:
-                        org_eq_display = org_eq.copy()
-                        org_eq_display["tipo_org"] = org_eq_display["tipo_org"].apply(
-                            lambda x: _friendly_org_type(str(x)) if pd.notna(x) else _friendly_org_type(None)
-                        )
-                        org_eq_display = org_eq_display.rename(
-                            columns={
-                                "dominio": "Dominio",
-                                "organizacion": "Organización",
-                                "tipo_org": "Tipo de organización",
-                                "primera": "Primera actividad",
-                                "ultima": "Última actividad",
-                                "total": "Total de correos",
-                                "cotiz_email": "Correos con cotización",
-                                "factura_email": "Correos con factura",
-                                "compra_email": "Correos de compra/pedido",
-                                "doc_emails": "Correos con documentos comerciales",
-                                "equipos": "Equipos asociados (heurístico)",
-                            }
-                        )
-                        st.dataframe(org_eq_display.head(50), use_container_width=True, hide_index=True)
-
-                    # Contactos relacionados con el equipo.
-                    st.markdown("#### Contactos relacionados con este equipo")
-                    contact_eq = _load_df(
-                        conn,
-                        """
-                        SELECT
-                          email,
-                          domain AS dominio,
-                          organization_name_guess AS organizacion,
-                          organization_type_guess AS tipo_org,
-                          first_seen_at AS primera,
-                          last_seen_at AS ultima,
-                          total_emails AS total,
-                          quote_email_count AS cotiz_email,
-                          invoice_email_count AS factura_email,
-                          business_doc_email_count AS doc_emails,
-                          top_equipment_tags AS equipos
-                        FROM contact_master
-                        """,
-                    )
-                    mask_contact_eq = contact_eq["equipos"].fillna("").str.contains(selected_tag, case=False, na=False)
-                    contact_eq = contact_eq[mask_contact_eq]
-                    if contact_eq.empty:
-                        st.info("No se encontraron contactos claramente asociados a este equipo.")
-                    else:
-                        contact_eq_display = contact_eq.copy()
-                        contact_eq_display["tipo_org"] = contact_eq_display["tipo_org"].apply(
-                            lambda x: _friendly_org_type(str(x)) if pd.notna(x) else _friendly_org_type(None)
-                        )
-                        contact_eq_display = contact_eq_display.rename(
-                            columns={
-                                "email": "Contacto (email)",
-                                "dominio": "Dominio",
-                                "organizacion": "Organización",
-                                "tipo_org": "Tipo de organización",
-                                "primera": "Primera actividad",
-                                "ultima": "Última actividad",
-                                "total": "Total de correos",
-                                "cotiz_email": "Correos con cotización",
-                                "factura_email": "Correos con factura",
-                                "doc_emails": "Correos con documentos comerciales",
-                                "equipos": "Equipos asociados (heurístico)",
-                            }
-                        )
-                        st.dataframe(contact_eq_display.head(80), use_container_width=True, hide_index=True)
-
-                    # Documentos relacionados con el equipo.
-                    st.markdown("#### Documentos comerciales relacionados con este equipo")
-                    doc_eq = _load_df(
-                        conn,
-                        """
-                        SELECT
-                          attachment_id,
-                          sent_at,
-                          doc_type,
-                          filename,
-                          sender_domain,
-                          equipment_tags
-                        FROM document_master
-                        """,
-                    )
-                    mask_doc_eq = doc_eq["equipment_tags"].fillna("").str.contains(
-                        selected_tag, case=False, na=False
-                    )
-                    doc_eq = doc_eq[mask_doc_eq]
-                    if doc_eq.empty:
-                        st.info("No se encontraron documentos explícitamente asociados a este equipo.")
-                    else:
-                        doc_eq_display = doc_eq.copy()
-                        doc_eq_display["doc_type"] = doc_eq_display["doc_type"].apply(
-                            lambda x: _friendly_doc_type(str(x)) if pd.notna(x) else _friendly_doc_type(None)
-                        )
-                        doc_eq_display = doc_eq_display.rename(
-                            columns={
-                                "sent_at": "Fecha envío",
-                                "doc_type": "Tipo de documento",
-                                "filename": "Archivo",
-                                "sender_domain": "Dominio remitente",
-                                "equipment_tags": "Equipos mencionados",
-                            }
-                        )
-                        st.dataframe(doc_eq_display.head(80), use_container_width=True, hide_index=True)
-
-                    # Señales heurísticas relacionadas (si details_json hace referencia al equipo).
-                    st.markdown("#### Señales heurísticas relacionadas con este equipo")
-                    signals_eq = _load_df(
-                        conn,
-                        """
-                        SELECT signal_type, entity_kind, entity_key, score, details_json, created_at
-                        FROM opportunity_signals
-                        WHERE details_json LIKE ?
-                        ORDER BY score DESC, created_at DESC
-                        """,
-                        (f"%{selected_tag}%",),
-                    )
-                    if signals_eq.empty:
-                        st.info(
-                            "No se encontraron señales heurísticas donde el detalle haga referencia explícita a este equipo."
-                        )
-                    else:
-                        signals_eq["señal"] = signals_eq["signal_type"].apply(lambda x: _signal_label(str(x))[0])
-                        signals_eq["explicación"] = signals_eq["signal_type"].apply(
-                            lambda x: _signal_label(str(x))[1]
-                        )
-                        signals_display = signals_eq[
-                            ["señal", "explicación", "entity_kind", "entity_key", "score", "created_at"]
-                        ].copy()
-                        signals_display["Entidad"] = signals_display["entity_kind"].map(
-                            {"contact": "Contacto", "organization": "Organización"}
-                        ).fillna(signals_display["entity_kind"])
-                        signals_display = signals_display.rename(
-                            columns={
-                                "entity_key": "Clave (email/dominio)",
-                                "score": "Intensidad de la señal",
-                                "created_at": "Detectado el",
-                            }
-                        ).drop(columns=["entity_kind"])
-                        st.dataframe(signals_display.head(80), use_container_width=True, hide_index=True)
-                        with st.expander("Ver detalles técnicos de las señales por equipo"):
-                            st.dataframe(
-                                signals_eq[
-                                    ["signal_type", "entity_kind", "entity_key", "details_json", "score", "created_at"]
-                                ].head(200),
-                                use_container_width=True,
-                                hide_index=True,
-                            )
-
+        if page == "Equipos":
+            _render_equipment_page(conn)
             return
 
         if page == "Contactos":
             st.subheader("Contactos")
             q = st.text_input("Buscar (email / dominio / organización)", value="")
             min_total = st.number_input("Mínimo de correos", min_value=0, value=3, step=1)
+            st.caption("Busca por email, dominio u organización. Se priorizan coincidencias más exactas.")
 
             dfc = _load_df(
                 conn,
@@ -805,15 +844,15 @@ def main() -> None:
                 """,
             )
             dfc = dfc[dfc["total"] >= int(min_total)]
-            if q.strip():
-                ql = q.strip().lower()
-                mask = (
-                    dfc["email"].str.lower().str.contains(ql, na=False)
-                    | dfc["dominio"].fillna("").str.lower().str.contains(ql, na=False)
-                    | dfc["organizacion"].fillna("").str.lower().str.contains(ql, na=False)
-                )
-                dfc = dfc[mask]
-            dfc = dfc.sort_values(["total", "ultima"], ascending=[False, False])
+            qn = _normalize_query(q)
+            if qn:
+                score = _search_relevance_score(dfc, qn, ["email", "dominio", "organizacion"])
+                dfc = dfc.assign(_search_score=score)
+                dfc = dfc[dfc["_search_score"] > 0]
+                dfc = dfc.sort_values(["_search_score", "total", "ultima"], ascending=[False, False, False])
+            else:
+                dfc = dfc.sort_values(["total", "ultima"], ascending=[False, False])
+            st.caption(f"Resultados: {len(dfc):,}")
             # Nombres de columnas más amigables para la tabla principal.
             dfc_display = dfc.rename(
                 columns={
@@ -959,7 +998,8 @@ def main() -> None:
             min_contacts = st.number_input(
                 "Mínimo contactos", min_value=0, value=2, step=1, key="org_min_c_basic"
             )
-            solo_unis_default = st.session_state.get("org_only_unis", False)
+            st.caption("Busca por dominio o nombre. Se priorizan coincidencias más exactas.")
+            solo_unis_default = _consume_nav_flag("org_only_unis", False)
             solo_unis = st.checkbox(
                 "Solo universidades con actividad de cotización",
                 value=solo_unis_default,
@@ -993,23 +1033,24 @@ def main() -> None:
                     & ((dfo["cotiz_email"] > 0) | (dfo["doc_emails"] > 0))
                 ]
             # Filtro adicional desde quick-actions: solo organizaciones con facturas.
-            if st.session_state.get("org_only_invoices"):
+            if _consume_nav_flag("org_only_invoices", False):
                 dfo = dfo[(dfo["factura_email"] > 0)]
             # Filtro adicional: universidades con facturación.
-            if st.session_state.get("org_only_unis_invoices"):
+            if _consume_nav_flag("org_only_unis_invoices", False):
                 dfo = dfo[
                     (dfo["tipo_org"] == "education")
                     & (dfo["factura_email"] > 0)
                 ]
 
-            if q.strip():
-                ql = q.strip().lower()
-                mask = (
-                    dfo["dominio"].str.lower().str.contains(ql, na=False)
-                    | dfo["organizacion"].fillna("").str.lower().str.contains(ql, na=False)
-                )
-                dfo = dfo[mask]
-            dfo = dfo.sort_values(["total", "ultima"], ascending=[False, False])
+            qn = _normalize_query(q)
+            if qn:
+                score = _search_relevance_score(dfo, qn, ["dominio", "organizacion"])
+                dfo = dfo.assign(_search_score=score)
+                dfo = dfo[dfo["_search_score"] > 0]
+                dfo = dfo.sort_values(["_search_score", "total", "ultima"], ascending=[False, False, False])
+            else:
+                dfo = dfo.sort_values(["total", "ultima"], ascending=[False, False])
+            st.caption(f"Resultados: {len(dfo):,}")
 
             # Nombres de columnas más amigables para la tabla principal.
             dfo_display = dfo.rename(
@@ -1443,7 +1484,7 @@ def main() -> None:
             signal_options = ["Todas", "Cotización + documento", "Universidad con cotización", "Cuenta dormida", "Tema de equipo recurrente"]
             # Si venimos desde quick-action de cuentas dormidas, seleccionar por defecto esa opción.
             default_signal = 0
-            if st.session_state.get("opp_signal_filter") == "dormant_contact":
+            if st.session_state.pop("opp_signal_filter", None) == "dormant_contact":
                 default_signal = signal_options.index("Cuenta dormida")
             tipo_señal = st.selectbox("Tipo de señal", options=signal_options, index=default_signal)
             signal_map = {
@@ -1465,6 +1506,24 @@ def main() -> None:
             min_score = st.number_input("Score mínimo de la señal", min_value=0.0, max_value=1000.0, value=0.0, step=1.0)
             dfs = dfs[dfs["score"] >= float(min_score)]
 
+            # Panel rápido: señales por tipo + intensidad máxima para priorización.
+            if not dfs.empty:
+                summary = (
+                    dfs.groupby("signal_type", dropna=False)
+                    .agg(total=("signal_type", "count"), score_max=("score", "max"))
+                    .reset_index()
+                )
+                summary["señal"] = summary["signal_type"].apply(lambda x: _signal_label(str(x))[0])
+                summary = summary.sort_values(["total", "score_max"], ascending=[False, False]).head(6)
+                st.markdown("#### Prioridad rápida")
+                st.dataframe(
+                    summary[["señal", "total", "score_max"]].rename(
+                        columns={"total": "Cantidad", "score_max": "Score máximo"}
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
             # Traducir entity_kind a etiquetas legibles.
             dfs_display = dfs.copy()
             dfs_display["Entidad"] = dfs_display["entity_kind"].map(
@@ -1480,6 +1539,7 @@ def main() -> None:
                 }
             )
 
+            st.caption(f"Resultados: {len(dfs_display):,}")
             st.dataframe(
                 dfs_display.head(600),
                 use_container_width=True,

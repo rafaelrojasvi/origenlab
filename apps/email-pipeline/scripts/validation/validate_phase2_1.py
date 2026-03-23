@@ -22,13 +22,6 @@ def main() -> None:
     conn = sqlite3.connect(str(db_path), timeout=60.0)
     conn.row_factory = sqlite3.Row
 
-    # Optional index to speed up GROUP BY on body_source_type (one-time cost)
-    try:
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_emails_body_source_type ON emails(body_source_type)")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
-
     print("=== Phase 2.1 validation ===", flush=True)
     print("DB:", db_path, "\n", flush=True)
 

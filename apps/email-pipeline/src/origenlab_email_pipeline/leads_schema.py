@@ -166,8 +166,8 @@ def backfill_lead_master_norm_columns(conn: sqlite3.Connection) -> int:
     return n
 
 
-def ensure_leads_tables(conn: sqlite3.Connection) -> None:
-    """Create lead tables if they do not exist. Idempotent."""
+def ensure_leads_tables_ddl(conn: sqlite3.Connection) -> None:
+    """Create/migrate lead tables and indexes only (no norm backfill, no view refresh). Idempotent."""
     ensure_pipeline_meta_tables(conn)
     conn.executescript(LEAD_SCHEMA_SQL)
     # Existing DBs created before Phase 1 hardening.
@@ -202,5 +202,20 @@ def ensure_leads_tables(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass
     conn.commit()
-    backfill_lead_master_norm_columns(conn)
-    refresh_lead_match_summary_view(conn)
+
+
+def ensure_leads_tables(
+    conn: sqlite3.Connection,
+    *,
+    backfill_norms: bool = True,
+    refresh_view: bool = True,
+) -> None:
+    """Create lead tables if they do not exist. Idempotent.
+
+    Defaults preserve legacy behavior: DDL, then norm backfill, then BI view refresh.
+    """
+    ensure_leads_tables_ddl(conn)
+    if backfill_norms:
+        backfill_lead_master_norm_columns(conn)
+    if refresh_view:
+        refresh_lead_match_summary_view(conn)

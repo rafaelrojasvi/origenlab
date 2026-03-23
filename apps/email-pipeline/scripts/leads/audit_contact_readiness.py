@@ -4,7 +4,7 @@
 Reads ``reports/out/active/leads_contact_hunt_current.csv`` as the primary cohort,
 SQLite for matches / enrichment / archive, and writes:
 
-- docs/CONTACT_READINESS_AUDIT.md
+- docs/generated/CONTACT_READINESS_AUDIT.md
 - reports/out/active/leads_ready_to_contact.csv
 - reports/out/active/leads_needs_contact_research.csv
 - reports/out/active/leads_not_ready.csv
@@ -37,7 +37,7 @@ HUNT_PATH = _ROOT / "reports/out/active/leads_contact_hunt_current.csv"
 MERGED_PATH = _ROOT / "reports/out/active/leads_contact_hunt_current_merged.csv"
 WEEKLY_FOCUS_PATH = _ROOT / "reports/out/active/leads_weekly_focus.csv"
 REFERENCE_GLOB = "reports/out/reference/*DEEPRESEARCH*"
-DOCS_OUT = _ROOT / "docs/CONTACT_READINESS_AUDIT.md"
+DOCS_OUT = _ROOT / "docs/generated/CONTACT_READINESS_AUDIT.md"
 ACTIVE = _ROOT / "reports/out/active"
 
 CONTACT_JSON_KEYS = (
@@ -517,14 +517,13 @@ Se marca **ready** solo si, para un `id_lead` del cohorte hunt:
 {align_msg if not align_ok else "OK: mismos id_lead en current y merged."}
 ```
 
-**Base de datos:** SQLite según `ORIGENLAB_SQLITE_PATH` o el default del proyecto (`~/data/origenlab-email/sqlite/emails.sqlite`). La ruta absoluta de una corrida concreta se imprime en consola al ejecutar el script; no se incrusta aquí para evitar rutas personales en el repo.  
+**Base de datos usada:** `{db_path}`  
 **Generado:** audit automático (`scripts/leads/audit_contact_readiness.py`).
 """
 
     DOCS_OUT.parent.mkdir(parents=True, exist_ok=True)
     DOCS_OUT.write_text(md, encoding="utf-8")
 
-    print(f"SQLite used: {db_path}")
     print(f"Wrote {DOCS_OUT}")
     print(f"Ready: {len(ready_rows)}, needs research: {len(needs_rows)}, not ready: {len(not_ready_rows)}")
     return 0

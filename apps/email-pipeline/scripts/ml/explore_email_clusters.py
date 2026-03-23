@@ -25,7 +25,7 @@ if str(_ROOT / "src") not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 
-# Spanish + English tokens aligned with EMAIL_BUSINESS_SIGNAL_PROMPT.md
+# Spanish + English tokens aligned with AI_ML_IMPLEMENTED_SUMMARY.md (business-signal prompt appendix)
 DEFAULT_TRACK = [
     ("cotiz", "cotización / quote"),
     ("proveedor", "proveedor"),

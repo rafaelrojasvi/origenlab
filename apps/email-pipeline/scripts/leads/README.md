@@ -17,9 +17,9 @@ File-based ingest and normalization for Chile external leads. Run from **repo ro
 11. **Merge + import hunt CSV** — `merge_contact_hunt_enrichment.py` (Deep Research → mismo CSV), luego validar con `validate_contact_hunt_alignment.py` (misma población de `id_lead` que `leads_contact_hunt_current.csv`), después `import_contact_hunt_to_sqlite.py` (recomendado: `--require-aligned-with` apuntando al hunt actual).
 12. **Weekly canonical focus (safe mode)** — `run_weekly_focus.py` (genera CSV operativo + resumen ES con clasificación USAR/REFERENCIA/NO OPERATIVO).
 13. **Limpiar `active/` + deepsearch + CSV unificado** — `prepare_active_workspace.py` (mantiene en `active/` solo foco semanal + resumen + hunt current ± for_deepsearch; archiva otros CSV; opcional `--deepsearch` y `--unified`).
-14. **Paquete cliente (HTML + MD + anexo)** — `uv run python scripts/reports/build_leads_client_pack.py` → `reports/out/client_pack_latest/`. Ver `docs/REPORTS_AND_CLIENT_PACK.md`.
-15. **DR50 ready-8 → hunt + top20 informe** — `apply_ready8_contact_patch.py` (actualiza `leads_contact_hunt_current.csv` desde `leads_dr50_ready_candidates.csv`, escribe `leads_contact_hunt_current_ready8_patch.csv`, `leads_top20_for_client_report.csv`, `docs/READY8_AND_TOP20_REPORTING_PLAN.md`). Luego import + `audit_contact_readiness.py`.
-16. **Reconciliación DR 50 filas (solo análisis)** — `reconcile_deepresearch_50_with_current_cohort.py` → CSVs `leads_dr50_*` y `docs/DEEP_RESEARCH_RECONCILIATION.md`.
+14. **Paquete cliente (HTML + MD + anexo)** — `uv run python scripts/reports/build_leads_client_pack.py` → `reports/out/client_pack_latest/`. Ver `docs/REPORTING.md`.
+15. **DR50 ready-8 → hunt + top20 informe** — `apply_ready8_contact_patch.py` (actualiza `leads_contact_hunt_current.csv` desde `leads_dr50_ready_candidates.csv`, escribe `leads_contact_hunt_current_ready8_patch.csv`, `leads_top20_for_client_report.csv`, `docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md`). Luego import + `audit_contact_readiness.py`.
+16. **Reconciliación DR 50 filas (solo análisis)** — `reconcile_deepresearch_50_with_current_cohort.py` → CSVs `leads_dr50_*` y `docs/generated/DEEP_RESEARCH_RECONCILIATION.md`.
 
 Or run the full pipeline. Sample CSVs in `samples/` let you run without real data:
 
@@ -75,7 +75,7 @@ uv run python scripts/leads/run_contact_hunt_web_server.py --port 8000
 - **INN labs:** CSV with columns such as: nombre, lab_name, area, region, ciudad, sitio, website, email, contacto, telefono, id, codigo.
 - **CORFO centers:** CSV with columns such as: centro, nombre_centro, organizacion, region, ciudad, sitio, website, email, contacto, director, telefono, area, lineas, id, codigo.
 
-See [docs/LEAD_PIPELINE.md](../../docs/LEAD_PIPELINE.md) for full column lists and [docs/CHILE_LEAD_SOURCES.md](../../docs/CHILE_LEAD_SOURCES.md) for source URLs.
+See [docs/leads/LEAD_PIPELINE.md](../../docs/leads/LEAD_PIPELINE.md) for full column lists and [docs/leads/CHILE_LEAD_SOURCES.md](../../docs/leads/CHILE_LEAD_SOURCES.md) for source URLs.
 
 ## SOP semanal corto (6 comandos)
 

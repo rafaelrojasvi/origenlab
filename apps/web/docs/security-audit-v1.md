@@ -1,5 +1,9 @@
 # OrigenLab — Auditoría de seguridad y arquitectura v1
 
+Status: canonical  
+Owner: web-maintainers  
+Last reviewed: 2026-03-23
+
 Auditoría enfocada para el sitio estático Astro desplegado en HostGator (sin backend).
 
 **Nota de alineación con el código:** Las secciones 2–3 y el resumen final reflejan el estado **actual** del repositorio (recursos de terceros, meta tags, implicaciones para CSP). Las tablas históricas de hallazgos más abajo se conservan con el estado **Hecho / pendiente** actualizado donde correspondía.

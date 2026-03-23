@@ -4,6 +4,8 @@
 
 This folder is the **default** destination for generated reports (HTML + JSON).
 
+**Command reference:** [docs/RUNBOOK.md](../../docs/RUNBOOK.md#m-eprun-path).
+
 - Generate a new run:
 
 ```bash
@@ -60,7 +62,7 @@ ORIGENLAB_REPORTS_DIR="$(pwd)/reports/out" uv run python scripts/mart/open_clien
 ## Regenerating “the” report
 
 ```bash
-cd apps/email-pipeline   # from OrigenLab monorepo root
+cd apps/email-pipeline
 uv run python scripts/reports/run_all_reports.py
 ```
 

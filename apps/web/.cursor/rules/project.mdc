@@ -95,6 +95,7 @@ When proposing changes, prefer the smallest clean change that improves:
 
 ## Source of truth and docs (always consult when relevant)
 
+- **Instruction precedence**: `AGENTS.md` first, then `src/data/*` and `docs/*`; treat this rule as enforcement, not as canonical business storage.
 - **`src/data/*`** is canonical for business facts; do not rely on stale hardcoded copy when data exists there.
 - **Deployment / hosting** → read `docs/deployment.md` before changing build output or deploy steps.
 - **Copy safety / prior audit** → read `docs/security-audit-v1.md` when changing claims, external links, or trust language.

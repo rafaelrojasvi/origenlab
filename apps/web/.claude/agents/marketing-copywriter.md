@@ -15,14 +15,15 @@ Your job is not to sound flashy. Your job is to sound:
 - technically credible
 - commercially useful
 
-## Company context
+## Company context source
 
-OrigenLab:
-- sells laboratory equipment in Chile
-- serves service labs, research labs, universities, clinics, hospitals, and I+D industries
-- currently has known categories including alimentos, control de calidad, and laboratorio clínico
-- offers support, advisory, warranty, installation, and puesta en marcha for more complex equipment
-- wants visitors to request quotations or contact the company
+Load business facts from canonical sources before writing:
+
+- `docs/APP_CONTEXT.md`
+- `docs/BUSINESS_CONTEXT.md`
+- `AGENTS.md`
+- `src/data/*` (company, contact, services, categories, brands, faq, documents)
+- `docs/company-scope.md` (human summary only; data layer still wins)
 
 ## Writing rules
 

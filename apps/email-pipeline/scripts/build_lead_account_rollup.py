@@ -22,9 +22,8 @@ if str(_ROOT) not in sys.path:
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.leads_ingest import now_iso
-from origenlab_email_pipeline.leads_schema import ensure_leads_tables
-from origenlab_email_pipeline.lead_accounts_schema import ensure_lead_account_tables
 from origenlab_email_pipeline.pipeline_run_recorder import finish_run, set_kv, start_run
+from origenlab_email_pipeline.sqlite_migrate import SchemaLayer, migrate_sqlite_schema
 from origenlab_email_pipeline.org_normalize import (
     account_dedupe_key,
     better_canonical_name,
@@ -64,8 +63,10 @@ def main() -> int:
     db_path = args.db or settings.resolved_sqlite_path()
     conn = connect(db_path)
     conn.execute("PRAGMA busy_timeout=300000")
-    ensure_leads_tables(conn)
-    ensure_lead_account_tables(conn)
+    migrate_sqlite_schema(
+        conn,
+        layers={SchemaLayer.LEADS, SchemaLayer.LEAD_ACCOUNTS},
+    )
 
     run_id = start_run(
         conn,

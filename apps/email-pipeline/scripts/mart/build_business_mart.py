@@ -37,8 +37,9 @@ from origenlab_email_pipeline.business_mart import (
     signal_row,
 )
 from origenlab_email_pipeline.config import load_settings
-from origenlab_email_pipeline.db import connect, init_schema
+from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.pipeline_run_recorder import finish_run, get_git_describe, set_kv, start_run
+from origenlab_email_pipeline.sqlite_migrate import SchemaLayer, migrate_sqlite_schema
 from origenlab_email_pipeline.progress import iter_with_progress
 
 
@@ -83,7 +84,7 @@ def main() -> None:
     settings = load_settings()
     db_path = settings.resolved_sqlite_path()
     conn = connect(db_path)
-    init_schema(conn)
+    migrate_sqlite_schema(conn, layers={SchemaLayer.ARCHIVE_AND_MART})
 
     run_id = start_run(
         conn,

@@ -4,8 +4,15 @@ Monorepo for OrigenLab engineering: **marketing site** (Astro) and **email / lea
 
 | App | Path | Stack |
 |-----|------|--------|
-| Website | [`apps/web/`](apps/web/) | Astro 5, Tailwind 4, Node 20 (see `apps/web/.nvmrc`) |
+| Website | [`apps/web/`](apps/web/) | Astro 5, Tailwind 4, Node 20 (see [`apps/web/.nvmrc`](apps/web/.nvmrc)) |
 | Email pipeline | [`apps/email-pipeline/`](apps/email-pipeline/) | Python 3.12, uv, optional CUDA ML — see that app’s [README](apps/email-pipeline/README.md) |
+
+## Documentation hubs
+
+- Agent-first monorepo context: [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md#m-proj-start)
+- Monorepo map: [`docs/DOCUMENTATION_MAP.md`](docs/DOCUMENTATION_MAP.md#m-docmap-entry)
+- Web app docs: [`apps/web/docs/README.md`](apps/web/docs/README.md)
+- Email pipeline docs: [`apps/email-pipeline/docs/README.md`](apps/email-pipeline/docs/README.md)
 
 ## Quick start
 
@@ -25,7 +32,7 @@ uv sync --group dev --group ui
 uv run pytest
 ```
 
-(`--group ui` is required for Streamlit-related tests; default `uv sync` is enough to run the core pipeline only.)
+(`--group ui` is required for Streamlit-related tests in CI. Default `uv sync` (no extra groups) installs **base** email-pipeline dependencies only—**not** the ML stack; use `uv sync --group ml` for embeddings/CUDA tooling. CI for this app uses `--group dev` + `--group ui`.)
 
 ## CI
 

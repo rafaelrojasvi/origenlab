@@ -122,7 +122,11 @@ CREATE INDEX IF NOT EXISTS idx_lead_account_overrides_type
 """
 
 
-def ensure_lead_account_tables(conn: sqlite3.Connection) -> None:
+def ensure_lead_account_tables(
+    conn: sqlite3.Connection,
+    *,
+    refresh_view: bool = True,
+) -> None:
     """Create lead account rollup tables if missing. Idempotent."""
     ensure_pipeline_meta_tables(conn)
     conn.executescript(LEAD_ACCOUNT_SCHEMA_SQL)
@@ -139,4 +143,5 @@ def ensure_lead_account_tables(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass
     conn.commit()
-    refresh_lead_match_summary_view(conn)
+    if refresh_view:
+        refresh_lead_match_summary_view(conn)

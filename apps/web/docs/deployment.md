@@ -1,5 +1,9 @@
 # Despliegue — OrigenLab (HostGator)
 
+Status: canonical  
+Owner: web-maintainers  
+Last reviewed: 2026-03-23
+
 Sitio estático generado con Astro. El resultado del build son HTML, CSS y assets en la carpeta `dist/`.
 
 ## Checklist antes del lanzamiento

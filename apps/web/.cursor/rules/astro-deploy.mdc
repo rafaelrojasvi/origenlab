@@ -11,6 +11,8 @@ globs:
 
 This site should stay compatible with simple static hosting.
 
+Canonical deployment documentation: `docs/deployment.md` and `docs/deployment-status.md`.
+
 ## Core assumptions
 
 Assume:

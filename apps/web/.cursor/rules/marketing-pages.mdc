@@ -10,6 +10,8 @@ globs:
 
 Apply these rules when editing public-facing pages or shared UI sections.
 
+For canonical facts and policy, read `AGENTS.md` and `src/data/*` first.
+
 ## Primary objective
 
 Every page should help a potential client do one or more of these:

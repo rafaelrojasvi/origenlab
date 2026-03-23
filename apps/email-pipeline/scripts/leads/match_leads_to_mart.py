@@ -14,8 +14,8 @@ if str(_ROOT) not in sys.path:
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.leads_match import match_leads_to_mart
-from origenlab_email_pipeline.leads_schema import ensure_leads_tables
 from origenlab_email_pipeline.pipeline_run_recorder import finish_run, set_kv, start_run
+from origenlab_email_pipeline.sqlite_migrate import SchemaLayer, migrate_sqlite_schema
 
 
 def main() -> int:
@@ -25,7 +25,7 @@ def main() -> int:
     settings = load_settings()
     db_path = args.db or settings.resolved_sqlite_path()
     conn = connect(db_path)
-    ensure_leads_tables(conn)
+    migrate_sqlite_schema(conn, layers={SchemaLayer.LEADS})
     run_id = start_run(
         conn,
         script_name="scripts/leads/match_leads_to_mart.py",

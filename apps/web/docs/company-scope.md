@@ -1,5 +1,9 @@
 # Alcance y datos de OrigenLab (brief / cotizaciones)
 
+Status: canonical  
+Owner: web-maintainers  
+Last reviewed: 2026-03-23
+
 Documento de referencia para copy, IA y redacción de cotizaciones. **Fuente de verdad en código:** `src/data/company.ts`, `src/data/contact.ts`, `src/data/services.ts`, `src/data/categories.ts`. Este doc resume y centraliza para humanos y prompts externos (p. ej. ChatGPT).
 
 ---

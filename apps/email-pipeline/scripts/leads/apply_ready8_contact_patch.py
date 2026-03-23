@@ -4,7 +4,7 @@
 Also writes:
   reports/out/active/leads_contact_hunt_current_ready8_patch.csv — the 8 full hunt rows after patch
   reports/out/active/leads_top20_for_client_report.csv
-  docs/READY8_AND_TOP20_REPORTING_PLAN.md
+  docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md
 
 Does not touch legacy reference/*DEEPRESEARCH* files.
 """
@@ -25,7 +25,7 @@ READY8 = REPO / "reports/out/active/leads_dr50_ready_candidates.csv"
 NEEDS = REPO / "reports/out/active/leads_dr50_needs_research.csv"
 PATCH_OUT = REPO / "reports/out/active/leads_contact_hunt_current_ready8_patch.csv"
 TOP20_OUT = REPO / "reports/out/active/leads_top20_for_client_report.csv"
-PLAN_MD = REPO / "docs/READY8_AND_TOP20_REPORTING_PLAN.md"
+PLAN_MD = REPO / "docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md"
 
 READY_IDS = {608694, 622998, 608621, 617311, 619403, 608386, 609442, 610539}
 
@@ -249,7 +249,7 @@ Con la hoja `leads_contact_hunt_current.csv` ya parcheada y **reimportada** a SQ
 ```
 
 - **Import:** vuelca la hoja hunt actualizada a `lead_outreach_enrichment` y opcionalmente promueve compras a `lead_master` (`--promote-procurement`).
-- **Audit:** regenera `docs/CONTACT_READINESS_AUDIT.md` y los tres CSV de readiness en `reports/out/active/`.
+- **Audit:** regenera `docs/generated/CONTACT_READINESS_AUDIT.md` y los tres CSV de readiness en `reports/out/active/`.
 - **Client pack:** regenera `reports/out/client_pack_latest/`.
 
 ---

@@ -117,69 +117,10 @@ def init_schema(conn: sqlite3.Connection) -> None:
             conn.commit()
         except sqlite3.OperationalError:
             pass
-    # Ensure attachments table exists even on older DBs
+    # Optional perf index for GROUP BY / filters on body_source_type (needs column from ALTER loop above).
     try:
         conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS attachments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email_id INTEGER NOT NULL,
-                part_index INTEGER NOT NULL,
-                filename TEXT,
-                content_type TEXT,
-                content_disposition TEXT,
-                size_bytes INTEGER,
-                content_id TEXT,
-                is_inline INTEGER,
-                sha256 TEXT,
-                saved_path TEXT,
-                created_at TEXT,
-                FOREIGN KEY(email_id) REFERENCES emails(id) ON DELETE CASCADE
-            )
-            """
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_attachments_email_id ON attachments(email_id)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_attachments_sha256 ON attachments(sha256)"
-        )
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
-    # Ensure attachment_extracts exists even on older DBs
-    try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS attachment_extracts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                attachment_id INTEGER NOT NULL UNIQUE,
-                extract_status TEXT NOT NULL,
-                extract_method TEXT NOT NULL,
-                text_preview TEXT,
-                text_truncated TEXT,
-                char_count INTEGER,
-                page_count INTEGER,
-                sheet_count INTEGER,
-                detected_doc_type TEXT,
-                has_quote_terms INTEGER,
-                has_invoice_terms INTEGER,
-                has_price_list_terms INTEGER,
-                has_purchase_terms INTEGER,
-                error_message TEXT,
-                created_at TEXT,
-                FOREIGN KEY(attachment_id) REFERENCES attachments(id) ON DELETE CASCADE
-            )
-            """
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_attachment_extracts_attachment_id ON attachment_extracts(attachment_id)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_attachment_extracts_doc_type ON attachment_extracts(detected_doc_type)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_attachment_extracts_status_method ON attachment_extracts(extract_status, extract_method)"
+            "CREATE INDEX IF NOT EXISTS idx_emails_body_source_type ON emails(body_source_type)"
         )
         conn.commit()
     except sqlite3.OperationalError:

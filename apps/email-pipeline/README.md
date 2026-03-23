@@ -1,14 +1,13 @@
 # origenlab-email-pipeline
 
-**Monorepo:** In the OrigenLab monorepo this app is **`apps/email-pipeline/`**. From the monorepo root, run `cd apps/email-pipeline` before the `uv` / `bash` commands below (or open this folder as the working directory in your terminal).
-
 Local-first pipeline: **PST → mbox** (`readpst`) → **SQLite** → **JSONL**.  
-Code lives in the repo; **put real PSTs and outputs outside the repo** (e.g. `~/data/origenlab-email/`).
+Code lives in the repo; **put real PSTs and outputs outside the repo** (e.g. `~/data/origenlab-email/` — see [docs/DATA_LOCATIONS.md](docs/DATA_LOCATIONS.md#m-epdata-root)).
 
 - Python **3.12**, managed with **[uv](https://docs.astral.sh/uv/)**
 - Optional **ML stack** (PyTorch CUDA, sentence-transformers, FAISS-CPU) for a later embeddings stage — see [ML environment setup](#ml-environment-setup)
-- Paths from **environment** (see `.env.example`); defaults use `$HOME/data/origenlab-email/`
+- Paths from **environment** (see [`.env.example`](.env.example)); defaults use `$HOME/data/origenlab-email/`
 
+**Agent-first app context:** [docs/APP_CONTEXT.md](docs/APP_CONTEXT.md#m-epapp-start).  
 **Documentation index** (what is canonical vs auto-generated, merges to consider): [docs/README.md](docs/README.md).
 
 ## GitHub & what not to commit
@@ -18,12 +17,12 @@ This repo is meant to hold **code and docs** only.
 | Committed | Not committed (see `.gitignore`) |
 |-----------|-----------------------------------|
 | `pyproject.toml`, `uv.lock`, `src/`, `scripts/`, `tests/`, `docs/`, `apps/` | `.env` (use `.env.example` as template) |
-| `LICENSE`, `README.md`, `SECURITY.md`, `CONTRIBUTING.md` | `*.sqlite`, `*.pst`, `*.mbox`, `*.jsonl` |
+| `LICENSE`, `README.md`, [docs/SECURITY.md](docs/SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md) | `*.sqlite`, `*.pst`, `*.mbox`, `*.jsonl` |
 | `reports/out/README.md` + `reports/out/.gitkeep` | Everything else under `reports/out/` (reports, `active/` CSVs, client pack — often sensitive) |
 
 **After cloning:** `uv sync` → `cp .env.example .env` → create `~/data/origenlab-email/...` and set paths. **Do not** paste API keys or DB paths with real usernames into issues or PRs.
 
-Security disclosures: [SECURITY.md](SECURITY.md).
+Security disclosures: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Prerequisites (Ubuntu / WSL)
 
@@ -42,7 +41,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ## One-time setup
 
 ```bash
-cd apps/email-pipeline   # from OrigenLab monorepo root
+cd apps/email-pipeline   # from monorepo root, or use your absolute clone path
 
 uv python install 3.12
 uv sync
@@ -70,7 +69,7 @@ Use the repo **`.venv`** — do **not** install into system Python. **`pyproject
 ### Recommended: one command
 
 ```bash
-cd apps/email-pipeline   # from monorepo root
+cd apps/email-pipeline
 export UV_HTTP_TIMEOUT=300
 export UV_HTTP_RETRIES=5
 
@@ -144,7 +143,7 @@ Build a curated, searchable business layer on top of the raw archive (does **not
 1) Build / rebuild mart tables:
 
 ```bash
-cd apps/email-pipeline   # from monorepo root
+cd apps/email-pipeline
 uv run python scripts/mart/build_business_mart.py --rebuild
 ```
 
@@ -177,7 +176,7 @@ New-NetFirewallRule -DisplayName "WSL Streamlit 8501" -Direction Inbound -LocalP
 Then the client opens **`http://<your-PC-WiFi-IPv4>:8501/`** (e.g. `http://192.168.4.182:8501/`).  
 **Note:** Streamlit has no built-in Basic Auth like the CSV helper; treat this as trusted-LAN only or put a reverse proxy in front.
 
-Docs: `docs/BUSINESS_MART.md`
+Docs: `docs/pipeline/BUSINESS_MART.md`
 
 **3. SQLite → JSONL**
 
@@ -205,7 +204,7 @@ Prints keyword hit rates on the sample and per-cluster subject lines + a body sn
 
 ### Client report (HTML + JSON, saved per run)
 
-**Why you don’t see it in the repo tree:** reports default to **`~/data/origenlab-email/reports/`** (same place as SQLite), not inside `apps/email-pipeline/`. Open that folder in the editor, or run `uv run python scripts/mart/open_client_report.py --open`. To generate **inside** this app: `--out reports/out/mi_run` (see [reports/README.md](reports/README.md)).
+**Why you don’t see it in the repo tree:** reports default to **`~/data/origenlab-email/reports/`** (same place as SQLite), not inside `origenlab-email-pipeline/`. Open that folder in the editor, or run `uv run python scripts/mart/open_client_report.py --open`. To generate **inside** the repo: `--out reports/out/mi_run` (see [reports/README.md](reports/README.md)).
 
 Full dashboard: by year, cotización / proveedor / universidad / equipment mentions, top sender & recipient domains, optional embedding sample.
 
@@ -220,10 +219,10 @@ uv run python scripts/reports/generate_client_report.py --domain-sample 500000 -
 uv run python scripts/reports/generate_client_report.py --domain-sample 300000 --embeddings-sample 1500 --embeddings-clusters 12
 ```
 
-Output folder: **`ORIGENLAB_REPORTS_DIR`** (default `~/data/origenlab-email/reports/<timestamp>_<name>/`) with `index.html` (open in browser), `summary.json`. See [docs/CLIENT_REPORT.md](docs/CLIENT_REPORT.md).
+Output folder: **`ORIGENLAB_REPORTS_DIR`** (default `~/data/origenlab-email/reports/<timestamp>_<name>/`) with `index.html` (open in browser), `summary.json`. See [docs/REPORTING.md](docs/REPORTING.md#m-eprep-mail).
 
 **Todo en una pasada** (informe + clusters estratificados + ML explore):  
-`bash scripts/reports/run_all.sh` — ver [docs/RUN_ALL.md](docs/RUN_ALL.md). Al terminar, en la carpeta del run se genera **`overview.html`**: una sola página con qué se ejecutó, números principales y enlaces a todos los resultados. Mapa completo de salidas: [docs/OUTPUTS_OVERVIEW.md](docs/OUTPUTS_OVERVIEW.md).
+`bash scripts/reports/run_all.sh` — ver [docs/RUNBOOK.md](docs/RUNBOOK.md#m-eprun-batch) (sección batch). Al terminar, en la carpeta del run se genera **`overview.html`**: una sola página con qué se ejecutó, números principales y enlaces a todos los resultados. Mapa completo de salidas: [docs/reporting/OUTPUTS_OVERVIEW.md](docs/reporting/OUTPUTS_OVERVIEW.md).
 
 **Full run (all rows, all CPUs for dominios, ETA en consola):**
 
@@ -234,7 +233,7 @@ uv run python scripts/reports/generate_client_report.py --full --name cliente_fu
 # Sin embeddings:   --full --embeddings-sample 0
 ```
 
-More ML + **estratificación** (`--sample-mode cotiz|no_bounce|universidad`): [docs/AI_ML_IMPLEMENTED_SUMMARY.md](docs/AI_ML_IMPLEMENTED_SUMMARY.md) · [docs/ML_EMAIL_OPTIONS.md](docs/ML_EMAIL_OPTIONS.md)
+More ML + **estratificación** (`--sample-mode cotiz|no_bounce|universidad`): [docs/ml/AI_ML_IMPLEMENTED_SUMMARY.md](docs/ml/AI_ML_IMPLEMENTED_SUMMARY.md)
 
 ```bash
 uv run python scripts/ml/explore_email_clusters.py --limit 2000 --sample-mode no_bounce --n-clusters 12
@@ -314,13 +313,13 @@ sqlite3 ~/data/origenlab-email/sqlite/emails.sqlite \
 ## Layout
 
 ```
-apps/email-pipeline/
+origenlab-email-pipeline/
 ├── .env.example
 ├── pyproject.toml
 ├── README.md
 ├── apps/
 │   └── business_mart_app.py      # Streamlit UI (mart + equipment explorer)
-├── docs/                         # Detailed docs (BUSINESS_MART, CLIENT_REPORT, RUN_ALL, ML, etc.)
+├── docs/                         # Detailed docs (BUSINESS_MART, REPORTING, RUNBOOK, ML, etc.)
 ├── reports/
 │   └── out/                      # Generated outputs; contents gitignored except README + .gitkeep
 ├── scripts/                      # CLI entrypoints (see scripts/README.md)

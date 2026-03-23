@@ -22,6 +22,8 @@ Thumbs.db
 data/
 tmp/
 logs/
+scripts/leads/input/*
+!scripts/leads/input/.gitkeep
 
 # Generated reports under repo (may contain PII / client data).
 # Only reports/out/README.md and reports/out/.gitkeep are tracked — see root README "GitHub & secrets".
@@ -60,7 +62,3 @@ id_rsa.pub
 
 # Jupyter
 .ipynb_checkpoints/
-
-# Lead / procurement downloads (local only; can be large or sensitive)
-scripts/leads/input/*
-!scripts/leads/input/.gitkeep

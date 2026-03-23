@@ -12,7 +12,7 @@ Generates:
   - category_counts.csv
   - sender_domain_by_view.csv
 
-  cd apps/email-pipeline  # from OrigenLab monorepo root
+  cd apps/email-pipeline   # from monorepo root
   uv run python scripts/reports/run_all_reports.py
   uv run python scripts/reports/run_all_reports.py --fast          # skip full domain scan (faster, fewer stats)
   uv run python scripts/reports/run_all_reports.py --embeddings   # add ML clusters (needs GPU/CUDA)

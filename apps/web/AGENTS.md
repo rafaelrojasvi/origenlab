@@ -2,94 +2,41 @@
 
 ## Project overview
 
-OrigenLab is a Chile-based laboratory equipment company. The website is a primarily static, professional, Spanish-first company site that helps potential clients understand what the company offers and contact OrigenLab to request quotations.
+This file is a **policy overlay** for the web app workspace. Factual truth lives in monorepo + app docs and in code.
 
-The site should communicate trust, clarity, technical seriousness, and responsiveness without exaggeration.
+## Instruction precedence
 
-## Reference documents
+**Factual project truth** (must not be overridden by this file):
 
-Files under `docs/` are **not** loaded into context automatically. When a task matches the area below, **read the relevant file first** before changing code or copy.
+1. Monorepo: [`../../docs/PROJECT_CONTEXT.md`](../../docs/PROJECT_CONTEXT.md#m-proj-precedence) *(from `apps/web/` → repo root)*
+2. Web: [`docs/APP_CONTEXT.md`](docs/APP_CONTEXT.md#m-web-agent-start), [`docs/BUSINESS_CONTEXT.md`](docs/BUSINESS_CONTEXT.md#m-webbiz-objective), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#m-webarch-stack), [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-webrun-local), and other canonical web docs under [`docs/`](docs/)
+3. Web app [`README.md`](README.md)
+4. [`src/data/`](src/data/) and the rest of the repo (code, configs)
 
-**Canonical business data (prefer these over hardcoded page text):**
+**Policy and workflow** (this file and tooling):
 
-- `src/data/company.ts` — narrative, audience, safe framing
-- `src/data/contact.ts` — email, phone, WhatsApp, hours; **public location** = `locationPublic`; **full street** = `addressLine` (internal/legal/logistics only — see “Contact / address policy” below)
-- `src/data/services.ts` — support/service lines
-- `src/data/categories.ts` — product categories and buyer copy
-- `src/data/brands.ts` — brands (conservative until formal list exists)
-- `src/data/faq.ts` — FAQ entries
-- `src/data/documents.ts` — future catalogs/fichas (empty until real files exist)
+5. [`AGENTS.md`](AGENTS.md) (this file) — non‑negotiable content/safety rules
+6. [`.cursor/rules/`](.cursor/rules/)
+7. [`.claude/agents/`](.claude/agents/)
+8. [`.claude/skills/`](.claude/skills/)
 
-**When to open project docs:**
+If a policy line here **contradicts** a fact in [`PROJECT_CONTEXT.md`](../../docs/PROJECT_CONTEXT.md#m-proj-precedence), app canonical docs, or `src/data/*`, **follow the factual doc or data** and treat the policy as needing an update—not as permission to invent facts.
 
-- Deployment, hosting, `dist/`, HostGator → `docs/deployment.md`
-- Prior security/link/claims decisions → `docs/security-audit-v1.md`
-- Full company scope (brief for humans/cotizations) → `docs/company-scope.md` (summary of `src/data/*` + prompt for quotation rewriting)
-- Email DB → business signal (prompt for another AI) → `docs/EMAIL_BUSINESS_SIGNAL_PROMPT.md`
-- Collaborator and AI onboarding (structure, Cursor rules, Claude skills) → `CONTRIBUTING.md`
+Rules, agents, and skills should reference canonical sources instead of duplicating volatile facts.
 
-If a task touches copy, SEO, contact details, categories, deployment, or trust/safety language, consult the relevant reference above. **Do not invent facts** not present in the data layer or referenced docs.
+## Canonical context docs (read first)
 
-**Before making changes (quick check):**
+- [`docs/APP_CONTEXT.md`](docs/APP_CONTEXT.md)
+- [`docs/BUSINESS_CONTEXT.md`](docs/BUSINESS_CONTEXT.md)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-webrun-local)
+- Data truth: [`src/data/`](src/data/)
 
-- Use `src/data/*` as the canonical business source of truth.
-- If the task involves deployment or hosting, read `docs/deployment.md`.
-- If the task involves copy safety, prior decisions, or trust claims, read `docs/security-audit-v1.md`.
-- Prefer referenced project docs over inferred assumptions.
-- Do not invent brands, certifications, specifications, delivery times, warranty terms, or provider relationships.
+## Quick checks
 
-## What OrigenLab does
-
-OrigenLab sells laboratory equipment in Chile for service and research environments.
-
-Current target customer types include:
-- laboratorios de servicios
-- laboratorios de investigación
-- universidades
-- clínicas
-- hospitales
-- industrias de I+D
-
-Current known product/service areas:
-- equipos para alimentos
-- equipos para control de calidad
-- equipos para laboratorio clínico
-
-Current known service/support offerings:
-- soporte
-- asesorías
-- garantía
-- instalación
-- puesta en marcha de equipos más complejos
-
-## Website goals
-
-The website should help visitors:
-1. understand what OrigenLab offers
-2. identify relevant product categories
-3. request a quotation
-4. contact the company quickly through the available channels
-5. access product catalogs or technical sheets when available
-
-This is not a flashy startup site. It should feel trustworthy, clear, and commercially useful.
-
-## Current contact data
-
-Use these details unless explicitly updated in the repo:
-
-- Company name: OrigenLab
-- Email: contacto@origenlab.cl
-- Phone: +56 9 6256 7816
-- WhatsApp: +56 9 6256 7816
-- Hours: 09:00–18:00 (same as `contact.hours` in code)
-- Geography: all Chile
-
-### Contact / address policy
-
-- **Public-facing default** (website, generic quotations, marketing copy): use **`locationPublic`** from `src/data/contact.ts` — currently **Valdivia, Chile** — and **do not** put the street in that material. `site.ts` already maps `site.location` from `locationPublic`.
-- **Full street** (**Oettinger 51, depto 206, Valdivia, Chile**): **`contact.addressLine` in code** — for **internal**, **legal**, **logistics**, or any artifact that explicitly requires a postal address. Do not copy the street into new public web sections or public quote PDFs unless the business decides otherwise; align with `docs/company-scope.md`.
-
-If Instagram is mentioned, only include it when the exact handle is available in repo data.
+- Use [`src/data/`](src/data/) as factual source of truth.
+- If deployment-related, use [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-webrun-deploy) then [`docs/deployment.md`](docs/deployment.md).
+- Do not invent brands, certifications, specs, delivery times, warranty terms, or partnerships.
 
 ## Non-negotiable content rules
 
@@ -106,75 +53,6 @@ Do not invent:
 - regulatory claims
 
 If information is missing, use placeholders in code/comments or write copy that stays general and truthful.
-
-## Tone and writing style
-
-Public-facing copy must be:
-- Spanish-first
-- professional
-- clear
-- concise
-- technically credible
-- commercially useful
-- restrained, never exaggerated
-
-Avoid:
-- hype
-- vague marketing fluff
-- "líder absoluto", "número uno", "soluciones revolucionarias"
-- fake urgency
-- unsupported claims
-
-Prefer:
-- direct explanations
-- concrete business value
-- short paragraphs
-- clear CTAs like "Solicitar cotización" or "Contactar por WhatsApp"
-
-## Product/content modeling rules
-
-Treat current business reality carefully:
-- OrigenLab mainly sells equipment today
-- consumables/insumos may be added later
-- brands are pending formal confirmation
-- catalogs and technical sheets exist and can support future structured product data
-
-When modeling data, prefer simple, extensible structures:
-- categories
-- services
-- contact info
-- downloadable documents
-- optional brand references
-
-Do not overengineer with a backend unless clearly needed.
-
-## Technical preferences
-
-Prefer:
-- Astro for static pages
-- Tailwind for styling
-- reusable components
-- clean content/data separation
-- simple data files for categories, services, contact info
-- static-first architecture
-
-Avoid:
-- unnecessary client-side JavaScript
-- premature CMS complexity
-- unnecessary backend work
-- duplicated markup across pages
-- large monolithic components
-
-## Deployment assumptions
-
-Assume static deployment to HostGator or similar shared hosting unless the repo states otherwise.
-
-Important assumptions:
-- production build output should be in `dist/`
-- deployment should upload the built static site contents correctly
-- avoid nested `dist/dist`
-- verify asset paths carefully
-- prefer robust, simple static deployment patterns
 
 ## When editing or generating content
 

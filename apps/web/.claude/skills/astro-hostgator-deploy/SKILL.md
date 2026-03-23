@@ -23,6 +23,8 @@ Default assumptions:
 - deployment to shared hosting
 - no server runtime available in production unless explicitly documented
 
+Canonical deployment authority: `docs/deployment.md` and `docs/deployment-status.md`.
+
 ## Main risks to catch
 
 Watch for:

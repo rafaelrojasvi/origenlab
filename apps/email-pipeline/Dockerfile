@@ -1,5 +1,3 @@
-# Build with this folder as context (from monorepo: `cd apps/email-pipeline` then):
-#   docker build -t origenlab-email-pipeline .
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \

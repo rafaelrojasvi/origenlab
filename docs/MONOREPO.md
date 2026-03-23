@@ -1,5 +1,9 @@
 # Monorepo migration notes
 
+Status: historical  
+Owner: project-maintainers  
+Last reviewed: 2026-03-23
+
 ## What changed
 
 - **`apps/web/`** — Full history from `git@github.com:rafaelRojasVi/origenlab-web.git` (default branch `main`) was added with `git subtree add --prefix=apps/web`.

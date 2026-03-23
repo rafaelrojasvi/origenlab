@@ -179,7 +179,7 @@ def main() -> None:
     </table>
   </section>
 
-  <p class="sub">Documentación: <code>docs/OUTPUTS_OVERVIEW.md</code> — mapa de scripts, salidas y qué es cada cosa.</p>
+  <p class="sub">Documentación: <code>docs/reporting/OUTPUTS_OVERVIEW.md</code> — mapa de scripts, salidas y qué es cada cosa.</p>
 </body>
 </html>
 """
