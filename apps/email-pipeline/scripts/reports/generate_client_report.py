@@ -42,7 +42,12 @@ def _decode_mime_header(s: str | None) -> str:
     except Exception:
         return (s or "").strip()
 
-_ROOT = Path(__file__).resolve().parent.parent
+def _repo_root() -> Path:
+    # scripts/reports/generate_client_report.py -> apps/email-pipeline
+    return Path(__file__).resolve().parents[2]
+
+
+_ROOT = _repo_root()
 if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 

@@ -25,7 +25,12 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
+def _repo_root() -> Path:
+    # scripts/reports/run_all_reports.py -> apps/email-pipeline
+    return Path(__file__).resolve().parents[2]
+
+
+_ROOT = _repo_root()
 if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
@@ -87,11 +92,11 @@ def main() -> None:
         return True
 
     if args.dedupe:
-        if not run("dedupe_emails_by_message_id.py", []):
+        if not run("tools/dedupe_emails_by_message_id.py", []):
             sys.exit(1)
 
     if not run(
-        "export_unique_emails_csv.py",
+        "tools/export_unique_emails_csv.py",
         ["--out", str(out_dir / "unique_emails.csv")],
     ):
         sys.exit(1)
@@ -104,7 +109,7 @@ def main() -> None:
         client_args.append("--fast")
     if args.embeddings:
         client_args.extend(["--embeddings-sample", "2000", "--embeddings-clusters", "12"])
-    if not run("generate_client_report.py", client_args):
+    if not run("reports/generate_client_report.py", client_args):
         sys.exit(1)
 
     print("\nDone. All artifacts in:", out_dir.resolve())

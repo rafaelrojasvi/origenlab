@@ -2,6 +2,8 @@
 """Mbox → SQLite. Paths from .env / ORIGENLAB_* (see .env.example)."""
 from __future__ import annotations
 
+from collections import Counter, defaultdict
+import os
 import sys
 from pathlib import Path
 
@@ -43,6 +45,33 @@ def is_probably_mbox(path: Path) -> bool:
         return False
 
 
+def _max_error_ratio_from_env() -> float | None:
+    raw = os.getenv("ORIGENLAB_INGEST_MAX_ERROR_RATIO", "").strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        print(
+            "Invalid ORIGENLAB_INGEST_MAX_ERROR_RATIO; expected float in [0, 1]. Ignoring.",
+            file=sys.stderr,
+        )
+        return None
+    if value < 0 or value > 1:
+        print(
+            "Invalid ORIGENLAB_INGEST_MAX_ERROR_RATIO; expected float in [0, 1]. Ignoring.",
+            file=sys.stderr,
+        )
+        return None
+    return value
+
+
+def _fmt_error_counts(counter: Counter[str], *, top_n: int = 5) -> str:
+    if not counter:
+        return "(none)"
+    return ", ".join(f"{name}={count}" for name, count in counter.most_common(top_n))
+
+
 def main() -> None:
     settings = load_settings()
     mbox_root = settings.resolved_mbox_dir()
@@ -62,6 +91,14 @@ def main() -> None:
     conn.execute("DELETE FROM emails")
     conn.commit()
     total_inserted = 0
+    total_messages = 0
+    total_attachments = 0
+    message_errors = 0
+    attachment_errors = 0
+    per_file_message_errors: dict[str, int] = defaultdict(int)
+    per_file_attachment_errors: dict[str, int] = defaultdict(int)
+    message_error_types: Counter[str] = Counter()
+    attachment_error_types: Counter[str] = Counter()
 
     for mbox_path in tqdm(files, desc="mbox files"):
         mbox = open_mbox(str(mbox_path))
@@ -69,6 +106,7 @@ def main() -> None:
             continue
         try:
             for msg in mbox:
+                total_messages += 1
                 try:
                     body, body_html = body_content(msg)
                     structured = extract_body_structured(msg)
@@ -97,6 +135,7 @@ def main() -> None:
                         has_attachments=bool(attachments),
                     )
                     for att in attachments:
+                        total_attachments += 1
                         try:
                             insert_attachment(
                                 conn,
@@ -112,10 +151,16 @@ def main() -> None:
                                 saved_path=att["saved_path"],
                                 created_at=None,
                             )
-                        except Exception:
+                        except Exception as exc:
+                            attachment_errors += 1
+                            per_file_attachment_errors[str(mbox_path)] += 1
+                            attachment_error_types[type(exc).__name__] += 1
                             continue
                     total_inserted += 1
-                except Exception:
+                except Exception as exc:
+                    message_errors += 1
+                    per_file_message_errors[str(mbox_path)] += 1
+                    message_error_types[type(exc).__name__] += 1
                     continue
             conn.commit()
         finally:
@@ -123,6 +168,39 @@ def main() -> None:
 
     conn.close()
     print(f"SQLite: {db_path}  rows: {total_inserted}")
+    print(
+        "Ingest summary: "
+        f"messages_seen={total_messages} inserted={total_inserted} "
+        f"message_errors={message_errors} attachment_errors={attachment_errors}"
+    )
+    if message_errors > 0:
+        print("Top message error types:", _fmt_error_counts(message_error_types))
+        top_files = sorted(per_file_message_errors.items(), key=lambda kv: kv[1], reverse=True)[:5]
+        print(
+            "Top files by message errors:",
+            ", ".join(f"{Path(p).name}={c}" for p, c in top_files),
+        )
+    if attachment_errors > 0:
+        print("Top attachment error types:", _fmt_error_counts(attachment_error_types))
+        top_files = sorted(per_file_attachment_errors.items(), key=lambda kv: kv[1], reverse=True)[:5]
+        print(
+            "Top files by attachment errors:",
+            ", ".join(f"{Path(p).name}={c}" for p, c in top_files),
+        )
+
+    max_error_ratio = _max_error_ratio_from_env()
+    if max_error_ratio is not None and total_messages > 0:
+        error_ratio = message_errors / total_messages
+        print(
+            f"Message error ratio: {error_ratio:.4f} (threshold={max_error_ratio:.4f})"
+        )
+        if error_ratio > max_error_ratio:
+            print(
+                "Ingest failed quality threshold: "
+                f"message_error_ratio={error_ratio:.4f} > {max_error_ratio:.4f}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
 
 if __name__ == "__main__":
