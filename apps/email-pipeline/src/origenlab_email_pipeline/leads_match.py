@@ -10,6 +10,7 @@ import json
 import re
 import sqlite3
 
+from origenlab_email_pipeline.lead_upstream_reconcile import sql_upstream_active_bare
 from origenlab_email_pipeline.org_normalize import is_junk_org_name, normalize_org_name
 from origenlab_email_pipeline.pipeline_run_recorder import now_iso
 
@@ -85,9 +86,10 @@ def match_leads_to_mart(
         contacts_by_email = {}
 
     leads = conn.execute(
-        """
+        f"""
         SELECT id, domain, org_name, contact_name, email_norm, domain_norm, org_name_norm
         FROM lead_master
+        WHERE {sql_upstream_active_bare()}
         """
     ).fetchall()
 

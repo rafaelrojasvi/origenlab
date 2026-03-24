@@ -31,7 +31,7 @@ from origenlab_email_pipeline.business_filter_rules import (
     SPAM_SUBJECT_PATTERNS,
 )
 
-# Email extraction (aligned with generate_client_report)
+# Email extraction (same regex as scripts/reports/generate_client_report.py)
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}", re.I)
 
 

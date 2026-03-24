@@ -13,6 +13,7 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.lead_upstream_reconcile import sql_upstream_active_bare
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
 from origenlab_email_pipeline.leads_score import compute_priority_score, fit_bucket
 
@@ -26,7 +27,11 @@ def main() -> int:
     conn = connect(db_path)
     ensure_leads_tables(conn)
     rows = conn.execute(
-        "SELECT id, source_type, lead_type, equipment_match_tags, lab_context_score, buyer_kind, email, phone FROM lead_master"
+        f"""
+        SELECT id, source_type, lead_type, equipment_match_tags, lab_context_score, buyer_kind, email, phone
+        FROM lead_master
+        WHERE {sql_upstream_active_bare()}
+        """
     ).fetchall()
     for lead_id, source_type, lead_type, equipment_match_tags, lab_context_score, buyer_kind, email, phone in rows:
         score, reason = compute_priority_score(

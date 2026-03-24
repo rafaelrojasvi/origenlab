@@ -21,6 +21,8 @@ When you run **`run_all.sh`**, it produces one batch folder with: the client rep
 
 ## What the main report includes (index.html + summary.json)
 
+The script orchestrates output; **SQL metric helpers** live in `origenlab_email_pipeline.client_report_metrics`, and **shared attachment business-doc / delivery-noise SQL** in `origenlab_email_pipeline.attachment_report_sql` (same fragments as `scripts/validation/validate_attachments.py`).
+
 - **Totals:** total messages, with_date, with_body, bounce_like (heuristic).
 - **By year:** volume per year (chart + table).
 - **By year × cotización:** messages with “cotiz…” per year (chart + table).

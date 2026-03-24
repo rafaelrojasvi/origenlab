@@ -14,7 +14,14 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.lead_export_queries import (
+    sql_left_join_best_org_match,
+    sql_upstream_active_lead_master,
+)
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+
+_LM_UPSTREAM_ACTIVE = sql_upstream_active_lead_master("lm")
+_JOIN_BEST_ORG = sql_left_join_best_org_match(variant="org_and_archive")
 
 
 EXPORT_COLS = [
@@ -60,7 +67,7 @@ def main() -> int:
 
     # Join to a single match row (if any) + flag net-new.
     rows = conn.execute(
-        """
+        f"""
         SELECT
           lm.id AS id_lead,
           lm.source_name, lm.org_name, lm.contact_name, lm.email, lm.website,
@@ -71,13 +78,10 @@ def main() -> int:
           m.matched_org_name, COALESCE(m.already_in_archive_flag, 0) AS already_in_archive_flag,
           lm.source_url
         FROM lead_master lm
-        LEFT JOIN (
-          SELECT m1.lead_id, m1.matched_org_name, m1.already_in_archive_flag
-          FROM lead_matches_existing_orgs m1
-          WHERE m1.id = (SELECT MIN(m2.id) FROM lead_matches_existing_orgs m2 WHERE m2.lead_id = m1.lead_id)
-        ) m ON lm.id = m.lead_id
+        {_JOIN_BEST_ORG}
         WHERE
-          (? = 1) OR (COALESCE(lm.fit_bucket, 'low_fit') != 'low_fit')
+          {_LM_UPSTREAM_ACTIVE}
+          AND ((? = 1) OR (COALESCE(lm.fit_bucket, 'low_fit') != 'low_fit'))
         ORDER BY
           CASE COALESCE(lm.fit_bucket, 'low_fit')
             WHEN 'high_fit' THEN 0

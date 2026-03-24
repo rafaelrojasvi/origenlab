@@ -13,7 +13,10 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.lead_upstream_reconcile import sql_upstream_active
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+
+_LM_UPSTREAM_ACTIVE = sql_upstream_active("lm")
 from origenlab_email_pipeline.lead_accounts_schema import ensure_lead_account_tables
 
 
@@ -26,21 +29,24 @@ def main() -> int:
     ensure_leads_tables(conn)
     ensure_lead_account_tables(conn)
 
-    n_leads = conn.execute("SELECT COUNT(*) FROM lead_master").fetchone()[0]
+    n_leads = conn.execute(
+        f"SELECT COUNT(*) FROM lead_master lm WHERE {_LM_UPSTREAM_ACTIVE}"
+    ).fetchone()[0]
     n_accounts = conn.execute("SELECT COUNT(*) FROM lead_account_master").fetchone()[0]
     n_mem = conn.execute("SELECT COUNT(*) FROM lead_account_membership").fetchone()[0]
     n_alias = conn.execute("SELECT COUNT(*) FROM lead_account_aliases").fetchone()[0]
     n_match = conn.execute("SELECT COUNT(*) FROM lead_account_matches_existing_orgs").fetchone()[0]
 
     unmatched = conn.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM lead_master lm
-        WHERE NOT EXISTS (SELECT 1 FROM lead_account_membership m WHERE m.lead_id = lm.id)
+        WHERE {_LM_UPSTREAM_ACTIVE}
+          AND NOT EXISTS (SELECT 1 FROM lead_account_membership m WHERE m.lead_id = lm.id)
         """
     ).fetchone()[0]
 
     print("=== Counts ===")
-    print(f"lead_master:              {n_leads}")
+    print(f"lead_master (upstream-active): {n_leads}")
     print(f"lead_account_master:      {n_accounts}")
     print(f"lead_account_membership:  {n_mem}")
     print(f"lead_account_aliases:     {n_alias}")

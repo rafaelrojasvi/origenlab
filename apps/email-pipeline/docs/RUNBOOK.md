@@ -163,14 +163,17 @@ Scripts live under [`scripts/qa/`](../scripts/qa/). Shared checks and helpers: [
 
 ### Recommended sequence before sharing lead/client artifacts
 
-1. Regenerate the client pack if the DB or lead inventory changed: [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py) → [`reports/out/client_pack_latest/`](../reports/out/README.md).
-2. Run the full gate (from `apps/email-pipeline/`):
+1. **Optional — one ordered leads routine** [`scripts/leads/run_leads_operational_stack.sh`](../scripts/leads/run_leads_operational_stack.sh): assigns a UUID `run_id` → optional ingest → ensure schema → normalize → reconcile upstream → score → match → exports → weekly focus → client pack → publish gate → run manifest (e.g. `bash scripts/leads/run_leads_operational_stack.sh --skip-fetch`). Build the business mart first when you need matches (`scripts/pipeline/run_aligned_stack.sh`). **`--skip-gate` completes without publish validation** — treat as **not publish-safe by default** until you run `publish_gate.py`. **`--reconcile-dry-run` only skips reconcile `--apply`**; the rest of the stack still writes DB/files. If publish gate runs and **fails**, the stack still writes `operational_stack_last_run.json` with `publish_gate.passed=false` and exits non-zero.
+2. If you did not use the stack: regenerate the client pack when the DB or lead inventory changed: [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py) → [`reports/out/client_pack_latest/`](../reports/out/README.md).
+3. Run the full gate (from `apps/email-pipeline/`) if the stack did not already run it:
 
    ```bash
    uv run python scripts/qa/publish_gate.py
    ```
 
-3. Treat **external** handoff of the pack + related CSVs as **publish-safe only if the gate PASS** (with evidence HTTP enabled — see below).
+4. Treat **external** handoff of the pack + related CSVs as **publish-safe only if the gate PASS** (with evidence HTTP enabled — see below).
+
+**Provenance / run correlation:** `client_pack_latest/summary.json` includes `provenance` with `operational_run_id` when the pack was built inside the stack (same value as `ORIGENLAB_LEADS_OPERATIONAL_RUN_ID`). **`publish_gate_validated_this_artifact` is always false in the pack** — the pack is built before the gate; validation outcome lives in `operational_stack_last_run.json` → `publish_gate` for the same `run_id`. The scorecard JSON `provenance` repeats `operational_run_id` when the gate inherits that env var. A durable copy per run: `reports/out/active/operational_run_manifests/<run_id>.json`. These aid traceability; they **do not** replace `publish_gate` or prove the pack is safe to publish.
 
 ### Commands
 
@@ -202,8 +205,8 @@ uv run python scripts/qa/check_evidence_links.py
 
 | Script | Reads (typical) | Writes | Exit `1` when |
 |--------|-----------------|--------|----------------|
-| [`verify_client_pack_consistency.py`](../scripts/qa/verify_client_pack_consistency.py) | [`reports/out/client_pack_latest/summary.json`](../reports/out/README.md), SQLite `lead_master`, [`reports/out/active/leads_top20_for_client_report.csv`](../reports/out/README.md), hunt + readiness CSVs under `active/` | stdout only | Any **critical** check fails (pack vs DB totals/fit buckets, top20 vs readiness/hunt/DB, cohort partition) |
-| [`audit_operational_trust.py`](../scripts/qa/audit_operational_trust.py) | Same `active/` paths + [`docs/generated/CONTACT_READINESS_AUDIT.md`](generated/CONTACT_READINESS_AUDIT.md) for DB path line | [`reports/out/active/operational_trust_scorecard.json`](../reports/out/README.md), [`docs/generated/operational_trust_scorecard.md`](generated/operational_trust_scorecard.md) | Any **critical** check fails (cohort/readiness, stale pack, merged vs current hunt IDs, etc.) |
+| [`verify_client_pack_consistency.py`](../scripts/qa/verify_client_pack_consistency.py) | Pack `summary.json`, SQLite `lead_master`, top20 CSV, hunt + ready/needs CSVs (for **top20** cross-checks only) | stdout only | Any **critical** check fails (pack vs DB totals/fit buckets, top20 vs readiness/hunt/DB — **not** hunt/readiness cohort partition; that runs in audit only) |
+| [`audit_operational_trust.py`](../scripts/qa/audit_operational_trust.py) | Same `active/` paths + [`docs/generated/CONTACT_READINESS_AUDIT.md`](generated/CONTACT_READINESS_AUDIT.md) for DB path line | [`reports/out/active/operational_trust_scorecard.json`](../reports/out/README.md), [`docs/generated/operational_trust_scorecard.md`](generated/operational_trust_scorecard.md) | Any **critical** check fails (**cohort partition**, readiness nulls, taxonomy, stale pack, merged vs current hunt IDs, etc.) |
 | [`check_evidence_links.py`](../scripts/qa/check_evidence_links.py) | URL columns in top20 + hunt CSVs | stdout only | Invalid `http(s)` URL strings and/or HTTP probe failures beyond [`--max-failures` / `--max-fail-ratio`](../scripts/qa/check_evidence_links.py) |
 
 ### When something fails

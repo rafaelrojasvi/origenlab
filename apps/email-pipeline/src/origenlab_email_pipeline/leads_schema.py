@@ -6,6 +6,11 @@ import sqlite3
 
 from origenlab_email_pipeline.bi_views import refresh_lead_match_summary_view
 from origenlab_email_pipeline.lead_identity_norm import compute_lead_norm_fields
+from origenlab_email_pipeline.lead_master_keys import (
+    backfill_canonical_source_record_ids,
+    count_duplicate_key_groups,
+    ensure_lead_master_source_unique_index,
+)
 from origenlab_email_pipeline.pipeline_meta_schema import ensure_pipeline_meta_tables
 
 LEAD_SCHEMA_SQL = """
@@ -56,7 +61,10 @@ CREATE TABLE IF NOT EXISTS lead_master (
   notes TEXT,
   email_norm TEXT,
   domain_norm TEXT,
-  org_name_norm TEXT
+  org_name_norm TEXT,
+  upstream_sync_state TEXT DEFAULT 'active',
+  upstream_retired_at TEXT,
+  upstream_retired_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_lead_master_source ON lead_master(source_name);
 CREATE INDEX IF NOT EXISTS idx_lead_master_domain ON lead_master(domain);
@@ -112,6 +120,21 @@ CREATE TABLE IF NOT EXISTS lead_outreach_enrichment (
   updated_at TEXT NOT NULL,
   FOREIGN KEY(lead_id) REFERENCES lead_master(id) ON DELETE CASCADE
 );
+
+-- Audit trail for upstream raw vs lead_master reconciliation (dry-run and apply).
+CREATE TABLE IF NOT EXISTS lead_upstream_reconcile_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_at TEXT NOT NULL,
+  dry_run INTEGER NOT NULL,
+  lead_id INTEGER NOT NULL,
+  source_name TEXT NOT NULL,
+  canonical_source_record_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  detail TEXT,
+  FOREIGN KEY(lead_id) REFERENCES lead_master(id)
+);
+CREATE INDEX IF NOT EXISTS idx_lead_upstream_reconcile_log_run ON lead_upstream_reconcile_log(run_at);
+CREATE INDEX IF NOT EXISTS idx_lead_upstream_reconcile_log_lead ON lead_upstream_reconcile_log(lead_id);
 """
 
 
@@ -166,8 +189,8 @@ def backfill_lead_master_norm_columns(conn: sqlite3.Connection) -> int:
     return n
 
 
-def ensure_leads_tables_ddl(conn: sqlite3.Connection) -> None:
-    """Create/migrate lead tables and indexes only (no norm backfill, no view refresh). Idempotent."""
+def ensure_leads_tables_ddl_base(conn: sqlite3.Connection) -> None:
+    """Create/migrate lead tables and secondary indexes (no canonical key backfill, no UNIQUE index)."""
     ensure_pipeline_meta_tables(conn)
     conn.executescript(LEAD_SCHEMA_SQL)
     # Existing DBs created before Phase 1 hardening.
@@ -179,12 +202,26 @@ def ensure_leads_tables_ddl(conn: sqlite3.Connection) -> None:
         "lab_context_score REAL",
         "lab_context_tags TEXT",
         "fit_bucket TEXT",
+        "upstream_sync_state TEXT DEFAULT 'active'",
+        "upstream_retired_at TEXT",
+        "upstream_retired_reason TEXT",
     ):
         try:
             conn.execute(f"ALTER TABLE lead_master ADD COLUMN {col}")
             conn.commit()
         except sqlite3.OperationalError:
             pass
+    try:
+        conn.execute(
+            """
+            UPDATE lead_master
+            SET upstream_sync_state = 'active'
+            WHERE upstream_sync_state IS NULL OR TRIM(upstream_sync_state) = ''
+            """
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.rollback()
     # Indexes (IF NOT EXISTS in LEAD_SCHEMA_SQL for new installs; create missing on old DBs).
     for stmt in (
         "CREATE INDEX IF NOT EXISTS idx_lead_master_email_norm ON lead_master(email_norm)",
@@ -201,7 +238,37 @@ def ensure_leads_tables_ddl(conn: sqlite3.Connection) -> None:
             conn.commit()
         except sqlite3.OperationalError:
             pass
+
+
+def finalize_lead_master_source_keys(conn: sqlite3.Connection) -> None:
+    """Canonicalize source_record_id values and enforce UNIQUE(source_name, source_record_id).
+
+    Drops the unique index first so backfill can collapse whitespace/NULL keys without
+    violating the constraint mid-UPDATE. If duplicates remain, raises RuntimeError (run dedupe).
+    """
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_master'"
+    ).fetchone():
+        conn.commit()
+        return
+    conn.execute("DROP INDEX IF EXISTS uidx_lead_master_source_name_record")
     conn.commit()
+    backfill_canonical_source_record_ids(conn)
+    if count_duplicate_key_groups(conn) > 0:
+        raise RuntimeError(
+            "lead_master has duplicate (source_name, source_record_id) after canonical "
+            "backfill. Run:\n"
+            "  uv run python scripts/leads/audit_lead_master_duplicates.py\n"
+            "  uv run python scripts/leads/dedupe_lead_master.py --apply"
+        )
+    ensure_lead_master_source_unique_index(conn)
+    conn.commit()
+
+
+def ensure_leads_tables_ddl(conn: sqlite3.Connection) -> None:
+    """Create/migrate lead tables and indexes; then canonical keys + UNIQUE index on lead_master."""
+    ensure_leads_tables_ddl_base(conn)
+    finalize_lead_master_source_keys(conn)
 
 
 def ensure_leads_tables(

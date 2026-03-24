@@ -23,7 +23,14 @@ from origenlab_email_pipeline.leads_enrich import (
     derive_product_angle,
     guess_official_site_and_domain,
 )
+from origenlab_email_pipeline.lead_export_queries import (
+    sql_left_join_best_org_match,
+    sql_upstream_active_lead_master,
+)
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+
+_LM_UPSTREAM_ACTIVE = sql_upstream_active_lead_master("lm")
+_JOIN_BEST_ORG = sql_left_join_best_org_match(variant="org_domain_archive")
 
 
 HEADERS = [
@@ -139,7 +146,7 @@ def main() -> int:
 
     buyer_kinds = [k.strip().lower() for k in args.buyer_kinds.split(",") if k.strip()]
 
-    sql = """
+    sql = f"""
         SELECT
           lm.id AS lead_id,
           lm.source_name,
@@ -168,16 +175,10 @@ def main() -> int:
           m.matched_domain,
           COALESCE(m.already_in_archive_flag, 0) AS already_in_archive_flag
         FROM lead_master lm
-        LEFT JOIN (
-          SELECT m1.lead_id,
-                 m1.matched_org_name,
-                 m1.matched_domain,
-                 m1.already_in_archive_flag
-          FROM lead_matches_existing_orgs m1
-          WHERE m1.id = (SELECT MIN(m2.id) FROM lead_matches_existing_orgs m2 WHERE m2.lead_id = m1.lead_id)
-        ) m ON lm.id = m.lead_id
-        WHERE (? = 1) OR (COALESCE(lm.fit_bucket, 'low_fit') != 'low_fit')
-          AND (? = 0) OR (COALESCE(m.already_in_archive_flag, 0) = 0)
+        {_JOIN_BEST_ORG}
+        WHERE {_LM_UPSTREAM_ACTIVE}
+          AND ((? = 1) OR (COALESCE(lm.fit_bucket, 'low_fit') != 'low_fit'))
+          AND ((? = 0) OR (COALESCE(m.already_in_archive_flag, 0) = 0))
     """
 
     params: list[object] = [1 if args.include_low else 0, 1 if args.net_new_only else 0]

@@ -8,9 +8,12 @@ import os
 import sqlite3
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
 from origenlab_email_pipeline.operational_trust import (
@@ -18,16 +21,27 @@ from origenlab_email_pipeline.operational_trust import (
     check_evidence_url_formats,
     normalized_fit_bucket_counts,
     probe_url,
+    verify_client_pack_against_db,
 )
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def _clear_operational_run_id_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ORIGENLAB_LEADS_OPERATIONAL_RUN_ID", raising=False)
 
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _build_minimal_publish_workspace(root: Path, db_path: Path) -> None:
+def _build_minimal_publish_workspace(
+    root: Path,
+    db_path: Path,
+    *,
+    operational_run_id: str | None = None,
+) -> None:
     """Synthetic hunt (20 ids), readiness split, top20, pack summary, audit MD, merged hunt."""
     db_path = db_path.resolve()
     active = root / "reports" / "out" / "active"
@@ -113,13 +127,19 @@ def _build_minimal_publish_workspace(root: Path, db_path: Path) -> None:
                 }
             )
 
-    summary = {
+    summary: dict = {
         "generated_at_utc": _iso_now(),
         "totals": {
             "lead_master_rows": 20,
             "fit_bucket": {"high_fit": 20},
         },
     }
+    if operational_run_id is not None:
+        summary["provenance"] = {
+            "schema_version": 2,
+            "operational_run_id": operational_run_id,
+            "db_path_resolved": str(db_path.resolve()),
+        }
     (pack / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -130,10 +150,10 @@ def _build_minimal_publish_workspace(root: Path, db_path: Path) -> None:
             conn.execute(
                 """
                 INSERT INTO lead_master (
-                  id, source_name, org_name, fit_bucket, priority_score, status
-                ) VALUES (?, 'test', ?, 'high_fit', 7.0, 'nuevo')
+                  id, source_name, source_record_id, org_name, fit_bucket, priority_score, status
+                ) VALUES (?, 'test', ?, ?, 'high_fit', 7.0, 'nuevo')
                 """,
-                (i, f"Org {i}"),
+                (i, str(i), f"Org {i}"),
             )
         conn.commit()
     finally:
@@ -165,6 +185,53 @@ def test_verify_client_pack_consistency_fails_on_summary_mismatch(tmp_path: Path
     assert mod.run(_args(tmp_path, db)) == 1
 
 
+def test_verify_passes_when_only_cohort_partition_broken(tmp_path: Path) -> None:
+    """Cohort partition runs in audit only; verify no longer duplicates it."""
+    db = tmp_path / "db.sqlite"
+    _build_minimal_publish_workspace(tmp_path, db)
+    needs_p = tmp_path / "reports" / "out" / "active" / "leads_needs_contact_research.csv"
+    with needs_p.open("a", encoding="utf-8-sig", newline="") as f:
+        f.write("1,overlap_duplicate\n")
+    mod = _import_qa("verify_client_pack_consistency")
+    assert mod.run(_args(tmp_path, db)) == 0
+    assert _import_qa("audit_operational_trust").run(_args(tmp_path, db)) == 1
+
+
+def test_publish_gate_fails_on_cohort_partition_via_audit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "db.sqlite"
+    rid = str(uuid.uuid4())
+    _build_minimal_publish_workspace(tmp_path, db, operational_run_id=rid)
+    monkeypatch.setenv("ORIGENLAB_LEADS_OPERATIONAL_RUN_ID", rid)
+    needs_p = tmp_path / "reports" / "out" / "active" / "leads_needs_contact_research.csv"
+    with needs_p.open("a", encoding="utf-8-sig", newline="") as f:
+        f.write("1,overlap_duplicate\n")
+    script = REPO / "scripts" / "qa" / "publish_gate.py"
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(REPO),
+        "ORIGENLAB_LEADS_OPERATIONAL_RUN_ID": rid,
+    }
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--repo-root",
+            str(tmp_path),
+            "--db",
+            str(db),
+            "--skip-evidence-http",
+        ],
+        cwd=str(REPO),
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 1, r.stderr + r.stdout
+
+
 def test_audit_operational_trust_passes(tmp_path: Path) -> None:
     db = tmp_path / "db.sqlite"
     _build_minimal_publish_workspace(tmp_path, db)
@@ -175,6 +242,10 @@ def test_audit_operational_trust_passes(tmp_path: Path) -> None:
     assert score_json.is_file()
     payload = json.loads(score_json.read_text(encoding="utf-8"))
     assert "checks" in payload and len(payload["checks"]) > 0
+    assert "provenance" in payload
+    assert payload["provenance"]["sqlite_path_resolved"] == str(db.resolve())
+    assert "client_pack_summary_path" in payload["provenance"]
+    assert payload["provenance"].get("operational_run_id") is None
 
 
 def test_audit_operational_trust_fails_when_merged_hunt_missing(tmp_path: Path) -> None:
@@ -226,11 +297,17 @@ def test_check_evidence_links_fails_http_with_mock(tmp_path: Path) -> None:
         assert mod.run(ns) == 1
 
 
-def test_publish_gate_aggregate(tmp_path: Path) -> None:
+def test_publish_gate_aggregate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = tmp_path / "db.sqlite"
-    _build_minimal_publish_workspace(tmp_path, db)
+    rid = str(uuid.uuid4())
+    _build_minimal_publish_workspace(tmp_path, db, operational_run_id=rid)
+    monkeypatch.setenv("ORIGENLAB_LEADS_OPERATIONAL_RUN_ID", rid)
     script = REPO / "scripts" / "qa" / "publish_gate.py"
-    env = {**os.environ, "PYTHONPATH": str(REPO)}
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(REPO),
+        "ORIGENLAB_LEADS_OPERATIONAL_RUN_ID": rid,
+    }
     r = subprocess.run(
         [
             sys.executable,
@@ -248,17 +325,26 @@ def test_publish_gate_aggregate(tmp_path: Path) -> None:
         text=True,
     )
     assert r.returncode == 0, r.stderr + r.stdout
+    score_json = tmp_path / "reports" / "out" / "active" / "operational_trust_scorecard.json"
+    payload = json.loads(score_json.read_text(encoding="utf-8"))
+    assert payload["provenance"]["operational_run_id"] == rid
 
 
-def test_publish_gate_fails_when_verify_fails(tmp_path: Path) -> None:
+def test_publish_gate_fails_when_verify_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = tmp_path / "db.sqlite"
-    _build_minimal_publish_workspace(tmp_path, db)
+    rid = str(uuid.uuid4())
+    _build_minimal_publish_workspace(tmp_path, db, operational_run_id=rid)
+    monkeypatch.setenv("ORIGENLAB_LEADS_OPERATIONAL_RUN_ID", rid)
     summary = tmp_path / "reports" / "out" / "client_pack_latest" / "summary.json"
     data = json.loads(summary.read_text(encoding="utf-8"))
     data["totals"]["lead_master_rows"] = 1
     summary.write_text(json.dumps(data, indent=2), encoding="utf-8")
     script = REPO / "scripts" / "qa" / "publish_gate.py"
-    env = {**os.environ, "PYTHONPATH": str(REPO)}
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(REPO),
+        "ORIGENLAB_LEADS_OPERATIONAL_RUN_ID": rid,
+    }
     r = subprocess.run(
         [
             sys.executable,
@@ -288,6 +374,32 @@ def test_cohort_partition_detects_overlap(tmp_path: Path) -> None:
     checks = check_cohort_partition(hunt, r, n, nr)
     disjoint = next(c for c in checks if c.check_id == "readiness_partition_disjoint")
     assert not disjoint.ok
+
+
+def test_pack_operational_run_id_mismatch_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = tmp_path / "db.sqlite"
+    _build_minimal_publish_workspace(tmp_path, db, operational_run_id="pack-uuid")
+    monkeypatch.setenv("ORIGENLAB_LEADS_OPERATIONAL_RUN_ID", "env-uuid")
+    checks = verify_client_pack_against_db(
+        tmp_path / "reports" / "out" / "client_pack_latest" / "summary.json",
+        db.resolve(),
+    )
+    chk = next(c for c in checks if c.check_id == "pack_operational_run_id_matches_env")
+    assert not chk.ok
+    assert chk.critical
+
+
+def test_pack_operational_run_id_match_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = tmp_path / "db.sqlite"
+    rid = "same-id"
+    _build_minimal_publish_workspace(tmp_path, db, operational_run_id=rid)
+    monkeypatch.setenv("ORIGENLAB_LEADS_OPERATIONAL_RUN_ID", rid)
+    checks = verify_client_pack_against_db(
+        tmp_path / "reports" / "out" / "client_pack_latest" / "summary.json",
+        db.resolve(),
+    )
+    chk = next(c for c in checks if c.check_id == "pack_operational_run_id_matches_env")
+    assert chk.ok
 
 
 def test_probe_url_invalid() -> None:

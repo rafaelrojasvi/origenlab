@@ -25,7 +25,14 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.lead_export_queries import (
+    sql_left_join_best_org_match,
+    sql_upstream_active_lead_master,
+)
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+
+_LM_UPSTREAM_ACTIVE = sql_upstream_active_lead_master("lm")
+_JOIN_BEST_ORG = sql_left_join_best_org_match(variant="archive_only")
 
 
 FOCUS_COLS = [
@@ -80,7 +87,10 @@ def _count_any_contact_rows(rows: list[dict[str, str]]) -> int:
 
 def _source_count(conn: sqlite3.Connection, source_name: str) -> int:
     return conn.execute(
-        "SELECT COUNT(*) FROM lead_master WHERE source_name=?",
+        f"""
+        SELECT COUNT(*) FROM lead_master lm
+        WHERE lm.source_name = ? AND {_LM_UPSTREAM_ACTIVE}
+        """,
         (source_name,),
     ).fetchone()[0]
 
@@ -88,7 +98,7 @@ def _source_count(conn: sqlite3.Connection, source_name: str) -> int:
 def _build_focus_rows(conn: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
     conn.row_factory = sqlite3.Row
     return conn.execute(
-        """
+        f"""
         SELECT
           lm.id AS id_lead,
           COALESCE(lm.fit_bucket, 'low_fit') AS fit_bucket,
@@ -103,12 +113,9 @@ def _build_focus_rows(conn: sqlite3.Connection, limit: int) -> list[sqlite3.Row]
           lm.status,
           lm.next_action
         FROM lead_master lm
-        LEFT JOIN (
-          SELECT m1.lead_id, m1.already_in_archive_flag
-          FROM lead_matches_existing_orgs m1
-          WHERE m1.id = (SELECT MIN(m2.id) FROM lead_matches_existing_orgs m2 WHERE m2.lead_id = m1.lead_id)
-        ) m ON m.lead_id = lm.id
-        WHERE COALESCE(lm.fit_bucket, 'low_fit') IN ('high_fit', 'medium_fit')
+        {_JOIN_BEST_ORG}
+        WHERE {_LM_UPSTREAM_ACTIVE}
+          AND COALESCE(lm.fit_bucket, 'low_fit') IN ('high_fit', 'medium_fit')
         ORDER BY
           CASE COALESCE(lm.fit_bucket, 'low_fit')
             WHEN 'high_fit' THEN 0
@@ -311,10 +318,17 @@ def main() -> int:
     conn = connect(db_path)
     ensure_leads_tables(conn)
 
-    total_leads = conn.execute("SELECT COUNT(*) FROM lead_master").fetchone()[0]
+    total_leads = conn.execute(
+        f"SELECT COUNT(*) FROM lead_master lm WHERE {_LM_UPSTREAM_ACTIVE}"
+    ).fetchone()[0]
     chilecompra_leads = _source_count(conn, "chilecompra")
     scored_rows = conn.execute(
-        "SELECT COUNT(*) FROM lead_master WHERE source_name='chilecompra' AND priority_score IS NOT NULL"
+        f"""
+        SELECT COUNT(*) FROM lead_master lm
+        WHERE lm.source_name = 'chilecompra'
+          AND lm.priority_score IS NOT NULL
+          AND {_LM_UPSTREAM_ACTIVE}
+        """
     ).fetchone()[0]
 
     if _table_exists(conn, "lead_outreach_enrichment"):

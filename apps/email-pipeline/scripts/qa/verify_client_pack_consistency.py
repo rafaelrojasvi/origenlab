@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Cross-check client pack summary.json, live SQLite, top20 CSV, and readiness exports."""
+"""Pack / DB / top20 consistency only — **not** full operational validation.
+
+Cross-checks ``client_pack_latest/summary.json``, live SQLite, top20 CSV, and related active
+exports. Hunt/readiness **cohort partition** and other trust/readiness/freshness checks live in
+``audit_operational_trust.py`` (and in ``publish_gate.py`` as step 2) — not here — so the full
+gate does not repeat the same work or stdout.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +21,6 @@ from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.operational_trust import (
     TrustCheck,
     any_critical_failed,
-    check_cohort_partition,
     leads_active_paths,
     verify_client_pack_against_db,
     verify_top20_and_readiness,
@@ -58,14 +63,6 @@ def run(args: argparse.Namespace) -> int:
             needs_path=paths.needs.resolve(),
             hunt_path=paths.hunt.resolve(),
             db_path=db,
-        )
-    )
-    checks.extend(
-        check_cohort_partition(
-            paths.hunt.resolve(),
-            paths.ready.resolve(),
-            paths.needs.resolve(),
-            paths.not_ready.resolve(),
         )
     )
     for c in checks:

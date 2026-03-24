@@ -14,65 +14,10 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
-from origenlab_email_pipeline.lead_identity_norm import compute_lead_norm_fields
-from origenlab_email_pipeline.leads_normalize import pick_contact_field_for_upsert, raw_to_normalized
+from origenlab_email_pipeline.lead_master_keys import canonical_source_record_id
+from origenlab_email_pipeline.lead_normalize_upsert import upsert_lead_master_row
+from origenlab_email_pipeline.leads_normalize import raw_to_normalized
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
-
-LEAD_MASTER_COLS = [
-    "source_name", "source_type", "source_record_id", "source_url",
-    "org_name", "contact_name", "email", "phone", "website", "domain",
-    "region", "city", "lead_type", "organization_type_guess", "equipment_match_tags",
-    "buyer_kind", "lab_context_score", "lab_context_tags",
-    "evidence_summary", "first_seen_at", "last_seen_at", "status",
-    "email_norm", "domain_norm", "org_name_norm",
-]
-
-
-def upsert_lead(conn, row: dict) -> None:
-    """Update existing lead by (source_name, source_record_id) or insert."""
-    norms = compute_lead_norm_fields(row.get("email"), row.get("domain"), row.get("org_name"))
-    row = {**row, **norms}
-    cur = conn.execute(
-        "SELECT id FROM lead_master WHERE source_name = ? AND source_record_id = ?",
-        (row["source_name"], row.get("source_record_id") or ""),
-    )
-    existing = cur.fetchone()
-    if existing:
-        lead_id = existing[0]
-        prev = conn.execute(
-            "SELECT contact_name, email, phone FROM lead_master WHERE id = ?",
-            (lead_id,),
-        ).fetchone()
-        old_name, old_email, old_phone = (prev or (None, None, None))
-        contact_name = pick_contact_field_for_upsert(row.get("contact_name"), old_name)
-        email = pick_contact_field_for_upsert(row.get("email"), old_email)
-        phone = pick_contact_field_for_upsert(row.get("phone"), old_phone)
-        conn.execute(
-            """
-            UPDATE lead_master SET
-              source_type = ?, source_url = ?, org_name = ?, contact_name = ?, email = ?, phone = ?, website = ?,
-              domain = ?, region = ?, city = ?, lead_type = ?, organization_type_guess = ?, equipment_match_tags = ?,
-              buyer_kind = ?, lab_context_score = ?, lab_context_tags = ?,
-              evidence_summary = ?, last_seen_at = ?,
-              email_norm = ?, domain_norm = ?, org_name_norm = ?
-            WHERE id = ?
-            """,
-            (
-                row.get("source_type"), row.get("source_url"), row.get("org_name"), contact_name,
-                email, phone, row.get("website"), row.get("domain"),
-                row.get("region"), row.get("city"), row.get("lead_type"), row.get("organization_type_guess"),
-                row.get("equipment_match_tags"), row.get("buyer_kind"), row.get("lab_context_score"), row.get("lab_context_tags"),
-                row.get("evidence_summary"), row.get("last_seen_at"),
-                row.get("email_norm"), row.get("domain_norm"), row.get("org_name_norm"),
-                lead_id,
-            ),
-        )
-    else:
-        placeholders = ", ".join(["?"] * len(LEAD_MASTER_COLS))
-        conn.execute(
-            f"INSERT INTO lead_master ({', '.join(LEAD_MASTER_COLS)}) VALUES ({placeholders})",
-            tuple(row.get(c) for c in LEAD_MASTER_COLS),
-        )
 
 
 def main() -> int:
@@ -105,8 +50,8 @@ def main() -> int:
         except Exception as e:
             print(f"Warning: skip raw {source_name}/{source_record_id}: {e}", file=sys.stderr)
             continue
-        normalized["source_record_id"] = source_record_id
-        upsert_lead(conn, normalized)
+        normalized["source_record_id"] = canonical_source_record_id(source_record_id)
+        upsert_lead_master_row(conn, normalized)
         n += 1
         batch += 1
         # Commit periodically so results are visible and to reduce long transactions.

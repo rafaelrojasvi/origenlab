@@ -74,15 +74,15 @@ def test_contact_hunt_sorting_prefers_high_fit_and_net_new(tmp_path: Path) -> No
     conn.execute(
         """
         INSERT INTO lead_master
-          (source_name, org_name, region, city, lead_type, organization_type_guess,
+          (source_name, source_record_id, org_name, region, city, lead_type, organization_type_guess,
            buyer_kind, equipment_match_tags, lab_context_tags,
            evidence_summary, priority_score, priority_reason, fit_bucket,
            status, review_owner, next_action, notes, source_url)
         VALUES
-          ('chilecompra', 'Org A', 'RM', 'Santiago', 'tender_buyer', 'government',
+          ('chilecompra', 'lic-a', 'Org A', 'RM', 'Santiago', 'tender_buyer', 'government',
            'hospital', 'balanza', 'laboratorio', 'Licitación balanza', 8.0, 'test', 'high_fit',
            'nuevo', '', '', '', 'http://example.org/a'),
-          ('chilecompra', 'Org B', 'RM', 'Santiago', 'tender_buyer', 'government',
+          ('chilecompra', 'lic-b', 'Org B', 'RM', 'Santiago', 'tender_buyer', 'government',
            'publico', '', '', 'Licitación genérica', 5.0, 'test', 'medium_fit',
            'nuevo', '', '', '', '')
         """

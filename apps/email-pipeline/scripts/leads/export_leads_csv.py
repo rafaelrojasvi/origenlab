@@ -14,7 +14,14 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.lead_export_queries import (
+    sql_left_join_best_org_match,
+    sql_upstream_active_lead_master,
+)
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+
+_LM_UPSTREAM_ACTIVE = sql_upstream_active_lead_master("lm")
+_JOIN_BEST_ORG = sql_left_join_best_org_match(variant="org_and_archive")
 
 EXPORT_COLS = [
     "id_lead",
@@ -36,7 +43,8 @@ def main() -> int:
     conn = connect(db_path)
     ensure_leads_tables(conn)
     # Left join to one match per lead (first by id)
-    rows = conn.execute("""
+    rows = conn.execute(
+        f"""
         SELECT
           lm.id AS id_lead,
           lm.source_name, lm.org_name, lm.contact_name, lm.email, lm.phone, lm.website, lm.domain,
@@ -47,13 +55,11 @@ def main() -> int:
           m.matched_org_name,
           COALESCE(m.already_in_archive_flag, 0)
         FROM lead_master lm
-        LEFT JOIN (
-          SELECT m1.lead_id, m1.matched_org_name, m1.already_in_archive_flag
-          FROM lead_matches_existing_orgs m1
-          WHERE m1.id = (SELECT MIN(m2.id) FROM lead_matches_existing_orgs m2 WHERE m2.lead_id = m1.lead_id)
-        ) m ON lm.id = m.lead_id
+        {_JOIN_BEST_ORG}
+        WHERE {_LM_UPSTREAM_ACTIVE}
         ORDER BY lm.priority_score DESC, lm.last_seen_at DESC
-    """).fetchall()
+        """
+    ).fetchall()
     conn.close()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w", encoding="utf-8", newline="") as f:

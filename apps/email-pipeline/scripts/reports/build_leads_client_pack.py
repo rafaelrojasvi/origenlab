@@ -6,7 +6,7 @@ Writes to ``reports/out/client_pack_latest/`` (overwrites previous pack files):
 - index.html — resumen visual sobrio
 - resumen_ejecutivo_es.md — narrativa ejecutiva
 - anexo_leads.csv — tabla anexa con id_lead
-- summary.json — métricas para tooling
+- summary.json — métricas para tooling (incluye bloque factual ``provenance``: ``operational_run_id`` si ``ORIGENLAB_LEADS_OPERATIONAL_RUN_ID`` está definido; ``publish_gate_validated_this_artifact`` siempre false)
 
 SQLite es la fuente de verdad; este paquete es solo proyección.
 
@@ -14,6 +14,7 @@ Usage::
 
     uv run python scripts/reports/build_leads_client_pack.py
     uv run python scripts/reports/build_leads_client_pack.py --db /path/to/emails.sqlite --limit 400
+    uv run python scripts/reports/build_leads_client_pack.py --run-id <uuid>   # or rely on ORIGENLAB_LEADS_OPERATIONAL_RUN_ID
 """
 
 from __future__ import annotations
@@ -33,7 +34,16 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.lead_export_queries import (
+    sql_left_join_best_org_match,
+    sql_upstream_active_lead_master,
+)
+from origenlab_email_pipeline.lead_provenance import build_client_pack_provenance
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+
+_LM_UPSTREAM_ACTIVE = sql_upstream_active_lead_master("lm")
+_JOIN_BEST_ORG_ARCHIVE = sql_left_join_best_org_match(variant="archive_only")
+_JOIN_BEST_ORG_ANNEX = sql_left_join_best_org_match(variant="org_and_archive")
 
 # Align with operational_trust.db_lead_totals / publish_gate (blank fit → low_fit).
 _LM_FIT = "COALESCE(NULLIF(TRIM(lm.fit_bucket), ''), 'low_fit')"
@@ -76,18 +86,13 @@ def _enrichment_with_contact_count(conn: sqlite3.Connection) -> tuple[int, int]:
 def _archive_split_counts(conn: sqlite3.Connection) -> tuple[int, int]:
     """Leads with best match already_in_archive_flag=1 vs net-new (0 or no match)."""
     row = conn.execute(
-        """
+        f"""
         SELECT
           SUM(CASE WHEN COALESCE(m.already_in_archive_flag, 0) = 1 THEN 1 ELSE 0 END),
           SUM(CASE WHEN COALESCE(m.already_in_archive_flag, 0) = 0 THEN 1 ELSE 0 END)
         FROM lead_master lm
-        LEFT JOIN (
-          SELECT m1.lead_id, m1.already_in_archive_flag
-          FROM lead_matches_existing_orgs m1
-          WHERE m1.id = (
-            SELECT MIN(m2.id) FROM lead_matches_existing_orgs m2 WHERE m2.lead_id = m1.lead_id
-          )
-        ) m ON m.lead_id = lm.id
+        {_JOIN_BEST_ORG_ARCHIVE}
+        WHERE {_LM_UPSTREAM_ACTIVE}
         """
     ).fetchone()
     in_a = int(row[0] or 0)
@@ -110,6 +115,12 @@ def main() -> int:
         default=400,
         help="Max rows in anexo_leads.csv (default: 400)",
     )
+    ap.add_argument(
+        "--run-id",
+        type=str,
+        default=None,
+        help="Operational run UUID for summary provenance (default: ORIGENLAB_LEADS_OPERATIONAL_RUN_ID env)",
+    )
     args = ap.parse_args()
 
     settings = load_settings()
@@ -123,11 +134,15 @@ def main() -> int:
     conn = connect(db_path)
     ensure_leads_tables(conn)
 
-    total_leads = conn.execute("SELECT COUNT(*) FROM lead_master").fetchone()[0]
+    total_leads = conn.execute(
+        f"SELECT COUNT(*) FROM lead_master lm WHERE {_LM_UPSTREAM_ACTIVE}"
+    ).fetchone()[0]
     fit_rows = conn.execute(
         f"""
         SELECT {_FIT_GROUP} AS fb, COUNT(*)
-        FROM lead_master GROUP BY fb
+        FROM lead_master lm
+        WHERE {_LM_UPSTREAM_ACTIVE}
+        GROUP BY fb
         """
     ).fetchall()
     fit_counts = {str(r[0]): int(r[1]) for r in fit_rows}
@@ -136,23 +151,29 @@ def main() -> int:
     enrich_total, enrich_contacts = _enrichment_with_contact_count(conn)
 
     src_rows = conn.execute(
-        "SELECT source_name, COUNT(*) FROM lead_master GROUP BY source_name ORDER BY COUNT(*) DESC"
+        f"""
+        SELECT source_name, COUNT(*) FROM lead_master lm
+        WHERE {_LM_UPSTREAM_ACTIVE}
+        GROUP BY source_name ORDER BY COUNT(*) DESC
+        """
     ).fetchall()
     sources = {str(r[0]): int(r[1]) for r in src_rows}
 
     buyer_rows = conn.execute(
-        """
-        SELECT buyer_kind, COUNT(*) FROM lead_master
-        WHERE buyer_kind IS NOT NULL AND length(trim(buyer_kind)) > 0
+        f"""
+        SELECT buyer_kind, COUNT(*) FROM lead_master lm
+        WHERE {_LM_UPSTREAM_ACTIVE}
+          AND buyer_kind IS NOT NULL AND length(trim(buyer_kind)) > 0
         GROUP BY buyer_kind ORDER BY COUNT(*) DESC LIMIT 12
         """
     ).fetchall()
     buyers = [(str(r[0]), int(r[1])) for r in buyer_rows]
 
     region_rows = conn.execute(
-        """
-        SELECT region, COUNT(*) FROM lead_master
-        WHERE region IS NOT NULL AND length(trim(region)) > 0
+        f"""
+        SELECT region, COUNT(*) FROM lead_master lm
+        WHERE {_LM_UPSTREAM_ACTIVE}
+          AND region IS NOT NULL AND length(trim(region)) > 0
         GROUP BY region ORDER BY COUNT(*) DESC LIMIT 12
         """
     ).fetchall()
@@ -164,13 +185,8 @@ def main() -> int:
                COALESCE(lm.priority_score, 0), lm.buyer_kind,
                COALESCE(m.already_in_archive_flag, 0)
         FROM lead_master lm
-        LEFT JOIN (
-          SELECT m1.lead_id, m1.already_in_archive_flag
-          FROM lead_matches_existing_orgs m1
-          WHERE m1.id = (
-            SELECT MIN(m2.id) FROM lead_matches_existing_orgs m2 WHERE m2.lead_id = m1.lead_id
-          )
-        ) m ON m.lead_id = lm.id
+        {_JOIN_BEST_ORG_ARCHIVE}
+        WHERE {_LM_UPSTREAM_ACTIVE}
         ORDER BY COALESCE(lm.priority_score, 0) DESC, lm.last_seen_at DESC
         LIMIT 15
         """
@@ -195,13 +211,8 @@ def main() -> int:
       lm.next_action,
       m.matched_org_name
     FROM lead_master lm
-    LEFT JOIN (
-      SELECT m1.lead_id, m1.matched_org_name, m1.already_in_archive_flag
-      FROM lead_matches_existing_orgs m1
-      WHERE m1.id = (
-        SELECT MIN(m2.id) FROM lead_matches_existing_orgs m2 WHERE m2.lead_id = m1.lead_id
-      )
-    ) m ON m.lead_id = lm.id
+    {_JOIN_BEST_ORG_ANNEX}
+    WHERE {_LM_UPSTREAM_ACTIVE}
     ORDER BY
       CASE {_LM_FIT}
         WHEN 'high_fit' THEN 0 WHEN 'medium_fit' THEN 1 ELSE 2 END,
@@ -237,6 +248,10 @@ def main() -> int:
     conn.close()
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db_resolved = Path(db_path).resolve()
+    db_configured = (
+        str(args.db) if args.db is not None else (str(settings.sqlite_path) if settings.sqlite_path else None)
+    )
     summary = {
         "generated_at_utc": generated_at,
         "sqlite_path_note": "Cifras calculadas sobre el inventario unificado de oportunidades de este análisis.",
@@ -265,6 +280,14 @@ def main() -> int:
         "anexo_csv_rows_written": len(annex_rows),
         "anexo_limit": args.limit,
     }
+    rid = (args.run_id or "").strip() or None
+    summary["provenance"] = build_client_pack_provenance(
+        repo_root=_ROOT,
+        db_path_configured=db_configured,
+        db_path_resolved=db_resolved,
+        generated_at_utc=generated_at,
+        operational_run_id=rid,
+    )
     (out_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # --- resumen_ejecutivo_es.md ---

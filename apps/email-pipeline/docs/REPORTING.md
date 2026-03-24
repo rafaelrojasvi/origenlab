@@ -89,7 +89,7 @@ uv run python scripts/ml/explore_email_clusters.py --limit 2000 --filter-any --n
 | Ubicación | Propósito |
 |-----------|-----------|
 | **`reports/out/active/`** | Archivos operativos **mínimos**: foco semanal, resumen MD, hoja de hunting actual, opcional `for_deepsearch`. Al ejecutar [`prepare_active_workspace.py`](../scripts/leads/prepare_active_workspace.py), otros CSV en esta carpeta se mueven a `archive/`. |
-| **`reports/out/client_pack_latest/`** | **Entregable cliente**: informe estático (HTML + MD + anexo CSV). Regenerar con [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py); puede sobrescribirse en cada ejecución. |
+| **`reports/out/client_pack_latest/`** | **Entregable cliente**: informe estático (HTML + MD + anexo CSV). Regenerar con [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py); puede sobrescribirse en cada ejecución. `summary.json` incluye un bloque **`provenance`** (DB resuelta, revisión git opcional, registro opcional del último `run_leads_operational_stack.sh` en disco). |
 | **`reports/out/archive/`** | Históricos, limpiezas, dumps grandes (`leads_export*.csv`, etc.). |
 | **`reports/out/reference/`** | Experimentos y recortes (p. ej. Deep Research de prueba). |
 
@@ -119,13 +119,13 @@ Más detalle del pipeline de leads: **[leads/LEAD_PIPELINE.md](leads/LEAD_PIPELI
 
 Los informes y CSVs de leads son **instantáneas**: pueden quedar desalineados respecto a la base si no se regeneran. La capa de **operational trust** ([`operational_trust.py`](../src/origenlab_email_pipeline/operational_trust.py) + [`scripts/qa/`](../scripts/qa/)) contrasta:
 
-- **[`reports/out/client_pack_latest/summary.json`](#m-eprep-leads)** — totales `lead_master_rows` y `fit_bucket` frente al **SQLite** usado por el gate (mismo criterio que [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py): `fit_bucket` vacío tras `TRIM` cuenta como `low_fit`; la verificación también normaliza claves al comparar).
+- **[`reports/out/client_pack_latest/summary.json`](#m-eprep-leads)** — totales `lead_master_rows` y `fit_bucket` frente al **SQLite** usado por el gate (mismo criterio que [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py): `fit_bucket` vacío tras `TRIM` cuenta como `low_fit`; la verificación también normaliza claves al comparar). Incluye **`provenance`**: `operational_run_id` si el pack se generó con `ORIGENLAB_LEADS_OPERATIONAL_RUN_ID` (stack), **`publish_gate_validated_this_artifact` siempre false** en el pack, rutas de DB, `generated_at_utc`, revisión git, copia del último [`operational_stack_last_run.json`](../reports/out/README.md) si está presente (ver `caveat`). Si el gate corre con el mismo env `ORIGENLAB_LEADS_OPERATIONAL_RUN_ID`, [`verify_client_pack_consistency.py`](../scripts/qa/verify_client_pack_consistency.py) exige que `provenance.operational_run_id` coincida (**crítico**). Puede marcar **no crítico** si `provenance.db_path_resolved` no coincide con el SQLite de la sesión del gate.
 - **[`reports/out/active/leads_top20_for_client_report.csv`](../reports/out/README.md)** — filas, `id_lead` únicos, alineación con `leads_ready_to_contact.csv`, subconjunto del hunt, existencia en `lead_master`, campos mínimos.
 - **Cohorte hunt + readiness** — [`leads_contact_hunt_current.csv`](../reports/out/README.md), [`leads_ready_to_contact.csv`](../reports/out/README.md), [`leads_needs_contact_research.csv`](../reports/out/README.md), [`leads_not_ready.csv`](../reports/out/README.md): partición de IDs, sumas, duplicados en hunt.
 
 **Scorecards generados** (al ejecutar [`audit_operational_trust.py`](../scripts/qa/audit_operational_trust.py), también vía [`publish_gate.py`](../scripts/qa/publish_gate.py)):
 
-- JSON: [`reports/out/active/operational_trust_scorecard.json`](../reports/out/README.md)
+- JSON: [`reports/out/active/operational_trust_scorecard.json`](../reports/out/README.md) — incluye **`provenance`** (`operational_run_id` si está definido en el entorno, timestamp del audit, SQLite usado, ruta a `summary.json` del pack, copia opcional de `operational_stack_last_run.json`, `caveat` sobre correlación temporal).
 - Markdown: [`docs/generated/operational_trust_scorecard.md`](generated/operational_trust_scorecard.md)
 
 **Frescura del pack (`client_pack_freshness`):** el audit comprueba que `summary.json` tenga `generated_at_utc` parseable y que su antigüedad no supere `--max-pack-age-hours` (por defecto 168 h). Es una comprobación de **snapshot reciente**, no de calidad de negocio.
@@ -133,3 +133,5 @@ Los informes y CSVs de leads son **instantáneas**: pueden quedar desalineados r
 **Enlaces de evidencia:** [`check_evidence_links.py`](../scripts/qa/check_evidence_links.py) valida formato `http(s)` y, salvo `--skip-evidence-http` en el gate, hace peticiones HTTP con umbrales configurables.
 
 **Flujo recomendado** antes de compartir el paquete cliente: regenerar pack si cambió la DB → ejecutar el gate → solo entregar si **PASS**. Procedimiento: **[RUNBOOK.md §4](RUNBOOK.md#m-eprun-publish-qa)**.
+
+**Provenance (trazabilidad):** los metadatos en `summary.json`, `operational_stack_last_run.json`, `operational_run_manifests/<run_id>.json` y el scorecard JSON **no** sustituyen el gate ni prueban calidad de negocio; documentan `run_id`, resultado del gate en el manifiesto, rutas y flags conocidos por el código.

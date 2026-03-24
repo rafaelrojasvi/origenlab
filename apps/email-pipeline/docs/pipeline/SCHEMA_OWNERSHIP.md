@@ -61,12 +61,13 @@ Also invoked from `init_schema`, `ensure_leads_tables`, `ensure_lead_account_tab
 | Object | DDL owner | ALTER / deferred indexes | Backfill | View refresh | Ownership |
 |--------|-----------|--------------------------|----------|--------------|-----------|
 | `external_leads_raw` | [`leads_schema.py`](../../src/origenlab_email_pipeline/leads_schema.py) `LEAD_SCHEMA_SQL` | — | — | — | **Clean** |
-| `lead_master` | `leads_schema.py` | `_migrate_lead_master_norm_columns`; legacy buyer/fit/lab columns loop; norm indexes after ALTER | `backfill_lead_master_norm_columns`; `normalize_leads` upserts | via `ensure_leads_tables` / `bi_views` | **Clean module**; **split concerns** (DDL + backfill in same module) |
-| `lead_matches_existing_orgs` | `leads_schema.py` | `_migrate_lead_matches_org_columns`; deferred `pipeline_run_id` index | cleared by matching code | — | **Clean** |
+| `lead_master` | `leads_schema.py` | `_migrate_lead_master_norm_columns`; legacy buyer/fit/lab columns loop; norm indexes after ALTER; **upstream lifecycle** columns `upstream_sync_state` (default `active`), `upstream_retired_at`, `upstream_retired_reason`; **UNIQUE** `(source_name, source_record_id)` index `uidx_lead_master_source_name_record` via `finalize_lead_master_source_keys` ([`lead_master_keys.py`](../../src/origenlab_email_pipeline/lead_master_keys.py)) | `backfill_canonical_source_record_ids` + `backfill_lead_master_norm_columns`; conflict upsert in [`lead_normalize_upsert.py`](../../src/origenlab_email_pipeline/lead_normalize_upsert.py); reactivation of `upstream_sync_state` on upsert; soft retire via [`lead_upstream_reconcile.py`](../../src/origenlab_email_pipeline/lead_upstream_reconcile.py) + [`scripts/leads/reconcile_lead_upstream.py`](../../scripts/leads/reconcile_lead_upstream.py) | via `ensure_leads_tables` / `bi_views` | **Clean module**; use `ensure_leads_tables_ddl_base` + audit/dedupe when duplicates block index creation |
+| `lead_upstream_reconcile_log` | `leads_schema.py` | `CREATE TABLE` in `LEAD_SCHEMA_SQL` | append-only on `reconcile_lead_upstream.py --apply` | — | **Audit** for retire events |
+| `lead_matches_existing_orgs` | `leads_schema.py` | `_migrate_lead_matches_org_columns`; deferred `pipeline_run_id` index | cleared by matching code | — | **Clean**; read-side “best match per lead” for exports is centralized in [`lead_export_queries.py`](../../src/origenlab_email_pipeline/lead_export_queries.py) (deterministic `MIN(id)` per `lead_id`). |
 | `lead_matches_existing_contacts` | `leads_schema.py` | — (new table) | cleared by matching | — | **Clean** |
 | `lead_outreach_enrichment` | `leads_schema.py` | — | import/merge scripts | — | **Clean** |
 
-`ensure_leads_tables_ddl` holds DDL+migrations+indexes without backfill/view; `ensure_leads_tables` wraps optional backfill + view (defaults unchanged).
+`ensure_leads_tables_ddl_base` holds DDL+migrations+secondary indexes without the lead source-key finalize step. `ensure_leads_tables_ddl` calls base then `finalize_lead_master_source_keys` (canonical `source_record_id` + UNIQUE index). `ensure_leads_tables` wraps full DDL, norm backfill, and view (defaults unchanged). Read-only duplicate audit: [`scripts/leads/audit_lead_master_duplicates.py`](../../scripts/leads/audit_lead_master_duplicates.py); merge: [`scripts/leads/dedupe_lead_master.py`](../../scripts/leads/dedupe_lead_master.py). Raw-vs-master soft retire: [`scripts/leads/reconcile_lead_upstream.py`](../../scripts/leads/reconcile_lead_upstream.py). Operational stack manifest (not DB): [`run_leads_operational_stack.sh`](../../scripts/leads/run_leads_operational_stack.sh) writes [`reports/out/active/operational_stack_last_run.json`](../../reports/out/README.md) plus a per-run copy under `reports/out/active/operational_run_manifests/` (see [`lead_provenance.py`](../../src/origenlab_email_pipeline/lead_provenance.py)).
 
 ---
 
@@ -88,7 +89,7 @@ Also invoked from `init_schema`, `ensure_leads_tables`, `ensure_lead_account_tab
 
 | Object | Owner | Behavior |
 |--------|-------|------------|
-| `v_lead_match_summary` | [`bi_views.py`](../../src/origenlab_email_pipeline/bi_views.py) `refresh_lead_match_summary_view` | Prerequisites checked before DROP; transactional replace; returns status string. Core vs full SQL depends on account tables. |
+| `v_lead_match_summary` | [`bi_views.py`](../../src/origenlab_email_pipeline/bi_views.py) `refresh_lead_match_summary_view` | Prerequisites checked before DROP; transactional replace; returns status string. Core vs full SQL depends on account tables. Excludes `lead_master` rows with `upstream_sync_state = 'retired_no_raw'` (soft-retired missing raw). |
 
 ---
 

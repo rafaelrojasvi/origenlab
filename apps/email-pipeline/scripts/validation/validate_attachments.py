@@ -10,6 +10,11 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
+from origenlab_email_pipeline.attachment_report_sql import (
+    attachment_business_doc_filename_extension_expr_sql,
+    attachment_business_doc_predicate_sql,
+    attachment_delivery_noise_predicate_sql,
+)
 from origenlab_email_pipeline.config import load_settings
 
 
@@ -79,17 +84,9 @@ def main() -> None:
     print(f"  Orphan attachment rows (email_id not in emails): {orphan_att:,}")
 
     # --- Attachment reporting refinement (broad classes, business-doc) ---
-    # Business-doc: pdf, doc/docx, xls/xlsx/csv, zip, xml; exclude image/* and noise types
-    _noise = "LOWER(COALESCE(content_type,'')) IN ('message/delivery-status','multipart/report','text/rfc822-headers')"
-    _business_doc = f"""(
-        (LOWER(COALESCE(content_type,'')) LIKE 'application/pdf%' OR LOWER(COALESCE(filename,'')) LIKE '%.pdf')
-        OR (LOWER(COALESCE(filename,'')) GLOB '*.doc' OR LOWER(COALESCE(filename,'')) GLOB '*.docx'
-            OR LOWER(COALESCE(content_type,'')) LIKE '%msword%' OR LOWER(COALESCE(content_type,'')) LIKE '%wordprocessing%')
-        OR (LOWER(COALESCE(filename,'')) GLOB '*.xls' OR LOWER(COALESCE(filename,'')) GLOB '*.xlsx' OR LOWER(COALESCE(filename,'')) GLOB '*.csv'
-            OR LOWER(COALESCE(content_type,'')) LIKE '%spreadsheet%' OR LOWER(COALESCE(content_type,'')) LIKE '%ms-excel%')
-        OR (LOWER(COALESCE(filename,'')) GLOB '*.zip' OR LOWER(COALESCE(content_type,'')) LIKE '%zip%' OR LOWER(COALESCE(content_type,'')) LIKE '%x-zip%')
-        OR (LOWER(COALESCE(filename,'')) GLOB '*.xml' OR LOWER(COALESCE(content_type,'')) LIKE '%/xml' OR LOWER(COALESCE(content_type,'')) = 'application/xml')
-    ) AND LOWER(COALESCE(content_type,'')) NOT LIKE 'image/%' AND NOT ({_noise})"""
+    # Business-doc / noise SQL shared with client_report_metrics (alias `a` in joins)
+    _noise = attachment_delivery_noise_predicate_sql("a")
+    _business_doc = attachment_business_doc_predicate_sql("a")
     emails_non_inline = cur.execute(
         """
         SELECT COUNT(DISTINCT a.email_id) FROM attachments a
@@ -144,7 +141,7 @@ def main() -> None:
         """
     ).fetchone()[0]
     class_other = cur.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM attachments a INNER JOIN emails e ON e.id = a.email_id
         WHERE LOWER(COALESCE(a.content_type,'')) NOT LIKE 'image/%'
           AND LOWER(COALESCE(a.content_type,'')) NOT LIKE 'application/pdf%' AND LOWER(COALESCE(a.filename,'')) NOT LIKE '%.pdf'
@@ -153,7 +150,7 @@ def main() -> None:
           AND NOT (LOWER(COALESCE(a.filename,'')) GLOB '*.doc' OR LOWER(COALESCE(a.filename,'')) GLOB '*.docx'
                OR LOWER(COALESCE(a.content_type,'')) LIKE '%msword%' OR LOWER(COALESCE(a.content_type,'')) LIKE '%wordprocessing%')
           AND NOT (LOWER(COALESCE(a.filename,'')) GLOB '*.zip' OR LOWER(COALESCE(a.content_type,'')) LIKE '%zip%' OR LOWER(COALESCE(a.content_type,'')) LIKE '%x-zip%')
-          AND LOWER(COALESCE(a.content_type,'')) NOT IN ('message/delivery-status','multipart/report','text/rfc822-headers')
+          AND NOT ({_noise})
         """
     ).fetchone()[0]
     print("  Attachment counts by broad class (existing emails only):")
@@ -166,14 +163,7 @@ def main() -> None:
     print(f"    other docs:          {class_other:,}")
 
     # Top business-doc extensions (existing emails only)
-    ext_expr_main = """
-        LOWER(CASE
-            WHEN instr(substr(a.filename, instr(a.filename, '.') + 1), '.') = 0 THEN substr(a.filename, instr(a.filename, '.') + 1)
-            WHEN instr(substr(substr(a.filename, instr(a.filename, '.') + 1), instr(substr(a.filename, instr(a.filename, '.') + 1), '.') + 1), '.') = 0
-            THEN substr(substr(a.filename, instr(a.filename, '.') + 1), instr(substr(a.filename, instr(a.filename, '.') + 1), '.') + 1)
-            ELSE substr(substr(substr(a.filename, instr(a.filename, '.') + 1), instr(substr(a.filename, instr(a.filename, '.') + 1), '.') + 1), instr(substr(substr(a.filename, instr(a.filename, '.') + 1), instr(substr(a.filename, instr(a.filename, '.') + 1), '.') + 1), '.') + 1)
-        END)
-    """
+    ext_expr_main = attachment_business_doc_filename_extension_expr_sql("a")
     print("  Top business-doc extensions (top 10):")
     for row in cur.execute(
         f"""

@@ -78,6 +78,10 @@ def test_legacy_lead_master_without_norm_columns_migrates() -> None:
     assert "email_norm" in cols
     assert "domain_norm" in cols
     assert "org_name_norm" in cols
+    assert "upstream_sync_state" in cols
+    assert conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_upstream_reconcile_log'"
+    ).fetchone()
     assert conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='view' AND name='v_lead_match_summary'"
     ).fetchone()

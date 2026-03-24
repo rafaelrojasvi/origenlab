@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
-"""Run operational trust QA scripts; exit non-zero if any critical check fails."""
+"""**Final combined** publish decision: pack/DB/top20 verify, then operational audit, then evidence.
+
+1. ``verify_client_pack_consistency`` — pack vs DB and top20 consistency only (not full operational
+   validation). Cohort partition is **not** run there.
+2. ``audit_operational_trust`` — cohort partition, readiness, freshness, taxonomy, merged hunt,
+   scorecard, provenance.
+3. Evidence step (unless skipped).
+
+Exit non-zero if any critical check fails.
+
+``audit_operational_trust`` embeds a factual ``provenance`` object in
+``reports/out/active/operational_trust_scorecard.json`` (paths, DB, ``operational_run_id`` from
+``ORIGENLAB_LEADS_OPERATIONAL_RUN_ID`` when the stack exported it, optional stack manifest echo).
+Correlate with ``client_pack_latest/summary.json`` ``provenance.operational_run_id`` and
+``operational_stack_last_run.json`` ``run_id`` for the same stack run; timestamps alone do not
+prove ordering.
+"""
 
 from __future__ import annotations
 

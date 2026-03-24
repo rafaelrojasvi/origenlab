@@ -45,6 +45,70 @@ Columns (any can be missing): `centro`, `nombre_centro`, `name`, `organizacion`,
 
 Scripts are resilient to missing optional fields.
 
+## Lead identity (`source_record_id`)
+
+`lead_master` rows are keyed by `(source_name, canonical source_record_id)` where **blank or whitespace-only** values collapse to `''`. That is the right layer for “one upstream source record → one row”; it is **not** the same as one university or one domain.
+
+**Weak upstream IDs** (missing columns, row-order fallbacks in ingest, or empty IDs) show up as many blanks, duplicate keys, or short numeric IDs. Run the read-only audit below before trusting uniqueness; use `--fail-on-duplicates` in CI only to fail on **duplicate key groups** (not on blanks alone).
+
+## Upstream lifecycle (raw shrink, soft retire)
+
+`external_leads_raw` keeps one row per `(source_name, source_record_id)` (upsert/replace on re-fetch). **`normalize_leads.py` never deletes** `lead_master` when a source file shrinks, so keys that disappear from raw would otherwise stay in exports forever.
+
+**Model**
+
+| State | `upstream_sync_state` | Meaning |
+|--------|------------------------|--------|
+| Active (default) | `active` (or legacy empty → treated as active) | Row is part of the current operational cohort for that source’s raw snapshot. |
+| Soft-retired | `retired_no_raw` | No matching `(source_name, canonical source_record_id)` in `external_leads_raw` **for a source that still has at least one raw row**; set by `reconcile_lead_upstream.py --apply`. Row remains in DB; `upstream_retired_at` / `upstream_retired_reason` record the event. |
+| Reactivated | back to `active` | Next successful `normalize_leads.py` upsert for that key clears retire fields. |
+
+**Conservative guard:** if `external_leads_raw` has **no rows** for a given `source_name`, reconciliation **does not** retire any `lead_master` rows for that source (empty snapshot often means “fetch skipped”, not “universe is empty”).
+
+**Commands**
+
+```bash
+uv run python scripts/leads/reconcile_lead_upstream.py              # dry-run
+uv run python scripts/leads/reconcile_lead_upstream.py --apply     # soft retire + log
+uv run python scripts/leads/reconcile_lead_upstream.py --sources chilecompra,inn_labs
+```
+
+Apply runs append one row per retired lead to `lead_upstream_reconcile_log` (`dry_run=0`). Use `--json-out` for machine-readable output.
+
+**Downstream behavior:** scoring, mart matching, CSV exports, weekly focus, client pack totals, `operational_trust.db_lead_totals` (publish gate vs `summary.json`), lead account rollup input, and `v_lead_match_summary` all filter to **upstream-active** leads. `lead_outreach_enrichment` rows are unchanged; imports keyed by `id_lead` still work if you intentionally touch a retired lead.
+
+**Migration risks:** additive columns and a new log table; existing rows default to `active`. Running `--apply` after a mistaken empty fetch for a source that still has raw rows elsewhere does not retire the empty source’s masters; the main risk is **mis-scoped `--sources`** or **canonicalization drift** between raw `source_record_id` and `lead_master` (same rules as uniqueness: trim, empty → `''`).
+
+## One-command operational stack
+
+[`run_leads_operational_stack.sh`](../scripts/leads/run_leads_operational_stack.sh) runs this order (fail-fast before publish gate; manifest is always written after gate when reached):
+
+0. Generate **`run_id`** (UUID) → exports `ORIGENLAB_LEADS_OPERATIONAL_RUN_ID` for pack + gate + manifest
+1. Optional file ingest (`LEADS_*_FILE`, same semantics as `run_leads_pipeline.sh`)
+2. Ensure lead schema — `normalize_leads.py --ensure-schema-only`
+3. Normalize — `normalize_leads.py`
+4. Reconcile upstream — `reconcile_lead_upstream.py` (`--apply` unless you pass `--reconcile-dry-run` to the shell script)
+5. Score — `leads_score.py`
+6. Match — `match_leads_to_mart.py`
+7. Exports — `export_leads_csv.py` + `export_leads_shortlist.py`
+8. Weekly focus — `run_weekly_focus.py` (omit with `--skip-focus`)
+9. Client pack — `build_leads_client_pack.py` (omit with `--skip-pack`)
+10. Publish gate — `publish_gate.py` (omit with `--skip-gate`)
+11. Run manifest — `write_operational_stack_provenance.py` → [`reports/out/active/operational_stack_last_run.json`](../reports/out/README.md) and `operational_run_manifests/<run_id>.json` (includes `publish_gate.executed` / `passed` / `exit_code`; **still written if gate fails**)
+
+```bash
+bash scripts/leads/run_leads_operational_stack.sh --skip-fetch
+```
+
+- **Mart:** this script does **not** build `organization_master` / `contact_master`. Run [`scripts/pipeline/run_aligned_stack.sh`](../pipeline/run_aligned_stack.sh) (or at least `scripts/mart/build_business_mart.py`) first when you need archive matches.
+- **`--reconcile-dry-run`:** affects **only** `reconcile_lead_upstream.py` (no soft-retire writes from that step). Normalize, score, match, exports, weekly focus, and client pack **still write** the DB and/or files — not a read-only stack.
+- **`--skip-gate`:** the script exits successfully but **does not** run publish validation; the final banner states the run is **not publish-safe by default**. Run `publish_gate.py` before external handoff of the pack or operational CSVs.
+- **Other flags:** `--skip-fetch`, `--skip-pack`, `--skip-focus`, `--db /path/to/emails.sqlite` (sets `ORIGENLAB_SQLITE_PATH` for children and passes `--db` into `publish_gate`).
+- **Ingest env:** same as `run_leads_pipeline.sh` (`LEADS_*_FILE`, `LEADS_EXPORT_PATH`, …).
+- **Provenance / run_id:** [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py) adds `provenance` to `summary.json` (`operational_run_id` when run inside the stack; **`publish_gate_validated_this_artifact` is always false** — gate runs after pack). Same `run_id` appears in the manifest and scorecard when the stack exports the env var. See [REPORTING.md § QA](../REPORTING.md#m-eprep-leads-qa).
+
+For fetch-only + shorter export path without pack/gate, keep using `run_leads_pipeline.sh`.
+
 ## Commands
 
 Run from repo root. DB is the same as the rest of the project (`ORIGENLAB_SQLITE_PATH` or default `~/data/origenlab-email/sqlite/emails.sqlite`).
@@ -79,6 +143,14 @@ uv run python scripts/leads/export_leads_shortlist.py --out reports/out/leads_sh
 
 # QA / inspection
 uv run python scripts/leads/inspect_leads_quality.py --top 20
+
+# Source-key audit (read-only): blanks, per-source stats, duplicate groups, samples, ChileCompra ID hints
+uv run python scripts/leads/audit_lead_master_duplicates.py
+# uv run python scripts/leads/audit_lead_master_duplicates.py --fail-on-duplicates   # CI: exit 1 if dup groups
+
+# Upstream reconciliation: dry-run by default; --apply soft-retires keys missing from external_leads_raw
+uv run python scripts/leads/reconcile_lead_upstream.py
+# uv run python scripts/leads/reconcile_lead_upstream.py --apply
 
 # Client-friendly review CSV (includes archive comparison + existing contacts when available)
 uv run python scripts/leads/export_client_review_csv.py --out reports/out/leads_client_review.csv --limit 250

@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Operational trust scorecard: cohort, readiness fields, taxonomy, freshness, provenance."""
+"""Cohort integrity, readiness fields, freshness, taxonomy, and trust scorecard.
+
+This is **operational** validation (partition, nulls, stale pack, merged hunt, provenance). It does
+**not** replace ``verify_client_pack_consistency.py``, which covers pack vs DB and top20
+cross-checks. For the **final combined** pass/fail, run ``publish_gate.py``.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -14,6 +20,12 @@ if str(REPO) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.hunt_csv_alignment import describe_hunt_misalignment
+from origenlab_email_pipeline.lead_provenance import (
+    operational_stack_last_run_path,
+    read_operational_run_id_from_env,
+    read_operational_stack_last_run,
+    try_git_revision,
+)
 from origenlab_email_pipeline.operational_trust import (
     TrustCheck,
     any_critical_failed,
@@ -106,19 +118,40 @@ def check_hunt_merged_alignment(current: Path, merged: Path) -> list[TrustCheck]
     ]
 
 
-def write_scorecard_json(path: Path, checks: list[TrustCheck], summary: dict) -> None:
+def write_scorecard_json(
+    path: Path,
+    checks: list[TrustCheck],
+    summary: dict,
+    *,
+    provenance: dict | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
+    payload: dict = {
         "summary": summary,
         "checks": [c.to_dict() for c in checks],
     }
+    if provenance is not None:
+        payload["provenance"] = provenance
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def write_scorecard_md(path: Path, checks: list[TrustCheck], summary: dict) -> None:
+def write_scorecard_md(
+    path: Path,
+    checks: list[TrustCheck],
+    summary: dict,
+    *,
+    operational_run_id: str | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    run_line = (
+        f"- **Operational run ID:** `{operational_run_id}`"
+        if operational_run_id
+        else "- **Operational run ID:** _(not set; run publish_gate from `run_leads_operational_stack.sh` or export ORIGENLAB_LEADS_OPERATIONAL_RUN_ID)_"
+    )
     lines = [
         "# Operational trust scorecard",
+        "",
+        run_line,
         "",
         f"- **Total checks:** {summary['total']}",
         f"- **Critical failed:** {summary['critical_failed']}",
@@ -190,8 +223,29 @@ def run(args: argparse.Namespace) -> int:
     )
 
     summary = trust_summary(checks)
-    write_scorecard_json(json_out.resolve(), checks, summary)
-    write_scorecard_md(md_out.resolve(), checks, summary)
+    operational_run_id = read_operational_run_id_from_env()
+    audit_prov = {
+        "audit_generated_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sqlite_path_resolved": str(db),
+        "operational_run_id": operational_run_id,
+        "client_pack_summary_path": str(paths.client_pack_summary.resolve()),
+        "operational_stack_last_run_path": str(operational_stack_last_run_path(repo)),
+        "operational_stack_last_run": read_operational_stack_last_run(repo),
+        "git_revision": try_git_revision(repo),
+        "caveat": (
+            "Links this audit run to paths on disk. operational_run_id is taken from "
+            "ORIGENLAB_LEADS_OPERATIONAL_RUN_ID when set (operational stack). "
+            "operational_stack_last_run is the latest manifest on disk; it may be from a different run "
+            "unless you just finished the stack. Provenance does not replace validation."
+        ),
+    }
+    write_scorecard_json(json_out.resolve(), checks, summary, provenance=audit_prov)
+    write_scorecard_md(
+        md_out.resolve(),
+        checks,
+        summary,
+        operational_run_id=operational_run_id,
+    )
     print(f"Wrote {json_out}")
     print(f"Wrote {md_out}")
 

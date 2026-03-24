@@ -21,7 +21,14 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.lead_export_queries import (
+    sql_cte_best_org_match,
+    sql_upstream_active_lead_master,
+)
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+
+_LM_UPSTREAM_ACTIVE = sql_upstream_active_lead_master("lm")
+_CTE_BEST_MATCH = sql_cte_best_org_match("best_match", variant="org_domain_archive")
 
 
 EXPORT_COLS = [
@@ -79,18 +86,11 @@ def main() -> int:
 
     has_mart = _table_exists(conn, "organization_master") and _table_exists(conn, "contact_master")
 
-    # Choose the best match per lead: domain match first (confidence 1.0), otherwise first row.
-    # Note: We keep matching conservative; if there is no match, archive fields are blank/0.
+    # One mart match row per lead: same rule as other exports (lowest lead_matches_existing_orgs.id).
+    # If there is no match, archive fields are blank/0.
     if has_mart:
-        sql = """
-        WITH best_match AS (
-          SELECT m1.lead_id, m1.matched_domain, m1.matched_org_name, m1.already_in_archive_flag
-          FROM lead_matches_existing_orgs m1
-          WHERE m1.id = (
-            SELECT MIN(m2.id) FROM lead_matches_existing_orgs m2
-            WHERE m2.lead_id = m1.lead_id
-          )
-        ),
+        sql = f"""
+        WITH {_CTE_BEST_MATCH},
         top_contacts AS (
           SELECT
             domain,
@@ -136,7 +136,8 @@ def main() -> int:
         LEFT JOIN best_match bm ON bm.lead_id = lm.id
         LEFT JOIN organization_master om ON om.domain = bm.matched_domain
         LEFT JOIN top_contacts tc ON tc.domain = bm.matched_domain
-        WHERE (? = 0) OR (COALESCE(lm.fit_bucket,'low_fit') != 'low_fit')
+        WHERE {_LM_UPSTREAM_ACTIVE}
+          AND ((? = 0) OR (COALESCE(lm.fit_bucket,'low_fit') != 'low_fit'))
         ORDER BY
           CASE COALESCE(lm.fit_bucket, 'low_fit')
             WHEN 'high_fit' THEN 0
@@ -151,7 +152,7 @@ def main() -> int:
         LIMIT ?
         """
     else:
-        sql = """
+        sql = f"""
         SELECT
           lm.id AS id_lead,
           COALESCE(lm.fit_bucket, 'low_fit') AS fit_bucket,
@@ -182,7 +183,8 @@ def main() -> int:
           lm.next_action,
           lm.notes
         FROM lead_master lm
-        WHERE (? = 0) OR (COALESCE(lm.fit_bucket,'low_fit') != 'low_fit')
+        WHERE {_LM_UPSTREAM_ACTIVE}
+          AND ((? = 0) OR (COALESCE(lm.fit_bucket,'low_fit') != 'low_fit'))
         ORDER BY
           CASE COALESCE(lm.fit_bucket, 'low_fit')
             WHEN 'high_fit' THEN 0

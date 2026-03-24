@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import sqlite3
 
+from origenlab_email_pipeline.lead_upstream_reconcile import sql_upstream_active
+
+# Exclude soft-retired leads (missing from current external_leads_raw snapshot).
+_UPSTREAM_ACTIVE_LM = sql_upstream_active("LM")
+
 # Core: no dependency on lead_account tables (match_leads may run before account rollup).
-VIEW_LEAD_MATCH_SUMMARY_CORE = """
+VIEW_LEAD_MATCH_SUMMARY_CORE = f"""
 CREATE VIEW v_lead_match_summary AS
 SELECT
   LM.id AS lead_id,
@@ -18,6 +23,7 @@ SELECT
   LM.domain_norm,
   LM.org_name_norm,
   LM.status,
+  LM.upstream_sync_state,
   LM.priority_score,
   LO.id AS org_match_id,
   LO.matched_domain AS org_match_domain,
@@ -44,10 +50,11 @@ SELECT
 FROM lead_master LM
 LEFT JOIN lead_matches_existing_orgs LO ON LM.id = LO.lead_id
 LEFT JOIN lead_matches_existing_contacts LC ON LM.id = LC.lead_id
+WHERE {_UPSTREAM_ACTIVE_LM}
 """
 
 # Full: includes lead account rollup when those tables exist.
-VIEW_LEAD_MATCH_SUMMARY_FULL = """
+VIEW_LEAD_MATCH_SUMMARY_FULL = f"""
 CREATE VIEW v_lead_match_summary AS
 SELECT
   LM.id AS lead_id,
@@ -60,6 +67,7 @@ SELECT
   LM.domain_norm,
   LM.org_name_norm,
   LM.status,
+  LM.upstream_sync_state,
   LM.priority_score,
   LO.id AS org_match_id,
   LO.matched_domain AS org_match_domain,
@@ -88,6 +96,7 @@ LEFT JOIN lead_matches_existing_orgs LO ON LM.id = LO.lead_id
 LEFT JOIN lead_matches_existing_contacts LC ON LM.id = LC.lead_id
 LEFT JOIN lead_account_membership LAM ON LM.id = LAM.lead_id
 LEFT JOIN lead_account_master LAC ON LAM.lead_account_id = LAC.id
+WHERE {_UPSTREAM_ACTIVE_LM}
 """
 
 # Columns referenced by v_lead_match_summary (Phase 1+ match metadata included).
@@ -103,6 +112,7 @@ _LEAD_MASTER_COLS = frozenset(
         "domain_norm",
         "org_name_norm",
         "status",
+        "upstream_sync_state",
         "priority_score",
     }
 )

@@ -21,6 +21,7 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.lead_upstream_reconcile import sql_upstream_active_bare
 from origenlab_email_pipeline.leads_ingest import now_iso
 from origenlab_email_pipeline.pipeline_run_recorder import finish_run, set_kv, start_run
 from origenlab_email_pipeline.sqlite_migrate import SchemaLayer, migrate_sqlite_schema
@@ -86,10 +87,11 @@ def main() -> int:
 
         ts = now_iso()
         cur = conn.execute(
-            """
+            f"""
             SELECT id, source_name, org_name, domain, website, region, city,
                    organization_type_guess, first_seen_at, last_seen_at
             FROM lead_master
+            WHERE {sql_upstream_active_bare()}
             ORDER BY id
             """
         )
