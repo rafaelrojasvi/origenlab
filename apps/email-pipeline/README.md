@@ -176,6 +176,21 @@ New-NetFirewallRule -DisplayName "WSL Streamlit 8501" -Direction Inbound -LocalP
 Then the client opens **`http://<your-PC-WiFi-IPv4>:8501/`** (e.g. `http://192.168.4.182:8501/`).  
 **Note:** Streamlit has no built-in Basic Auth like the CSV helper; treat this as trusted-LAN only or put a reverse proxy in front.
 
+### Docker (Streamlit only)
+
+The [`Dockerfile`](Dockerfile) runs **only** the business mart Streamlit app. It does **not** containerize ingest, reports, or the website. Build **from `apps/email-pipeline/`** (required context for `COPY pyproject.toml` / `COPY apps/...`):
+
+```bash
+cd apps/email-pipeline
+docker build -t origenlab-business-mart .
+docker run --rm -p 8501:8501 \
+  -e ORIGENLAB_DATA_ROOT=/data/origenlab-email \
+  -v "$HOME/data/origenlab-email:/data/origenlab-email:ro" \
+  origenlab-business-mart
+```
+
+Or: `docker compose up --build` using [`docker-compose.yml`](docker-compose.yml) (set `ORIGENLAB_HOST_DATA_ROOT` if your data is not under `$HOME/data/origenlab-email`). See [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-eprun-docker-streamlit) for env vars, compose notes, and Windows paths.
+
 Docs: `docs/pipeline/BUSINESS_MART.md`
 
 **3. SQLite → JSONL**

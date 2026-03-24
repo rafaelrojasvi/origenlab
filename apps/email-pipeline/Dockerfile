@@ -1,9 +1,19 @@
+# Business mart Streamlit UI only — not the full ingest/report pipeline.
+#
+# Build context MUST be this directory (apps/email-pipeline), not the monorepo root:
+#   cd apps/email-pipeline && docker build -t origenlab-business-mart .
+#
+# SQLite and PST/mbox data are NOT in the image: mount a host directory at
+# /data/origenlab-email (see README / RUNBOOK / docker-compose.yml).
+
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
-    ORIGENLAB_DATA_ROOT=/data/origenlab-email
+    ORIGENLAB_DATA_ROOT=/data/origenlab-email \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
 WORKDIR /app
 
@@ -36,8 +46,7 @@ USER appuser
 
 EXPOSE 8501
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health').read()"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
+  CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=4).read()"
 
 CMD ["uv", "run", "streamlit", "run", "apps/business_mart_app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
-

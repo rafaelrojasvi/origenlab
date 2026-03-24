@@ -11,6 +11,7 @@ Monorepo for OrigenLab engineering: **marketing site** (Astro) and **email / lea
 
 - Agent-first monorepo context: [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md#m-proj-start)
 - Monorepo map: [`docs/DOCUMENTATION_MAP.md`](docs/DOCUMENTATION_MAP.md#m-docmap-entry)
+- Quote & supplier business rules (canonical): [`docs/business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md`](docs/business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md)
 - Web app docs: [`apps/web/docs/README.md`](apps/web/docs/README.md)
 - Email pipeline docs: [`apps/email-pipeline/docs/README.md`](apps/email-pipeline/docs/README.md)
 

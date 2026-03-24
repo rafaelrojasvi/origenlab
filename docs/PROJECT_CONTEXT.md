@@ -22,6 +22,8 @@ Support OrigenLab's commercial operation by:
 - presenting clear, trustworthy public website content for quotation flows.
 - extracting business signal from historical email archives into operational reports.
 
+**Commercial truth rules** (quotes, suppliers, what may be claimed): [`docs/business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md`](./business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md). Policy there is **canonical** for the monorepo; templates and LLM prompts must align.
+
 <a id="m-proj-start"></a>
 ## Where to start (agent-first)
 

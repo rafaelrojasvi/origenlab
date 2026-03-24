@@ -24,6 +24,7 @@ This file is the source of truth for documentation placement, intent, and lifecy
 ### Monorepo
 
 - [MONOREPO.md](./MONOREPO.md) → historical context, keep as archive reference.
+- [business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md](./business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md) → **canonical** quote/supplier **truth rules** and proposed entities (cotizaciones, proveedores, research runs vs master data).
 
 ### Web docs
 

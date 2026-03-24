@@ -15,6 +15,60 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 
 ---
 
+<a id="m-eprun-docker-streamlit"></a>
+## Docker: Streamlit business mart only
+
+Optional container for [`apps/business_mart_app.py`](../apps/business_mart_app.py). **Does not** run ingest, reports, ML, leads QA, or `apps/web`. **SQLite stays on the host** via a bind mount (not baked into the image).
+
+### Build context
+
+Use **`apps/email-pipeline/`** (directory that contains `pyproject.toml`, `Dockerfile`, and `apps/business_mart_app.py`):
+
+```bash
+cd apps/email-pipeline
+docker build -t origenlab-business-mart .
+```
+
+### Run (`docker run`)
+
+Mount the host data tree at **`/data/origenlab-email`** inside the container so it matches **`ORIGENLAB_DATA_ROOT`** (set in the `Dockerfile`):
+
+```bash
+docker run --rm -p 8501:8501 \
+  -e ORIGENLAB_DATA_ROOT=/data/origenlab-email \
+  -v "$HOME/data/origenlab-email:/data/origenlab-email:ro" \
+  origenlab-business-mart
+```
+
+| Variable | Role |
+|----------|------|
+| `ORIGENLAB_DATA_ROOT` | Root inside the container; default layout expects `sqlite/emails.sqlite` under it. |
+| `ORIGENLAB_SQLITE_PATH` | Optional full path **inside the container** if the DB is not at `$ORIGENLAB_DATA_ROOT/sqlite/emails.sqlite`. |
+
+The image does **not** copy `.env`. Use `-e` / `--env-file` with **container-side** paths (`/data/...`).
+
+Open **http://localhost:8501/**.
+
+### Run (`docker compose`)
+
+[`docker-compose.yml`](../docker-compose.yml) in the same folder:
+
+```bash
+cd apps/email-pipeline
+# Optional override (default pattern: $HOME/data/origenlab-email)
+export ORIGENLAB_HOST_DATA_ROOT="$HOME/data/origenlab-email"
+docker compose up --build
+```
+
+On **Windows** (Docker Desktop), set `ORIGENLAB_HOST_DATA_ROOT` to the host folder that contains `sqlite/emails.sqlite` (e.g. `C:\Users\you\data\origenlab-email`).
+
+### Limitations
+
+- **UI only** — build the business mart on the host first: [`build_business_mart.py`](../scripts/mart/build_business_mart.py).
+- Read-only volume is OK; the app opens SQLite with immutable + query-only mode.
+
+---
+
 <a id="m-eprun-after-import"></a>
 ## 1. After import (PST → mbox → SQLite)
 

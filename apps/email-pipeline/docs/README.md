@@ -6,6 +6,10 @@ Last reviewed: 2026-03-24
 
 Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/docs/`](./).
 
+## Cross-cutting monorepo rules
+
+- Commercial quotes & supplier research (policy + proposed DB entities): [`docs/business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md`](../../../docs/business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md)
+
 ## Agent-first start
 
 - [`APP_CONTEXT.md`](APP_CONTEXT.md#m-epapp-start)
