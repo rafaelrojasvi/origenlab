@@ -9,7 +9,10 @@ Useful to see:
 Requires ML env: uv sync --group ml
   uv run python scripts/ml/explore_email_clusters.py --limit 500 --n-clusters 10
 
-Stratified samples (--sample-mode): cotiz, no_bounce, universidad, business, random.
+Stratified samples (--sample-mode): cotiz, no_bounce, voice, universidad, business, random.
+
+Default (no flags): --sample-mode no_bounce so clusters are not one giant NDR/newsletter blob.
+Use --sample-mode random only when you want an unbiased slice of the full archive.
 """
 from __future__ import annotations
 
@@ -24,6 +27,7 @@ if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.progress import print_compute_banner, tqdm_stderr
 
 # Spanish + English tokens aligned with AI_ML_IMPLEMENTED_SUMMARY.md (business-signal prompt appendix)
 DEFAULT_TRACK = [
@@ -40,6 +44,53 @@ DEFAULT_TRACK = [
     ("quote", "quote (EN)"),
     ("delivery", "delivery (EN)"),
 ]
+
+def voice_sender_domain_sql_or(domains: frozenset[str]) -> tuple[str, list[str]]:
+    """Match primary-style From lines against configured voice domains (see tatiana_voice_cohort)."""
+    parts: list[str] = []
+    params: list[str] = []
+    for d in sorted(domains):
+        d0 = (d or "").strip().lower()
+        if not d0 or " " in d0 or "@" in d0:
+            continue
+        parts.append(
+            "(LOWER(COALESCE(sender,'')) LIKE ? OR LOWER(COALESCE(sender,'')) LIKE ?)"
+        )
+        params.append(f"%@{d0}")
+        params.append(f"%.{d0}")
+    if not parts:
+        return "1=0", []
+    return "(" + " OR ".join(parts) + ")", params
+
+
+# Substrings often seen in phishing that forges *@labdelivery.cl From; used in voice sample-mode only.
+_VOICE_PHISH_BODY_SUBSTRINGS: tuple[str, ...] = (
+    "%si no está viendo%",
+    "%si no esta viendo%",
+    "%si no puede ver este mensaje%",
+    "%pending messages on our remote server%",
+    "%unread in our cloud%",
+    "%este e-mail fue generado durante%",
+    "%labdelivery.cl administrator support%",
+    "%nota fiscal.zip%",
+)
+
+# Forged *@labdelivery.cl subjects seen in corpus (Chilexpress lures, fake Entel/collections).
+_VOICE_PHISH_SUBJECT_SUBSTRINGS: tuple[str, ...] = (
+    "%pedido en su espera%",
+    "%pedido en nuestro deposito%",
+    "%pedido en nuestro depósito%",
+    "%deposito en su nombre%",
+    "%depósito en su nombre%",
+    "%existen facturas no pagos%",
+    "%existen facturas o boletos no pagados%",
+    "%boletas o facturas no pago%",
+    "%cobranza extrajudicial%",
+    "%cobranza judicial%",
+    "%tarjeta de coordenadas ha expirado%",
+    "%pending messages on our remote server%",
+)
+
 
 NOISE_HINTS = [
     "mailer-daemon",
@@ -86,10 +137,11 @@ def main() -> None:
     )
     ap.add_argument(
         "--sample-mode",
-        choices=("random", "business", "cotiz", "no_bounce", "universidad"),
+        choices=("random", "business", "cotiz", "no_bounce", "voice", "universidad"),
         default=None,
-        help="Stratify sample: cotiz=mention cotiz; no_bounce=exclude Mailer-Daemon/postmaster; "
-        "universidad=edu-ish OR; business=any business keyword; random=unfiltered random",
+        help="Stratify sample: no_bounce=exclude common NDR/bounces (default); voice=sender in "
+        "config/voice_sender_domains*.txt; cotiz=mention cotiz; business=any business keyword; "
+        "universidad=edu-ish OR; random=unfiltered random",
     )
     ap.add_argument("--year", type=str, default=None, help="Only substr(date_iso,1,4)=YEAR")
     ap.add_argument(
@@ -103,6 +155,25 @@ def main() -> None:
         type=Path,
         default=None,
         help="Also write clusters.json + report snippet into this folder (e.g. client report run)",
+    )
+    ap.add_argument(
+        "--voice-include-tagged-spam",
+        action="store_true",
+        help="With --sample-mode voice: keep subjects containing ***SPAM*** or [SPAM] "
+        "(default: drop them — many are phishing that spoof the company From)",
+    )
+    ap.add_argument(
+        "--voice-include-likely-phishing",
+        action="store_true",
+        help="With --sample-mode voice: skip body + subject phishing heuristics; default drops common "
+        "forgery templates (Chilexpress lure subjects, fake cobranza, etc.)",
+    )
+    ap.add_argument(
+        "--min-rows",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Minimum rows to run (default: 3 for sample-mode voice, 10 for other modes; clustering needs >= 2)",
     )
     args = ap.parse_args()
 
@@ -120,7 +191,7 @@ def main() -> None:
         print("Build: uv run python scripts/ingest/02_mbox_to_sqlite.py", file=sys.stderr)
         raise SystemExit(1)
 
-    mode = args.sample_mode or ("business" if args.filter_any else "random")
+    mode = args.sample_mode or ("business" if args.filter_any else "no_bounce")
 
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -134,13 +205,52 @@ def main() -> None:
         wheres.append("substr(date_iso,1,4) = ?")
         params.append(args.year)
 
+    report_voice_doms: frozenset[str] | None = None
     if mode == "cotiz":
         wheres.append(f"{blob} LIKE ?")
         params.append("%cotiz%")
     elif mode == "no_bounce":
+        subj_l = "LOWER(COALESCE(subject,''))"
         wheres.append(f"{snd} NOT LIKE '%mailer-daemon%'")
         wheres.append(f"{snd} NOT LIKE '%postmaster%'")
-        wheres.append("LOWER(COALESCE(subject,'')) NOT LIKE '%delivery status%'")
+        for pat in (
+            "%delivery status%",
+            "%undeliverable%",
+            "%undelivered mail%",
+            "%mail delivery failed%",
+            "%mail delivery deferred%",
+            "%returning message to sender%",
+        ):
+            wheres.append(f"{subj_l} NOT LIKE ?")
+            params.append(pat)
+    elif mode == "voice":
+        from origenlab_email_pipeline.tatiana_voice_cohort import load_voice_sender_domains
+
+        vdoms = load_voice_sender_domains()
+        if not vdoms:
+            print(
+                "voice sample-mode needs domains in config/voice_sender_domains.txt "
+                "(or voice_sender_domains.local.txt).",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        frag, vparams = voice_sender_domain_sql_or(vdoms)
+        wheres.append(frag)
+        params.extend(vparams)
+        subj_l = "LOWER(COALESCE(subject,''))"
+        if not args.voice_include_tagged_spam:
+            for pat in ("%***spam***%", "%[spam]%"):
+                wheres.append(f"{subj_l} NOT LIKE ?")
+                params.append(pat)
+        if not args.voice_include_likely_phishing:
+            for pat in _VOICE_PHISH_SUBJECT_SUBSTRINGS:
+                wheres.append(f"{subj_l} NOT LIKE ?")
+                params.append(pat)
+            body_l = "LOWER(COALESCE(body,''))"
+            for pat in _VOICE_PHISH_BODY_SUBSTRINGS:
+                wheres.append(f"{body_l} NOT LIKE ?")
+                params.append(pat)
+        report_voice_doms = vdoms
     elif mode == "universidad":
         u = [
             "%universidad%",
@@ -168,38 +278,82 @@ def main() -> None:
         wheres.append("(" + " OR ".join(f"{blob} LIKE ?" for _ in likes) + ")")
         params.extend(likes)
 
+    where_sql = " AND ".join(wheres)
+    count_sql = f"SELECT COUNT(*) FROM emails WHERE {where_sql}"
+    total_matched = conn.execute(count_sql, tuple(params)).fetchone()[0]
+    load_total = min(args.limit, int(total_matched))
+    if total_matched < args.limit:
+        print(
+            f"[compute] Filters match {total_matched:,} row(s); loading all of them "
+            f"(requested up to {args.limit:,}).",
+            file=sys.stderr,
+            flush=True,
+        )
+
     sql = f"""
         SELECT id, subject, sender, date_iso, body FROM emails
-        WHERE {" AND ".join(wheres)}
+        WHERE {where_sql}
         ORDER BY RANDOM() LIMIT ?
     """
     params.append(args.limit)
     cur = conn.execute(sql, tuple(params))
-    rows = [
-        {
-            "id": r["id"],
-            "subject": r["subject"] or "",
-            "sender": r["sender"] or "",
-            "date_iso": r["date_iso"] or "",
-            "body": r["body"] or "",
-            "text": row_text(
-                r["subject"] or "",
-                r["sender"] or "",
-                r["body"] or "",
-                args.max_body_chars,
-            ),
-        }
-        for r in cur
-    ]
+    print_compute_banner(
+        uses_gpu=False,
+        workload="SQLite: loading random email sample",
+        extra_detail=f"sample_mode={mode} | loading {load_total:,} of {total_matched:,} matched",
+    )
+    iterator = tqdm_stderr(
+        cur,
+        total=load_total,
+        desc="Load email sample",
+        unit="emails",
+    )
+    rows = []
+    for r in iterator:
+        rows.append(
+            {
+                "id": r["id"],
+                "subject": r["subject"] or "",
+                "sender": r["sender"] or "",
+                "date_iso": r["date_iso"] or "",
+                "body": r["body"] or "",
+                "text": row_text(
+                    r["subject"] or "",
+                    r["sender"] or "",
+                    r["body"] or "",
+                    args.max_body_chars,
+                ),
+            }
+        )
     conn.close()
 
-    if len(rows) < 10:
-        print("Too few rows after filter. Try --sample-mode random or lower --min-body-len.")
+    row_floor = args.min_rows if args.min_rows is not None else (3 if mode == "voice" else 10)
+    if len(rows) < 2:
+        print(
+            "Fewer than 2 rows after filters; cannot cluster. Try widening filters "
+            "(e.g. --sample-mode random, lower --min-body-len, --voice-include-likely-phishing).",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    if len(rows) < row_floor:
+        print(
+            f"Too few rows ({len(rows)}): need >= {row_floor} (override with --min-rows). "
+            "For voice: corpus may be mostly phishing—see "
+            "export_tatiana_review_sample / cohort scripts, or widen with "
+            "--voice-include-likely-phishing / --min-body-len.",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
 
     print("=== explore_email_clusters ===")
     print("db:", db_path)
-    print("loaded:", len(rows), "| sample_mode:", mode, "| year:", args.year or "-", "| min_body:", args.min_body_len)
+    vnote = ""
+    if report_voice_doms is not None:
+        vnote = " | voice_domains: " + ", ".join(sorted(report_voice_doms))
+    print(
+        f"loaded: {len(rows)} | sample_mode: {mode} | year: {args.year or '-'} | "
+        f"min_body: {args.min_body_len}{vnote}"
+    )
     print("model:", args.model)
 
     # Global keyword / noise stats on this sample
@@ -222,16 +376,39 @@ def main() -> None:
             device = "cpu"
     except Exception:
         device = "cpu"
-    print("\nembedding device:", device)
+    print_compute_banner(
+        uses_gpu=True,
+        workload="Embeddings (SentenceTransformer.encode)",
+        extra_detail=f"model={args.model} | device={device}",
+    )
     model = SentenceTransformer(args.model, device=device)
     texts = [r["text"] for r in rows]
-    emb = model.encode(
-        texts,
-        batch_size=32,
-        show_progress_bar=True,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
+    bs = 32
+    n_txt = len(texts)
+    n_batch = (n_txt + bs - 1) // bs
+    print(
+        f"[compute] Embedding {n_txt} texts in {n_batch} GPU/CPU batches (progress bar on stderr)",
+        file=sys.stderr,
+        flush=True,
     )
+    emb_parts: list = []
+    for start in tqdm_stderr(
+        range(0, n_txt, bs),
+        total=n_batch,
+        desc="Embedding batches",
+        unit="batch",
+    ):
+        chunk = texts[start : start + bs]
+        emb_parts.append(
+            model.encode(
+                chunk,
+                batch_size=len(chunk),
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+            )
+        )
+    emb = np.vstack(emb_parts)
     n_clusters = min(args.n_clusters, len(rows) // 2)
     n_clusters = max(2, n_clusters)
     clust = AgglomerativeClustering(n_clusters=n_clusters, metric="cosine", linkage="average")
@@ -260,7 +437,7 @@ def main() -> None:
 
     if args.report_dir:
         args.report_dir.mkdir(parents=True, exist_ok=True)
-        clusters_payload = {
+        clusters_payload: dict = {
             "model": args.model,
             "n_sample": len(rows),
             "n_clusters": n_clusters,
@@ -268,6 +445,8 @@ def main() -> None:
             "year": args.year,
             "clusters": {},
         }
+        if report_voice_doms is not None:
+            clusters_payload["voice_sender_domains"] = sorted(report_voice_doms)
         for lab in sorted(by_c.keys(), key=lambda k: -len(by_c[k])):
             idxs = by_c[lab]
             cluster_rows = [rows[i] for i in idxs]

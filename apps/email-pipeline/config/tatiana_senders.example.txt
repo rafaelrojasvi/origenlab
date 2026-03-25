@@ -1,0 +1,10 @@
+# Optional extra filter: specific From addresses only.
+# By default, voice cohort uses domains in voice_sender_domains.txt (labdelivery.cl).
+# Personal Gmail used with display name "tatiana vivanco" will NOT match domain rules —
+# add that address here so cohort/export scripts include it (see audit script samples).
+#
+# Copy to: config/tatiana_senders.local.txt (gitignored), or use ORIGENLAB_TATIANA_SENDERS.
+# One address per line, lowercase recommended.
+#
+# tatiana.vivanco@origenlab.cl
+# tvivancob@gmail.com

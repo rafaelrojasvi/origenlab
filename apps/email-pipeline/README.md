@@ -136,6 +136,24 @@ uv run python scripts/ingest/02_mbox_to_sqlite.py
 
 Each run **clears the `emails` table** then re-imports from mbox (full refresh). **Original PST/mbox is never touched.**
 
+**Optional: live mailbox (IMAP)** — `contacto@origenlab.cl` is on **Titan** (`imap.titan.email`), not Gmail API. Set `ORIGENLAB_IMAP_*` in `.env` and append into SQLite (does not clear the whole DB unless you pass `--replace-source` for that IMAP source only):
+
+```bash
+uv run python scripts/ingest/04_imap_to_sqlite.py --folder INBOX --since-days 90 --skip-duplicate-message-id
+```
+
+Details: [docs/ingest/IMAP_CONTACTO.md](docs/ingest/IMAP_CONTACTO.md).
+
+**Google Workspace (Gmail) for contacto@** — use OAuth + Gmail IMAP (not Titan):
+
+```bash
+# Add `workspace` alongside other groups you already use, e.g.:
+uv sync --group ml --group workspace --group dev
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder INBOX --since-days 30 --skip-duplicate-message-id
+```
+
+Setup: [docs/ingest/WORKSPACE_GMAIL_IMAP.md](docs/ingest/WORKSPACE_GMAIL_IMAP.md). Overview: [docs/ingest/GMAIL_API.md](docs/ingest/GMAIL_API.md).
+
 ## Business mart (client-facing searchable layer)
 
 Build a curated, searchable business layer on top of the raw archive (does **not** modify `emails/attachments/attachment_extracts`).
@@ -197,6 +215,27 @@ Docs: `docs/pipeline/BUSINESS_MART.md`
 
 ```bash
 uv run python scripts/ingest/03_sqlite_to_jsonl.py
+# Include Phase 2 clean body fields (writes emails_phase2.jsonl by default):
+uv run python scripts/ingest/03_sqlite_to_jsonl.py --phase2
+```
+
+**LabDelivery / drafting-style cohort** — historical outbound from **@labdelivery.cl** is where Tatiana Vivanco’s writing usually lives in this archive. Scripts default to that domain via [`config/voice_sender_domains.txt`](config/voice_sender_domains.txt) (no env needed). Optional: narrow to specific addresses with `config/tatiana_senders.local.txt` or `ORIGENLAB_TATIANA_SENDERS`. Run with cwd **`apps/email-pipeline`**.
+
+Dataset and ML scripts print **progress bars on stderr** and a **`[compute]`** block: PyTorch/CUDA availability, GPU name when present, and whether **this step** uses the GPU (SQLite scans are CPU-only; **sentence-transformers** can use CUDA when installed).
+
+```bash
+# Discover where “Tatiana” / “Vivanco” appear (subjects, bodies, From lines):
+uv run python scripts/dataset/audit_tatiana_identity_signals.py
+
+uv run python scripts/dataset/report_tatiana_cohort_metrics.py
+# Widen cohort with signature/display-name hits on company domains:
+uv run python scripts/dataset/report_tatiana_cohort_metrics.py --include-tatiana-text-signals
+
+uv run python scripts/dataset/export_tatiana_review_sample.py -o reports/out/tatiana_review_sample.csv
+
+# Full candidate cohort CSV + JSON summary (ranked scores, not stratified sampling):
+# See docs/dataset/TATIANA_REVIEW_COHORT.md
+uv run python scripts/dataset/export_tatiana_candidate_cohort.py --exclude-noise --include-tatiana-text-signals
 ```
 
 **Inspect DB** (schema, counts, 3 sample rows; body truncated):
@@ -210,7 +249,18 @@ uv run python scripts/tools/inspect_sqlite.py
 
 ```bash
 uv sync --group ml
+# Default sample excludes common NDR/bounces (clearer clusters than raw random).
 uv run python scripts/ml/explore_email_clusters.py --limit 600 --n-clusters 12
+# Unfiltered random slice of the archive:
+uv run python scripts/ml/explore_email_clusters.py --limit 600 --sample-mode random --n-clusters 12
+# Senders in config/voice_sender_domains*.txt (e.g. labdelivery.cl); drops ***SPAM*** / [SPAM] subjects by default:
+uv run python scripts/ml/explore_email_clusters.py --limit 400 --sample-mode voice --n-clusters 8
+# Include tagged-spam subjects (many are phishing that spoof @labdelivery.cl):
+uv run python scripts/ml/explore_email_clusters.py --limit 400 --sample-mode voice --voice-include-tagged-spam --n-clusters 8
+# Include rows that match body phishing heuristics (default voice mode drops them):
+uv run python scripts/ml/explore_email_clusters.py --limit 400 --sample-mode voice --voice-include-likely-phishing --n-clusters 8
+# Sparse voice cohort (default min rows is 3 for voice; use --min-rows 2 only if you accept tiny samples):
+uv run python scripts/ml/explore_email_clusters.py --limit 400 --sample-mode voice --min-rows 2 --n-clusters 4
 # Only rows that look like business signal (cotización, proveedor, factura, …):
 uv run python scripts/ml/explore_email_clusters.py --limit 400 --filter-any --n-clusters 8
 ```

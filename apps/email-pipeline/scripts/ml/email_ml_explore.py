@@ -22,6 +22,7 @@ if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.progress import print_compute_banner, tqdm_stderr
 
 # Editable: (etiqueta_informe, regex) — case insensitive
 EQUIPMENT_MODEL_PATTERNS: list[tuple[str, str]] = [
@@ -82,9 +83,20 @@ def main() -> None:
         """,
         (args.limit,),
     )
+    print_compute_banner(
+        uses_gpu=False,
+        workload="SQLite: loading random emails for ML explore",
+        extra_detail=f"Up to {args.limit:,} rows",
+    )
+    iterator = tqdm_stderr(
+        cur,
+        total=args.limit,
+        desc="Load emails",
+        unit="emails",
+    )
     rows = []
     texts = []
-    for r in cur:
+    for r in iterator:
         subj, snd, body = r[1] or "", r[2] or "", (r[3] or "")[:1200]
         blob = f"{subj}\n{snd}\n{body}"
         rows.append({"id": r[0], "subject": subj[:120], "sender": snd[:80], "snippet": body[:200]})
@@ -94,9 +106,37 @@ def main() -> None:
         sys.exit("Muy pocas filas")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print("device:", device, "| rows:", len(rows))
+    print_compute_banner(
+        uses_gpu=True,
+        workload="Embeddings (SentenceTransformer.encode)",
+        extra_detail=f"all-MiniLM-L6-v2 | device={device} | rows={len(rows)}",
+    )
     model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device=device)
-    X = model.encode(texts, batch_size=64, show_progress_bar=True, convert_to_numpy=True)
+    bs = 64
+    n_txt = len(texts)
+    n_batch = (n_txt + bs - 1) // bs
+    print(
+        f"[compute] Embedding {n_txt} texts in {n_batch} batches (stderr progress bar)",
+        file=sys.stderr,
+        flush=True,
+    )
+    parts: list = []
+    for start in tqdm_stderr(
+        range(0, n_txt, bs),
+        total=n_batch,
+        desc="Embedding batches",
+        unit="batch",
+    ):
+        chunk = texts[start : start + bs]
+        parts.append(
+            model.encode(
+                chunk,
+                batch_size=len(chunk),
+                show_progress_bar=False,
+                convert_to_numpy=True,
+            )
+        )
+    X = np.vstack(parts)
     Xn = X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-12)
 
     k = min(args.kmeans, len(rows) // 4)

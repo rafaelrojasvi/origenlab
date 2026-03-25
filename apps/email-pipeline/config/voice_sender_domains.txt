@@ -1,0 +1,3 @@
+# From-address domains included in the “voice / drafting style” cohort (in addition to any address allowlist).
+# Historical LabDelivery outbound is the usual source for Tatiana Vivanco’s writing style in this archive.
+labdelivery.cl

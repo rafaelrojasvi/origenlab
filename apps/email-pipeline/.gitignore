@@ -7,6 +7,10 @@ dist/
 build/
 wheels/
 
+# Local Tatiana allowlist (optional; prefer env or path outside repo)
+config/tatiana_senders.local.txt
+config/voice_sender_domains.local.txt
+
 # Env — never commit secrets or machine-specific paths
 .env
 .env.local

@@ -19,6 +19,7 @@ Run from **`apps/email-pipeline/`** with `uv run python scripts/...` or `bash sc
 | `reports/` | Client report, `run_all_reports.py`, `run_all.sh` |
 | `validation/` | Phase checks, attachment text extraction |
 | `ml/` | Embeddings, clusters, `email_ml_explore` |
+| `dataset/` | Voice cohort metrics, Tatiana/Vivanco DB audit, stratified review CSV export |
 | `tools/` | Inspect DB, dedupe, env checks |
 | `pipeline/` | Cross-layer runs (e.g. aligned stack) |
 | `leads/` | Lead scoring, matching, audits |

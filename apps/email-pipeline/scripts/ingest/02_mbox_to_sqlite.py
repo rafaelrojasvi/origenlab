@@ -7,8 +7,13 @@ import os
 import sys
 from pathlib import Path
 
-# Repo root on path when run as scripts/02_...
-_ROOT = Path(__file__).resolve().parent.parent
+
+def _repo_root() -> Path:
+    # scripts/ingest/02_mbox_to_sqlite.py -> apps/email-pipeline
+    return Path(__file__).resolve().parents[2]
+
+
+_ROOT = _repo_root()
 if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 

@@ -23,6 +23,10 @@ ui = [
     "pandas<3",
     "streamlit>=1.36",
 ]
+workspace = [
+    "google-auth>=2.29",
+    "google-auth-oauthlib>=1.2",
+]
 ml = [
     "numpy==2.3.5",
     "torch==2.8.0",

@@ -109,3 +109,124 @@ def test_ingest_counts_and_prints_errors(tmp_path: Path, monkeypatch: pytest.Mon
     assert "attachment_errors=1" in out
     assert "ValueError=1" in out
     assert "RuntimeError=1" in out
+
+
+def _ingest_mod_for_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    num_messages: int,
+    fail_message_indices: set[int],
+):
+    mod = _load_ingest_module()
+
+    mbox_root = tmp_path / "mbox"
+    mbox_root.mkdir(parents=True)
+    (mbox_root / "sample.mbox").write_bytes(b"From test\n")
+    db_path = tmp_path / "sqlite" / "emails.sqlite"
+
+    class DummySettings:
+        def resolved_mbox_dir(self) -> Path:
+            return mbox_root
+
+        def resolved_sqlite_path(self) -> Path:
+            return db_path
+
+    class DummyConn:
+        def execute(self, *_args, **_kwargs):
+            return self
+
+        def commit(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    class DummyMsg:
+        def get(self, _key: str):
+            return None
+
+    class DummyMbox:
+        def __iter__(self):
+            return iter([DummyMsg() for _ in range(num_messages)])
+
+        def close(self) -> None:
+            return None
+
+    idx = {"n": 0}
+
+    def fake_body_content(_msg):
+        i = idx["n"]
+        idx["n"] += 1
+        if i in fail_message_indices:
+            raise ValueError("broken")
+        return ("ok", "")
+
+    monkeypatch.setattr(mod, "load_settings", lambda: DummySettings())
+    monkeypatch.setattr(mod, "connect", lambda _path: DummyConn())
+    monkeypatch.setattr(mod, "init_schema", lambda _conn: None)
+    monkeypatch.setattr(mod, "open_mbox", lambda _path: DummyMbox())
+    monkeypatch.setattr(mod, "body_content", fake_body_content)
+    monkeypatch.setattr(
+        mod,
+        "extract_body_structured",
+        lambda _msg: {
+            "body_text_raw": "r",
+            "body_text_clean": "c",
+            "body_source_type": "plain",
+            "body_has_plain": True,
+            "body_has_html": False,
+        },
+    )
+    monkeypatch.setattr(mod, "extract_full_and_top_reply", lambda _s: ("full", "top"))
+    monkeypatch.setattr(mod, "walk_attachments", lambda _msg: [])
+    monkeypatch.setattr(mod, "insert_email", lambda *_a, **_k: 1)
+    monkeypatch.setattr(mod, "insert_attachment", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "tqdm", lambda iterable, **_k: iterable)
+    return mod
+
+
+def test_ingest_threshold_exceeded_exits_2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_INGEST_MAX_ERROR_RATIO", "0.2")
+    mod = _ingest_mod_for_threshold(
+        monkeypatch,
+        tmp_path,
+        num_messages=5,
+        fail_message_indices={0, 1, 2, 3, 4},
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        mod.main()
+    assert excinfo.value.code == 2
+
+
+def test_ingest_threshold_below_no_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_INGEST_MAX_ERROR_RATIO", "0.5")
+    mod = _ingest_mod_for_threshold(
+        monkeypatch,
+        tmp_path,
+        num_messages=10,
+        fail_message_indices={0},
+    )
+    mod.main()
+    out = capsys.readouterr().out
+    assert "Message error ratio:" in out
+    assert "threshold=0.5000" in out
+
+
+def test_ingest_invalid_threshold_env_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_INGEST_MAX_ERROR_RATIO", "not-a-float")
+    mod = _ingest_mod_for_threshold(
+        monkeypatch,
+        tmp_path,
+        num_messages=4,
+        fail_message_indices={0, 1, 2},
+    )
+    mod.main()
+    err = capsys.readouterr().err
+    assert "Invalid ORIGENLAB_INGEST_MAX_ERROR_RATIO" in err

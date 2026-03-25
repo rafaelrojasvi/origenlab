@@ -35,6 +35,23 @@ class Settings(BaseSettings):
         description="Client reports root (timestamped runs under here)",
     )
 
+    gmail_oauth_client_json: str | None = Field(
+        default=None,
+        description="Path to Google Cloud Desktop OAuth client JSON (Gmail IMAP ingest)",
+    )
+    gmail_workspace_user: str | None = Field(
+        default=None,
+        description="Workspace mailbox address for Gmail IMAP (e.g. contacto@domain)",
+    )
+    gmail_token_json: str | None = Field(
+        default=None,
+        description="Optional path for Gmail OAuth refresh token JSON",
+    )
+    gmail_oauth_open_browser: bool = Field(
+        default=True,
+        description="If false, print OAuth URL only (use on WSL when xdg-open/gio fails)",
+    )
+
     def resolved_raw_pst_dir(self) -> Path:
         return self.raw_pst_dir or (self.data_root / "raw_pst")
 

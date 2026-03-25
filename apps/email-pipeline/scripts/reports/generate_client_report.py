@@ -861,18 +861,17 @@ def main() -> None:
             from sentence_transformers import SentenceTransformer
             import torch
 
-            print("torch:", torch.__version__, "| cuda available:", torch.cuda.is_available(), end="")
-            if torch.cuda.is_available():
-                print(" | GPU:", torch.cuda.get_device_name(0))
-            else:
-                print(" | (install ML group + CUDA torch — see README)")
+            import numpy as np
+            from origenlab_email_pipeline.progress import print_compute_banner, tqdm_stderr
+
+            try:
+                from tqdm import tqdm as _tqdm_em
+            except ImportError:
+                _tqdm_em = None
+
             device = "cuda" if torch.cuda.is_available() else "cpu"
             batch = 160 if device == "cuda" else 32
 
-            print(
-                f"Embeddings (GPU): n={args.embeddings_sample} device={device} batch={batch} — "
-                "esto sí usa la GPU; el resto del informe no."
-            )
             cur = conn.execute(
                 """
                 SELECT id, subject, sender, body FROM emails
@@ -881,8 +880,24 @@ def main() -> None:
                 """,
                 (args.embeddings_sample,),
             )
+            print_compute_banner(
+                uses_gpu=False,
+                workload="SQLite: rows for optional embeddings",
+                extra_detail=f"up to {args.embeddings_sample:,} random rows",
+            )
+            _it = cur
+            if _tqdm_em is not None:
+                _it = _tqdm_em(
+                    cur,
+                    total=args.embeddings_sample,
+                    desc="Load embedding sample",
+                    unit="emails",
+                    file=sys.stderr,
+                    disable=False,
+                    dynamic_ncols=True,
+                )
             rows = []
-            for r in cur:
+            for r in _it:
                 subj, snd, body = r[1] or "", r[2] or "", (r[3] or "")[:900]
                 rows.append(
                     {
@@ -893,16 +908,34 @@ def main() -> None:
                     }
                 )
             if len(rows) >= 20:
+                print_compute_banner(
+                    uses_gpu=True,
+                    workload="Embeddings (client report clusters)",
+                    extra_detail=f"device={device} batch={batch} n={len(rows)}",
+                )
                 model = SentenceTransformer(
                     "sentence-transformers/all-MiniLM-L6-v2", device=device
                 )
-                emb = model.encode(
-                    [x["text"] for x in rows],
-                    batch_size=batch,
-                    show_progress_bar=True,
-                    convert_to_numpy=True,
-                    normalize_embeddings=True,
-                )
+                texts_emb = [x["text"] for x in rows]
+                n_t, n_b = len(texts_emb), (len(texts_emb) + batch - 1) // batch
+                emb_parts: list = []
+                for start in tqdm_stderr(
+                    range(0, n_t, batch),
+                    total=n_b,
+                    desc="Embedding batches",
+                    unit="batch",
+                ):
+                    ch = texts_emb[start : start + batch]
+                    emb_parts.append(
+                        model.encode(
+                            ch,
+                            batch_size=len(ch),
+                            show_progress_bar=False,
+                            convert_to_numpy=True,
+                            normalize_embeddings=True,
+                        )
+                    )
+                emb = np.vstack(emb_parts)
                 n_c = min(args.embeddings_clusters, len(rows) // 3)
                 n_c = max(2, n_c)
                 lab = AgglomerativeClustering(
