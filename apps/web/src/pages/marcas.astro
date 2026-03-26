@@ -2,36 +2,94 @@
 import Layout from '../layouts/Layout.astro';
 import PageHeader from '../components/PageHeader.astro';
 import QuoteCTA from '../components/QuoteCTA.astro';
-import Card from '../components/Card.astro';
+import ProductPreviewCard from '../components/ProductPreviewCard.astro';
 import { brands } from '../data/brands';
 import { company } from '../data/company';
 import { site } from '../config/site';
+import { products } from '../data/products';
+
+const servaBrand = brands.find((brand) => brand.slug === 'serva-electrophoresis');
+const servaProducts = servaBrand
+  ? products.filter((product) => product.brandId === servaBrand.id && product.showOnBrandPage)
+  : [];
+const otherBrands = brands.filter((brand) => !servaBrand || brand.id !== servaBrand.id);
 ---
 
 <Layout
   title="Marcas — OrigenLab"
-  description={`Listado de marcas en actualización. ${company.primaryOffer}, atención en ${company.geography}. ${site.location}.`}
+  description={`Líneas y marcas disponibles según alcance comercial. ${company.primaryOffer}, atención en ${company.geography}. ${site.location}.`}
 >
   <PageHeader
     title="Marcas"
-    lead="La relación de marcas representadas se actualiza según disponibilidad y acuerdos comerciales. Consulte por la marca o equipo que necesite."
+    lead="Trabajamos con líneas y marcas según alcance comercial vigente. La disponibilidad, documentación y condiciones se confirman durante la cotización."
   />
 
-  <div class="mt-10">
-    <p class="text-slate-600">
-      Si busca una marca en particular, cotización o recomendación según su laboratorio, escríbanos; le orientamos sin compromiso.
+  <section class="mt-10" aria-labelledby="marcas-intro-heading">
+    <h2 id="marcas-intro-heading" class="section-title">Líneas disponibles por consulta</h2>
+    <p class="mt-3 max-w-3xl text-slate-600">
+      Si busca una marca en particular, cotización o recomendación según su laboratorio, escríbanos.
+      Definimos alcance, condiciones comerciales y documentación técnica durante el proceso de cotización.
     </p>
-    <ul class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {brands.map((brand) => (
-        <li>
-          <Card
-            title={brand.name}
-            description="Lista formal en actualización. Consulte por correo o WhatsApp."
-          />
-        </li>
-      ))}
-    </ul>
-  </div>
+  </section>
+
+  {servaBrand && (
+    <section class="mt-8" aria-labelledby="serva-featured-heading">
+      <article class="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 shadow-sm md:p-8">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">Línea destacada</p>
+            <h2 id="serva-featured-heading" class="section-title mt-2">{servaBrand.name}</h2>
+          </div>
+          {servaBrand.logoPath && (
+            <img
+              src={servaBrand.logoPath}
+              alt={servaBrand.logoAlt ?? `Logo ${servaBrand.name}`}
+              loading="lazy"
+              class="h-12 w-auto object-contain md:h-14"
+            />
+          )}
+        </div>
+        {servaBrand.featuredIntro && (
+          <p class="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">{servaBrand.featuredIntro}</p>
+        )}
+        {servaProducts.length > 0 && (
+          <ul class="mt-6 grid gap-4 md:grid-cols-3">
+            {servaProducts.map((product) => (
+              <li class="h-full">
+                <ProductPreviewCard product={product} />
+              </li>
+            ))}
+          </ul>
+        )}
+        <div class="mt-6 border-t border-brand-100 pt-5">
+          <p class="text-sm text-slate-600">
+            {servaBrand.commercialNote ??
+              'Consulta por disponibilidad y condiciones; la confirmación se realiza durante la cotización.'}
+          </p>
+          <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <a href={`/marcas/${servaBrand.slug}`} class="btn-outline-dark">Ver detalle de la línea</a>
+            <a href="/contacto" class="btn-primary">Solicitar cotización</a>
+          </div>
+        </div>
+      </article>
+    </section>
+  )}
+
+  {otherBrands.length > 0 && (
+    <section class="mt-12" aria-labelledby="otras-marcas-heading">
+      <h2 id="otras-marcas-heading" class="section-title">Otras marcas del portafolio</h2>
+      <ul class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {otherBrands.map((brand) => (
+          <li class="card-elevated">
+            <h3 class="font-semibold text-brand-950">{brand.name}</h3>
+            <p class="mt-2 text-sm text-slate-600">
+              Línea sujeta a evaluación comercial y confirmación de disponibilidad al cotizar.
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
 
   <div class="mt-14">
     <QuoteCTA

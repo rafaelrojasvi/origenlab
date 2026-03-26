@@ -6,14 +6,35 @@ export interface Brand {
   id: string;
   name: string;
   slug: string;
-  url?: string;
+  websiteUrl?: string;
+  logoPath?: string;
+  logoAlt?: string;
+  summary?: string;
+  featuredOnHome?: boolean;
+  featuredIntro?: string;
+  applicationAreas?: readonly string[];
+  commercialNote?: string;
 }
 
-/** Hasta tener marcas confirmadas, una sola entrada honesta evita claims falsos. */
 export const brands: Brand[] = [
   {
-    id: 'pending',
-    name: 'Marcas en actualización',
-    slug: 'marcas-en-actualizacion',
+    id: 'serva',
+    name: 'SERVA Electrophoresis GmbH',
+    slug: 'serva-electrophoresis',
+    websiteUrl: 'https://www.serva.de/deDE/index.html',
+    logoPath: '/brands/serva-logo.png',
+    logoAlt: 'Logo SERVA Electrophoresis GmbH',
+    summary:
+      'Proveedor internacional de reactivos e insumos para aplicaciones de electroforesis y laboratorio.',
+    featuredOnHome: true,
+    featuredIntro:
+      'Línea disponible para consulta y cotización en aplicaciones de electroforesis.',
+    applicationAreas: [
+      'Electroforesis',
+      'Preparación y tratamiento de muestras',
+      'Flujos técnicos de laboratorio',
+    ],
+    commercialNote:
+      'OrigenLab puede gestionar pedidos directos con SERVA según confirmación comercial. La modalidad de prepago aplica y la disponibilidad, documentación técnica y condiciones se confirman al cotizar.',
   },
 ];

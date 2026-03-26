@@ -8,6 +8,14 @@ import { company } from '../data/company';
 import { categories } from '../data/categories';
 import { serviceOfferings } from '../data/services';
 import { faqItems } from '../data/faq';
+import { brands } from '../data/brands';
+import { products } from '../data/products';
+import ProductPreviewCard from '../components/ProductPreviewCard.astro';
+
+const featuredBrand = brands.find((brand) => brand.featuredOnHome);
+const featuredBrandProducts = featuredBrand
+  ? products.filter((product) => product.brandId === featuredBrand.id && product.showOnHome)
+  : [];
 ---
 
 <Layout
@@ -25,7 +33,7 @@ import { faqItems } from '../data/faq';
 
   <section class="border-b border-slate-100 py-10" aria-labelledby="intro-heading">
     <h2 id="intro-heading" class="sr-only">Sobre OrigenLab</h2>
-    <p class="max-w-2xl text-slate-600">{company.homeIntro}</p>
+    <p class="mx-auto max-w-3xl text-center text-slate-600">{company.homeIntro}</p>
   </section>
 
   <section class="py-12" aria-labelledby="why-heading">
@@ -62,6 +70,49 @@ import { faqItems } from '../data/faq';
       ))}
     </div>
   </section>
+
+  {featuredBrand && (
+    <section class="py-12" aria-labelledby="featured-brand-heading">
+      <div class="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 shadow-sm md:p-8">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">Marca destacada</p>
+            <h2 id="featured-brand-heading" class="section-title mt-2">{featuredBrand.name}</h2>
+            {featuredBrand.featuredIntro && (
+              <p class="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">{featuredBrand.featuredIntro}</p>
+            )}
+          </div>
+          {featuredBrand.logoPath && (
+            <img
+              src={featuredBrand.logoPath}
+              alt={featuredBrand.logoAlt ?? `Logo ${featuredBrand.name}`}
+              loading="lazy"
+              class="h-12 w-auto object-contain md:h-14"
+            />
+          )}
+        </div>
+
+        {featuredBrandProducts.length > 0 && (
+          <ul class="mt-6 grid gap-4 md:grid-cols-3">
+            {featuredBrandProducts.map((product) => (
+              <li class="h-full">
+                <ProductPreviewCard product={product} />
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <p class="mt-5 max-w-3xl text-sm text-slate-600">
+          {featuredBrand.commercialNote ??
+            'Disponibilidad, condiciones comerciales y documentación técnica se confirman durante la cotización.'}
+        </p>
+        <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <a href={`/marcas/${featuredBrand.slug}`} class="btn-outline-dark">Ver línea SERVA</a>
+          <a href="/contacto" class="btn-primary">Solicitar cotización</a>
+        </div>
+      </div>
+    </section>
+  )}
 
   <section class="py-12" aria-labelledby="services-heading">
     <h2 id="services-heading" class="section-title">Qué incluye trabajar con OrigenLab</h2>

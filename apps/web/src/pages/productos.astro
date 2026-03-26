@@ -3,8 +3,14 @@ import Layout from '../layouts/Layout.astro';
 import PageHeader from '../components/PageHeader.astro';
 import QuoteCTA from '../components/QuoteCTA.astro';
 import Card from '../components/Card.astro';
+import ProductPreviewCard from '../components/ProductPreviewCard.astro';
 import { categories } from '../data/categories';
 import { company } from '../data/company';
+import { products } from '../data/products';
+import { brands } from '../data/brands';
+
+const featuredProducts = products.filter((product) => product.featured && product.showOnProductsPage);
+const brandMap = new Map(brands.map((brand) => [brand.id, brand]));
 ---
 
 <Layout
@@ -29,6 +35,42 @@ import { company } from '../data/company';
       ))}
     </ul>
   </div>
+
+  {featuredProducts.length > 0 && (
+    <section class="mt-14" aria-labelledby="destacados-heading">
+      <div class="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 shadow-sm md:p-8">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">Líneas destacadas</p>
+            <h2 id="destacados-heading" class="section-title mt-2">Productos destacados</h2>
+            <p class="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+              Referencias seleccionadas para consulta técnica y comercial. No reemplazan las categorías principales del sitio.
+            </p>
+          </div>
+          <a href="/marcas/serva-electrophoresis" class="btn-outline-dark">Ver línea SERVA</a>
+        </div>
+
+        <ul class="mt-6 grid gap-4 md:grid-cols-3">
+          {featuredProducts.map((product) => {
+            const brand = brandMap.get(product.brandId);
+            return (
+              <li class="h-full">
+                <ProductPreviewCard
+                  product={product}
+                  brandName={brand?.name}
+                  showBrand={true}
+                  showApplication={true}
+                />
+              </li>
+            );
+          })}
+        </ul>
+        <p class="mt-5 text-sm text-slate-600">
+          Condiciones, disponibilidad y documentación técnica se confirman durante la cotización.
+        </p>
+      </div>
+    </section>
+  )}
 
   <div class="mt-14">
     <QuoteCTA
