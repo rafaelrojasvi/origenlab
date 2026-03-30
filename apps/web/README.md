@@ -7,6 +7,10 @@ Sitio estático para **OrigenLab**, empresa de equipamiento y soluciones para la
 
 **Alcance del negocio:** venta de equipos para laboratorios de servicio e investigación en Chile; líneas en alimentos, control de calidad y laboratorio clínico. Audiencia: laboratorios, universidades, clínicas, hospitales, I+D. Datos completos (contacto, servicios, tono, prompt para cotizaciones): [docs/company-scope.md](docs/company-scope.md). Código fuente de verdad: `src/data/*`.
 
+**Monorepo / GitHub:** Política de seguridad, licencia y contribución del repositorio están en la raíz del clone: [`SECURITY.md`](../../SECURITY.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`LICENSE`](../../LICENSE). La plantilla de **pull requests** por defecto es [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md).
+
+**Privacidad y datos:** El sitio es estático (sin backend en este repo). Los archivos de correo, bases SQLite, exportes JSONL e informes del pipeline viven en el otro paquete ([`apps/email-pipeline/`](../email-pipeline/)) y, en producción local, **fuera de git**; no subas datos operativos al árbol de `apps/web/`.
+
 ## Comandos
 
 | Comando | Descripción |
@@ -65,5 +69,5 @@ Inicio rápido para agentes: [docs/APP_CONTEXT.md](docs/APP_CONTEXT.md)
 
 ## Licencia
 
-Este proyecto está bajo la [Licencia MIT](LICENSE).  
+Licencia **MIT** del monorepo: [raíz `LICENSE`](../../LICENSE). También puede existir [LICENSE](LICENSE) en esta carpeta por el historial del subtree.  
 **Contacto del sitio:** contacto@origenlab.cl

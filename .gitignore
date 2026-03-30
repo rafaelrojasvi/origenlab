@@ -24,11 +24,20 @@ pnpm-debug.log*
 .env.local
 .env.*.local
 .env.production
+# Defense in depth: ignore env variants, but keep tracked templates named `.env.example`.
+.env.*
+!.env.example
 
 # --- OS / editors ---
 .DS_Store
 Thumbs.db
 **/.idea/
+# Editor temp / swap
+*.swp
+*.swo
+*~
+# Local tooling scratch (do not use for data you intend to share)
+.repomix/
 
 # --- Email pipeline (explicit paths so we never ignore apps/web/src/data/) ---
 apps/email-pipeline/data/
@@ -50,6 +59,9 @@ apps/email-pipeline/reports/out/*
 *.db-wal
 *.db-shm
 *.jsonl
+# NOTE: `*.jsonl` is intentional (mail exports must never land in git). If you add a
+# committed JSONL **test fixture**, add a narrow negation here, e.g.:
+# !apps/email-pipeline/tests/fixtures/**/*.jsonl
 
 apps/email-pipeline/.streamlit/secrets.toml
 

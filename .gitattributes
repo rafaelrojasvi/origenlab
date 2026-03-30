@@ -1,0 +1,18 @@
+# Default: normalize text files to LF where supported.
+* text=auto eol=lf
+
+# Binaries
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# SVG as text
+*.svg text eol=lf
+
+# Lockfiles
+package-lock.json text eol=lf
+uv.lock text eol=lf

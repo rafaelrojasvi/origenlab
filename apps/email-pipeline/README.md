@@ -1,4 +1,4 @@
-# origenlab-email-pipeline
+# OrigenLab — Email pipeline
 
 Local-first pipeline: **PST → mbox** (`readpst`) → **SQLite** → **JSONL**.  
 Code lives in the repo; **put real PSTs and outputs outside the repo** (e.g. `~/data/origenlab-email/` — see [docs/DATA_LOCATIONS.md](docs/DATA_LOCATIONS.md#m-epdata-root)).
@@ -12,17 +12,21 @@ Code lives in the repo; **put real PSTs and outputs outside the repo** (e.g. `~/
 
 ## GitHub & what not to commit
 
-This repo is meant to hold **code and docs** only.
+This monorepo is meant to hold **code and docs** only; **operational data stays outside git** by default.
 
-| Committed | Not committed (see `.gitignore`) |
+| Committed | Not committed (see root + app `.gitignore`) |
 |-----------|-----------------------------------|
-| `pyproject.toml`, `uv.lock`, `src/`, `scripts/`, `tests/`, `docs/`, `apps/` | `.env` (use `.env.example` as template) |
+| `pyproject.toml`, `uv.lock`, `src/`, `scripts/`, `tests/`, `docs/`, `apps/` | `.env` (use [`.env.example`](.env.example) as template) |
 | `LICENSE`, `README.md`, [docs/SECURITY.md](docs/SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md) | `*.sqlite`, `*.pst`, `*.mbox`, `*.jsonl` |
 | `reports/out/README.md` + `reports/out/.gitkeep` | Everything else under `reports/out/` (reports, `active/` CSVs, client pack — often sensitive) |
 
-**After cloning:** `uv sync` → `cp .env.example .env` → create `~/data/origenlab-email/...` and set paths. **Do not** paste API keys or DB paths with real usernames into issues or PRs.
+**After cloning:** `uv sync` → `cp .env.example .env` → create `~/data/origenlab-email/...` and set paths.
 
-Security disclosures: [docs/SECURITY.md](docs/SECURITY.md).
+**Never paste** API keys, OAuth tokens, mailbox passwords, full paths to customer archives, or excerpts from real reports into issues or PRs.
+
+**Monorepo (repo root):** coordinated disclosure → [`SECURITY.md`](../../SECURITY.md); general contribution flow → [`CONTRIBUTING.md`](../../CONTRIBUTING.md); license → [`LICENSE`](../../LICENSE). Default PR template → [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md).
+
+Pipeline-specific handling notes: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Prerequisites (Ubuntu / WSL)
 
@@ -171,10 +175,11 @@ Optional: override internal domains:
 uv run python scripts/mart/build_business_mart.py --rebuild --internal-domain labdelivery.cl
 ```
 
-2) Run Streamlit MVP UI:
+2) Run Streamlit MVP UI (Streamlit and pandas live in dependency group **`ui`** — not installed by default `uv sync`):
 
 ```bash
-uv run streamlit run apps/business_mart_app.py
+uv sync --group ui   # once per machine / after clone
+uv run --group ui streamlit run apps/business_mart_app.py
 ```
 
 **Share on Wi‑Fi (same LAN):** Streamlit must listen on all interfaces, and if you use **WSL2** Windows must forward the port to WSL (like you did for port 8000).

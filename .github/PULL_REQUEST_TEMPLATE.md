@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What changed and why -->
+<!-- What changed and why (English or Spanish is fine) -->
 
 ## Scope
 
@@ -14,12 +14,13 @@
 
 - [ ] `npm run check` passes (if you changed site code)
 - [ ] `npm run build` passes (if you changed site code)
-- [ ] Business/contact data lives in `apps/web/src/data/*` (not hardcoded in pages)
+- [ ] Business/contact facts live in `apps/web/src/data/*` (not hardcoded in pages)
+- [ ] If you changed public copy: tone and claims align with `apps/web/docs/company-scope.md` / `AGENTS.md`
 
 ### Email pipeline (`apps/email-pipeline`)
 
 - [ ] `uv run pytest` passes (if you changed pipeline code)
-- [ ] No secrets, PST/mbox/SQLite, or sensitive CSVs committed (see app `.gitignore`)
+- [ ] No secrets, archives, databases, JSONL exports, or sensitive reports committed (see repo and app `.gitignore`)
 
 ## Notes / screenshots
 
