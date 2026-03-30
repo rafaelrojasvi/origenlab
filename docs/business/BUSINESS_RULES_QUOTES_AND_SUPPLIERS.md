@@ -6,7 +6,7 @@ Last reviewed: 2026-03-24
 
 Formal rules and **proposed** data shapes for OrigenLab commercial work. This doc is **source of truth for policy**; Word templates remain **presentation**. When code or DB schemas exist, they must not contradict this file without an explicit decision and doc update.
 
-**Related:** [`apps/web/docs/company-scope.md`](../../apps/web/docs/company-scope.md) (tone, contact, cotización prompts, [operational intake checklist](../../apps/web/docs/company-scope.md#datos-a-solicitar-operativo)).
+**Related:** `[apps/web/docs/company-scope.md](../../apps/web/docs/company-scope.md)` (tone, contact, cotización prompts, [operational intake checklist](../../apps/web/docs/company-scope.md#datos-a-solicitar-operativo)).
 
 ---
 
@@ -34,12 +34,14 @@ This rule applies to: internal checklists, any future quote generator, LLM promp
 
 Until enforced in software, these are **manual policy**; implement validation in a quote tool/DB when ready.
 
-| Gate | Requirement |
-|------|-------------|
-| Minimum intake | Required client/request fields present (see §3). |
+
+| Gate             | Requirement                                                                                                                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Minimum intake   | Required client/request fields present (see §3).                                                                                                                                                |
 | Commercial terms | **Delivery**, **payment**, **validity**, **taxes (e.g. IVA)**, **warranty**, **installation/startup**: each is either a **confirmed value** or **explicit** “not confirmed” / “not applicable”. |
-| Technical claims | **Model**, **brand**, **lead time**, **warranty** line items: **confirmed** or explicitly **not confirmed**. |
-| Taxes | **Never inferred**; state inclusion/exclusion of IVA (or equivalent) explicitly. |
+| Technical claims | **Model**, **brand**, **lead time**, **warranty** line items: **confirmed** or explicitly **not confirmed**.                                                                                    |
+| Taxes            | **Never inferred**; state inclusion/exclusion of IVA (or equivalent) explicitly.                                                                                                                |
+
 
 ---
 
@@ -47,14 +49,16 @@ Until enforced in software, these are **manual policy**; implement validation in
 
 The “ficha breve” is already a **logical data model**. These fields should eventually live in **structured storage** (DB or validated form), not only in `.docx`.
 
-| Area | Fields (indicative) |
-|------|---------------------|
-| Organization | Company / institution name, RUT (if applicable), city, **region** |
-| Contact | Name, **role / area**, email, phone |
-| Need | Equipment type, **preferred brand** (if any), **exact model** (if known), **quantity** |
-| Technical | **Application**, matrix/sample type, **required range / capacity**, accessories/consumables |
-| Commercial | **Target purchase date**, **delivery place**, invoice requirements, **tender vs direct purchase**, **estimated budget** (optional) |
-| Services | Installation, startup, training, support — **requested** vs **quoted** (later) |
+
+| Area         | Fields (indicative)                                                                                                                |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Organization | Company / institution name, RUT (if applicable), city, **region**                                                                  |
+| Contact      | Name, **role / area**, email, phone                                                                                                |
+| Need         | Equipment type, **preferred brand** (if any), **exact model** (if known), **quantity**                                             |
+| Technical    | **Application**, matrix/sample type, **required range / capacity**, accessories/consumables                                        |
+| Commercial   | **Target purchase date**, **delivery place**, invoice requirements, **tender vs direct purchase**, **estimated budget** (optional) |
+| Services     | Installation, startup, training, support — **requested** vs **quoted** (later)                                                     |
+
 
 **Minimum required for “quote started”** should be defined in implementation (subset of the above); this doc lists the **full** intended model.
 
@@ -64,16 +68,18 @@ The “ficha breve” is already a **logical data model**. These fields should e
 
 Repeatable sections from internal templates and examples:
 
-| Block | Content |
-|-------|---------|
-| Header | Quote **number**, **date** |
-| Parties | **Client**, institution/company, **contact** |
-| Reference | Main reference (e.g. inquiry / RFQ id) |
-| Summary | Short technical summary |
-| Lines | **Quote items** (see §5) |
-| Terms | **Delivery**, **payment**, **validity** |
-| Legal/commercial | **Warranty** (as confirmed), **taxes / IVA** |
-| Services | **Support**, **installation / startup** applicability |
+
+| Block            | Content                                               |
+| ---------------- | ----------------------------------------------------- |
+| Header           | Quote **number**, **date**                            |
+| Parties          | **Client**, institution/company, **contact**          |
+| Reference        | Main reference (e.g. inquiry / RFQ id)                |
+| Summary          | Short technical summary                               |
+| Lines            | **Quote items** (see §5)                              |
+| Terms            | **Delivery**, **payment**, **validity**               |
+| Legal/commercial | **Warranty** (as confirmed), **taxes / IVA**          |
+| Services         | **Support**, **installation / startup** applicability |
+
 
 ---
 
@@ -107,10 +113,12 @@ Per scope: model confirmed, brand confirmed, lead time confirmed, warranty confi
 
 ### 6.1 Separation (critical)
 
-| Kind | Meaning |
-|------|---------|
-| **Supplier master** | Relatively stable facts: identity, domain, country, categories, ongoing relationship notes. |
+
+| Kind                                 | Meaning                                                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Supplier master**                  | Relatively stable facts: identity, domain, country, categories, ongoing relationship notes.                                  |
 | **Supplier research run / campaign** | One sourcing exercise: methodology, scoring, **rankings**, regional quotas, “top 20/50”, quick-win lists, **snapshot date**. |
+
 
 **Rankings and “top N” from a given date are snapshot outputs**, not permanent truth about a supplier. Store them under a **run id**, not as the only record for the supplier.
 
@@ -118,13 +126,13 @@ Per scope: model confirmed, brand confirmed, lead time confirmed, warranty confi
 
 When ranking suppliers in a campaign, dimensions should be **data**, not only prose:
 
-1. Category fit  
-2. Export readiness  
-3. Ease of contact  
-4. Credibility / documentation  
-5. Partnership potential for Chile / LATAM  
+1. Category fit
+2. Export readiness
+3. Ease of contact
+4. Credibility / documentation
+5. Partnership potential for Chile / LATAM
 
-Campaign rows should store **score per dimension** and **total** (or rank), tied to **`research_run_id`**.
+Campaign rows should store **score per dimension** and **total** (or rank), tied to `**research_run_id`**.
 
 ### 6.3 Supplier prospect fields (target)
 
@@ -143,7 +151,7 @@ Keep as report/template prose:
 - Long executive summaries  
 - Regional commentary  
 - Strategic “why this category matters” essays  
-- Polished CTAs and marketing copy  
+- Polished CTAs and marketing copy
 
 Store **structured facts** (tables above) in the DB; **generate** narrative from them when needed.
 
@@ -151,15 +159,18 @@ Store **structured facts** (tables above) in the DB; **generate** narrative from
 
 ## 8. Implementation roadmap (for engineers)
 
-1. **Done in docs:** This file + links from `company-scope` and doc map.  
-2. **Next (high value):** Schema migration + minimal UI or CSV workflow for **quote_request** + **confirmation flags**.  
-3. **Next:** **supplier_research_run** + **supplier_prospect** tables (or append to existing leads SQLite with clear naming).  
+1. **Done in docs:** This file + links from `company-scope` and doc map.
+2. **Next (high value):** Schema migration + minimal UI or CSV workflow for **quote_request** + **confirmation flags**.
+3. **Next:** **supplier_research_run** + **supplier_prospect** tables (or append to existing leads SQLite with clear naming).
 4. **Enforcement:** Script or gate: **block “ready_to_send”** without required fields and explicit handling of unconfirmed terms.
 
 ---
 
 ## 9. Changelog
 
-| Date | Change |
-|------|--------|
+
+| Date       | Change                                                                                                   |
+| ---------- | -------------------------------------------------------------------------------------------------------- |
 | 2026-03-24 | Initial canonical rules + proposed entities (from internal template / ficha / supplier report analysis). |
+
+

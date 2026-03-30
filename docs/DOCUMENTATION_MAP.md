@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: project-maintainers  
-Last reviewed: 2026-03-24
+Last reviewed: 2026-03-29
 
 This file is the source of truth for documentation placement, intent, and lifecycle.
 
@@ -57,6 +57,10 @@ Paths below are under [`apps/email-pipeline/docs/`](../apps/email-pipeline/docs/
   - [leads/CHILE_LEAD_SOURCES.md](../apps/email-pipeline/docs/leads/CHILE_LEAD_SOURCES.md)
 - Canonical ML/AI:
   - [ml/AI_ML_IMPLEMENTED_SUMMARY.md](../apps/email-pipeline/docs/ml/AI_ML_IMPLEMENTED_SUMMARY.md) (includes former ML options + LLM prompt appendix)
+- Tatiana commercial drafting (OrigenLab / Labdelivery voice; human-reviewed; no send integration):
+  - [dataset/TATIANA_DRAFTING_COPILOT.md](../apps/email-pipeline/docs/dataset/TATIANA_DRAFTING_COPILOT.md)
+  - [dataset/TATIANA_PILOT_WORKFLOW.md](../apps/email-pipeline/docs/dataset/TATIANA_PILOT_WORKFLOW.md) (operational pilot batches + `pilot_review.csv`)
+  - [dataset/TATIANA_EVAL_REVIEW.md](../apps/email-pipeline/docs/dataset/TATIANA_EVAL_REVIEW.md)
 - Generated or snapshot docs:
   - [generated/CONTACT_READINESS_AUDIT.md](../apps/email-pipeline/docs/generated/CONTACT_READINESS_AUDIT.md)
   - [generated/DEEP_RESEARCH_RECONCILIATION.md](../apps/email-pipeline/docs/generated/DEEP_RESEARCH_RECONCILIATION.md)

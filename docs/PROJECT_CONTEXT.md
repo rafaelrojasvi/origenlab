@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: project-maintainers  
-Last reviewed: 2026-03-24
+Last reviewed: 2026-03-29
 
 This is the primary monorepo context document for coding agents and contributors.
 
@@ -12,7 +12,7 @@ This is the primary monorepo context document for coding agents and contributors
 OrigenLab monorepo with two active applications:
 
 - [`apps/web`](../apps/web/): public marketing website (Astro, static deployment).
-- [`apps/email-pipeline`](../apps/email-pipeline/): email archive ingestion, enrichment, and reporting pipeline (Python + uv).
+- [`apps/email-pipeline`](../apps/email-pipeline/): email archive ingestion, enrichment, and reporting pipeline (Python + uv), including **human-in-the-loop drafting assistance** for OrigenLab / Labdelivery-style commercial email (Tatiana copilot — eval and pilot workflows; **not** an autonomous sender).
 
 <a id="m-proj-business"></a>
 ## Business goal
@@ -23,6 +23,8 @@ Support OrigenLab's commercial operation by:
 - extracting business signal from historical email archives into operational reports.
 
 **Commercial truth rules** (quotes, suppliers, what may be claimed): [`docs/business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md`](./business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md). Policy there is **canonical** for the monorepo; templates and LLM prompts must align.
+
+**Commercial email drafting (Tatiana):** Implemented under [`apps/email-pipeline`](../apps/email-pipeline/) as retrieval + guarded LLM draft *suggestions* with mandatory human review for eval and pilot batches. It reuses signals from the historical archive cohorts and must stay aligned with the same business rules above. Entry points: [`apps/email-pipeline/docs/dataset/TATIANA_DRAFTING_COPILOT.md`](../apps/email-pipeline/docs/dataset/TATIANA_DRAFTING_COPILOT.md), [`apps/email-pipeline/docs/dataset/TATIANA_PILOT_WORKFLOW.md`](../apps/email-pipeline/docs/dataset/TATIANA_PILOT_WORKFLOW.md). Public-facing business copy remains owned by [`apps/web/docs/company-scope.md`](../apps/web/docs/company-scope.md) and site data — the copilot does not replace those sources of truth.
 
 <a id="m-proj-start"></a>
 ## Where to start (agent-first)
