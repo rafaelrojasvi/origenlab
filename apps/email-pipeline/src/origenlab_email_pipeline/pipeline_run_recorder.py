@@ -6,13 +6,9 @@ import json
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timezone
 
 from origenlab_email_pipeline.pipeline_meta_schema import ensure_pipeline_meta_tables
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from origenlab_email_pipeline.timeutil import now_iso
 
 
 def get_git_describe(fallback: str = "") -> str:

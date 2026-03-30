@@ -1,4 +1,7 @@
-"""Load versioned DR50 contact payload with SHA256 verification."""
+"""Load versioned **DR50** (deep-research) contact JSON with SHA256 verification.
+
+Payload lives under ``scripts/leads/data/``; consumed by hunt/reconcile utilities — not a general
+configuration layer."""
 
 from __future__ import annotations
 

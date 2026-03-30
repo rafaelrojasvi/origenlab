@@ -1,6 +1,8 @@
 """Ordered SQLite schema orchestration (no versioned migration framework).
 
-Prefer calling existing init/ensure helpers in a safe sequence. See docs/pipeline/SCHEMA_OWNERSHIP.md.
+Single orchestrated entrypoint for applying **layer stacks** (archive/mart → commercial intel → leads
+→ lead accounts) in dependency order. Prefer this over ad-hoc ``ensure_*`` ordering in new code.
+See docs/pipeline/SCHEMA_OWNERSHIP.md and tests/test_sqlite_migrate.py.
 """
 
 from __future__ import annotations

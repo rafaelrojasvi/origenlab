@@ -1,6 +1,8 @@
 # Google Workspace → SQLite (Gmail IMAP + OAuth2)
 
-Use this when **contacto@origenlab.cl** is a **real Google Workspace user**. Mail is in **Gmail**.
+**Operational default** for the live **contacto@** mailbox when it lives in **Google Workspace**: mail lands in **Gmail**, rows get **`gmail:...`** `source_file` values, and Streamlit **Actividad contacto Gmail** / **Casos para revisar** / Gmail **Borrador** flows read those rows (not Titan `imap:...` rows).
+
+Use this path when **contacto@origenlab.cl** (or the shared mailbox you ingest) is a **real Workspace user**. Mail is in **Gmail**.
 
 ---
 

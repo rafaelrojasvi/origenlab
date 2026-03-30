@@ -66,7 +66,7 @@ Create a case JSON (example):
 }
 ```
 
-Run:
+Run (default: **historical / Tatiana curator** drafting profile — same as pre-change CLI behavior):
 
 ```bash
 python3 scripts/tatiana/generate_tatiana_draft_package.py \
@@ -74,10 +74,20 @@ python3 scripts/tatiana/generate_tatiana_draft_package.py \
   --out reports/out/tatiana_draft_package_case001.json
 ```
 
+**OrigenLab mode** (same **`DRAFTING_PROFILE_ORIGENLAB`** + **`load_origenlab_drafting_context()`** as Streamlit **Borrador comercial** and **`run_tatiana_pilot_batch.py --origenlab`**):
+
+```bash
+uv run python scripts/tatiana/generate_tatiana_draft_package.py \
+  --origenlab \
+  --case-json /tmp/case.json \
+  --out reports/out/tatiana_draft_package_origenlab.json
+```
+
 Use a real model (requires `ORIGENLAB_TATIANA_OPENAI_API_KEY` or `OPENAI_API_KEY`; see `.env.example`):
 
 ```bash
 uv run python scripts/tatiana/generate_tatiana_draft_package.py \
+  --origenlab \
   --generator openai_chat \
   --case-json /tmp/case.json \
   --out reports/out/tatiana_draft_package_openai.json

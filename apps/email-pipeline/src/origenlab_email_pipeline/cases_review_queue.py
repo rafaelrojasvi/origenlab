@@ -10,8 +10,10 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
-# Gmail Workspace ingest for contacto@origenlab.cl (canonical v1 scope).
-CONTACTO_GMAIL_SOURCE_SQL = "lower(COALESCE(source_file, '')) LIKE 'gmail:contacto@origenlab.cl%'"
+from origenlab_email_pipeline.contacto_gmail_source import (
+    CONTACTO_GMAIL_SOURCE_SQL,
+    sql_predicate_contacto_gmail_source,
+)
 
 
 def _noise_sql_predicate() -> str:
@@ -94,7 +96,7 @@ def fetch_cases_review_queue(
     )
     _noise_e = _noise_sql_predicate().replace("sender", "e.sender").replace("subject", "e.subject")
     noise_clause = f"AND NOT {_noise_e}" if noise_ex else ""
-    contact_where = "lower(COALESCE(e.source_file, '')) LIKE 'gmail:contacto@origenlab.cl%'"
+    contact_where = sql_predicate_contacto_gmail_source(table_alias="e", coalesce_null=True)
     pos_clause = ""
     if positive_signal_only and cisf:
         pos_clause = "AND COALESCE(agg.has_positive, 0) = 1"

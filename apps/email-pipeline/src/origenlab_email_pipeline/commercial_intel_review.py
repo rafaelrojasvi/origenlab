@@ -11,10 +11,11 @@ import csv
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
 from typing import Any, Iterable, Literal
+
+from origenlab_email_pipeline.timeutil import now_iso
 
 ReviewAction = Literal["approve", "reject", "snooze"]
 
@@ -29,10 +30,6 @@ _STATUS_TO_REASON: dict[str, str] = {
     "rejected": "MANUAL_REJECT",
     "snoozed": "MANUAL_SNOOZE",
 }
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _entity_table(entity_kind: str) -> tuple[str, str]:

@@ -12,8 +12,9 @@ from dataclasses import dataclass
 import csv as _csv
 import io
 import re
-from datetime import datetime, timezone
 from typing import Literal
+
+from origenlab_email_pipeline.timeutil import now_iso
 import xml.etree.ElementTree as ET
 
 
@@ -48,10 +49,6 @@ class ExtractResult:
 
 
 _RE_WS = re.compile(r"[ \t\r\f\v]+")
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _normalize_text(s: str) -> str:
@@ -165,7 +162,7 @@ def extract_bytes(
     max_chars: int = 50000,
 ) -> ExtractResult:
     method = guess_method(content_type, filename)
-    created_at = _now_iso()
+    created_at = now_iso()
 
     if method == "none":
         return ExtractResult(

@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+
+from origenlab_email_pipeline.timeutil import now_iso
 
 SOURCE_CHILECOMPRA = "chilecompra"
 SOURCE_INN_LABS = "inn_labs"
 SOURCE_CORFO_CENTERS = "corfo_centers"
 
 SOURCE_NAMES = (SOURCE_CHILECOMPRA, SOURCE_INN_LABS, SOURCE_CORFO_CENTERS)
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def insert_raw(

@@ -1,7 +1,8 @@
-"""Shared operational trust checks for QA scripts and tests.
+"""Facade for operational trust / publication QA (import this module from scripts, not the ``operational_trust_*`` siblings).
 
-Implementation is split across ``operational_trust_*`` modules; this file re-exports
-the public API so imports stay ``from origenlab_email_pipeline.operational_trust import ...``.
+Implementation is split across ``operational_trust_*`` modules; this file re-exports the public API
+so imports stay ``from origenlab_email_pipeline.operational_trust import ...``. ``__all__`` is
+the stability contract (see tests/test_operational_trust_facade.py).
 """
 
 from __future__ import annotations

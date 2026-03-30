@@ -1,6 +1,8 @@
-# IMAP ingest for `contacto@origenlab.cl` (Titan)
+# IMAP ingest for `contacto@origenlab.cl` (Titan / generic password IMAP)
 
-The operational mailbox for **contacto@origenlab.cl** is documented as **Titan** with **IMAP**, not Google’s Gmail API. See [`apps/web/docs/email-setup.md`](../../../web/docs/email-setup.md).
+**Legacy or optional path.** If **contacto@origenlab.cl** is on **Google Workspace**, use **[`WORKSPACE_GMAIL_IMAP.md`](WORKSPACE_GMAIL_IMAP.md)** and **`05_workspace_gmail_imap_to_sqlite.py`** instead — that is the **operational default** in this repo (`gmail:...` rows; Streamlit contacto review pages filter that pattern).
+
+This document describes **password IMAP** (e.g. **Titan**) via **`04_imap_to_sqlite.py`** (`imap:...` rows). Older web runbooks may still mention Titan; align [`apps/web/docs/email-setup.md`](../../../web/docs/email-setup.md) with your actual host when convenient.
 
 ## What this does
 

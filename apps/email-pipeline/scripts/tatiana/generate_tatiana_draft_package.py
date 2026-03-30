@@ -12,6 +12,8 @@ if str(_ROOT / "src") not in sys.path:
 
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.tatiana_copilot.draft_package import build_draft_package
+from origenlab_email_pipeline.tatiana_copilot.origenlab_context import DRAFTING_PROFILE_ORIGENLAB
+from origenlab_email_pipeline.tatiana_copilot.origenlab_facts_loader import load_origenlab_drafting_context
 from origenlab_email_pipeline.tatiana_copilot.generator_factory import (
     TatianaLLMConfigurationError,
     resolve_draft_generator,
@@ -32,6 +34,12 @@ def main() -> None:
         default="mock",
         choices=("mock", "openai_chat", "openai", "llm"),
         help="mock = offline template; openai_chat|openai|llm = OpenAI Chat Completions (requires API key)",
+    )
+    ap.add_argument(
+        "--origenlab",
+        action="store_true",
+        help="OrigenLab drafting profile + load OrigenLab drafting context (facts). Matches Streamlit "
+        "Borrador comercial and run_tatiana_pilot_batch.py --origenlab. Default (historical curator profile) is unchanged.",
     )
     args = ap.parse_args()
 
@@ -54,12 +62,17 @@ def main() -> None:
         context_metadata=dict(case_obj.get("context_metadata") or {}),
     )
 
+    kw: dict = {}
+    if args.origenlab:
+        kw["drafting_profile"] = DRAFTING_PROFILE_ORIGENLAB
+        kw["origenlab_context"] = load_origenlab_drafting_context()
     pkg = build_draft_package(
         case=case,
         index=idx,
         generator=gen,
         style_top_k=args.style_top_k,
         retrieval_top_k=args.retrieval_top_k,
+        **kw,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(pkg.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")

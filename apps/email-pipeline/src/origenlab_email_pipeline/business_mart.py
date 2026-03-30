@@ -9,12 +9,12 @@ Design goals:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import re
 from collections import Counter, defaultdict
 from typing import Iterable
 
+from origenlab_email_pipeline.timeutil import now_iso
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}", re.I)
 
@@ -32,10 +32,6 @@ def domain_of(email: str | None) -> str | None:
     if not email or "@" not in email:
         return None
     return email.split("@")[-1].lower()
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def guess_org_name_from_domain(domain: str) -> str:

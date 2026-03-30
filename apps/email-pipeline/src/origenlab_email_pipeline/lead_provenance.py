@@ -1,4 +1,7 @@
-"""Factual provenance for leads client pack and operational stack (no guessed workflow state)."""
+"""Factual provenance for leads client pack, operational stack manifests, and QA correlation.
+
+Reads/writes paths under ``reports/out/active/`` and env vars set by ``run_leads_operational_stack.sh``;
+does not infer business outcomes — only filesystem and env facts for ``run_id`` / DB path alignment."""
 
 from __future__ import annotations
 

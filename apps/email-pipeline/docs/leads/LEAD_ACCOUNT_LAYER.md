@@ -16,7 +16,7 @@ Schema source of truth: `src/origenlab_email_pipeline/lead_accounts_schema.py` (
 
 ## Design notes
 
-- **Idempotent full rebuild:** `build_lead_account_rollup.py` **deletes** rollup rows and rebuilds from `lead_master`. It does **not** delete `external_leads_raw`, `lead_master`, or mart tables.
+- **Idempotent full rebuild:** [`build_lead_account_rollup.py`](../scripts/leads/build_lead_account_rollup.py) **deletes** rollup rows and rebuilds from `lead_master`. It does **not** delete `external_leads_raw`, `lead_master`, or mart tables. Compatibility wrappers live at `scripts/build_lead_account_rollup.py` (same behavior).
 - **Dedupe key:** `account_dedupe_key(normalized_name, primary_domain)` → stored as `account_dedupe_key` (unique).
 - **Junk names:** Rows with junk `org_name` and **no** usable domain are **skipped** (no membership). Junk + domain → `domain_only_fallback` + `quality_status=needs_review`.
 - **Overrides:** Insert rows into `lead_account_overrides` with `override_type` in (`remap_raw_name`, `merge`, `manual`), `is_active=1`, and `target_account_name` (and optional `normalized_source_value` / `source_value`).
@@ -25,18 +25,18 @@ Schema source of truth: `src/origenlab_email_pipeline/lead_accounts_schema.py` (
 
 ```bash
 # 0) Optional: audit raw org names before rollup
-uv run python scripts/audit_lead_org_quality.py
+uv run python scripts/leads/audit_lead_org_quality.py
 
 # 1) Build / refresh rollup (after lead_master is up to date)
-uv run python scripts/build_lead_account_rollup.py
+uv run python scripts/leads/build_lead_account_rollup.py
 
 # 2) Match accounts to email mart (requires organization_master populated)
-uv run python scripts/match_lead_accounts_to_existing_orgs.py
+uv run python scripts/leads/match_lead_accounts_to_existing_orgs.py
 # Optional fuzzy (always needs_review on fuzzy path):
-uv run python scripts/match_lead_accounts_to_existing_orgs.py --allow-fuzzy
+uv run python scripts/leads/match_lead_accounts_to_existing_orgs.py --allow-fuzzy
 
 # 3) Validate
-uv run python scripts/validate_lead_account_rollup.py
+uv run python scripts/leads/validate_lead_account_rollup.py
 ```
 
 Override DB path: `--db /path/to/emails.sqlite`

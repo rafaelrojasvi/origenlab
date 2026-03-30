@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 import re
 
 from origenlab_email_pipeline.business_mart import (
@@ -14,6 +13,7 @@ from origenlab_email_pipeline.business_mart import (
     is_noise_sender,
     primary_sender_email,
 )
+from origenlab_email_pipeline.timeutil import now_iso
 
 TECHNICAL_INQUIRY_RE = re.compile(
     r"\b(especificaci[oó]n|ficha t[eé]cnica|instalaci[oó]n|calibraci[oó]n|mantenimiento|"
@@ -47,10 +47,6 @@ class EmailSignalFact:
     confidence_score: float
     strength_score: float
     rationale_json: str
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def infer_direction(sender_domain: str | None, internal_domains: set[str]) -> str:

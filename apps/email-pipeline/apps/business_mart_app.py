@@ -16,6 +16,7 @@ from origenlab_email_pipeline.cases_review_queue import (
     fetch_cases_review_queue,
 )
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
 from origenlab_email_pipeline.tatiana_copilot.pilot_schemas import extract_asunto_from_draft
 from origenlab_email_pipeline.tatiana_copilot.streamlit_draft_helpers import (
     draft_case_from_email_row,
@@ -278,12 +279,13 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
     except Exception as exc:
         st.warning(f"No se pudo agrupar por source_file: {exc}")
 
+    _gmail_where = sql_predicate_contacto_gmail_source()
     n_gmail_c = (
         int(
             conn.execute(
-                """
+                f"""
                 SELECT COUNT(*) FROM emails
-                WHERE lower(source_file) LIKE 'gmail:contacto@origenlab.cl%'
+                WHERE {_gmail_where}
                 """
             ).fetchone()[0]
         )
@@ -430,8 +432,7 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
 
 def _where_contacto_gmail_source(*, table_alias: str | None = None) -> str:
     """SQL fragment: lower(<alias>.source_file) LIKE contacto Gmail Workspace pattern."""
-    col = "source_file" if not table_alias else f"{table_alias}.source_file"
-    return f"lower({col}) LIKE 'gmail:contacto@origenlab.cl%'"
+    return sql_predicate_contacto_gmail_source(table_alias=table_alias, coalesce_null=False)
 
 
 def _contacto_gmail_upper_slack(slack_days: int = 2) -> str:

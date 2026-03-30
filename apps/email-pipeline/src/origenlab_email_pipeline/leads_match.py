@@ -12,7 +12,7 @@ import sqlite3
 
 from origenlab_email_pipeline.lead_upstream_reconcile import sql_upstream_active_bare
 from origenlab_email_pipeline.org_normalize import is_junk_org_name, normalize_org_name
-from origenlab_email_pipeline.pipeline_run_recorder import now_iso
+from origenlab_email_pipeline.timeutil import now_iso
 
 
 def _normalize_name_for_match(name: str | None) -> str:

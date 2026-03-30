@@ -1,11 +1,15 @@
 # Gmail / Google Workspace and this pipeline
 
-## Two ways to pull mail into SQLite
+## Operational default vs legacy IMAP
 
-| Mailbox host | Script | Auth |
-|--------------|--------|------|
-| **Titan / generic IMAP** (password) | `04_imap_to_sqlite.py` | `ORIGENLAB_IMAP_*` |
-| **Google Workspace / Gmail** (Case A) | `05_workspace_gmail_imap_to_sqlite.py` | OAuth2 desktop + `ORIGENLAB_GMAIL_*` |
+**Primary (operational mailbox path):** **Google Workspace Gmail** via **`05_workspace_gmail_imap_to_sqlite.py`** and **`ORIGENLAB_GMAIL_*`**. Ingested rows use **`source_file`** values prefixed with **`gmail:`**. Streamlit **Actividad contacto Gmail**, **Casos para revisar**, and Gmail-sourced **Borrador comercial** depend on those **`gmail:contacto@...`** rows (see [`RUNBOOK.md`](../RUNBOOK.md#m-eprun-mailbox-primary)).
+
+**Legacy / optional:** **Titan (or any password IMAP)** via **`04_imap_to_sqlite.py`** and **`ORIGENLAB_IMAP_*`**. Rows use **`imap:`** prefixes; they are **not** picked up by the contacto Gmail–specific Streamlit filters.
+
+| Role | Mailbox host | Script | Auth |
+|------|--------------|--------|------|
+| **Primary** | **Google Workspace / Gmail** | `05_workspace_gmail_imap_to_sqlite.py` | OAuth2 desktop + `ORIGENLAB_GMAIL_*` |
+| **Legacy / optional** | **Titan / generic IMAP** (password) | `04_imap_to_sqlite.py` | `ORIGENLAB_IMAP_*` |
 
 Workspace ingest is documented end-to-end in **[WORKSPACE_GMAIL_IMAP.md](WORKSPACE_GMAIL_IMAP.md)** (`uv sync --group workspace`).
 

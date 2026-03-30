@@ -1,4 +1,9 @@
-"""SQLite schema and helpers for email rows."""
+"""Foundation SQLite layer: raw archive + mart DDL and connection helpers.
+
+`init_schema` owns `emails` / `attachments` DDL (and related migrations), pulls in pipeline-meta
+and business-mart table definitions, and is the first step in `sqlite_migrate.migrate_sqlite_schema`.
+Ingest scripts insert rows; domain scoring and reporting live in other modules.
+"""
 
 from __future__ import annotations
 
@@ -150,7 +155,7 @@ def insert_email(
     top_reply_clean: str | None = None,
     attachment_count: int | None = None,
     has_attachments: bool | None = None,
-) -> None:
+) -> int:
     cur = conn.execute(
         """
         INSERT INTO emails

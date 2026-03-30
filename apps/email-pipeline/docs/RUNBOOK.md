@@ -10,8 +10,34 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 ## Path and command policy
 
 - Working directory: `apps/email-pipeline/` (from monorepo root: `cd apps/email-pipeline`).
+- **Prefer `uv run python scripts/...` (or `uv run bash ...`)** from that directory so the project package and env match CI and [`scripts/README.md`](../scripts/README.md). Paths like `scripts/qa/publish_gate.py` are part of the operational contract; if you relocate scripts, update [`SCHEMA_OWNERSHIP.md`](pipeline/SCHEMA_OWNERSHIP.md) and **`tests/test_critical_script_paths.py`** together.
+- **Lead-account tools** — canonical copies live under `scripts/leads/` (`build_lead_account_rollup.py`, `match_lead_accounts_to_existing_orgs.py`, etc.); root-level `scripts/*.py` names are thin wrappers for compatibility ([`scripts/README.md`](../scripts/README.md)).
 - Prefer environment variables over machine-specific paths (`ORIGENLAB_SQLITE_PATH`, `ORIGENLAB_REPORTS_DIR`, `.env` from [`.env.example`](../.env.example)).
 - Sensitive outputs and large artifacts stay **outside** git (default data root `~/data/origenlab-email/` — see [`DATA_LOCATIONS.md`](DATA_LOCATIONS.md#m-epdata-root)).
+
+---
+
+<a id="m-eprun-mailbox-primary"></a>
+## Primary mailbox path (Google Workspace Gmail)
+
+For **live** mail for **contacto@origenlab.cl** on **Google Workspace**, the operational ingest path is **[`05_workspace_gmail_imap_to_sqlite.py`](../scripts/ingest/05_workspace_gmail_imap_to_sqlite.py)** with OAuth (see [`docs/ingest/WORKSPACE_GMAIL_IMAP.md`](ingest/WORKSPACE_GMAIL_IMAP.md)). Messages are stored in **`emails`** with **`source_file`** values like **`gmail:contacto@origenlab.cl/...`**.
+
+**Titan (password IMAP)** via **[`04_imap_to_sqlite.py`](../scripts/ingest/04_imap_to_sqlite.py)** ([`docs/ingest/IMAP_CONTACTO.md`](ingest/IMAP_CONTACTO.md)) remains supported for legacy or alternate hosts; those rows use **`imap:...`** prefixes.
+
+In **Streamlit** ([`apps/business_mart_app.py`](../apps/business_mart_app.py)), **Actividad contacto Gmail**, **Casos para revisar**, and **Borrador comercial** when loading from the Gmail inbox filter **`gmail:contacto@origenlab.cl%`**. They do **not** include Titan-ingested rows; use **Salud de datos** (or raw SQL) if you need a mixed view of sources.
+
+---
+
+<a id="m-eprun-post-gmail-ingest"></a>
+## Post–Gmail ingest checklist
+
+After **`05_workspace_gmail_imap_to_sqlite.py`** succeeds against the **same** SQLite file your operators use (`ORIGENLAB_SQLITE_PATH` or default under `ORIGENLAB_DATA_ROOT`):
+
+1. **Mount / process** — Confirm Docker or local Streamlit points at that DB path (see [Docker: Streamlit business mart only](#m-eprun-docker-streamlit)).
+2. **Safe to inspect immediately (raw `emails`)** — **Actividad contacto Gmail** and **Casos para revisar** read **`emails`** for **`gmail:contacto@...`**. After ingest, reopen or refresh the app so it rereads SQLite; new messages appear without rebuilding marts. If the UI is empty, verify Workspace ingest actually wrote **`gmail:`** rows (not only **`imap:`**).
+3. **Rebuild business mart when** — You changed data that feeds organization/contact/document rollups, or Streamlit pages backed by mart tables look wrong. Run **[`build_business_mart.py`](../scripts/mart/build_business_mart.py)** on the host before expecting updated drill-downs (the Docker image does not build the mart).
+4. **Rebuild commercial intel when** — You want **Candidatos comerciales**, exports, or signal-driven views to reflect new mail. Run **`build_commercial_intel_v1.py`** (see [Commercial intelligence v1](#m-eprun-commercial-intel-v1); incremental by default, use **`--rebuild`** or **`--reprocess-days`** when you need a broader refresh).
+5. **Likely stale until rebuild** — Pages and widgets that join **`emails`** to **mart** or **`commercial_*`** tables may show old rollups or sparse signals until steps 3–4 complete. **Borrador comercial** can use verbatim text from **`emails`** immediately; richer context panels may still lag mart/commercial builds.
 
 ---
 

@@ -1,4 +1,9 @@
-"""Dashboard-oriented SQL views (recreated when schema layers are ensured)."""
+"""Dashboard-oriented SQL views (recreated when schema layers are ensured).
+
+Boundary: view definitions live here but encode **leads** semantics (e.g. ``sql_upstream_active``), so
+this module couples mart-style reporting to the lead pipeline. Refresh via
+``refresh_lead_match_summary_view`` / ``migrate_sqlite_schema`` — see ``sqlite_migrate``.
+"""
 
 from __future__ import annotations
 

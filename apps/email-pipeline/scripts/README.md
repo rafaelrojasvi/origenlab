@@ -1,6 +1,34 @@
 # Scripts
 
-Run from **`apps/email-pipeline/`** with `uv run python scripts/...` or `bash scripts/...`. Not installed as package entrypoints.
+## Quick navigation
+
+| Kind | What to use | Notes |
+|------|-------------|--------|
+| **Stable operational entrypoints** | Ingest ([`ingest/`](ingest/)), [`mart/build_business_mart.py`](mart/build_business_mart.py), [`commercial/build_commercial_intel_v1.py`](commercial/build_commercial_intel_v1.py), [`leads/run_leads_operational_stack.sh`](leads/run_leads_operational_stack.sh), QA ([`qa/publish_gate.py`](qa/publish_gate.py) and table below) | Procedures and ordering: [`docs/RUNBOOK.md`](../docs/RUNBOOK.md), schema map: [`docs/pipeline/SCHEMA_OWNERSHIP.md`](../docs/pipeline/SCHEMA_OWNERSHIP.md) |
+| **Lead-account (canonical)** | [`leads/build_lead_account_rollup.py`](leads/build_lead_account_rollup.py), [`leads/match_lead_accounts_to_existing_orgs.py`](leads/match_lead_accounts_to_existing_orgs.py), [`leads/validate_lead_account_rollup.py`](leads/validate_lead_account_rollup.py), [`leads/audit_lead_org_quality.py`](leads/audit_lead_org_quality.py) | Same code as root wrappers; detail: [`docs/leads/LEAD_ACCOUNT_LAYER.md`](../docs/leads/LEAD_ACCOUNT_LAYER.md) |
+| **Compatibility wrappers** | Root-level `scripts/build_lead_account_rollup.py`, `scripts/match_…`, etc. | Delegate to `leads/`; keep for bookmarks and old shell one-liners |
+| **One-off / exploratory** | [`tools/`](tools/), [`validation/`](validation/) (phase checks), [`ml/`](ml/), some [`dataset/`](dataset/) | Not the main weekly path; useful for debugging or optional ML |
+
+**Execution:** always from **`apps/email-pipeline/`** — **`uv run python scripts/...`** or **`uv run bash scripts/...`** (see below).
+
+## How to run
+
+From **`apps/email-pipeline/`** (monorepo: `cd apps/email-pipeline`):
+
+- **Preferred:** `uv run python scripts/...` or `uv run bash scripts/...` so the editable package and dependency groups resolve consistently.
+- Script locations (e.g. `scripts/qa/publish_gate.py`, `scripts/leads/build_lead_account_rollup.py`) are part of the **operational contract**: documented in [`docs/RUNBOOK.md`](../docs/RUNBOOK.md), [`docs/pipeline/SCHEMA_OWNERSHIP.md`](../docs/pipeline/SCHEMA_OWNERSHIP.md), and regression-tested under `tests/test_critical_script_paths.py`. **If you move a script, update docs and that test in the same change.**
+- Subfolder scripts that use `sys.path` should resolve the app root with `Path(__file__).resolve().parents[2]` when the file is `scripts/<subdir>/tool.py` (not `parent.parent`, which pointed at `scripts/` only). Shared reference: [`_bootstrap.py`](_bootstrap.py) exposes `APP_ROOT` / `SCRIPTS_DIR` for future imports.
+
+## Lead-account layer (rollup + mart match)
+
+**Canonical implementations** (same `sys.path` pattern as other `scripts/leads/*.py`):
+
+- [`leads/build_lead_account_rollup.py`](leads/build_lead_account_rollup.py) — full rollup rebuild  
+- [`leads/match_lead_accounts_to_existing_orgs.py`](leads/match_lead_accounts_to_existing_orgs.py) — match accounts → `organization_master`  
+- [`leads/validate_lead_account_rollup.py`](leads/validate_lead_account_rollup.py) — sanity checks  
+- [`leads/audit_lead_org_quality.py`](leads/audit_lead_org_quality.py) — org_name quality audit  
+
+**Thin compatibility wrappers** at the repo’s `scripts/` root ([`build_lead_account_rollup.py`](build_lead_account_rollup.py), etc.) delegate to the `leads/` copies so older commands and bookmarks keep working. Prefer documenting `scripts/leads/…` for new material.  
 
 ## Where to read
 

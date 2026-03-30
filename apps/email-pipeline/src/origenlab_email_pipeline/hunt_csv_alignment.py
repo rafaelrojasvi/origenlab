@@ -1,4 +1,7 @@
-"""Helpers to validate contact-hunt CSV id_lead alignment (current base vs merged)."""
+"""Contact-hunt CSV ``id_lead`` set alignment (current vs merged exports).
+
+Used by QA (e.g. operational trust), merge tooling, and operators validating that enriched hunt
+CSVs cover the same lead cohort as the base file."""
 
 from __future__ import annotations
 

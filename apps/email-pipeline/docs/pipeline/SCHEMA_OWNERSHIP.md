@@ -14,7 +14,7 @@ Canonical map of **who defines DDL**, **who ALTERs**, **who rebuilds row data**,
 
 Callers may still use `ensure_leads_tables()` / `ensure_lead_account_tables()` alone; defaults preserve prior behavior (backfill + view refresh).
 
-**Phase 2 adoption:** [`build_business_mart.py`](../../scripts/mart/build_business_mart.py), [`match_leads_to_mart.py`](../../scripts/leads/match_leads_to_mart.py), [`build_lead_account_rollup.py`](../../scripts/build_lead_account_rollup.py), and [`match_lead_accounts_to_existing_orgs.py`](../../scripts/match_lead_accounts_to_existing_orgs.py) call `migrate_sqlite_schema` with the appropriate `SchemaLayer` set. Operational one-shot: [`scripts/pipeline/run_aligned_stack.sh`](../../scripts/pipeline/run_aligned_stack.sh).
+**Phase 2 adoption:** [`build_business_mart.py`](../../scripts/mart/build_business_mart.py), [`match_leads_to_mart.py`](../../scripts/leads/match_leads_to_mart.py), [`build_lead_account_rollup.py`](../../scripts/leads/build_lead_account_rollup.py), and [`match_lead_accounts_to_existing_orgs.py`](../../scripts/leads/match_lead_accounts_to_existing_orgs.py) call `migrate_sqlite_schema` with the appropriate `SchemaLayer` set. Thin wrappers at [`scripts/build_lead_account_rollup.py`](../../scripts/build_lead_account_rollup.py) and [`scripts/match_lead_accounts_to_existing_orgs.py`](../../scripts/match_lead_accounts_to_existing_orgs.py) keep older paths working. Operational one-shot: [`scripts/pipeline/run_aligned_stack.sh`](../../scripts/pipeline/run_aligned_stack.sh).
 
 ---
 
@@ -76,10 +76,10 @@ Also invoked from `init_schema`, `ensure_leads_tables`, `ensure_lead_account_tab
 
 | Object | DDL owner | ALTER / deferred index | Data rebuild | View | Ownership |
 |--------|-----------|------------------------|--------------|------|-----------|
-| `lead_account_master` | [`lead_accounts_schema.py`](../../src/origenlab_email_pipeline/lead_accounts_schema.py) | — | [`build_lead_account_rollup.py`](../../scripts/build_lead_account_rollup.py) | optional via `refresh_view` | **Clean** |
+| `lead_account_master` | [`lead_accounts_schema.py`](../../src/origenlab_email_pipeline/lead_accounts_schema.py) | — | [`build_lead_account_rollup.py`](../../scripts/leads/build_lead_account_rollup.py) | optional via `refresh_view` | **Clean** |
 | `lead_account_aliases` | same | — | rollup | — | **Clean** |
 | `lead_account_membership` | same | — | rollup | — | **Clean** |
-| `lead_account_matches_existing_orgs` | same | `ADD pipeline_run_id` + index after (legacy DBs) | [`match_lead_accounts_to_existing_orgs.py`](../../scripts/match_lead_accounts_to_existing_orgs.py) | — | **Clean** (deferred index pattern) |
+| `lead_account_matches_existing_orgs` | same | `ADD pipeline_run_id` + index after (legacy DBs) | [`match_lead_accounts_to_existing_orgs.py`](../../scripts/leads/match_lead_accounts_to_existing_orgs.py) | — | **Clean** (deferred index pattern) |
 | `lead_account_overrides` | same | — | manual | — | **Clean** |
 
 ---

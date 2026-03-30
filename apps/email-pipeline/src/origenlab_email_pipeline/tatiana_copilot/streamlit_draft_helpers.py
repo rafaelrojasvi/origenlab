@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from origenlab_email_pipeline.config import Settings
+from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -145,8 +146,9 @@ def load_contacto_gmail_email_choices_df(
     import pandas as pd
 
     lim = max(1, min(int(limit), 500))
+    _gmail_c = sql_predicate_contacto_gmail_source()
     df = pd.read_sql_query(
-        """
+        f"""
         SELECT
           id,
           date_iso,
@@ -154,7 +156,7 @@ def load_contacto_gmail_email_choices_df(
           substr(COALESCE(sender, ''), 1, 100) AS sender_preview,
           source_file
         FROM emails
-        WHERE lower(source_file) LIKE 'gmail:contacto@origenlab.cl%'
+        WHERE {_gmail_c}
         ORDER BY
           CASE WHEN date_iso IS NULL OR trim(date_iso) = '' THEN 1 ELSE 0 END,
           date_iso DESC
@@ -179,7 +181,7 @@ def load_contacto_gmail_email_choices_df(
           substr(COALESCE(sender, ''), 1, 100) AS sender_preview,
           source_file
         FROM emails
-        WHERE lower(source_file) LIKE 'gmail:contacto@origenlab.cl%'
+        WHERE {_gmail_c}
           AND id IN ({placeholders})
         """,
         conn,
