@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -19,7 +21,8 @@ def _repo_root() -> Path:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="ORIGENLAB_",
-        env_file=".env",
+        # Repo-local .env (apps/email-pipeline/.env), not cwd — works from monorepo root too.
+        env_file=str(_repo_root() / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -52,6 +55,43 @@ class Settings(BaseSettings):
         description="If false, print OAuth URL only (use on WSL when xdg-open/gio fails)",
     )
 
+    # Tatiana copilot — OpenAI-compatible chat (optional; see docs/dataset/TATIANA_DRAFTING_COPILOT.md)
+    tatiana_openai_api_key: str | None = Field(
+        default=None,
+        description="API key for OpenAIChatDraftGenerator (falls back to OPENAI_API_KEY if unset)",
+    )
+    tatiana_openai_model: str = Field(
+        default="gpt-4o-mini",
+        description="Chat model id for Tatiana draft generation",
+    )
+    tatiana_openai_base_url: str | None = Field(
+        default=None,
+        description="Optional OpenAI API base URL (proxies, Azure-style endpoints)",
+    )
+    tatiana_openai_timeout_seconds: float = Field(
+        default=60.0,
+        ge=5.0,
+        le=600.0,
+        description="HTTP timeout for OpenAI chat completion calls",
+    )
+    tatiana_llm_min_body_chars: int = Field(
+        default=40,
+        ge=0,
+        le=10_000,
+        description="Abstain if case body_text is shorter than this (chars)",
+    )
+    tatiana_llm_abstain_on_empty_retrieval: bool = Field(
+        default=True,
+        description="If true, abstain when both style and precedent lists in the prompt are empty",
+    )
+
+    def resolved_tatiana_openai_api_key(self) -> str | None:
+        k = (self.tatiana_openai_api_key or "").strip()
+        if k:
+            return k
+        env = (os.environ.get("OPENAI_API_KEY") or "").strip()
+        return env or None
+
     def resolved_raw_pst_dir(self) -> Path:
         return self.raw_pst_dir or (self.data_root / "raw_pst")
 
@@ -71,4 +111,8 @@ class Settings(BaseSettings):
 
 
 def load_settings() -> Settings:
+    # Pydantic only binds ORIGENLAB_* fields from .env; OPENAI_API_KEY must hit os.environ.
+    env_path = _repo_root() / ".env"
+    if env_path.is_file():
+        load_dotenv(env_path, override=False)
     return Settings()

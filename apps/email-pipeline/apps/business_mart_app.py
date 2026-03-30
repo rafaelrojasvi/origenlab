@@ -1,13 +1,31 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+from datetime import date
 from pathlib import Path
+from typing import NamedTuple
 
 import pandas as pd
 import streamlit as st
 
+from origenlab_email_pipeline.cases_review_queue import (
+    commercial_hint_es,
+    fetch_case_detail,
+    fetch_cases_review_queue,
+)
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.tatiana_copilot.pilot_schemas import extract_asunto_from_draft
+from origenlab_email_pipeline.tatiana_copilot.streamlit_draft_helpers import (
+    draft_case_from_email_row,
+    draft_case_from_manual,
+    export_streamlit_review_artifact,
+    get_cached_tatiana_index,
+    load_contacto_gmail_email_choices_df,
+    new_streamlit_export_dir,
+    run_origenlab_draft_package,
+)
 
 
 def _connect_ro(db_path: Path) -> sqlite3.Connection:
@@ -21,8 +39,9 @@ def _connect_ro(db_path: Path) -> sqlite3.Connection:
 
 
 def _has_table(conn: sqlite3.Connection, name: str) -> bool:
+    """True if a table or view with this name exists (SQLite lists views separately)."""
     row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        "SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name=?",
         (name,),
     ).fetchone()
     return bool(row)
@@ -30,6 +49,541 @@ def _has_table(conn: sqlite3.Connection, name: str) -> bool:
 
 def _load_df(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> pd.DataFrame:
     return pd.read_sql_query(sql, conn, params=params)
+
+
+def _safe_count(conn: sqlite3.Connection, table: str) -> int | None:
+    if not _has_table(conn, table):
+        return None
+    row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+    return int(row[0]) if row else 0
+
+
+def _safe_scalar_sql(conn: sqlite3.Connection, sql: str) -> str | None:
+    try:
+        row = conn.execute(sql).fetchone()
+        if not row or row[0] is None:
+            return None
+        s = str(row[0]).strip()
+        return s if s else None
+    except sqlite3.Error:
+        return None
+
+
+def _date_prefix_for_compare(value: str | None) -> str | None:
+    if not value:
+        return None
+    v = value.strip()
+    if len(v) >= 10 and v[4] == "-" and v[7] == "-":
+        return v[:10]
+    return None
+
+
+def _days_since_iso_prefix(prefix: str | None) -> int | None:
+    if not prefix or len(prefix) < 10:
+        return None
+    try:
+        y, m, d = int(prefix[:4]), int(prefix[5:7]), int(prefix[8:10])
+        end = date(y, m, d)
+        return (date.today() - end).days
+    except ValueError:
+        return None
+
+
+class EmailDateHealthSnapshot(NamedTuple):
+    """Read-only stats for emails.date_iso (raw vs future-filtered)."""
+
+    raw_min: str | None
+    raw_max: str | None
+    future_dated_count: int
+    max_future_date_iso: str | None
+    plausible_max_date_iso: str | None
+    slack_days: int
+
+
+def load_email_date_health(
+    conn: sqlite3.Connection,
+    *,
+    slack_days: int = 2,
+) -> EmailDateHealthSnapshot:
+    """Detect future-dated rows via SQLite date() and max plausible MAX(date_iso).
+
+    Suspicious: date(date_iso) > date('now', '+N days'). Rows where date() is NULL are
+    not counted as future (may be malformed — see doc). Plausible max includes rows
+    where date() IS NULL OR date() <= threshold (so unparseable strings can still
+    affect MAX lexicographically — narrow edge case).
+    """
+    n = slack_days
+    if n < 0 or n > 3660:
+        n = 2
+    now_delta = f"+{n} days"
+
+    raw_min = _safe_scalar_sql(
+        conn, "SELECT MIN(date_iso) FROM emails WHERE date_iso IS NOT NULL AND trim(date_iso) != ''"
+    )
+    raw_max = _safe_scalar_sql(
+        conn, "SELECT MAX(date_iso) FROM emails WHERE date_iso IS NOT NULL AND trim(date_iso) != ''"
+    )
+
+    future_dated_count = 0
+    max_future_date_iso: str | None = None
+    plausible_max_date_iso: str | None = None
+
+    try:
+        row_fc = conn.execute(
+            """
+            SELECT COUNT(*) FROM emails
+            WHERE date_iso IS NOT NULL AND trim(date_iso) != ''
+              AND date(date_iso) > date('now', ?)
+            """,
+            (now_delta,),
+        ).fetchone()
+        if row_fc:
+            future_dated_count = int(row_fc[0])
+    except sqlite3.Error:
+        future_dated_count = -1  # signal SQL failure
+
+    try:
+        row_mf = conn.execute(
+            """
+            SELECT MAX(date_iso) FROM emails
+            WHERE date_iso IS NOT NULL AND trim(date_iso) != ''
+              AND date(date_iso) > date('now', ?)
+            """,
+            (now_delta,),
+        ).fetchone()
+        if row_mf and row_mf[0] is not None:
+            mf = str(row_mf[0]).strip()
+            max_future_date_iso = mf if mf else None
+        else:
+            max_future_date_iso = None
+    except sqlite3.Error:
+        max_future_date_iso = None
+
+    try:
+        row_pm = conn.execute(
+            """
+            SELECT MAX(date_iso) FROM emails
+            WHERE date_iso IS NOT NULL AND trim(date_iso) != ''
+              AND (
+                date(date_iso) IS NULL
+                OR date(date_iso) <= date('now', ?)
+              )
+            """,
+            (now_delta,),
+        ).fetchone()
+        if row_pm and row_pm[0] is not None:
+            pm = str(row_pm[0]).strip()
+            plausible_max_date_iso = pm if pm else None
+        else:
+            plausible_max_date_iso = None
+    except sqlite3.Error:
+        plausible_max_date_iso = None
+
+    if future_dated_count < 0:
+        future_dated_count = 0
+
+    return EmailDateHealthSnapshot(
+        raw_min=raw_min,
+        raw_max=raw_max,
+        future_dated_count=future_dated_count,
+        max_future_date_iso=max_future_date_iso,
+        plausible_max_date_iso=plausible_max_date_iso,
+        slack_days=n,
+    )
+
+
+def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
+    """Read-only snapshot: DB path, counts, date span, sources, mart vs raw hints."""
+    st.subheader("Salud de datos y vigencia")
+    st.caption(
+        "Vista técnica: el archivo SQLite mostrado es el que ve esta app. "
+        "No sustituye registros de ingest ni ejecuta reconstrucción del mart."
+    )
+    st.markdown(f"**Ruta SQLite:** `{db_path}`")
+
+    if not _has_table(conn, "emails"):
+        st.error("No existe la tabla `emails` en este archivo.")
+        return
+
+    counts = {
+        "emails": _safe_count(conn, "emails"),
+        "attachments": _safe_count(conn, "attachments"),
+        "attachment_extracts": _safe_count(conn, "attachment_extracts"),
+        "contact_master": _safe_count(conn, "contact_master"),
+        "organization_master": _safe_count(conn, "organization_master"),
+        "document_master": _safe_count(conn, "document_master"),
+        "opportunity_signals": _safe_count(conn, "opportunity_signals"),
+    }
+    count_rows = [{"tabla": k, "filas": counts[k] if counts[k] is not None else "— (sin tabla)"} for k in counts]
+    st.markdown("#### Conteos principales")
+    st.dataframe(pd.DataFrame(count_rows), use_container_width=True, hide_index=True)
+
+    edh = load_email_date_health(conn, slack_days=2)
+    st.markdown("#### Archivo crudo (`emails.date_iso`)")
+    st.write(
+        {
+            "min(date_iso)": edh.raw_min or "—",
+            "max(date_iso) (absoluto)": edh.raw_max or "—",
+            "max(date_iso) plausible": edh.plausible_max_date_iso or "—",
+            "filas con fecha futura sospechosa": edh.future_dated_count,
+            "umbral (días sobre hoy)": edh.slack_days,
+        }
+    )
+    if edh.future_dated_count > 0:
+        st.warning(
+            f"Se detectaron **{edh.future_dated_count}** filas donde `date(date_iso)` supera "
+            f"hoy + **{edh.slack_days}** días (posible dato corrupto o cabecera incorrecta). "
+            f"Máximo entre ellas: `{edh.max_future_date_iso or '—'}`. "
+            "**La vigencia y la comparación con el mart usan el máximo plausible**, no el absoluto."
+        )
+    st.caption(
+        "El máximo plausible excluye filas cuya fecha calendario (según SQLite `date(date_iso)`) "
+        "está más de {n} días en el futuro; las filas con `date_iso` no parseable por SQLite "
+        "siguen pudiendo entrar en ese máximo. Ver documentación.".format(n=edh.slack_days)
+    )
+
+    if edh.plausible_max_date_iso:
+        raw_prefix_for_vigencia = _date_prefix_for_compare(edh.plausible_max_date_iso)
+    elif edh.future_dated_count == 0:
+        raw_prefix_for_vigencia = _date_prefix_for_compare(edh.raw_max)
+    else:
+        raw_prefix_for_vigencia = None
+        st.warning(
+            "No hay **máximo plausible** calculable (p. ej. todas las fechas parseables están en el futuro). "
+            "La vigencia frente al mart quedará en **desconocida** hasta corregir fechas o el ingest."
+        )
+    days_old = _days_since_iso_prefix(raw_prefix_for_vigencia)
+    if days_old is not None and days_old > 90:
+        st.warning(
+            f"Según la fecha máxima **plausible**, el último correo parece tener **~{days_old} días** "
+            "de antigüedad (umbral 90 días). Verifique ingest si esperaba correo reciente."
+        )
+
+    st.markdown("#### Origen (`source_file`)")
+    try:
+        src_df = _load_df(
+            conn,
+            """
+            SELECT source_file, COUNT(*) AS n
+            FROM emails
+            GROUP BY source_file
+            ORDER BY n DESC
+            LIMIT 40
+            """,
+        )
+        if src_df.empty:
+            st.info("No hay filas en `emails`.")
+        else:
+            st.dataframe(src_df, use_container_width=True, hide_index=True)
+    except Exception as exc:
+        st.warning(f"No se pudo agrupar por source_file: {exc}")
+
+    n_gmail_c = (
+        int(
+            conn.execute(
+                """
+                SELECT COUNT(*) FROM emails
+                WHERE lower(source_file) LIKE 'gmail:contacto@origenlab.cl%'
+                """
+            ).fetchone()[0]
+        )
+        if _has_table(conn, "emails")
+        else 0
+    )
+    n_imap_c = (
+        int(
+            conn.execute(
+                """
+                SELECT COUNT(*) FROM emails
+                WHERE lower(source_file) LIKE 'imap:contacto@origenlab.cl%'
+                """
+            ).fetchone()[0]
+        )
+        if _has_table(conn, "emails")
+        else 0
+    )
+    st.write(
+        {
+            "gmail:contacto@origenlab.cl*": n_gmail_c,
+            "imap:contacto@origenlab.cl*": n_imap_c,
+        }
+    )
+    if (n_gmail_c + n_imap_c) == 0 and (counts.get("emails") or 0) > 0:
+        st.warning(
+            "No se detectaron filas con `source_file` típico de **Gmail Workspace** "
+            "(`gmail:contacto@...`) ni **Titan IMAP** (`imap:contacto@...`). "
+            "Si el buzón debería estar en este archivo, revise ingest y prefijos reales arriba."
+        )
+
+    st.markdown("#### Mart vs archivo crudo (heurística)")
+    contact_mx = None
+    org_mx = None
+    doc_mx = None
+    opp_mx = None
+    if _has_table(conn, "contact_master"):
+        contact_mx = _safe_scalar_sql(conn, "SELECT MAX(last_seen_at) FROM contact_master")
+    if _has_table(conn, "organization_master"):
+        org_mx = _safe_scalar_sql(conn, "SELECT MAX(last_seen_at) FROM organization_master")
+    if _has_table(conn, "document_master"):
+        doc_mx = _safe_scalar_sql(conn, "SELECT MAX(sent_at) FROM document_master")
+    if _has_table(conn, "opportunity_signals"):
+        opp_mx = _safe_scalar_sql(conn, "SELECT MAX(created_at) FROM opportunity_signals")
+
+    mart_candidates: list[str] = []
+    for label, val in (
+        ("contact_master.last_seen_at", contact_mx),
+        ("organization_master.last_seen_at", org_mx),
+        ("document_master.sent_at", doc_mx),
+        ("opportunity_signals.created_at", opp_mx),
+    ):
+        p = _date_prefix_for_compare(val)
+        if p:
+            mart_candidates.append(p)
+    mart_peak = max(mart_candidates) if mart_candidates else None
+    raw_p = raw_prefix_for_vigencia
+
+    verdict = "unknown"
+    verdict_detail = ""
+    if raw_p and mart_peak:
+        if mart_peak < raw_p:
+            verdict = "stale"
+            verdict_detail = (
+                f"El máximo visto en mart ({mart_peak}) es **anterior** al último `date_iso` "
+                f"**plausible** del archivo ({raw_p}). Conviene ejecutar `build_business_mart` tras ingest."
+            )
+        else:
+            verdict = "fresh"
+            verdict_detail = (
+                f"Picos de fechas en mart ({mart_peak}) alcanzan o superan el último correo **plausible** ({raw_p}) "
+                "(comparación por prefijo YYYY-MM-DD)."
+            )
+    elif not raw_p:
+        verdict = "unknown"
+        verdict_detail = "No hay `date_iso` útil en `emails` (ni plausible ni absoluto) para comparar."
+    elif not mart_peak:
+        verdict = "unknown"
+        verdict_detail = "No hay fechas en tablas del mart para comparar (mart vacío o sin fechas)."
+
+    st.write(
+        {
+            "contact_master.max(last_seen_at)": contact_mx or "—",
+            "organization_master.max(last_seen_at)": org_mx or "—",
+            "document_master.max(sent_at)": doc_mx or "—",
+            "opportunity_signals.max(created_at)": opp_mx or "—",
+            "mart_peak_date (max de prefijos anteriores)": mart_peak or "—",
+            "prefijo fecha crudo usado en vigencia (plausible si existe)": raw_p or "—",
+            "juicio_mart_vs_raw": verdict,
+        }
+    )
+    if verdict == "stale":
+        st.error(verdict_detail)
+    elif verdict == "fresh":
+        st.success(verdict_detail)
+    else:
+        st.info(verdict_detail)
+
+    st.markdown("#### Metadatos de pipeline (si existen)")
+    if _has_table(conn, "pipeline_kv"):
+        try:
+            kv_df = _load_df(
+                conn,
+                """
+                SELECT k, v, updated_at
+                FROM pipeline_kv
+                ORDER BY updated_at DESC
+                LIMIT 20
+                """,
+            )
+            st.dataframe(kv_df, use_container_width=True, hide_index=True)
+        except Exception as exc:
+            st.warning(f"pipeline_kv: {exc}")
+    else:
+        st.caption("Tabla `pipeline_kv` no presente.")
+
+    if _has_table(conn, "pipeline_run"):
+        try:
+            run_df = _load_df(
+                conn,
+                """
+                SELECT id, started_at, finished_at, script_name, notes
+                FROM pipeline_run
+                WHERE script_name LIKE '%build_business_mart%'
+                ORDER BY id DESC
+                LIMIT 5
+                """,
+            )
+            st.markdown("Últimas ejecuciones registradas de **build_business_mart**:")
+            if run_df.empty:
+                st.caption("Sin filas que coincidan.")
+            else:
+                st.dataframe(run_df, use_container_width=True, hide_index=True)
+        except Exception as exc:
+            st.warning(f"pipeline_run: {exc}")
+    else:
+        st.caption("Tabla `pipeline_run` no presente.")
+
+    st.markdown("---")
+    st.caption(
+        "Interpretación y límites: `apps/email-pipeline/docs/pipeline/STREAMLIT_DATA_FRESHNESS.md`."
+    )
+
+
+def _where_contacto_gmail_source(*, table_alias: str | None = None) -> str:
+    """SQL fragment: lower(<alias>.source_file) LIKE contacto Gmail Workspace pattern."""
+    col = "source_file" if not table_alias else f"{table_alias}.source_file"
+    return f"lower({col}) LIKE 'gmail:contacto@origenlab.cl%'"
+
+
+def _contacto_gmail_upper_slack(slack_days: int = 2) -> str:
+    n = slack_days if 0 <= slack_days <= 3660 else 2
+    return f"+{n} days"
+
+
+class ContactoGmailActivitySummary(NamedTuple):
+    total_rows: int
+    count_7d: int
+    count_30d: int
+    count_90d: int
+    most_recent_plausible_iso: str | None
+
+
+def load_contacto_gmail_activity_summary(
+    conn: sqlite3.Connection,
+    *,
+    slack_days: int = 2,
+) -> ContactoGmailActivitySummary:
+    """Counts for Gmail-ingested contacto@origenlab.cl rows; windows use SQLite date()."""
+    w = _where_contacto_gmail_source()
+    upper = _contacto_gmail_upper_slack(slack_days)
+    try:
+        total = int(conn.execute(f"SELECT COUNT(*) FROM emails WHERE {w}").fetchone()[0])
+    except sqlite3.Error:
+        total = 0
+
+    def _window_count(days: int) -> int:
+        try:
+            row = conn.execute(
+                f"""
+                SELECT COUNT(*) FROM emails
+                WHERE {w}
+                  AND date_iso IS NOT NULL AND trim(date_iso) != ''
+                  AND date(date_iso) >= date('now', ?)
+                  AND date(date_iso) <= date('now', ?)
+                """,
+                (f"-{days} days", upper),
+            ).fetchone()
+            return int(row[0]) if row else 0
+        except sqlite3.Error:
+            return 0
+
+    mr: str | None = None
+    try:
+        row_mr = conn.execute(
+            f"""
+            SELECT MAX(date_iso) FROM emails
+            WHERE {w}
+              AND date_iso IS NOT NULL AND trim(date_iso) != ''
+              AND (date(date_iso) IS NULL OR date(date_iso) <= date('now', ?))
+            """,
+            (upper,),
+        ).fetchone()
+        if row_mr and row_mr[0] is not None:
+            s = str(row_mr[0]).strip()
+            mr = s if s else None
+    except sqlite3.Error:
+        mr = None
+
+    return ContactoGmailActivitySummary(
+        total_rows=total,
+        count_7d=_window_count(7),
+        count_30d=_window_count(30),
+        count_90d=_window_count(90),
+        most_recent_plausible_iso=mr,
+    )
+
+
+def load_contacto_gmail_recent_emails_df(conn: sqlite3.Connection, *, limit: int = 50) -> pd.DataFrame:
+    w = _where_contacto_gmail_source()
+    lim = max(1, min(int(limit), 500))
+    try:
+        return _load_df(
+            conn,
+            f"""
+            SELECT
+              date_iso,
+              substr(COALESCE(subject, ''), 1, 120) AS subject_preview,
+              substr(COALESCE(sender, ''), 1, 120) AS sender_preview,
+              source_file
+            FROM emails
+            WHERE {w}
+            ORDER BY
+              CASE WHEN date_iso IS NULL OR trim(date_iso) = '' THEN 1 ELSE 0 END,
+              date_iso DESC
+            LIMIT ?
+            """,
+            (lim,),
+        )
+    except Exception:
+        return pd.DataFrame()
+
+
+def load_contacto_gmail_recent_documents_df(conn: sqlite3.Connection, *, limit: int = 25) -> pd.DataFrame:
+    if not _has_table(conn, "document_master"):
+        return pd.DataFrame()
+    w = _where_contacto_gmail_source(table_alias="e")
+    lim = max(1, min(int(limit), 200))
+    try:
+        return _load_df(
+            conn,
+            f"""
+            SELECT
+              d.sent_at,
+              substr(COALESCE(d.filename, ''), 1, 80) AS filename_preview,
+              d.doc_type,
+              d.sender_domain,
+              d.email_id
+            FROM document_master d
+            JOIN emails e ON e.id = d.email_id
+            WHERE {w}
+            ORDER BY
+              CASE WHEN d.sent_at IS NULL OR trim(d.sent_at) = '' THEN 1 ELSE 0 END,
+              d.sent_at DESC
+            LIMIT ?
+            """,
+            (lim,),
+        )
+    except Exception:
+        return pd.DataFrame()
+
+
+def load_contacto_gmail_recent_signals_df(conn: sqlite3.Connection, *, limit: int = 25) -> pd.DataFrame:
+    if not _has_table(conn, "opportunity_signals"):
+        return pd.DataFrame()
+    w = _where_contacto_gmail_source(table_alias="e")
+    lim = max(1, min(int(limit), 200))
+    try:
+        return _load_df(
+            conn,
+            f"""
+            SELECT
+              s.created_at,
+              s.signal_type,
+              s.entity_kind,
+              substr(COALESCE(s.entity_key, ''), 1, 80) AS entity_key_preview,
+              s.score,
+              s.email_id
+            FROM opportunity_signals s
+            JOIN emails e ON e.id = s.email_id
+            WHERE {w}
+            ORDER BY
+              CASE WHEN s.created_at IS NULL OR trim(s.created_at) = '' THEN 1 ELSE 0 END,
+              s.created_at DESC
+            LIMIT ?
+            """,
+            (lim,),
+        )
+    except Exception:
+        return pd.DataFrame()
 
 
 BRAND = {
@@ -173,6 +727,437 @@ def _signal_label(signal_type: str) -> tuple[str, str]:
         ),
     }
     return m.get(signal_type, (signal_type, "Señal heurística (ver detalles)."))
+
+
+def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path) -> None:
+    """Read-only recent activity for Gmail-ingested contacto@origenlab.cl mailbox."""
+    st.subheader("Actividad reciente (contacto Gmail)")
+    st.caption(
+        "Muestra correos con **`source_file` tipo Gmail Workspace** para `contacto@origenlab.cl`. "
+        "No incluye buzón Titan (`imap:contacto@...`); para mezcla de orígenes use **Salud de datos**."
+    )
+    if not _has_table(conn, "emails"):
+        st.error("No existe la tabla `emails` en este archivo.")
+        return
+
+    summary = load_contacto_gmail_activity_summary(conn, slack_days=2)
+    if summary.total_rows == 0:
+        st.warning(
+            "No hay filas con origen **`gmail:contacto@origenlab.cl`** en `emails`. "
+            "Si el correo operativo está en **Titan IMAP**, es normal; use la tabla de orígenes en **Salud de datos** "
+            "o ejecute `05_workspace_gmail_imap_to_sqlite.py` tras configurar OAuth (ver `docs/ingest/WORKSPACE_GMAIL_IMAP.md`)."
+        )
+        return
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        _kpi("Mensajes contacto Gmail (total)", f"{summary.total_rows:,}")
+    with c2:
+        _kpi("Últimos 7 días", f"{summary.count_7d:,}", help_text="date_iso parseable por SQLite en ventana.")
+    with c3:
+        _kpi("Últimos 30 días", f"{summary.count_30d:,}")
+    with c4:
+        _kpi("Últimos 90 días", f"{summary.count_90d:,}")
+    st.markdown(
+        f"**Última fecha plausible (`date_iso`):** `{summary.most_recent_plausible_iso or '—'}` "
+        "(excluye fechas > hoy + 2 días en calendario SQLite)."
+    )
+
+    st.markdown("#### Correos recientes (contacto Gmail)")
+    emails_df = load_contacto_gmail_recent_emails_df(conn, limit=50)
+    if emails_df.empty:
+        st.caption("Sin filas para mostrar.")
+    else:
+        st.dataframe(emails_df, use_container_width=True, hide_index=True)
+
+    docs_df = load_contacto_gmail_recent_documents_df(conn, limit=25)
+    if _has_table(conn, "document_master"):
+        st.markdown("#### Documentos recientes (correos contacto Gmail)")
+        if docs_df.empty:
+            st.caption("Sin documentos asociados a estos `email_id` o mart no construido.")
+        else:
+            docs_show = docs_df.copy()
+            docs_show["doc_type"] = docs_show["doc_type"].apply(
+                lambda x: _friendly_doc_type(str(x)) if pd.notna(x) else _friendly_doc_type(None)
+            )
+            st.dataframe(
+                docs_show.rename(
+                    columns={
+                        "sent_at": "Enviado",
+                        "filename_preview": "Archivo",
+                        "doc_type": "Tipo",
+                        "sender_domain": "Dominio remitente",
+                        "email_id": "email_id",
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    sig_df = load_contacto_gmail_recent_signals_df(conn, limit=25)
+    if _has_table(conn, "opportunity_signals"):
+        st.markdown("#### Señales recientes ligadas a esos correos")
+        if sig_df.empty:
+            st.caption("Sin señales con `email_id` unido a contacto Gmail (o mart/señales vacíos).")
+        else:
+            sig_display = sig_df.copy()
+            sig_display["señal"] = sig_display["signal_type"].apply(lambda x: _signal_label(str(x))[0])
+            st.dataframe(
+                sig_display.rename(
+                    columns={
+                        "created_at": "Detectado el",
+                        "entity_kind": "entidad",
+                        "entity_key_preview": "Clave",
+                        "score": "score",
+                    }
+                )[
+                    [
+                        "Detectado el",
+                        "señal",
+                        "entidad",
+                        "Clave",
+                        "score",
+                        "email_id",
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    st.caption(f"Archivo: `{db_path}` · Vista informativa (no es bandeja de entrada completa).")
+
+
+def render_cases_to_review_page(conn: sqlite3.Connection, db_path: Path) -> None:
+    """Cola operativa de mensajes Gmail contacto para revisión; entrega a Borrador comercial (sin redactar aquí)."""
+    st.subheader("Casos para revisar")
+    st.caption(
+        "Lista **mensaje por mensaje** (un correo = un caso) del buzón **Gmail de contacto**. "
+        "No envía correos ni modifica la base. Para redactar, use **Borrador comercial**."
+    )
+    if not _has_table(conn, "emails"):
+        st.error("No se encontró la tabla de mensajes en este archivo.")
+        return
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        win = st.selectbox(
+            "Ventana de fechas",
+            options=[7, 30, 90],
+            format_func=lambda d: f"Últimos {d} días",
+            index=1,
+            key="casos_win",
+        )
+    with c2:
+        ex_noise = st.checkbox("Excluir rebotes / avisos de entrega obvios", value=True, key="casos_noise")
+    with c3:
+        enrich = _has_table(conn, "commercial_email_signal_fact")
+        solo_pos = st.checkbox(
+            "Solo con señal comercial positiva",
+            value=False,
+            key="casos_solo_pos",
+            disabled=not enrich,
+            help="Requiere capa CI v1 (`commercial_email_signal_fact`).",
+        )
+    with c4:
+        lim = st.number_input("Máx. filas", min_value=20, max_value=400, value=150, step=10, key="casos_lim")
+
+    try:
+        result = fetch_cases_review_queue(
+            conn,
+            days_window=int(win),
+            exclude_obvious_noise=ex_noise,
+            positive_signal_only=solo_pos,
+            limit=int(lim),
+        )
+    except sqlite3.Error as exc:
+        st.error(f"No se pudo cargar la cola: {exc}")
+        return
+
+    st.caption(result.caption_es)
+
+    if not result.rows:
+        st.info("No hay mensajes con los filtros actuales.")
+        st.caption(f"Base de datos (solo lectura): `{db_path}`")
+        return
+
+    disp = []
+    for r in result.rows:
+        disp.append(
+            {
+                "ID": r["email_id"],
+                "Fecha": r.get("date_iso") or "—",
+                "Asunto (extracto)": r.get("subject_preview") or "",
+                "Remitente (extracto)": r.get("sender_preview") or "",
+                "Pista comercial": commercial_hint_es(r, enrichment_available=result.enrichment_available),
+            }
+        )
+    st.dataframe(pd.DataFrame(disp), use_container_width=True, hide_index=True)
+
+    ids = [int(r["email_id"]) for r in result.rows]
+
+    def _fmt_caso(eid: int) -> str:
+        row = next(x for x in result.rows if int(x["email_id"]) == eid)
+        sub = str(row.get("subject_preview") or "")[:56]
+        return f"ID {eid} · {sub}"
+
+    pick = st.selectbox("Seleccionar caso para ver detalle", ids, format_func=_fmt_caso, key="casos_pick")
+
+    det = fetch_case_detail(conn, email_id=int(pick))
+    if det:
+        st.markdown("#### Detalle del mensaje")
+        st.write(
+            {
+                "Fecha": det.get("date_iso") or "—",
+                "Asunto": det.get("subject") or "—",
+                "Remitente": det.get("sender") or "—",
+                "Origen técnico": det.get("source_file") or "—",
+                "Message-ID": det.get("message_id") or "—",
+            }
+        )
+        st.text_area("Vista previa del cuerpo", value=det.get("body_preview") or "(sin cuerpo extraíble)", height=240, disabled=True)
+        dc = det.get("document_count")
+        if dc is not None:
+            st.caption(f"Documentos comerciales ligados a este correo (mart): **{dc}**")
+        sigs = det.get("commercial_signals") or []
+        if sigs:
+            with st.expander("Señales de inteligencia comercial (por mensaje)", expanded=False):
+                st.dataframe(pd.DataFrame(sigs), use_container_width=True, hide_index=True)
+
+    if st.button("Redactar borrador en «Borrador comercial»", type="primary", key="casos_to_borrador"):
+        st.session_state["borrador_handoff_email_id"] = int(pick)
+        _navigate_to("Borrador comercial")
+
+    st.caption(f"Base de datos (solo lectura): `{db_path}`")
+
+
+def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path) -> None:
+    """OrigenLab-mode drafting for human review only (no send; optional filesystem export under reports/out)."""
+    _handoff = st.session_state.pop("borrador_handoff_email_id", None)
+    if _handoff is not None:
+        st.session_state["borrador_origen_caso"] = "Correo reciente (Gmail contacto)"
+        st.session_state["borrador_pick_email"] = int(_handoff)
+
+    st.subheader("Borrador comercial (revisión)")
+    st.caption(
+        "**Solo revisión humana:** no envía correos, no escribe en el buzón y no modifica filas en la tabla de correos. "
+        "Modo **OrigenLab** siempre. El texto exacto del mensaje puede ingresarse a mano o tomarse del archivo de correos "
+        "(**Gmail** de contacto); el resto de tablas de negocio es contexto indirecto, no la fuente única del texto."
+    )
+
+    settings = load_settings()
+    mode = st.radio(
+        "Origen del caso",
+        ("Entrada manual", "Correo reciente (Gmail contacto)"),
+        horizontal=True,
+        key="borrador_origen_caso",
+    )
+
+    _GEN_OPENAI_LABEL = "OpenAI (requiere API configurada)"
+    _GEN_SIM_LABEL = "Simulación sin API (solo prueba, sin costo)"
+
+    selected_email_id: int | None = None
+    if mode == "Entrada manual":
+        st.text_input("Identificador del caso", value="streamlit_manual_001", key="borrador_case_id")
+        st.text_input("Asunto del mensaje entrante", key="borrador_subject_in")
+        st.text_area("Cuerpo del mensaje entrante", height=220, key="borrador_body_in")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.text_input("Nombre del solicitante (opcional)", key="borrador_rn")
+            st.text_input("Correo del solicitante (opcional)", key="borrador_re")
+            st.text_input("Producto o categoría solicitada (opcional)", key="borrador_rpc")
+        with c2:
+            st.text_area("Hechos ya confirmados (opcional)", height=90, key="borrador_ekf")
+            st.text_area("Información que aún falta (opcional)", height=90, key="borrador_mi")
+        st.text_area("Notas internas para quien revisa (opcional)", height=70, key="borrador_nfr")
+    else:
+        if not _has_table(conn, "emails"):
+            st.error("No se encontró la tabla de mensajes de correo en este archivo.")
+            return
+        try:
+            _ensure = st.session_state.get("borrador_pick_email")
+            _ensure_ids = [int(_ensure)] if _ensure is not None else None
+            pick_df = load_contacto_gmail_email_choices_df(
+                conn, limit=200, ensure_email_ids=_ensure_ids
+            )
+        except Exception as exc:
+            st.error(f"No se pudieron leer los mensajes: {exc}")
+            return
+        if pick_df.empty:
+            st.warning(
+                "No hay correos del buzón **Gmail de contacto** en el archivo. "
+                "Puede importarlos con el script de Gmail (Workspace) o usar entrada manual."
+            )
+            return
+        _cols_es = {
+            "id": "ID",
+            "date_iso": "Fecha",
+            "subject_preview": "Asunto (extracto)",
+            "sender_preview": "Remitente (extracto)",
+            "source_file": "Origen técnico",
+        }
+        st.dataframe(
+            pick_df.rename(columns={k: v for k, v in _cols_es.items() if k in pick_df.columns}),
+            use_container_width=True,
+            hide_index=True,
+        )
+        ids = [int(x) for x in pick_df["id"].tolist()]
+
+        def _fmt_row(eid: int) -> str:
+            row = pick_df.loc[pick_df["id"] == eid].iloc[0]
+            subj = str(row.get("subject_preview") or "")
+            ds = str(row.get("date_iso") or "")
+            return f"{ds} · {subj[:72]} · ID {eid}"
+
+        selected_email_id = st.selectbox("Elegir un correo de la lista", ids, format_func=_fmt_row, key="borrador_pick_email")
+
+    gen_mode = st.radio(
+        "Motor de generación",
+        (_GEN_OPENAI_LABEL, _GEN_SIM_LABEL),
+        horizontal=True,
+        key="borrador_gen_mode",
+        help="Si no elige simulación, se usa OpenAI; si falta la clave de API, verá un mensaje de error claro (sin cambiar solo a modo simulado).",
+    )
+    use_mock = gen_mode == _GEN_SIM_LABEL
+
+    if st.button("Generar borrador (OrigenLab)", type="primary", key="borrador_gen_btn"):
+        try:
+            if mode == "Entrada manual":
+                body_raw = (st.session_state.get("borrador_body_in") or "").strip()
+                if not body_raw:
+                    st.error("El cuerpo del mensaje entrante es obligatorio.")
+                else:
+                    case = draft_case_from_manual(
+                        case_id=str(st.session_state.get("borrador_case_id") or "streamlit_manual_case"),
+                        subject=str(st.session_state.get("borrador_subject_in") or ""),
+                        body_text=body_raw,
+                        requester_name=(st.session_state.get("borrador_rn") or "").strip() or None,
+                        requester_email=(st.session_state.get("borrador_re") or "").strip() or None,
+                        requested_product_or_category=(st.session_state.get("borrador_rpc") or "").strip() or None,
+                        explicit_known_facts=(st.session_state.get("borrador_ekf") or "").strip() or None,
+                        missing_information=(st.session_state.get("borrador_mi") or "").strip() or None,
+                        notes_for_reviewer=(st.session_state.get("borrador_nfr") or "").strip() or None,
+                    )
+                    index = get_cached_tatiana_index(settings, st.session_state)
+                    pkg = run_origenlab_draft_package(
+                        case=case,
+                        settings=settings,
+                        index=index,
+                        generator_name="openai_chat",
+                        use_mock_explicit=use_mock,
+                    )
+                    st.session_state["borrador_last_pkg"] = pkg
+            else:
+                if selected_email_id is None:
+                    st.error("Seleccione un correo de la lista.")
+                else:
+                    case = draft_case_from_email_row(conn, email_id=selected_email_id)
+                    if case is None:
+                        st.error("No se encontró el correo seleccionado.")
+                    else:
+                        index = get_cached_tatiana_index(settings, st.session_state)
+                        pkg = run_origenlab_draft_package(
+                            case=case,
+                            settings=settings,
+                            index=index,
+                            generator_name="openai_chat",
+                            use_mock_explicit=use_mock,
+                        )
+                        st.session_state["borrador_last_pkg"] = pkg
+        except (RuntimeError, ValueError, FileNotFoundError) as exc:
+            st.error(str(exc))
+        except Exception as exc:
+            st.exception(exc)
+
+    pkg = st.session_state.get("borrador_last_pkg")
+    if not pkg:
+        st.info("Pulse **Generar borrador (OrigenLab)** arriba para ver el resultado y los campos de revisión.")
+        st.caption(f"Base de datos (solo lectura): `{db_path}`")
+        return
+
+    gen_subject = extract_asunto_from_draft(pkg.generated_draft or "")
+    st.markdown("### Borrador generado")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("¿Se abstuvo el modelo?", "Sí" if pkg.abstained else "No")
+    with c2:
+        st.metric("Proveedor técnico", pkg.provider_name or "—")
+    with c3:
+        st.metric("Asunto sugerido (1.ª línea)", gen_subject[:80] + ("…" if len(gen_subject) > 80 else ""))
+
+    st.text_area("Texto completo del borrador", value=pkg.generated_draft or "", height=320, disabled=True)
+
+    st.markdown("#### Ejemplos usados como referencia (estilo y precedentes)")
+    st.write(
+        "**Identificadores de estilo:** "
+        + ", ".join(str(x.get("example_id", "")) for x in pkg.retrieved_style_examples)
+        + "  \n**Identificadores de precedentes:** "
+        + ", ".join(str(x.get("example_id", "")) for x in pkg.retrieved_examples)
+    )
+
+    blocks = pkg.prompt_blocks or {}
+    with st.expander("Hechos de empresa y política comercial (resumen)", expanded=False):
+        st.json(
+            {
+                "hechos_empresa": blocks.get("company_facts"),
+                "politica_comercial": blocks.get("commercial_policy"),
+                "firma_aprobada": blocks.get("approved_signature_block"),
+                "fuentes_de_hechos": blocks.get("origenlab_fact_sources"),
+                "complemento_del_caso": blocks.get("case_context_supplement"),
+            }
+        )
+    with st.expander("Límites y reglas enviadas al modelo", expanded=False):
+        st.caption("El sistema usa este texto en **inglés** al generar el borrador (convención técnica).")
+        for g in pkg.guardrails or []:
+            st.write(f"- {g}")
+
+    st.download_button(
+        "Descargar paquete (archivo JSON)",
+        data=json.dumps(pkg.to_dict(), ensure_ascii=False, indent=2),
+        file_name="borrador_paquete.json",
+        mime="application/json",
+        key="borrador_dl_json",
+    )
+
+    st.markdown("### Revisión humana (solo en pantalla o al exportar)")
+    st.caption(
+        "En el archivo exportado, el campo de «aprobado para envío» queda siempre en **no**; esta aplicación **no envía** correos."
+    )
+
+    decision_labels = {
+        "": "(sin decidir)",
+        "approve": "Aprobar",
+        "approve_with_edits": "Aprobar con ediciones",
+        "reject": "Rechazar",
+        "needs_clarification": "Falta información del cliente",
+    }
+    rev_decision = st.selectbox(
+        "Decisión del revisor",
+        options=list(decision_labels.keys()),
+        format_func=lambda k: decision_labels[k],
+        key="borrador_rev_decision",
+    )
+    rev_notes = st.text_area("Comentarios del revisor", key="borrador_rev_notes")
+    rev_subj = st.text_input("Asunto final (tras revisión)", value=gen_subject, key="borrador_rev_subj")
+    rev_body = st.text_area("Cuerpo final (tras revisión)", value=pkg.generated_draft or "", height=200, key="borrador_rev_body")
+
+    if st.button("Guardar revisión en carpeta de informes (reports/out)", key="borrador_export_btn"):
+        try:
+            out_dir = new_streamlit_export_dir(settings)
+            info = export_streamlit_review_artifact(
+                out_dir=out_dir,
+                pkg=pkg,
+                reviewer_decision=rev_decision,
+                reviewer_notes=rev_notes,
+                reviewer_final_subject=rev_subj,
+                reviewer_final_body=rev_body,
+            )
+            st.success(
+                f"Guardado en `{info['out_dir']}`: paquete JSON, tabla de revisión (CSV) y copia del contexto OrigenLab."
+            )
+        except OSError as exc:
+            st.error(f"No se pudo guardar en el disco: {exc}")
+
+    st.caption(f"Base de datos (solo lectura): `{db_path}`")
 
 
 def _split_tags(value: object) -> list[str]:
@@ -489,20 +1474,25 @@ def main() -> None:
 
     conn = _connect_ro(db_path)
     try:
-        required = ["contact_master", "organization_master", "document_master", "opportunity_signals"]
-        missing = [t for t in required if not _has_table(conn, t)]
-        if missing:
-            st.error("Faltan tablas del mart: " + ", ".join(missing))
-            st.info("Ejecute primero: `uv run python scripts/mart/build_business_mart.py --rebuild`")
-            return
-
         # Navegación principal: permitir que quick-actions cambien de pestaña.
         if "start_page" in st.session_state:
             default_page = st.session_state.pop("start_page")
         else:
             default_page = "Resumen"
 
-        pages = ["Resumen", "Oportunidades", "Equipos", "Organizaciones", "Contactos", "Documentos"]
+        pages = [
+            "Resumen",
+            "Salud de datos",
+            "Actividad contacto Gmail",
+            "Casos para revisar",
+            "Borrador comercial",
+            "Oportunidades",
+            "Equipos",
+            "Organizaciones",
+            "Contactos",
+            "Documentos",
+            "Candidatos comerciales",
+        ]
         if default_page not in pages:
             default_page = "Resumen"
 
@@ -513,6 +1503,29 @@ def main() -> None:
             label_visibility="collapsed",
             index=pages.index(default_page),
         )
+
+        if page == "Salud de datos":
+            render_data_health_page(conn, db_path)
+            return
+
+        if page == "Actividad contacto Gmail":
+            render_contacto_gmail_activity_page(conn, db_path)
+            return
+
+        if page == "Casos para revisar":
+            render_cases_to_review_page(conn, db_path)
+            return
+
+        if page == "Borrador comercial":
+            render_commercial_draft_review_page(conn, db_path)
+            return
+
+        required = ["contact_master", "organization_master", "document_master", "opportunity_signals"]
+        missing = [t for t in required if not _has_table(conn, t)]
+        if missing:
+            st.error("Faltan tablas del mart: " + ", ".join(missing))
+            st.info("Ejecute primero: `uv run python scripts/mart/build_business_mart.py --rebuild`")
+            return
 
         if page == "Resumen":
             st.subheader("Resumen ejecutivo")
@@ -1465,6 +2478,128 @@ def main() -> None:
 
                         with st.expander("Ver datos técnicos del documento"):
                             st.json(d.to_dict())
+            return
+
+        if page == "Candidatos comerciales":
+            st.subheader("Candidatos comerciales (inteligencia comercial v1)")
+            st.caption(
+                "Vista `v_commercial_candidate_queue`: estado durable y resumen para revisión. "
+                "No sustituye un CRM; las acciones escriben override + evento de auditoría."
+            )
+            if not _has_table(conn, "v_commercial_candidate_queue"):
+                st.warning(
+                    "En este archivo SQLite no existe la vista **`v_commercial_candidate_queue`** "
+                    "(capa Commercial Intelligence v1 no aplicada o base distinta a la del build)."
+                )
+                st.markdown(
+                    "Desde **`apps/email-pipeline`** (mismo `ORIGENLAB_SQLITE_PATH` que muestra *Salud de datos*):\n\n"
+                    "```bash\n"
+                    "uv run python scripts/commercial/build_commercial_intel_v1.py\n"
+                    "```\n\n"
+                    "Primera vez o señales vacías: puede usar `--rebuild`. "
+                    "Si la app corre en Docker, el volumen debe apuntar al **mismo** `emails.sqlite` "
+                    "que actualiza el build."
+                )
+                st.caption(
+                    "Documentación: `docs/pipeline/COMMERCIAL_INTEL_V1.md` · "
+                    "Ejecución: `docs/RUNBOOK.md` (Commercial intelligence v1)."
+                )
+                return
+
+            from origenlab_email_pipeline.commercial_intel_review import (
+                QueueFilters,
+                apply_review_action,
+                fetch_queue_rows,
+            )
+
+            f1, f2, f3 = st.columns(3)
+            with f1:
+                fk = st.selectbox(
+                    "Tipo de entidad",
+                    ["(todas)", "organization", "contact", "opportunity"],
+                    key="ci_entity_kind",
+                )
+            with f2:
+                stat_opts = [
+                    "(todos)",
+                    "new",
+                    "needs_review",
+                    "approved",
+                    "rejected",
+                    "snoozed",
+                    "suppressed",
+                ]
+                st_sel = st.selectbox("Estado", stat_opts, key="ci_status")
+            with f3:
+                lim = st.number_input("Máx. filas", min_value=10, max_value=2000, value=300, step=10)
+
+            f4, f5, f6 = st.columns(3)
+            with f4:
+                ctype = st.text_input("candidate_type (solo org)", value="", key="ci_ctype")
+            with f5:
+                min_c = st.number_input("Confianza mín.", min_value=0.0, max_value=1.0, value=0.0, step=0.05)
+            with f6:
+                min_s = st.number_input("Strength mín.", min_value=0.0, max_value=1.0, value=0.0, step=0.05)
+
+            filters = QueueFilters(
+                entity_kind=None if fk == "(todas)" else fk,
+                review_status=None if st_sel == "(todos)" else st_sel,
+                candidate_type=ctype.strip() or None,
+                min_confidence=min_c if min_c > 0 else None,
+                min_strength=min_s if min_s > 0 else None,
+            )
+            rows = fetch_queue_rows(conn, filters=filters, limit=int(lim))
+            if not rows:
+                st.info("Sin filas con los filtros actuales.")
+            else:
+                df = pd.DataFrame(rows)
+                show = df.rename(
+                    columns={
+                        "entity_kind": "entidad",
+                        "entity_key": "clave",
+                        "status": "estado",
+                        "confidence_score": "confianza",
+                        "strength_score": "strength",
+                        "reason_summary": "resumen",
+                    }
+                )
+                st.dataframe(show, use_container_width=True, hide_index=True)
+
+            st.divider()
+            st.markdown("#### Acción sobre un candidato")
+            rw_ok = os.environ.get("ORIGENLAB_STREAMLIT_COMMERCIAL_REVIEW_RW") == "1"
+            if not rw_ok:
+                st.info(
+                    "Solo lectura (Streamlit típico con SQLite inmutable). Para aprobar/rechazar/postergar "
+                    "desde la UI, arranque con `ORIGENLAB_STREAMLIT_COMMERCIAL_REVIEW_RW=1` y una base **grabable** "
+                    "(no volumen solo lectura). Alternativa: "
+                    "`uv run python scripts/commercial/review_commercial_candidate.py`."
+                )
+            elif not rows:
+                st.caption("Cargue filas con los filtros para seleccionar una clave.")
+            else:
+                pick_labels = [f"{r['entity_kind']} | {r['entity_key']}" for r in rows[:500]]
+                choice = st.selectbox("Candidato", [""] + pick_labels, key="ci_pick")
+                act = st.selectbox("Acción", ["approve", "reject", "snooze"], key="ci_action")
+                note = st.text_input("Nota (opcional)", value="", key="ci_note")
+                if st.button("Aplicar acción", key="ci_apply") and choice:
+                    kind, _, ekey = choice.partition(" | ")
+                    conn_rw = sqlite3.connect(str(db_path), timeout=60.0)
+                    try:
+                        apply_review_action(
+                            conn_rw,
+                            entity_kind=kind,
+                            entity_key=ekey,
+                            action=act,
+                            actor="streamlit",
+                            note=note,
+                        )
+                        st.success("Guardado (override + fila + auditoría si hubo cambio de estado).")
+                        st.rerun()
+                    except ValueError as err:
+                        st.error(str(err))
+                    finally:
+                        conn_rw.close()
             return
 
         if page == "Oportunidades":

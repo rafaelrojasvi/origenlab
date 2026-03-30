@@ -90,6 +90,26 @@ Also invoked from `init_schema`, `ensure_leads_tables`, `ensure_lead_account_tab
 | Object | Owner | Behavior |
 |--------|-------|------------|
 | `v_lead_match_summary` | [`bi_views.py`](../../src/origenlab_email_pipeline/bi_views.py) `refresh_lead_match_summary_view` | Prerequisites checked before DROP; transactional replace; returns status string. Core vs full SQL depends on account tables. Excludes `lead_master` rows with `upstream_sync_state = 'retired_no_raw'` (soft-retired missing raw). |
+| `v_commercial_candidate_queue` | [`commercial_intel_schema.py`](../../src/origenlab_email_pipeline/commercial_intel_schema.py) `ensure_commercial_intel_tables` | Recreated idempotently; unions durable candidate tables for operational review queues. |
+
+---
+
+<a id="m-schema-commercial-intel"></a>
+## Commercial intelligence layer (v1)
+
+| Object | DDL owner | Data rebuild/ownership | Notes |
+|--------|-----------|------------------------|-------|
+| `commercial_email_signal_fact` | [`commercial_intel_schema.py`](../../src/origenlab_email_pipeline/commercial_intel_schema.py) | [`build_commercial_intel_v1.py`](../../scripts/commercial/build_commercial_intel_v1.py) rewrites selected email ids idempotently | Rebuildable evidence facts, linked to `emails.id`. |
+| `commercial_org_signal_rollup` | `commercial_intel_schema.py` | `build_commercial_intel_v1.py` recomputes from facts | Rebuildable org-level evidence/suppression rollup. |
+| `commercial_contact_signal_rollup` | `commercial_intel_schema.py` | `build_commercial_intel_v1.py` recomputes from facts | Rebuildable contact-level rollup. |
+| `commercial_opportunity_fact` | `commercial_intel_schema.py` | `build_commercial_intel_v1.py` recomputes from org rollups | Rebuildable opportunity facts for candidate promotion. |
+| `organization_candidate` | `commercial_intel_schema.py` | Durable UPSERT target from builder + manual review | Human-facing durable state. |
+| `contact_candidate` | `commercial_intel_schema.py` | Durable UPSERT target from builder + manual review | Human-facing durable state. |
+| `opportunity_candidate` | `commercial_intel_schema.py` | Durable UPSERT target from builder + manual review | Human-facing durable state. |
+| `candidate_review_event` | `commercial_intel_schema.py` | Append audit events from builder/manual ops | Durable review audit trail. |
+| `candidate_manual_override` | `commercial_intel_schema.py` | Manual operational input | Durable overrides applied by builder sync. |
+
+Commercial schema is added through `migrate_sqlite_schema(..., layers={SchemaLayer.COMMERCIAL_INTEL})`.
 
 ---
 
@@ -97,4 +117,5 @@ Also invoked from `init_schema`, `ensure_leads_tables`, `ensure_lead_account_tab
 ## Clean vs split (summary)
 
 - **Split:** `document_master` (CREATE in mart schema + ALTER in `db.py` for preview columns on old DBs).
+- **Split by lifecycle:** commercial v1 separates rebuildable evidence tables from durable review/candidate tables.
 - **Otherwise:** ownership aligns with one primary module per layer; operational DELETE/INSERT lives in named scripts, not schema modules.

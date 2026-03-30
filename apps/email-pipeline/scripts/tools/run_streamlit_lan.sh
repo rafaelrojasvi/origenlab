@@ -6,6 +6,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PORT="${STREAMLIT_PORT:-8501}"
 cd "$ROOT"
-exec uv run streamlit run apps/business_mart_app.py \
+exec uv run --group ui streamlit run apps/business_mart_app.py \
   --server.address 0.0.0.0 \
   --server.port "$PORT"

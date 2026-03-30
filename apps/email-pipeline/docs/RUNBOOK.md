@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-03-24
+Last reviewed: 2026-03-28
 
 Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.).
 
@@ -66,6 +66,7 @@ On **Windows** (Docker Desktop), set `ORIGENLAB_HOST_DATA_ROOT` to the host fold
 
 - **UI only** — build the business mart on the host first: [`build_business_mart.py`](../scripts/mart/build_business_mart.py).
 - Read-only volume is OK; the app opens SQLite with immutable + query-only mode.
+- **Borrador comercial** (Streamlit) is review-only and does not send mail; optional **export** writes under `reports/out/<timestamp>_streamlit_borrador_comercial/`. If the data mount is read-only, use the in-app JSON download instead or mount `ORIGENLAB_REPORTS_DIR` writable.
 
 ---
 
@@ -273,6 +274,53 @@ uv run python scripts/qa/check_evidence_links.py
 - **Provenance / taxonomy warnings** — Some checks are **non-critical**; read the line marked `FAIL` without `[critical]` as advisory.
 
 Further detail: [`REPORTING.md`](REPORTING.md#m-eprep-leads-qa), [`scripts/README.md`](../scripts/README.md).
+
+---
+
+<a id="m-eprun-commercial-intel-v1"></a>
+## 5. Commercial intelligence v1
+
+Builds a client-discovery layer on top of the historical archive:
+
+- rebuildable signal facts/rollups
+- durable org/contact/opportunity candidates with review statuses
+- explainable suppression and rationale fields
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/commercial/build_commercial_intel_v1.py
+```
+
+Useful variants:
+
+```bash
+# full recompute of rebuildable signal layer
+uv run python scripts/commercial/build_commercial_intel_v1.py --rebuild
+
+# include a recency reprocess window in addition to watermark optimization
+uv run python scripts/commercial/build_commercial_intel_v1.py --reprocess-days 30
+
+# reconciliation summary
+uv run python scripts/commercial/audit_commercial_intel_v1.py
+
+# export queue slice (CSV/JSON; filters: entity kind, status, candidate_type, min confidence/strength)
+uv run python scripts/commercial/export_commercial_candidate_queue.py \
+  --out reports/out/commercial_queue.csv --limit 500
+
+# approve / reject / snooze one candidate (writes candidate_manual_override + candidate_review_event)
+uv run python scripts/commercial/review_commercial_candidate.py \
+  --entity-kind organization --entity-key example.com --action snooze --actor you@example.com
+```
+
+Optional UI: the business mart Streamlit app includes **Candidatos comerciales** (read-only by default). Enable writes only with a writable SQLite file and `ORIGENLAB_STREAMLIT_COMMERCIAL_REVIEW_RW=1`.
+
+Contract summary:
+
+- raw archive tables are unchanged
+- watermark is performance-only
+- correctness uses idempotent rebuild/upsert and reconciliation checks
+
+Design/ownership: [`pipeline/COMMERCIAL_INTEL_V1.md`](pipeline/COMMERCIAL_INTEL_V1.md)
 
 ---
 

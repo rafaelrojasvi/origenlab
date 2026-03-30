@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-03-24
+Last reviewed: 2026-03-29
 
 Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/docs/`](./).
 
@@ -40,6 +40,11 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
   - [`leads/LEAD_ACCOUNT_LAYER.md`](leads/LEAD_ACCOUNT_LAYER.md)
   - [`leads/CHILE_LEAD_SOURCES.md`](leads/CHILE_LEAD_SOURCES.md)
 - ML: [`ml/AI_ML_IMPLEMENTED_SUMMARY.md`](ml/AI_ML_IMPLEMENTED_SUMMARY.md) (includes ML options reference + LLM prompt appendix)
+- **Tatiana commercial drafting (OrigenLab scope):** human-in-the-loop draft suggestions from archive-derived examples — not a sender, not CRM automation.
+  - Overview + eval: [`dataset/TATIANA_DRAFTING_COPILOT.md`](dataset/TATIANA_DRAFTING_COPILOT.md)
+  - **Pilot batches** (current operational path): [`dataset/TATIANA_PILOT_WORKFLOW.md`](dataset/TATIANA_PILOT_WORKFLOW.md)
+  - **OrigenLab drafting context** (`--origenlab`, web data as facts): [`dataset/ORIGENLAB_COMMERCIAL_DRAFTING_CONTEXT.md`](dataset/ORIGENLAB_COMMERCIAL_DRAFTING_CONTEXT.md)
+  - Manual eval rubric: [`dataset/TATIANA_EVAL_REVIEW.md`](dataset/TATIANA_EVAL_REVIEW.md)
 
 ## Generated / Snapshot Docs
 

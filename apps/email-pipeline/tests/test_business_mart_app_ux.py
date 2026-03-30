@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +21,112 @@ def _load_app_module():
 
 
 app = _load_app_module()
+
+
+def test_date_prefix_and_days_since_helpers():
+    assert app._date_prefix_for_compare("2026-03-29T12:00:00Z") == "2026-03-29"
+    assert app._date_prefix_for_compare(None) is None
+    assert app._date_prefix_for_compare("") is None
+    d = app._days_since_iso_prefix("2026-03-29")
+    assert d is not None and d >= 0
+
+
+def test_where_contacto_gmail_source_uses_expected_pattern() -> None:
+    assert "gmail:contacto@origenlab.cl" in app._where_contacto_gmail_source()
+    assert "e.source_file" in app._where_contacto_gmail_source(table_alias="e")
+
+
+def test_load_contacto_gmail_activity_summary_counts_gmail_contacto(tmp_path: Path) -> None:
+    db_path = tmp_path / "cg.sqlite"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE emails (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              date_iso TEXT,
+              subject TEXT,
+              sender TEXT,
+              source_file TEXT
+            )
+            """
+        )
+        src = "gmail:contacto@origenlab.cl/INBOX"
+        conn.executemany(
+            "INSERT INTO emails (date_iso, subject, sender, source_file) VALUES (?,?,?,?)",
+            [
+                ("2026-03-20T10:00:00Z", "A", "a@x.cl", src),
+                ("2026-03-28T10:00:00Z", "B", "b@y.cl", src),
+                ("2033-01-01T00:00:00Z", "Future", "c@z.cl", src),
+                ("2026-01-01T00:00:00Z", "Imap", "d@z.cl", "imap:contacto@origenlab.cl/INBOX"),
+            ],
+        )
+        conn.commit()
+        s = app.load_contacto_gmail_activity_summary(conn, slack_days=2)
+        assert s.total_rows == 3
+        assert s.most_recent_plausible_iso is not None
+        assert "2033" not in s.most_recent_plausible_iso
+        assert s.count_7d <= s.count_30d <= s.count_90d <= s.total_rows
+    finally:
+        conn.close()
+
+
+def test_load_contacto_gmail_recent_emails_df_respects_limit(tmp_path: Path) -> None:
+    db_path = tmp_path / "cg2.sqlite"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE emails (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              date_iso TEXT,
+              subject TEXT,
+              sender TEXT,
+              source_file TEXT
+            )
+            """
+        )
+        src = "gmail:contacto@origenlab.cl/INBOX"
+        conn.executemany(
+            "INSERT INTO emails (date_iso, subject, sender, source_file) VALUES (?,?,?,?)",
+            [(f"2026-03-{i+1:02d}T10:00:00Z", f"S{i}", f"u{i}@x.cl", src) for i in range(15)],
+        )
+        conn.commit()
+        df = app.load_contacto_gmail_recent_emails_df(conn, limit=5)
+        assert len(df) == 5
+    finally:
+        conn.close()
+
+
+def test_load_email_date_health_excludes_future_dated_from_plausible_max(tmp_path: Path) -> None:
+    db_path = tmp_path / "e.sqlite"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE emails (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              date_iso TEXT
+            )
+            """
+        )
+        conn.executemany(
+            "INSERT INTO emails (date_iso) VALUES (?)",
+            [
+                ("2001-01-03T21:35:47+00:00",),
+                ("2024-06-01T10:00:00Z",),
+                ("2033-06-09T15:09:53+01:00",),
+            ],
+        )
+        conn.commit()
+        h = app.load_email_date_health(conn, slack_days=2)
+        assert h.future_dated_count >= 1
+        assert h.raw_max is not None and "2033" in h.raw_max
+        assert h.plausible_max_date_iso is not None
+        assert "2033" not in h.plausible_max_date_iso
+        assert "2024" in h.plausible_max_date_iso or "2001" in h.plausible_max_date_iso
+    finally:
+        conn.close()
 
 
 def test_friendly_org_type_labels_in_spanish():

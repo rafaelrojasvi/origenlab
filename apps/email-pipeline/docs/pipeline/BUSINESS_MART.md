@@ -130,8 +130,14 @@ App: `apps/business_mart_app.py`
 
 Estructura:
 1. **Resumen** (KPIs + gráficos compactos)
-2. **Contactos**
-3. **Organizaciones**
-4. **Documentos** (preview limpio + texto crudo en expander)
-5. **Oportunidades** (señales con explicación en español)
+2. **Salud de datos** (conteos, rango `date_iso`, desglose `source_file`, heurística mart vs crudo, `pipeline_kv` / `pipeline_run` si existen) — ver [`STREAMLIT_DATA_FRESHNESS.md`](STREAMLIT_DATA_FRESHNESS.md)
+3. **Actividad contacto Gmail** — correos recientes con `source_file` tipo `gmail:contacto@origenlab.cl%`, resúmenes 7/30/90 días, documentos y señales unidos por `email_id` si el mart existe; no sustituye un visor de bandeja completo.
+4. **Casos para revisar** — cola operativa mensaje a mensaje (Gmail contacto), enriquecimiento opcional con `commercial_email_signal_fact`, entrega a **Borrador comercial**; ver [`CASOS_PARA_REVISAR.md`](CASOS_PARA_REVISAR.md).
+5. **Borrador comercial** (revisión OrigenLab, sin envío)
+6. **Oportunidades** (señales con explicación en español)
+7. **Equipos**
+8. **Organizaciones**
+9. **Contactos**
+10. **Documentos** (preview limpio + texto crudo en expander)
+11. **Candidatos comerciales** (si existe la capa commercial intel en el mismo SQLite)
 

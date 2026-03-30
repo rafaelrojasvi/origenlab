@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "hdbscan>=0.8.41",
+    "openai>=1.40",
     "orjson>=3.9",
     "pydantic>=2",
     "pydantic-settings>=2",
