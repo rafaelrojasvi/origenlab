@@ -1,0 +1,3 @@
+case_id,subject,body_text,from_email,from_name,thread_hint,received_at,case_type,notes
+demo_1,Cotización — demo piloto,"Estimados, necesitamos cotización para luminarias LED en local comercial. ¿Podrían enviar lista de precios?",cliente@example.com,Juan Pérez,,2026-03-28T12:00:00Z,quote_request,synthetic example — no PII
+demo_2,Re: entrega,"Buenas, ¿cuál sería el plazo de entrega si confirmamos hoy? Gracias.",compras@example.com,Maria López,,2026-03-28T14:00:00Z,logistics,synthetic example — no PII
