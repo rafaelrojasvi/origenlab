@@ -121,6 +121,21 @@ CREATE TABLE IF NOT EXISTS lead_outreach_enrichment (
   FOREIGN KEY(lead_id) REFERENCES lead_master(id) ON DELETE CASCADE
 );
 
+-- Operator / client manual enrichment (review UI). Does not replace raw import fields on lead_master.
+CREATE TABLE IF NOT EXISTS lead_contact_research (
+  lead_id INTEGER PRIMARY KEY,
+  contact_research_status TEXT NOT NULL DEFAULT 'nuevo',
+  resolved_domain TEXT,
+  resolved_contact_name TEXT,
+  resolved_contact_email TEXT,
+  contact_source TEXT,
+  contact_research_notes TEXT,
+  updated_at TEXT NOT NULL,
+  updated_by TEXT,
+  FOREIGN KEY(lead_id) REFERENCES lead_master(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_lead_contact_research_status ON lead_contact_research(contact_research_status);
+
 -- Audit trail for upstream raw vs lead_master reconciliation (dry-run and apply).
 CREATE TABLE IF NOT EXISTS lead_upstream_reconcile_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

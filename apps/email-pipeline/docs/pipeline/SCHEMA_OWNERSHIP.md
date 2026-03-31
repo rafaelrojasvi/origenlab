@@ -41,6 +41,8 @@ Callers may still use `ensure_leads_tables()` / `ensure_lead_account_tables()` a
 
 Mart **DDL** is applied inside `init_schema` via `BUSINESS_MART_SCHEMA_SQL`. Mart **rows** are not owned by schema modules.
 
+**Plausible-date policy for mart timelines** (raw `emails` unchanged): see [`MART_FRESHNESS.md`](./MART_FRESHNESS.md).
+
 ---
 
 <a id="m-schema-pipeline-meta"></a>

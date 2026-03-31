@@ -30,6 +30,9 @@ def test_migrate_fresh_db_full_layers() -> None:
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_master'"
     ).fetchone()
     assert conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='supplier_master'"
+    ).fetchone()
+    assert conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='view' AND name='v_lead_match_summary'"
     ).fetchone()
     st = refresh_lead_match_summary_view(conn)

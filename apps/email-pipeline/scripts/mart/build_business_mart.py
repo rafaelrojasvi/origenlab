@@ -22,6 +22,10 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
+from origenlab_email_pipeline.freshness_dates import (
+    MART_DATE_SLACK_DAYS_DEFAULT,
+    email_date_iso_for_mart_timeline,
+)
 from origenlab_email_pipeline.business_mart import (
     classify_email_intents,
     clean_document_preview,
@@ -79,6 +83,16 @@ def main() -> None:
     ap.add_argument("--internal-domain", action="append", default=[], help="repeatable; add internal domains (default: inferred)")
     ap.add_argument("--limit-emails", type=int, default=None, help="debug: limit emails scanned")
     ap.add_argument("--rebuild", action="store_true", help="truncate and rebuild mart tables")
+    ap.add_argument(
+        "--mart-date-slack-days",
+        type=int,
+        default=MART_DATE_SLACK_DAYS_DEFAULT,
+        help=(
+            "Exclude email date_iso from mart first/last_seen (and document sent_at) when "
+            "parsed calendar date is more than this many days after local today (default: "
+            f"{MART_DATE_SLACK_DAYS_DEFAULT}). Raw emails table is never modified."
+        ),
+    )
     args = ap.parse_args()
 
     settings = load_settings()
@@ -98,6 +112,10 @@ def main() -> None:
 
     print(f"DB: {db_path}")
     print(f"Internal domains (guess): {sorted(internal_domains)[:10]}")
+    mart_slack = int(args.mart_date_slack_days)
+    if mart_slack < 0 or mart_slack > 3660:
+        mart_slack = MART_DATE_SLACK_DAYS_DEFAULT
+    print(f"Mart date slack days (plausible timeline): {mart_slack}")
 
     if args.rebuild:
         conn.executescript(
@@ -177,7 +195,7 @@ def main() -> None:
                     sender_email,
                     sender_domain,
                     recipient_domain,
-                    r[6],
+                    email_date_iso_for_mart_timeline(r[6], slack_days=mart_slack),
                     (r[9] or "unknown"),
                     preview_raw,
                     preview_clean,
@@ -293,11 +311,12 @@ def main() -> None:
                     for tag in equip:
                         row["equip"][tag] += 1
 
-                    if date_iso:
-                        if row["first_seen_at"] is None or date_iso < row["first_seen_at"]:
-                            row["first_seen_at"] = date_iso
-                        if row["last_seen_at"] is None or date_iso > row["last_seen_at"]:
-                            row["last_seen_at"] = date_iso
+                    d_iso = email_date_iso_for_mart_timeline(date_iso, slack_days=mart_slack)
+                    if d_iso:
+                        if row["first_seen_at"] is None or d_iso < row["first_seen_at"]:
+                            row["first_seen_at"] = d_iso
+                        if row["last_seen_at"] is None or d_iso > row["last_seen_at"]:
+                            row["last_seen_at"] = d_iso
 
             batch = cur.fetchmany(5000)
 

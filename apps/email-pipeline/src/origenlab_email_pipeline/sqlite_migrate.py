@@ -15,6 +15,7 @@ from origenlab_email_pipeline.commercial_intel_schema import ensure_commercial_i
 from origenlab_email_pipeline.db import init_schema
 from origenlab_email_pipeline.lead_accounts_schema import ensure_lead_account_tables
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+from origenlab_email_pipeline.supplier_schema import ensure_supplier_tables
 
 
 class SchemaLayer(Enum):
@@ -22,10 +23,16 @@ class SchemaLayer(Enum):
     COMMERCIAL_INTEL = auto()
     LEADS = auto()
     LEAD_ACCOUNTS = auto()
+    SUPPLIERS = auto()
 
 
 _DEFAULT_LAYERS: frozenset[SchemaLayer] = frozenset(
-    (SchemaLayer.ARCHIVE_AND_MART, SchemaLayer.LEADS, SchemaLayer.LEAD_ACCOUNTS)
+    (
+        SchemaLayer.ARCHIVE_AND_MART,
+        SchemaLayer.LEADS,
+        SchemaLayer.LEAD_ACCOUNTS,
+        SchemaLayer.SUPPLIERS,
+    )
 )
 
 
@@ -42,7 +49,8 @@ def migrate_sqlite_schema(
         2. ensure_commercial_intel_tables
         3. ensure_leads_tables (refresh_view=False)
         4. ensure_lead_account_tables (refresh_view=False)
-        5. refresh_lead_match_summary_view once if leads or accounts layer ran
+        5. ensure_supplier_tables (supplier / sourcing layer; optional layer)
+        6. refresh_lead_match_summary_view once if leads or accounts layer ran
 
     Args:
         conn: Open SQLite connection (same as other pipeline scripts).
@@ -66,6 +74,9 @@ def migrate_sqlite_schema(
 
     if SchemaLayer.LEAD_ACCOUNTS in active:
         ensure_lead_account_tables(conn, refresh_view=False)
+
+    if SchemaLayer.SUPPLIERS in active:
+        ensure_supplier_tables(conn)
 
     if SchemaLayer.LEADS in active or SchemaLayer.LEAD_ACCOUNTS in active:
         refresh_lead_match_summary_view(conn)

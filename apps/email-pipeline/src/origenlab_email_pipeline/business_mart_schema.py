@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS opportunity_signals (
   attachment_id INTEGER,
   score REAL,
   details_json TEXT,
-  created_at TEXT
+  created_at TEXT                    -- mart rebuild stamp (UTC/Z), not email / business event time
 );
 
 CREATE INDEX IF NOT EXISTS idx_opportunity_signals_entity ON opportunity_signals(entity_kind, entity_key);
