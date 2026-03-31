@@ -19,6 +19,15 @@ from origenlab_email_pipeline.cases_review_queue import (
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.freshness_dates import MART_DATE_SLACK_DAYS_DEFAULT
 from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
+from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
+    CANONICAL_BASE_PRESENTATION_EMAIL_ES,
+    MARKETING_VARIANT_FOLLOWUP,
+    MARKETING_VARIANT_GENERAL,
+    MARKETING_VARIANT_HOSPITALES,
+    MARKETING_VARIANT_INDUSTRIA,
+    MARKETING_VARIANT_PUBLICO,
+    MARKETING_VARIANT_UNIVERSIDADES,
+)
 from origenlab_email_pipeline.tatiana_copilot.pilot_schemas import extract_asunto_from_draft
 from origenlab_email_pipeline.lead_contact_research import (
     CONTACT_RESEARCH_STATUSES,
@@ -109,6 +118,68 @@ def _fmt_ci_status(v: str) -> str:
 
 def _fmt_ci_action(v: str) -> str:
     return {"approve": "Aprobar", "reject": "Rechazar", "snooze": "Posponer"}.get(v, v)
+
+
+def _fmt_marketing_variant(v: str) -> str:
+    return {
+        MARKETING_VARIANT_GENERAL: "Presentacion general",
+        MARKETING_VARIANT_UNIVERSIDADES: "Universidades / investigacion",
+        MARKETING_VARIANT_HOSPITALES: "Hospitales / laboratorio clinico",
+        MARKETING_VARIANT_INDUSTRIA: "Industria / QA / alimentos",
+        MARKETING_VARIANT_PUBLICO: "Instituciones publicas / compras",
+        MARKETING_VARIANT_FOLLOWUP: "Follow-up sin respuesta",
+    }.get(v, v)
+
+
+def _load_existing_pilot_batch(batch_dir_raw: str) -> tuple[pd.DataFrame | None, list[dict[str, Any]] | None, str | None]:
+    """Load an existing Tatiana pilot batch folder for read-only review in Streamlit."""
+    raw = (batch_dir_raw or "").strip()
+    if not raw:
+        return None, None, "Ingrese una carpeta de batch."
+    p = Path(raw).expanduser()
+    if not p.is_absolute():
+        p = Path.cwd() / p
+    if not p.exists():
+        return None, None, f"No existe la carpeta: {p}"
+    if not p.is_dir():
+        return None, None, f"La ruta no es carpeta: {p}"
+    review_csv = p / "pilot_review.csv"
+    if not review_csv.is_file():
+        return None, None, f"No se encontró `pilot_review.csv` en: {p}"
+    try:
+        df = pd.read_csv(review_csv).fillna("")
+    except Exception as exc:
+        return None, None, f"No se pudo leer `pilot_review.csv`: {exc}"
+    cases: list[dict[str, Any]] = []
+    for cf in sorted(p.glob("case_*.json")):
+        try:
+            obj = json.loads(cf.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            obj["_case_path"] = str(cf)
+            obj["_case_file"] = cf.name
+            cases.append(obj)
+    return df, cases, None
+
+
+def _pilot_batch_signature(batch_dir_raw: str) -> str | None:
+    raw = (batch_dir_raw or "").strip()
+    if not raw:
+        return None
+    p = Path(raw).expanduser()
+    if not p.is_absolute():
+        p = Path.cwd() / p
+    review_csv = p / "pilot_review.csv"
+    if not review_csv.is_file():
+        return None
+    case_files = sorted(p.glob("case_*.json"))
+    try:
+        review_mtime = review_csv.stat().st_mtime_ns
+        case_sig = ",".join(f"{cf.name}:{cf.stat().st_mtime_ns}" for cf in case_files)
+    except OSError:
+        return None
+    return f"{review_mtime}|{len(case_files)}|{case_sig}"
 
 
 @st.cache_data(ttl=90, show_spinner=False)
@@ -1149,6 +1220,123 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
     )
 
     settings = load_settings()
+    st.markdown("### Revisar batch existente")
+    default_batch_dir = str(settings.resolved_reports_dir() / "latest_tatiana_pilot_batch")
+    batch_dir_in = st.text_input(
+        "Carpeta de batch existente",
+        value=default_batch_dir,
+        key="borrador_existing_batch_dir",
+        help="Puede usar la carpeta exacta del batch o el symlink `latest_tatiana_pilot_batch`.",
+    )
+    current_batch_sig = _pilot_batch_signature(batch_dir_in)
+    loaded_batch_dir = str(st.session_state.get("borrador_existing_batch_dir_loaded") or "")
+    loaded_batch_sig = st.session_state.get("borrador_existing_batch_sig")
+    if st.button("Cargar batch existente", key="borrador_load_existing_batch"):
+        df_batch, cases_batch, err = _load_existing_pilot_batch(batch_dir_in)
+        if err:
+            st.error(err)
+        else:
+            st.session_state["borrador_existing_batch_df"] = df_batch
+            st.session_state["borrador_existing_batch_cases"] = cases_batch
+            st.session_state["borrador_existing_batch_dir_loaded"] = batch_dir_in
+            st.session_state["borrador_existing_batch_sig"] = current_batch_sig
+            st.success("Batch cargado para revisión.")
+    elif loaded_batch_dir == batch_dir_in and current_batch_sig and current_batch_sig != loaded_batch_sig:
+        df_batch, cases_batch, err = _load_existing_pilot_batch(batch_dir_in)
+        if not err:
+            st.session_state["borrador_existing_batch_df"] = df_batch
+            st.session_state["borrador_existing_batch_cases"] = cases_batch
+            st.session_state["borrador_existing_batch_sig"] = current_batch_sig
+            st.info("Se recargó el batch porque cambió su contenido en disco.")
+
+    df_batch = st.session_state.get("borrador_existing_batch_df")
+    cases_batch = st.session_state.get("borrador_existing_batch_cases")
+    if isinstance(df_batch, pd.DataFrame) and cases_batch:
+        with st.expander("Ver drafts ya generados", expanded=True):
+            show = df_batch.copy()
+            if "case_id" in show.columns:
+                case_email_map: dict[str, str] = {}
+                for obj in cases_batch:
+                    case = dict(obj.get("case") or {})
+                    cid = str(case.get("case_id") or "")
+                    meta = dict(case.get("context_metadata") or {})
+                    email = str(meta.get("contact_email") or "").strip()
+                    if cid and email:
+                        case_email_map[cid] = email
+                if case_email_map:
+                    show["contact_email"] = show["case_id"].map(case_email_map).fillna("")
+            rename_map = {
+                "case_id": "Caso",
+                "contact_email": "Email contacto",
+                "subject_input": "Asunto entrada",
+                "generated_subject": "Asunto generado",
+                "abstained": "¿Abstuvo?",
+                "provider_name": "Proveedor",
+                "system_notes": "Notas sistema",
+                "reviewer_decision": "Decision",
+                "reviewer_notes": "Notas revisor",
+            }
+            keep_cols = [c for c in rename_map.keys() if c in show.columns]
+            st.dataframe(show[keep_cols].rename(columns=rename_map), use_container_width=True, hide_index=True)
+            case_labels = []
+            case_index: dict[str, dict[str, Any]] = {}
+            for obj in cases_batch:
+                case = dict(obj.get("case") or {})
+                cid = str(case.get("case_id") or obj.get("_case_file") or "case")
+                subj = str(case.get("subject") or "")[:72]
+                label = f"{cid} · {subj}" if subj else cid
+                case_labels.append(label)
+                case_index[label] = obj
+            if case_labels:
+                picked = st.selectbox("Elegir draft del batch", options=case_labels, key="borrador_existing_case_pick")
+                chosen = case_index[picked]
+                case = dict(chosen.get("case") or {})
+                selected_case_key = str(case.get("case_id") or chosen.get("_case_file") or "case")
+                st.markdown("#### Caso original")
+                st.write(
+                    {
+                        "case_id": case.get("case_id") or "—",
+                        "subject": case.get("subject") or "—",
+                        "expected_label": case.get("expected_label") or "—",
+                        "archivo_json": chosen.get("_case_file") or "—",
+                    }
+                )
+                st.text_area(
+                    "Contexto / briefing del caso",
+                    value=str(case.get("body_text") or ""),
+                    height=220,
+                    disabled=True,
+                    key=f"borrador_existing_case_body_{selected_case_key}",
+                )
+                st.markdown("#### Draft generado")
+                st.text_area(
+                    "Texto del draft",
+                    value=str(chosen.get("generated_draft") or ""),
+                    height=320,
+                    disabled=True,
+                    key=f"borrador_existing_generated_{selected_case_key}",
+                )
+                with st.expander("Metadata y referencias del package", expanded=False):
+                    st.json(
+                        {
+                            "prompt_blocks": chosen.get("prompt_blocks"),
+                            "guardrails": chosen.get("guardrails"),
+                            "retrieved_style_examples": chosen.get("retrieved_style_examples"),
+                            "retrieved_examples": chosen.get("retrieved_examples"),
+                            "notes": chosen.get("notes"),
+                            "provider_name": chosen.get("provider_name"),
+                            "abstained": chosen.get("abstained"),
+                        }
+                    )
+                st.download_button(
+                    "Descargar case JSON del batch",
+                    data=json.dumps(chosen, ensure_ascii=False, indent=2),
+                    file_name=str(chosen.get("_case_file") or "case.json"),
+                    mime="application/json",
+                    key="borrador_existing_dl_case",
+                )
+
+    st.divider()
     mode = st.radio(
         "Origen del caso",
         ("Entrada manual", "Correo reciente (Gmail contacto)"),
@@ -1161,18 +1349,68 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
 
     selected_email_id: int | None = None
     if mode == "Entrada manual":
+        draft_kind = st.radio(
+            "Tipo de borrador manual",
+            ("Respuesta comercial / caso puntual", "Outreach / presentacion comercial"),
+            horizontal=True,
+            key="borrador_manual_kind",
+        )
         st.text_input("Identificador del caso", value="streamlit_manual_001", key="borrador_case_id")
-        st.text_input("Asunto del mensaje entrante", key="borrador_subject_in")
-        st.text_area("Cuerpo del mensaje entrante", height=220, key="borrador_body_in")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.text_input("Nombre del solicitante (opcional)", key="borrador_rn")
-            st.text_input("Correo del solicitante (opcional)", key="borrador_re")
-            st.text_input("Producto o categoría solicitada (opcional)", key="borrador_rpc")
-        with c2:
-            st.text_area("Hechos ya confirmados (opcional)", height=90, key="borrador_ekf")
-            st.text_area("Información que aún falta (opcional)", height=90, key="borrador_mi")
-        st.text_area("Notas internas para quien revisa (opcional)", height=70, key="borrador_nfr")
+        if draft_kind == "Outreach / presentacion comercial":
+            st.text_input("Asunto sugerido", value="Presentacion OrigenLab", key="borrador_subject_in")
+            st.caption(
+                "Modo review-first para correos de presentacion. Si deja el cuerpo vacio, la app arma una base "
+                "canonica y la envia al modelo con los campos de personalizacion confirmados."
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                st.text_input("Nombre del destinatario (opcional)", key="borrador_mkt_recipient")
+                st.text_input("Institucion / empresa (opcional)", key="borrador_mkt_inst")
+                st.text_input("Correo del contacto (solo registro, opcional)", key="borrador_mkt_contact_email")
+                st.selectbox(
+                    "Variante",
+                    options=[
+                        MARKETING_VARIANT_GENERAL,
+                        MARKETING_VARIANT_UNIVERSIDADES,
+                        MARKETING_VARIANT_HOSPITALES,
+                        MARKETING_VARIANT_INDUSTRIA,
+                        MARKETING_VARIANT_PUBLICO,
+                        MARKETING_VARIANT_FOLLOWUP,
+                    ],
+                    format_func=_fmt_marketing_variant,
+                    key="borrador_mkt_variant",
+                )
+            with c2:
+                st.text_input("Sector (opcional)", key="borrador_mkt_sector")
+                st.text_input("Foco de producto (opcional)", key="borrador_mkt_product_focus")
+                st.text_input("Caso de uso probable (opcional)", key="borrador_mkt_use_case")
+                st.text_area("Nota personalizada confirmada (opcional)", height=90, key="borrador_mkt_custom_note")
+            st.text_area(
+                "Cuerpo base / briefing adicional (opcional)",
+                height=180,
+                key="borrador_body_in",
+                help="Opcional. Si lo deja vacio, se usa una base canonica de presentacion OrigenLab y los campos confirmados.",
+            )
+            st.text_area("Notas internas para quien revisa (opcional)", height=70, key="borrador_nfr")
+            with st.expander("Base canonica de presentacion usada como referencia", expanded=False):
+                st.text_area(
+                    "Referencia",
+                    value=CANONICAL_BASE_PRESENTATION_EMAIL_ES,
+                    height=180,
+                    disabled=True,
+                )
+        else:
+            st.text_input("Asunto del mensaje entrante", key="borrador_subject_in")
+            st.text_area("Cuerpo del mensaje entrante", height=220, key="borrador_body_in")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.text_input("Nombre del solicitante (opcional)", key="borrador_rn")
+                st.text_input("Correo del solicitante (opcional)", key="borrador_re")
+                st.text_input("Producto o categoría solicitada (opcional)", key="borrador_rpc")
+            with c2:
+                st.text_area("Hechos ya confirmados (opcional)", height=90, key="borrador_ekf")
+                st.text_area("Información que aún falta (opcional)", height=90, key="borrador_mi")
+            st.text_area("Notas internas para quien revisa (opcional)", height=70, key="borrador_nfr")
     else:
         if not _has_table(conn, "emails"):
             st.error("No se encontró la tabla de mensajes de correo en este archivo.")
@@ -1223,11 +1461,18 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
     )
     use_mock = gen_mode == _GEN_SIM_LABEL
 
-    if st.button("Generar borrador (OrigenLab)", type="primary", key="borrador_gen_btn"):
+    _btn_label = (
+        "Generar borrador de outreach (OrigenLab)"
+        if mode == "Entrada manual"
+        and st.session_state.get("borrador_manual_kind") == "Outreach / presentacion comercial"
+        else "Generar borrador (OrigenLab)"
+    )
+    if st.button(_btn_label, type="primary", key="borrador_gen_btn"):
         try:
             if mode == "Entrada manual":
                 body_raw = (st.session_state.get("borrador_body_in") or "").strip()
-                if not body_raw:
+                is_outreach = st.session_state.get("borrador_manual_kind") == "Outreach / presentacion comercial"
+                if not body_raw and not is_outreach:
                     st.error("El cuerpo del mensaje entrante es obligatorio.")
                 else:
                     case = draft_case_from_manual(
@@ -1240,6 +1485,15 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
                         explicit_known_facts=(st.session_state.get("borrador_ekf") or "").strip() or None,
                         missing_information=(st.session_state.get("borrador_mi") or "").strip() or None,
                         notes_for_reviewer=(st.session_state.get("borrador_nfr") or "").strip() or None,
+                        recipient_name=(st.session_state.get("borrador_mkt_recipient") or "").strip() or None,
+                        institution_name=(st.session_state.get("borrador_mkt_inst") or "").strip() or None,
+                        sector=(st.session_state.get("borrador_mkt_sector") or "").strip() or None,
+                        product_focus=(st.session_state.get("borrador_mkt_product_focus") or "").strip() or None,
+                        use_case=(st.session_state.get("borrador_mkt_use_case") or "").strip() or None,
+                        variant_type=(st.session_state.get("borrador_mkt_variant") or "").strip() or None,
+                        contact_email=(st.session_state.get("borrador_mkt_contact_email") or "").strip() or None,
+                        custom_note=(st.session_state.get("borrador_mkt_custom_note") or "").strip() or None,
+                        marketing_outreach=is_outreach,
                     )
                     index = get_cached_tatiana_index(settings, st.session_state)
                     pkg = run_origenlab_draft_package(
@@ -1307,6 +1561,7 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
                 "firma_aprobada": blocks.get("approved_signature_block"),
                 "fuentes_de_hechos": blocks.get("origenlab_fact_sources"),
                 "complemento_del_caso": blocks.get("case_context_supplement"),
+                "marketing_outreach": blocks.get("marketing_outreach_supplement"),
             }
         )
     with st.expander("Límites y reglas enviadas al modelo", expanded=False):

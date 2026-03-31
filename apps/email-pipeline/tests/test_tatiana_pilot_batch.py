@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,9 @@ from origenlab_email_pipeline.tatiana_copilot.pilot_batch import (
     resolve_pilot_generator,
     run_pilot_batch,
 )
+from origenlab_email_pipeline.tatiana_copilot.origenlab_facts_loader import load_origenlab_drafting_context
 from origenlab_email_pipeline.tatiana_copilot.pilot_loader import load_pilot_input
+from origenlab_email_pipeline.tatiana_copilot.prompting import build_prompt_blocks
 from origenlab_email_pipeline.tatiana_copilot.pilot_review_summary import (
     PILOT_REVIEW_ALL_FIELDS,
     recommend_pilot_phase,
@@ -22,6 +26,7 @@ from origenlab_email_pipeline.tatiana_copilot.pilot_schemas import (
     extract_asunto_from_draft,
     safe_case_filename,
 )
+from origenlab_email_pipeline.tatiana_copilot.schemas import DraftCase
 
 
 def test_load_pilot_csv_origenlab_columns(tmp_path: Path) -> None:
@@ -38,6 +43,23 @@ def test_load_pilot_csv_origenlab_columns(tmp_path: Path) -> None:
     assert cases[0].missing_information == "Falta plazo."
     meta = cases[0].context_metadata()
     assert meta.get("explicit_known_facts") == "Cotización N°1 confirmada."
+
+
+def test_load_pilot_csv_marketing_outreach_columns(tmp_path: Path) -> None:
+    p = tmp_path / "in.csv"
+    p.write_text(
+        "case_id,subject,body_text,recipient_name,institution_name,sector,product_focus,use_case,variant_type,contact_email,custom_note\n"
+        "m1,S,Texto suficientemente largo para un outreach de marketing.,Ana,Universidad X,universidades,Electroforesis,docencia,universidades_investigacion,ana@example.cl,Nota custom\n",
+        encoding="utf-8",
+    )
+    cases = load_pilot_input(p)
+    c = cases[0]
+    assert c.recipient_name == "Ana"
+    assert c.institution_name == "Universidad X"
+    meta = c.context_metadata()
+    assert meta.get("marketing_outreach") is True
+    assert meta.get("variant_type") == "universidades_investigacion"
+    assert meta.get("product_focus") == "Electroforesis"
 
 
 def test_load_pilot_csv_aliases(tmp_path: Path) -> None:
@@ -160,6 +182,63 @@ def test_run_pilot_batch_output_shape(
     assert row["reviewer_decision"] == ""
     assert row["reviewer_final_body"] == ""
     assert "case_id" in row
+
+
+def test_prompt_blocks_include_marketing_outreach_supplement() -> None:
+    case = DraftCase(
+        case_id="mkt1",
+        subject="Presentacion OrigenLab",
+        body_text="Texto base suficientemente largo para presentar OrigenLab en un primer contacto comercial.",
+        expected_label="marketing_outreach",
+        context_metadata={
+            "recipient_name": "Ana",
+            "institution_name": "Universidad X",
+            "sector": "universidades",
+            "variant_type": "universidades_investigacion",
+            "product_focus": "electroforesis",
+            "marketing_outreach": True,
+        },
+    )
+    blocks = build_prompt_blocks(
+        case=case,
+        style_examples=[],
+        retrieved_examples=[],
+        drafting_profile="origenlab",
+        origenlab_context=load_origenlab_drafting_context(),
+    )
+    assert "marketing_outreach_supplement" in blocks
+    supp = blocks["marketing_outreach_supplement"]
+    assert supp["variant_type"] == "universidades_investigacion"
+    assert "canonical_base_email_es" in supp
+    assert "first-touch B2B marketing" in blocks["instruction"]
+
+
+def test_prepare_marketing_outreach_input_script(tmp_path: Path) -> None:
+    inp = tmp_path / "marketing.csv"
+    inp.write_text(
+        "recipient_name,institution_name,sector,product_focus,use_case,variant_type,contact_email,custom_note\n"
+        "Ana,Universidad X,universidades,electroforesis,docencia,universidades_investigacion,ana@example.cl,Nota\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "pilot.csv"
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "tatiana"
+        / "prepare_origenlab_marketing_outreach_input.py"
+    )
+    proc = subprocess.run(
+        [sys.executable, str(script), "--input", str(inp), "--out", str(out)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert str(out) in proc.stdout
+    rows = list(csv.DictReader(out.open(encoding="utf-8", newline="")))
+    assert len(rows) == 1
+    assert rows[0]["case_type"] == "marketing_outreach"
+    assert rows[0]["variant_type"] == "universidades_investigacion"
+    assert "Base canonica sugerida" in rows[0]["body_text"]
 
 
 def test_pilot_review_csv_validation_ok(tmp_path: Path) -> None:

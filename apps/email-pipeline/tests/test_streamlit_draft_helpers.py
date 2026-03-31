@@ -6,6 +6,7 @@ import pytest
 
 from origenlab_email_pipeline.config import Settings
 from origenlab_email_pipeline.tatiana_copilot.generator import MockDraftGenerator
+from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import MARKETING_VARIANT_UNIVERSIDADES
 from origenlab_email_pipeline.tatiana_copilot.streamlit_draft_helpers import (
     draft_case_from_email_row,
     draft_case_from_manual,
@@ -44,6 +45,27 @@ def test_draft_case_from_manual_metadata() -> None:
     assert c.case_id == "t1"
     assert c.context_metadata.get("requester_name") == "Ana"
     assert c.context_metadata.get("intake") == "streamlit_manual"
+
+
+def test_draft_case_from_manual_marketing_outreach_builds_seed_body() -> None:
+    c = draft_case_from_manual(
+        case_id="m1",
+        subject="Presentacion OrigenLab",
+        body_text="",
+        recipient_name="Ana",
+        institution_name="Universidad X",
+        sector="universidades",
+        product_focus="electroforesis",
+        use_case="docencia",
+        variant_type=MARKETING_VARIANT_UNIVERSIDADES,
+        custom_note="tono sobrio",
+        marketing_outreach=True,
+    )
+    assert c.expected_label == "marketing_outreach"
+    assert c.context_metadata.get("marketing_outreach") is True
+    assert c.context_metadata.get("variant_type") == MARKETING_VARIANT_UNIVERSIDADES
+    assert "Base canonica sugerida" in c.body_text
+    assert "Universidad X" in c.body_text
 
 
 def test_draft_case_from_email_row(tmp_path) -> None:

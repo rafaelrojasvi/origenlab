@@ -6,12 +6,19 @@ import pytest
 
 from origenlab_email_pipeline.config import Settings
 from origenlab_email_pipeline.tatiana_copilot.draft_package import build_draft_package
+from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
+    CANONICAL_OUTREACH_SIGNATURE_BLOCK,
+    MARKETING_VARIANT_GENERAL,
+)
+from origenlab_email_pipeline.tatiana_copilot.origenlab_facts_loader import load_origenlab_drafting_context
+from origenlab_email_pipeline.tatiana_copilot.prompting import build_prompt_blocks
 from origenlab_email_pipeline.tatiana_copilot.generator_factory import (
     TatianaLLMConfigurationError,
     resolve_draft_generator,
 )
 from origenlab_email_pipeline.tatiana_copilot.index import TatianaExampleIndex
 from origenlab_email_pipeline.tatiana_copilot.openai_chat_generator import (
+    _canonical_outreach_product_paragraph,
     OpenAIChatDraftGenerator,
     cotización_pointer_is_email_only,
     enrich_generic_asunto_line,
@@ -23,6 +30,7 @@ from origenlab_email_pipeline.tatiana_copilot.openai_chat_generator import (
     remove_placeholder_model_bullets,
     sanitize_body_grounding,
     should_abstain_low_information_case,
+    validate_marketing_outreach_draft,
 )
 from origenlab_email_pipeline.tatiana_copilot.schemas import DraftCase, ExampleRecord
 
@@ -234,7 +242,8 @@ def test_normalize_signature_replaces_tail_from_saludos() -> None:
         "Celular: 999\n"
     )
     out = normalize_signature_block(draft)
-    assert "+56-2-3410805" in out
+    assert "OrigenLab | Equipos para laboratorio" in out
+    assert "contacto@origenlab.cl | +56 9 6256 7816" in out
     assert "Cuerpo." in out
     assert out.count("Saludos cordiales") == 1
 
@@ -330,6 +339,224 @@ def test_postprocess_dedupes_repeated_closing() -> None:
     case = "Estimado Juan, cotización modelo ST100."
     out = postprocess_openai_draft(raw, case)
     assert out.lower().count("quedo atenta a cualquier consulta") == 1
+
+
+def test_validate_marketing_outreach_detects_placeholder() -> None:
+    bad = (
+        "Asunto: Presentacion OrigenLab\n\n"
+        "Estimados,\n\n"
+        "Mi nombre es [Tu Nombre] y represento a OrigenLab.\n\n"
+        + CANONICAL_OUTREACH_SIGNATURE_BLOCK
+    )
+    assert (
+        validate_marketing_outreach_draft(
+            bad,
+            canonical_signature=CANONICAL_OUTREACH_SIGNATURE_BLOCK,
+            variant_type=MARKETING_VARIANT_GENERAL,
+        )
+        == "marketing_outreach_placeholder_token"
+    )
+
+
+def test_validate_marketing_outreach_detects_generic_reply_language() -> None:
+    bad = (
+        "Asunto: Re: Presentacion OrigenLab\n\n"
+        "Gracias por contactarnos.\n\n"
+        + CANONICAL_OUTREACH_SIGNATURE_BLOCK
+    )
+    code = validate_marketing_outreach_draft(
+        bad,
+        canonical_signature=CANONICAL_OUTREACH_SIGNATURE_BLOCK,
+        variant_type=MARKETING_VARIANT_GENERAL,
+    )
+    assert code in {"marketing_outreach_reply_subject", "marketing_outreach_reply_language"}
+
+
+def test_provider_marketing_outreach_abstains_on_placeholder_output() -> None:
+    class _Msg:
+        content = (
+            "Asunto: Presentacion OrigenLab | Universidad X\n\n"
+            "Estimados,\n\n"
+            "Mi nombre es [Tu Nombre] y represento a OrigenLab.\n\n"
+            "Saludos cordiales,\n\n"
+            "OrigenLab\n"
+        )
+
+    class _Choice:
+        message = _Msg()
+
+    class _Completion:
+        choices = [_Choice()]
+
+    class _Completions:
+        @staticmethod
+        def create(**kwargs):
+            return _Completion()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _Client:
+        chat = _Chat()
+
+    gen = OpenAIChatDraftGenerator(
+        client=_Client(), model="m", min_body_chars=0, abstain_on_empty_retrieval=False
+    )
+    case = DraftCase(
+        case_id="m1",
+        subject="Presentacion OrigenLab | Universidad X",
+        body_text="Contexto suficiente para outreach.",
+        expected_label="marketing_outreach",
+        context_metadata={
+            "marketing_outreach": True,
+            "institution_name": "Universidad X",
+            "variant_type": MARKETING_VARIANT_GENERAL,
+        },
+    )
+    blocks = build_prompt_blocks(
+        case=case,
+        style_examples=[],
+        retrieved_examples=[],
+        drafting_profile="origenlab",
+        origenlab_context=load_origenlab_drafting_context(),
+    )
+    r = gen.generate(blocks)
+    assert r.abstained is True
+    assert r.notes == "marketing_outreach_placeholder_token"
+
+
+def test_provider_marketing_outreach_enforces_canonical_signature() -> None:
+    class _Msg:
+        content = (
+            "Asunto: Presentacion OrigenLab | Universidad X\n\n"
+            "Estimados,\n\n"
+            "Junto con saludar, quisiera presentarles OrigenLab.\n\n"
+            "Quedo atento a su respuesta.\n\n"
+            "Saludos cordiales,\n\n"
+            "Tatiana Vivanco\n"
+        )
+
+    class _Choice:
+        message = _Msg()
+
+    class _Completion:
+        choices = [_Choice()]
+
+    class _Completions:
+        @staticmethod
+        def create(**kwargs):
+            return _Completion()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _Client:
+        chat = _Chat()
+
+    gen = OpenAIChatDraftGenerator(
+        client=_Client(), model="m", min_body_chars=0, abstain_on_empty_retrieval=False
+    )
+    case = DraftCase(
+        case_id="m2",
+        subject="Presentacion OrigenLab | Universidad X",
+        body_text="Contexto suficiente para outreach.",
+        expected_label="marketing_outreach",
+        context_metadata={
+            "marketing_outreach": True,
+            "institution_name": "Universidad X",
+            "variant_type": MARKETING_VARIANT_GENERAL,
+        },
+    )
+    blocks = build_prompt_blocks(
+        case=case,
+        style_examples=[],
+        retrieved_examples=[],
+        drafting_profile="origenlab",
+        origenlab_context=load_origenlab_drafting_context(),
+    )
+    r = gen.generate(blocks)
+    assert r.abstained is False
+    assert "Tatiana Vivanco" in r.text
+    assert "OrigenLab | Equipos para laboratorio" in r.text
+    assert "www.origenlab.cl" in r.text
+
+
+def test_provider_marketing_outreach_keeps_canonical_intro_and_adds_one_focus_line() -> None:
+    class _Msg:
+        content = (
+            "Asunto: Presentacion OrigenLab | Universidad del Sur\n\n"
+            "Estimados/as,\n\n"
+            "Junto con saludar, quisiera presentarles OrigenLab, empresa enfocada en la venta de equipos e insumos "
+            "para laboratorios de servicio e investigación, con atención cercana y soporte comercial para apoyar "
+            "requerimientos técnicos y cotizaciones.\n\n"
+            "Si les interesa, con gusto podemos compartir información detallada y preparar una cotización ajustada "
+            "a sus requerimientos.\n"
+        )
+
+    class _Choice:
+        message = _Msg()
+
+    class _Completion:
+        choices = [_Choice()]
+
+    class _Completions:
+        @staticmethod
+        def create(**kwargs):
+            return _Completion()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _Client:
+        chat = _Chat()
+
+    gen = OpenAIChatDraftGenerator(
+        client=_Client(), model="m", min_body_chars=0, abstain_on_empty_retrieval=False
+    )
+    case = DraftCase(
+        case_id="m3",
+        subject="Presentacion OrigenLab | Universidad del Sur",
+        body_text="Contexto suficiente para outreach universitario con foco en electroforesis y docencia.",
+        expected_label="marketing_outreach",
+        context_metadata={
+            "marketing_outreach": True,
+            "institution_name": "Universidad del Sur",
+            "sector": "universidades / investigacion",
+            "product_focus": "electroforesis",
+            "use_case": "docencia e investigación en laboratorio",
+            "variant_type": MARKETING_VARIANT_GENERAL,
+        },
+    )
+    blocks = build_prompt_blocks(
+        case=case,
+        style_examples=[],
+        retrieved_examples=[],
+        drafting_profile="origenlab",
+        origenlab_context=load_origenlab_drafting_context(),
+    )
+    r = gen.generate(blocks)
+    assert r.abstained is False
+    assert "Estimados/as," in r.text
+    assert r.text.index("Estimados/as,") < r.text.index(
+        "Junto con saludar, quisiera presentarles OrigenLab"
+    )
+    assert "Junto con saludar, quisiera presentarles OrigenLab" in r.text
+    assert _canonical_outreach_product_paragraph() in r.text
+    assert "electroforesis" in r.text.lower()
+    assert "docencia e investigación en laboratorio" in r.text.lower()
+    assert "Tatiana Vivanco" in r.text
+    assert "Si les interesa" in r.text
+    assert r.text.index("Junto con saludar, quisiera presentarles OrigenLab") < r.text.index(
+        _canonical_outreach_product_paragraph()
+    )
+    assert r.text.index(_canonical_outreach_product_paragraph()) < r.text.index(
+        "De manera complementaria, también podemos orientarles sobre electroforesis para docencia e investigación en laboratorio."
+    )
+    assert r.text.index(
+        "De manera complementaria, también podemos orientarles sobre electroforesis para docencia e investigación en laboratorio."
+    ) < r.text.index("Si les interesa")
+    assert len(r.text.splitlines()) < 30
+    assert "[" not in r.text and "{{" not in r.text and "<" not in r.text
 
 
 def test_build_draft_package_with_openai_generator() -> None:

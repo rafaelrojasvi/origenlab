@@ -1,0 +1,4 @@
+case_id,recipient_name,institution_name,sector,product_focus,use_case,variant_type,contact_email,custom_note
+mk_001,Ana Perez,Universidad del Sur,universidades / investigacion,electroforesis,docencia e investigacion en laboratorio,universidades_investigacion,ana.perez@example.cl,Mencionar apoyo para cotizaciones y alternativas segun aplicacion.
+mk_002,Carlos Soto,Hospital Regional de Los Rios,hospitales / laboratorio clinico,osmometro crioscopico,apoyo a laboratorio clinico,hospitales_laboratorio_clinico,carlos.soto@example.cl,Usar un tono sobrio y directo.
+mk_003,Equipo de Compras,Municipalidad de Ejemplo,instituciones publicas / compras,dispersores y equipamiento de laboratorio,solicitudes de informacion o cotizacion,instituciones_publicas_compras,compras@example.cl,No inventar convenio ni experiencia previa.

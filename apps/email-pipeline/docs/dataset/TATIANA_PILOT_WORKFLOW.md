@@ -124,6 +124,33 @@ uv run python scripts/tatiana/run_tatiana_pilot_batch.py \
 
 Each batch writes **`origenlab_context_snapshot.json`** next to `pilot_summary.json`.
 
+### 2d) Marketing / presentation outreach batch
+
+For first-touch OrigenLab presentation emails, prepare a small recipient sheet and convert it into
+standard pilot input first:
+
+```bash
+uv run python scripts/tatiana/prepare_origenlab_marketing_outreach_input.py \
+  --input config/origenlab_marketing_outreach_input.example.csv \
+  --out reports/out/origenlab_marketing_outreach_pilot.csv
+```
+
+Then run the normal OrigenLab pilot flow:
+
+```bash
+uv run python scripts/tatiana/run_tatiana_pilot_batch.py \
+  --input reports/out/origenlab_marketing_outreach_pilot.csv \
+  --origenlab \
+  --allow-mock \
+  --max-cases 5
+```
+
+Recommended columns for the simple outreach sheet:
+`recipient_name`, `institution_name`, `sector`, `product_focus`, `use_case`,
+`variant_type`, `contact_email`, `custom_note`.
+
+This remains **review-only**: it writes draft packages and CSVs for human review, not send actions.
+
 ### 3) Human review
 
 In the batch folder (the `out_dir` from the JSON stdout, or `reports/out/latest_tatiana_pilot_batch`), open first:

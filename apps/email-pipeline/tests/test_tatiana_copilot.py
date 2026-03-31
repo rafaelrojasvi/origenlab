@@ -6,8 +6,16 @@ from pathlib import Path
 from origenlab_email_pipeline.tatiana_copilot.draft_package import build_draft_package
 from origenlab_email_pipeline.tatiana_copilot.evaluation import run_holdout_evaluation
 from origenlab_email_pipeline.tatiana_copilot.generator import MockDraftGenerator
+from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
+    MARKETING_VARIANT_FOLLOWUP,
+    MARKETING_VARIANT_HOSPITALES,
+    MARKETING_VARIANT_PUBLICO,
+    MARKETING_VARIANT_UNIVERSIDADES,
+)
+from origenlab_email_pipeline.tatiana_copilot.origenlab_facts_loader import load_origenlab_drafting_context
 from origenlab_email_pipeline.tatiana_copilot.index import TatianaExampleIndex
 from origenlab_email_pipeline.tatiana_copilot.normalize import build_example_sets
+from origenlab_email_pipeline.tatiana_copilot.prompting import build_prompt_blocks
 from origenlab_email_pipeline.tatiana_copilot.schemas import DraftCase
 
 
@@ -154,6 +162,99 @@ def test_mock_generator_safe_no_provider_abstain() -> None:
     out = gen.generate({"case": {"subject": "Hola", "body_text": "muy corto"}})
     assert out.abstained is True
     assert out.provider_name == "mock"
+
+
+def _marketing_blocks(*, variant: str, institution_name: str, product_focus: str = "", use_case: str = "") -> dict[str, object]:
+    case = DraftCase(
+        case_id="m1",
+        subject=f"Presentacion OrigenLab | {institution_name}",
+        body_text="Contexto suficientemente largo para una presentacion comercial inicial de OrigenLab.",
+        expected_label="marketing_outreach",
+        context_metadata={
+            "marketing_outreach": True,
+            "recipient_name": "Ana Perez",
+            "institution_name": institution_name,
+            "sector": "segmento de prueba",
+            "product_focus": product_focus,
+            "use_case": use_case,
+            "variant_type": variant,
+            "custom_note": "No inventar hechos del destinatario.",
+        },
+    )
+    return build_prompt_blocks(
+        case=case,
+        style_examples=[],
+        retrieved_examples=[],
+        drafting_profile="origenlab",
+        origenlab_context=load_origenlab_drafting_context(),
+    )
+
+
+def test_mock_marketing_outreach_not_reply_style() -> None:
+    gen = MockDraftGenerator()
+    out = gen.generate(
+        _marketing_blocks(
+            variant=MARKETING_VARIANT_UNIVERSIDADES,
+            institution_name="Universidad del Sur",
+            product_focus="electroforesis",
+            use_case="docencia e investigacion",
+        )
+    )
+    assert out.abstained is False
+    assert "Gracias por contactarnos" not in out.text
+    assert "Le confirmamos recepción" not in out.text
+    assert "Asunto: Re:" not in out.text
+    assert "quisiera presentarles OrigenLab" in out.text
+    assert "Universidad del Sur" in out.text
+    assert "electroforesis" in out.text.lower()
+
+
+def test_mock_marketing_variants_differ_meaningfully() -> None:
+    gen = MockDraftGenerator()
+    uni = gen.generate(
+        _marketing_blocks(
+            variant=MARKETING_VARIANT_UNIVERSIDADES,
+            institution_name="Universidad X",
+            product_focus="electroforesis",
+            use_case="docencia",
+        )
+    )
+    hosp = gen.generate(
+        _marketing_blocks(
+            variant=MARKETING_VARIANT_HOSPITALES,
+            institution_name="Hospital Y",
+            product_focus="osmometro crioscopico",
+            use_case="laboratorio clinico",
+        )
+    )
+    pub = gen.generate(
+        _marketing_blocks(
+            variant=MARKETING_VARIANT_PUBLICO,
+            institution_name="Municipalidad Z",
+            product_focus="dispersores",
+            use_case="solicitudes de informacion o cotizacion",
+        )
+    )
+    assert "docencia" in uni.text.lower()
+    assert "laboratorio clinico" in hosp.text.lower()
+    assert "solicitudes de informacion o procesos de cotizacion" in pub.text.lower()
+    assert uni.text != hosp.text != pub.text
+
+
+def test_mock_marketing_followup_allows_non_reply_followup_subject() -> None:
+    gen = MockDraftGenerator()
+    out = gen.generate(
+        _marketing_blocks(
+            variant=MARKETING_VARIANT_FOLLOWUP,
+            institution_name="Municipalidad Z",
+            product_focus="dispersores",
+            use_case="cotizacion",
+        )
+    )
+    assert out.abstained is False
+    assert "Asunto: Seguimiento" in out.text
+    assert "Gracias por contactarnos" not in out.text
+    assert "Retomo este contacto" in out.text
 
 
 def test_evaluation_output_schema(tmp_path: Path) -> None:

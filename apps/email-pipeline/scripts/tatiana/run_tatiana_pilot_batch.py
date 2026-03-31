@@ -55,7 +55,9 @@ def main() -> None:
         action="store_true",
         help=(
             "OrigenLab drafting mode: inject company facts from apps/web/src/data (+ policy); "
-            "historical examples are style-only. Writes origenlab_context_snapshot.json."
+            "historical examples are style-only. Also supports review-first marketing / presentation "
+            "outreach rows when the input includes fields like variant_type / institution_name / sector. "
+            "Writes origenlab_context_snapshot.json."
         ),
     )
     ap.add_argument(

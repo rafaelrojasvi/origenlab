@@ -20,6 +20,11 @@ from .draft_package import build_draft_package
 from .generator import DraftGenerator, MockDraftGenerator
 from .generator_factory import TatianaLLMConfigurationError, resolve_draft_generator
 from .index import TatianaExampleIndex
+from .marketing_outreach import (
+    MARKETING_VARIANT_GENERAL,
+    MARKETING_VARIANT_TYPES,
+    build_marketing_outreach_seed_body,
+)
 from .normalize import build_example_sets
 from .origenlab_context import DRAFTING_PROFILE_ORIGENLAB
 from .origenlab_facts_loader import load_origenlab_drafting_context
@@ -317,8 +322,31 @@ def draft_case_from_manual(
     explicit_known_facts: str | None = None,
     missing_information: str | None = None,
     notes_for_reviewer: str | None = None,
+    recipient_name: str | None = None,
+    institution_name: str | None = None,
+    sector: str | None = None,
+    product_focus: str | None = None,
+    use_case: str | None = None,
+    variant_type: str | None = None,
+    contact_email: str | None = None,
+    custom_note: str | None = None,
+    marketing_outreach: bool = False,
 ) -> DraftCase:
     """Build a ``DraftCase`` aligned with pilot ``context_metadata`` (OrigenLab mode)."""
+    variant = (variant_type or MARKETING_VARIANT_GENERAL).strip()
+    if variant not in MARKETING_VARIANT_TYPES:
+        variant = MARKETING_VARIANT_GENERAL
+    body = (body_text or "").strip()
+    if marketing_outreach and not body:
+        body = build_marketing_outreach_seed_body(
+            variant_type=variant,
+            recipient_name=recipient_name,
+            institution_name=institution_name,
+            sector=sector,
+            product_focus=product_focus,
+            use_case=use_case,
+            custom_note=custom_note,
+        )
     meta: dict[str, Any] = {
         "pilot": True,
         "intake": "streamlit_manual",
@@ -328,15 +356,23 @@ def draft_case_from_manual(
         "explicit_known_facts": explicit_known_facts,
         "missing_information": missing_information,
         "notes_for_reviewer": notes_for_reviewer,
+        "recipient_name": recipient_name,
+        "institution_name": institution_name,
+        "sector": sector,
+        "product_focus": product_focus,
+        "use_case": use_case,
+        "variant_type": variant if marketing_outreach else None,
+        "contact_email": contact_email,
+        "custom_note": custom_note,
+        "marketing_outreach": marketing_outreach,
     }
     meta = {k: v for k, v in meta.items() if v not in (None, "", [])}
     cid = (case_id or "").strip() or "streamlit_manual_case"
     subj = (subject or "").strip()
-    body = (body_text or "").strip()
     return DraftCase(
         case_id=cid,
         subject=subj,
         body_text=body,
-        expected_label=None,
+        expected_label="marketing_outreach" if marketing_outreach else None,
         context_metadata=meta,
     )

@@ -166,6 +166,32 @@ def test_signal_label_returns_business_friendly_spanish():
     assert "Señal heurística" in desc
 
 
+def test_fmt_marketing_variant_labels() -> None:
+    assert "Presentacion" in app._fmt_marketing_variant("presentacion_general")
+    assert "Universidades" in app._fmt_marketing_variant("universidades_investigacion")
+    assert "Follow-up" in app._fmt_marketing_variant("followup_sin_respuesta")
+
+
+def test_load_existing_pilot_batch_reads_csv_and_case_json(tmp_path: Path) -> None:
+    batch = tmp_path / "pilot_batch"
+    batch.mkdir()
+    (batch / "pilot_review.csv").write_text(
+        "case_id,subject_input,generated_subject\nc1,Subj,Gen\n",
+        encoding="utf-8",
+    )
+    (batch / "case_c1.json").write_text(
+        '{"case":{"case_id":"c1","subject":"Subj"},"generated_draft":"Hola","prompt_blocks":{}}',
+        encoding="utf-8",
+    )
+    df, cases, err = app._load_existing_pilot_batch(str(batch))
+    assert err is None
+    assert df is not None
+    assert len(df) == 1
+    assert cases is not None
+    assert len(cases) == 1
+    assert cases[0]["case"]["case_id"] == "c1"
+
+
 def test_navigate_to_sets_session_state_and_calls_rerun(monkeypatch):
     # Asegurar un session_state limpio para el test
     st.session_state.clear()

@@ -25,6 +25,14 @@ class PilotInputCase:
     explicit_known_facts: str | None = None
     missing_information: str | None = None
     notes_for_reviewer: str | None = None
+    recipient_name: str | None = None
+    institution_name: str | None = None
+    sector: str | None = None
+    product_focus: str | None = None
+    use_case: str | None = None
+    variant_type: str | None = None
+    contact_email: str | None = None
+    custom_note: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -45,6 +53,24 @@ class PilotInputCase:
             "explicit_known_facts": self.explicit_known_facts,
             "missing_information": self.missing_information,
             "notes_for_reviewer": self.notes_for_reviewer,
+            "recipient_name": self.recipient_name,
+            "institution_name": self.institution_name,
+            "sector": self.sector,
+            "product_focus": self.product_focus,
+            "use_case": self.use_case,
+            "variant_type": self.variant_type,
+            "contact_email": self.contact_email,
+            "custom_note": self.custom_note,
+            "marketing_outreach": bool(
+                self.recipient_name
+                or self.institution_name
+                or self.sector
+                or self.product_focus
+                or self.use_case
+                or self.variant_type
+                or self.contact_email
+                or self.custom_note
+            ),
         }
         meta.update(self.extra)
         return {k: v for k, v in meta.items() if v not in (None, "", [])}

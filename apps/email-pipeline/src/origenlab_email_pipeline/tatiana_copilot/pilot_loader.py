@@ -42,6 +42,14 @@ _HEADER_ALIASES: dict[str, tuple[str, ...]] = {
     "explicit_known_facts": ("explicit_known_facts", "confirmed_facts"),
     "missing_information": ("missing_information", "gaps", "pending_facts"),
     "notes_for_reviewer": ("notes_for_reviewer", "internal_notes"),
+    "recipient_name": ("recipient_name", "recipient", "destinatario"),
+    "institution_name": ("institution_name", "institution", "organization_name", "org_name"),
+    "sector": ("sector", "segment", "industry_segment"),
+    "product_focus": ("product_focus", "focus_product", "product_family"),
+    "use_case": ("use_case", "application", "application_hint"),
+    "variant_type": ("variant_type", "variant", "marketing_variant"),
+    "contact_email": ("contact_email", "recipient_email", "record_email"),
+    "custom_note": ("custom_note", "personalization_note", "note_for_model"),
 }
 
 
@@ -110,6 +118,14 @@ def row_to_pilot_case(row: dict[str, str], *, alias_map: dict[str, str]) -> Pilo
         explicit_known_facts=_empty_to_none(get_canonical("explicit_known_facts")),
         missing_information=_empty_to_none(get_canonical("missing_information")),
         notes_for_reviewer=_empty_to_none(get_canonical("notes_for_reviewer")),
+        recipient_name=_empty_to_none(get_canonical("recipient_name")),
+        institution_name=_empty_to_none(get_canonical("institution_name")),
+        sector=_empty_to_none(get_canonical("sector")),
+        product_focus=_empty_to_none(get_canonical("product_focus")),
+        use_case=_empty_to_none(get_canonical("use_case")),
+        variant_type=_empty_to_none(get_canonical("variant_type")),
+        contact_email=_empty_to_none(get_canonical("contact_email")),
+        custom_note=_empty_to_none(get_canonical("custom_note")),
         extra=extras,
     )
 

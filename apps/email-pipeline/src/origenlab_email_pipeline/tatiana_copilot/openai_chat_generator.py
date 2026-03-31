@@ -9,6 +9,7 @@ from typing import Any
 from origenlab_email_pipeline.config import Settings
 
 from .generator import DraftGenerator, DraftResult
+from .marketing_outreach import MARKETING_VARIANT_FOLLOWUP
 from .origenlab_context import DRAFTING_PROFILE_ORIGENLAB, DRAFTING_PROFILE_TATIANA_HISTORICAL
 
 
@@ -16,17 +17,14 @@ class TatianaLLMConfigurationError(RuntimeError):
     """Raised when LLM-backed generation is requested but required configuration is missing."""
 
 
-# Single canonical closing block (avoids duplicate / inconsistent phone lines in drafts).
+# Single canonical closing block (avoids duplicate / inconsistent signature lines in drafts).
 _CANONICAL_SIGNATURE = (
     "Saludos cordiales,\n\n"
-    "Tatiana Vivanco\n\n"
-    "Bioquímico\n\n"
-    "Sales Manager\n\n"
-    "Rinconada El Salto 1005, Depto 404\n\n"
-    "Huechuraba\n\n"
-    "Celular: 62567816\n\n"
-    "Fono/Fax: +56-2-3410805\n\n"
-    "www.labdelivery.cl"
+    "Tatiana Vivanco\n"
+    "OrigenLab | Equipos para laboratorio\n"
+    "Valdivia, Chile\n"
+    "contacto@origenlab.cl | +56 9 6256 7816\n"
+    "www.origenlab.cl"
 )
 
 _SPANISH_BOILERPLATE = frozenset(
@@ -102,6 +100,13 @@ _CIF_TERM = re.compile(r"\bCIF\b", re.I)
 
 _MONTO_MÍNIMO = re.compile(
     r"(?i)monto\s+m[ií]nimo|m[ií]nimo\s+de\s+facturaci[oó]n|[\$]\s*[\d.]+",
+)
+_PLACEHOLDER_TOKEN_RE = re.compile(
+    r"(\[[^\]\n]{1,80}\]|<[^>\n]{1,80}>|\{\{[^}\n]{1,80}\}\})",
+    re.I,
+)
+_SUPPORT_REPLY_PHRASES_RE = re.compile(
+    r"(?i)(gracias\s+por\s+contactarnos|le\s+confirmamos\s+recepci[oó]n|en\s+respuesta\s+a\s+su\s+solicitud)"
 )
 
 
@@ -648,12 +653,116 @@ def dedupe_closing_phrase(text: str, phrase: str) -> str:
     return before + after
 
 
+def _canonical_outreach_product_paragraph() -> str:
+    return (
+        "Entre nuestras soluciones destacamos osmómetro crioscópico Knauer, reactivos y equipamiento "
+        "para electroforesis Serva, y dispersores Ultra Turrax IKA, entre otras líneas para distintas "
+        "necesidades de laboratorio."
+    )
+
+
+def _draft_mentions_canonical_outreach_examples(text: str) -> bool:
+    n = _norm_match_text(text)
+    return any(
+        cue in n
+        for cue in (
+            "osmometro crioscopico",
+            "electroforesis",
+            "ultra turrax",
+        )
+    )
+
+
+def _lead_specific_outreach_line(outreach_supplement: dict[str, object]) -> str | None:
+    pf = str(outreach_supplement.get("product_focus") or "").strip()
+    uc = str(outreach_supplement.get("use_case") or "").strip()
+    if pf and uc:
+        return f"De manera complementaria, también podemos orientarles sobre {pf} para {uc}."
+    if pf:
+        return f"De manera complementaria, también podemos orientarles sobre {pf}."
+    if uc:
+        return f"De manera complementaria, también podemos orientarles según su aplicación en {uc}."
+    return None
+
+
+def reinforce_marketing_outreach_structure(
+    draft: str,
+    *,
+    outreach_supplement: dict[str, object] | None = None,
+) -> str:
+    """Normalize outreach body order: intro -> canonical examples -> lead line -> CTA/contact."""
+    supp = outreach_supplement or {}
+    text = (draft or "").strip()
+    if not text:
+        return text
+    lines = text.splitlines()
+    if not lines:
+        return text
+    first = lines[0]
+    rest_lines = lines[1:]
+    greeting = ""
+    if rest_lines:
+        first_rest = (rest_lines[0] or "").strip()
+        if re.match(r"(?i)^estimad[oa]s?(?:/as)?\b|^estimados/as\b", first_rest):
+            greeting = first_rest
+            rest_lines = rest_lines[1:]
+            while rest_lines and not rest_lines[0].strip():
+                rest_lines = rest_lines[1:]
+    body = "\n".join(rest_lines).strip()
+    if not body:
+        return text
+    parts = [p.strip() for p in re.split(r"\n{2,}", body) if p.strip()]
+    if not parts:
+        return text
+    canon_para = _canonical_outreach_product_paragraph()
+    lead_line = _lead_specific_outreach_line(supp)
+    intro_parts: list[str] = []
+    cta_parts: list[str] = []
+    contact_parts: list[str] = []
+    other_parts: list[str] = []
+    # Remove any model-written canonical/examples paragraph; we will reinsert it in a fixed position.
+    for p in parts:
+        low = _norm_match_text(p)
+        if (
+            "entre nuestras soluciones destacamos" in low
+            or _draft_mentions_canonical_outreach_examples(p)
+        ):
+            continue
+        if low.startswith("junto con saludar") or "quisiera presentarles origenlab" in low:
+            intro_parts.append(p)
+        elif low.startswith("si le interesa") or low.startswith("si les interesa"):
+            cta_parts.append(p)
+        elif low.startswith("pueden escribirnos"):
+            contact_parts.append(p)
+        elif lead_line and _norm_match_text(p) == _norm_match_text(lead_line):
+            continue
+        else:
+            other_parts.append(p)
+    ordered_parts: list[str] = []
+    ordered_parts.extend(intro_parts[:1] or other_parts[:1])
+    if intro_parts[:1]:
+        other_parts = [p for p in other_parts if p not in intro_parts[:1]]
+    ordered_parts.append(canon_para)
+    if lead_line and _norm_match_text(lead_line) not in _norm_match_text(body):
+        ordered_parts.append(lead_line)
+    ordered_parts.extend(other_parts)
+    ordered_parts.extend(cta_parts[:1])
+    ordered_parts.extend(contact_parts[:1])
+    rebuilt_parts: list[str] = []
+    if greeting:
+        rebuilt_parts.append(greeting)
+    rebuilt_parts.extend([p for p in ordered_parts if p.strip()])
+    rebuilt = "\n\n".join(rebuilt_parts).strip()
+    return first + "\n" + rebuilt
+
+
 def postprocess_openai_draft(
     raw: str,
     case_body: str,
     *,
     canonical_signature: str | None = None,
     drafting_profile: str = DRAFTING_PROFILE_TATIANA_HISTORICAL,
+    outreach_supplement: dict[str, object] | None = None,
 ) -> str:
     t = raw.strip()
     t = postprocess_draft_lines_after_subject(t)
@@ -665,6 +774,11 @@ def postprocess_openai_draft(
         t = first + ("\n" + body if body.strip() else "")
     t = enrich_generic_asunto_line(t, case_body)
     t = harden_asunto_line(t)
+    if drafting_profile == DRAFTING_PROFILE_ORIGENLAB and outreach_supplement:
+        t = reinforce_marketing_outreach_structure(
+            t,
+            outreach_supplement=outreach_supplement,
+        )
     t = normalize_signature_block(t, canonical_signature=canonical_signature)
     t = dedupe_closing_phrase(
         t, "Quedo atenta a cualquier consulta, no dude en contactarme."
@@ -673,6 +787,30 @@ def postprocess_openai_draft(
     if drafting_profile == DRAFTING_PROFILE_ORIGENLAB:
         t = dedupe_closing_phrase(t, "Quedo atenta a sus comentarios o consultas.")
     return t
+
+
+def validate_marketing_outreach_draft(
+    draft: str,
+    *,
+    canonical_signature: str,
+    variant_type: str | None = None,
+) -> str | None:
+    """Return validation failure code, or ``None`` when draft looks safe enough."""
+    text = (draft or "").strip()
+    if not text:
+        return "marketing_outreach_empty"
+    if _PLACEHOLDER_TOKEN_RE.search(text):
+        return "marketing_outreach_placeholder_token"
+    first = text.splitlines()[0].strip() if text.splitlines() else ""
+    if variant_type != MARKETING_VARIANT_FOLLOWUP and re.match(r"(?i)^asunto:\s*re:\s*", first):
+        return "marketing_outreach_reply_subject"
+    if _SUPPORT_REPLY_PHRASES_RE.search(text):
+        return "marketing_outreach_reply_language"
+    if canonical_signature.strip() and canonical_signature.strip() not in text:
+        return "marketing_outreach_signature_mismatch"
+    if "Tatiana Vivanco" not in text:
+        return "marketing_outreach_missing_sender_identity"
+    return None
 
 
 class OpenAIChatDraftGenerator(DraftGenerator):
@@ -755,6 +893,13 @@ class OpenAIChatDraftGenerator(DraftGenerator):
         )
         if profile != DRAFTING_PROFILE_ORIGENLAB:
             canonical_signature = None
+        outreach_supp = dict(prompt_blocks.get("marketing_outreach_supplement") or {})
+        outreach_variant = str(outreach_supp.get("variant_type") or "").strip() or None
+        if outreach_supp:
+            canonical_signature = (
+                str(outreach_supp.get("canonical_signature_block") or "").strip()
+                or canonical_signature
+            )
 
         subject_raw = str(case.get("subject") or "")
         subject_decoded = decode_mime_subject(subject_raw)
@@ -772,6 +917,8 @@ class OpenAIChatDraftGenerator(DraftGenerator):
                 "Hechos comerciales: case.body_text, case_context_supplement (explicit_known_facts), "
                 "o posicionamiento general en company_facts — no inventar plazos, precios ni garantías. "
                 "Cumple commercial_policy al pie de la letra. "
+                "Nunca dejes placeholders o plantillas sin resolver como [Tu Nombre], [Nombre], [Institución], "
+                "<nombre>, <empresa> o {{campo}}. "
                 "Si case_context_supplement.missing_information indica vacíos críticos y el cuerpo no alcanza "
                 "para una respuesta segura, devuelve exactamente ABSTAIN en una sola línea. "
                 "Cierra el cuerpo antes de la firma con una frase profesional breve; luego respeta exactamente "
@@ -814,6 +961,7 @@ class OpenAIChatDraftGenerator(DraftGenerator):
             payload["case_context_supplement"] = prompt_blocks.get("case_context_supplement")
             payload["approved_signature_block"] = prompt_blocks.get("approved_signature_block")
             payload["style_reference_notice"] = prompt_blocks.get("style_reference_notice")
+            payload["marketing_outreach_supplement"] = prompt_blocks.get("marketing_outreach_supplement")
         user = json.dumps(payload, ensure_ascii=False, indent=2)
         messages = [
             {"role": "system", "content": system},
@@ -856,7 +1004,21 @@ class OpenAIChatDraftGenerator(DraftGenerator):
             body,
             canonical_signature=canonical_signature,
             drafting_profile=profile,
+            outreach_supplement=outreach_supp,
         )
+        if profile == DRAFTING_PROFILE_ORIGENLAB and outreach_supp:
+            failure = validate_marketing_outreach_draft(
+                processed,
+                canonical_signature=canonical_signature or "",
+                variant_type=outreach_variant,
+            )
+            if failure:
+                return DraftResult(
+                    text="",
+                    provider_name="openai_chat",
+                    abstained=True,
+                    notes=failure,
+                )
         return DraftResult(
             text=processed,
             provider_name="openai_chat",

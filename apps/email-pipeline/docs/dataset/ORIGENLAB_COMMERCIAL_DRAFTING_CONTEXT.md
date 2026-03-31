@@ -53,6 +53,11 @@ Template: **[`config/origenlab_pilot_input.example.csv`](../../config/origenlab_
 
 Recommended columns: `requester_name`, `requester_email`, `requested_product_or_category`, `explicit_known_facts`, `missing_information`, `notes_for_reviewer` (see [`pilot_loader.py`](../../src/origenlab_email_pipeline/tatiana_copilot/pilot_loader.py) aliases).
 
+For **marketing / presentation outreach**, the same pilot path also accepts deterministic recipient fields such as
+`recipient_name`, `institution_name`, `sector`, `product_focus`, `use_case`, `variant_type`,
+`contact_email`, and `custom_note`. These fields are treated as **confirmed personalization inputs only**:
+the model must not invent recipient facts beyond them.
+
 **No live inbox sync** in this layer: CSVs are manual or from future exports. SQLite / marts ([`BUSINESS_MART.md`](../pipeline/BUSINESS_MART.md)) are the natural future source for case derivation.
 
 ---
