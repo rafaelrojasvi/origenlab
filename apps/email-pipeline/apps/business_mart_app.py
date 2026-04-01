@@ -10,6 +10,7 @@ from typing import Any, NamedTuple
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from origenlab_email_pipeline.cases_review_queue import (
     commercial_hint_es,
@@ -19,6 +20,17 @@ from origenlab_email_pipeline.cases_review_queue import (
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.freshness_dates import MART_DATE_SLACK_DAYS_DEFAULT
 from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
+from origenlab_email_pipeline.contact_email_suppression import (
+    SUPPRESSION_REASON_CODES,
+    contact_email_suppression_table_exists,
+    delete_contact_email_suppression,
+    ensure_contact_email_suppression_table,
+    fetch_contact_email_suppression_map,
+    fetch_contact_email_suppression_row,
+    streamlit_contact_suppression_rw_enabled,
+    upsert_contact_email_suppression,
+    validate_contact_email_suppression_payload,
+)
 from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
     CANONICAL_BASE_PRESENTATION_EMAIL_ES,
     MARKETING_VARIANT_FOLLOWUP,
@@ -434,6 +446,7 @@ def load_email_date_health(
 def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Read-only snapshot: DB path, counts, date span, sources, mart vs raw hints."""
     st.subheader("Salud de datos y vigencia")
+    _render_page_status("Salud de datos")
     st.caption(
         "Vista técnica: el archivo SQLite mostrado es el que ve esta app. "
         "No sustituye registros de ingest ni ejecuta reconstrucción del mart."
@@ -859,6 +872,144 @@ def _kpi(label: str, value: str, *, help_text: str | None = None) -> None:
     st.metric(label, value, help=help_text)
 
 
+PAGE_STATUS_PRESETS: dict[str, dict[str, str]] = {
+    "Resumen": {
+        "source": "Archivo histórico + vistas derivadas del mart",
+        "freshness": "Mixto: resumen derivado del archivo cargado y del mart reconstruido",
+    },
+    "Salud de datos": {
+        "source": "Archivo histórico y estado técnico de la base actual",
+        "freshness": "Según el SQLite abierto y la última reconstrucción disponible",
+    },
+    "Actividad contacto Gmail": {
+        "source": "Gmail contacto",
+        "freshness": "Reciente, según correos ya ingestados en esta base",
+    },
+    "Casos para revisar": {
+        "source": "Gmail contacto",
+        "freshness": "Reciente, filtrado sobre correos del buzón operativo",
+    },
+    "Borrador comercial": {
+        "source": "Gmail contacto o entrada manual + borradores guardados",
+        "freshness": "Mixto: casos recientes y archivos ya guardados para revisión",
+    },
+    "Qué hacer hoy": {
+        "source": "Múltiples fuentes: Gmail contacto, candidatos, leads y oportunidades",
+        "freshness": "Mixto: combina filas recientes y vistas derivadas",
+    },
+    "Leads y cuentas": {
+        "source": "Leads externos + vínculos con el archivo histórico",
+        "freshness": "Mixto: import externo más coincidencias/enriquecimiento sobre la base actual",
+    },
+    "Proveedores": {
+        "source": "Proveedores importados",
+        "freshness": "Depende del último workbook importado a esta base",
+    },
+    "Candidatos comerciales": {
+        "source": "Candidatos comerciales",
+        "freshness": "Vista derivada del mart y de señales ya construidas",
+    },
+    "Oportunidades": {
+        "source": "Vista derivada del mart",
+        "freshness": "Derivada de señales heurísticas reconstruidas",
+    },
+}
+
+
+def _page_status_values(page_key: str) -> dict[str, str]:
+    return dict(PAGE_STATUS_PRESETS.get(page_key) or {})
+
+
+def _render_page_status(
+    page_key: str,
+    *,
+    note: str | None = None,
+) -> None:
+    info = _page_status_values(page_key)
+    if not info:
+        return
+    st.markdown("##### Fuente y frescura")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.caption("Fuente")
+        st.markdown(info.get("source", "—"))
+    with c2:
+        st.caption("Frescura")
+        st.markdown(info.get("freshness", "—"))
+    if note:
+        st.caption(note)
+
+
+def _render_copy_email_button(email: str, *, key: str, label: str = "Copiar") -> None:
+    value = (email or "").strip()
+    if not value:
+        return
+    safe_email = json.dumps(value)
+    safe_key = "".join(ch if ch.isalnum() else "_" for ch in key)
+    safe_label = json.dumps(label)
+    html = f"""
+    <button id="copy_btn_{safe_key}" style="
+      width: 100%;
+      padding: 0.35rem 0.6rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.5rem;
+      background: white;
+      cursor: pointer;
+      font-size: 0.9rem;
+    ">{label}</button>
+    <script>
+    const btn = document.getElementById("copy_btn_{safe_key}");
+    if (btn) {{
+      btn.addEventListener("click", async () => {{
+        try {{
+          await navigator.clipboard.writeText({safe_email});
+          btn.textContent = "Copiado";
+          setTimeout(() => btn.textContent = JSON.parse({safe_label}), 1200);
+        }} catch (e) {{
+          btn.textContent = "No se pudo copiar";
+        }}
+      }});
+    }}
+    </script>
+    """
+    components.html(html, height=40)
+
+
+def _render_copyable_email_row(email: str, *, key: str, prefix: str = "Email") -> None:
+    value = (email or "").strip()
+    if not value:
+        return
+    c1, c2 = st.columns([6, 1])
+    with c1:
+        st.markdown(f"**{prefix}:** `{value}`")
+    with c2:
+        _render_copy_email_button(value, key=key)
+
+
+def _contact_suppression_reason_label(code: str | None) -> str:
+    return {
+        "bounce_no_such_user": "Rebote: no existe la casilla",
+        "bounce_access_denied": "Rebote: acceso denegado",
+        "bounce_other": "Rebote: otro motivo",
+        "manual_do_not_contact": "No contactar",
+    }.get(code or "", code or "—")
+
+
+def _ensure_contact_email_suppression_ddl(db_path: Path) -> bool:
+    try:
+        conn_rw = sqlite3.connect(str(db_path), timeout=60.0)
+    except sqlite3.Error:
+        return False
+    try:
+        ensure_contact_email_suppression_table(conn_rw)
+        conn_rw.commit()
+        return True
+    except sqlite3.Error:
+        return False
+    finally:
+        conn_rw.close()
+
+
 EQUIPMENT_INFO: dict[str, dict[str, str]] = {
     "autoclave": {
         "label": "Autoclave",
@@ -990,6 +1141,7 @@ def _signal_label(signal_type: str) -> tuple[str, str]:
 def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Read-only recent activity for Gmail-ingested contacto@origenlab.cl mailbox."""
     st.subheader("Actividad reciente (contacto Gmail)")
+    _render_page_status("Actividad contacto Gmail")
     st.caption(
         "Muestra correos con **`source_file` tipo Gmail Workspace** para `contacto@origenlab.cl`. "
         "No incluye buzón Titan (`imap:contacto@...`); para mezcla de orígenes use **Salud de datos**."
@@ -1092,6 +1244,7 @@ def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path)
 def render_cases_to_review_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Cola operativa de mensajes Gmail contacto para revisión; entrega a Borrador comercial (sin redactar aquí)."""
     st.subheader("Casos para revisar")
+    _render_page_status("Casos para revisar")
     st.caption(
         "Una fila = un correo del buzón **Gmail de contacto** (no es la bandeja completa). "
         "Solo lectura aquí; para redactar respuesta vaya a **Borrador comercial**."
@@ -1213,6 +1366,10 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
         st.session_state["borrador_pick_email"] = int(_handoff)
 
     st.subheader("Borrador comercial (revisión)")
+    _render_page_status(
+        "Borrador comercial",
+        note="No envía correos. Aquí puede revisar borradores guardados o crear uno nuevo y guardar el resultado en archivos.",
+    )
     st.caption(
         "**Solo revisión humana:** no envía correos, no escribe en el buzón y no modifica filas en la tabla de correos. "
         "Modo **OrigenLab** siempre. El texto exacto del mensaje puede ingresarse a mano o tomarse del archivo de correos "
@@ -1220,7 +1377,8 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
     )
 
     settings = load_settings()
-    st.markdown("### Revisar batch existente")
+    st.markdown("### Revisar borradores guardados")
+    st.caption("Abra una carpeta ya generada para revisar textos, emails de contacto y metadatos del batch.")
     default_batch_dir = str(settings.resolved_reports_dir() / "latest_tatiana_pilot_batch")
     batch_dir_in = st.text_input(
         "Carpeta de batch existente",
@@ -1254,6 +1412,7 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
     if isinstance(df_batch, pd.DataFrame) and cases_batch:
         with st.expander("Ver drafts ya generados", expanded=True):
             show = df_batch.copy()
+            batch_supp_map: dict[str, dict[str, object]] = {}
             if "case_id" in show.columns:
                 case_email_map: dict[str, str] = {}
                 for obj in cases_batch:
@@ -1265,9 +1424,15 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
                         case_email_map[cid] = email
                 if case_email_map:
                     show["contact_email"] = show["case_id"].map(case_email_map).fillna("")
+                    batch_supp_map = fetch_contact_email_suppression_map(conn, list(case_email_map.values()))
+                    if batch_supp_map:
+                        show["email_suppressed"] = show["contact_email"].map(
+                            lambda x: "Sí" if str(x).strip().lower() in batch_supp_map else ""
+                        )
             rename_map = {
                 "case_id": "Caso",
                 "contact_email": "Email contacto",
+                "email_suppressed": "Rebotado / bloqueado",
                 "subject_input": "Asunto entrada",
                 "generated_subject": "Asunto generado",
                 "abstained": "¿Abstuvo?",
@@ -1292,6 +1457,8 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
                 chosen = case_index[picked]
                 case = dict(chosen.get("case") or {})
                 selected_case_key = str(case.get("case_id") or chosen.get("_case_file") or "case")
+                chosen_email = str((case.get("context_metadata") or {}).get("contact_email") or "").strip().lower()
+                chosen_supp = batch_supp_map.get(chosen_email) if chosen_email else None
                 st.markdown("#### Caso original")
                 st.write(
                     {
@@ -1301,6 +1468,13 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
                         "archivo_json": chosen.get("_case_file") or "—",
                     }
                 )
+                if chosen_email:
+                    st.caption(f"Email de contacto: `{chosen_email}`")
+                if chosen_supp:
+                    st.warning(
+                        "Este email está marcado para no reutilizarse: "
+                        f"{_contact_suppression_reason_label(str(chosen_supp.get('suppression_reason_code') or ''))}."
+                    )
                 st.text_area(
                     "Contexto / briefing del caso",
                     value=str(case.get("body_text") or ""),
@@ -1337,6 +1511,8 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
                 )
 
     st.divider()
+    st.markdown("### Crear nuevo borrador")
+    st.caption("Elija si quiere partir desde un correo reciente de Gmail contacto o desde una entrada manual/outreach.")
     mode = st.radio(
         "Origen del caso",
         ("Entrada manual", "Correo reciente (Gmail contacto)"),
@@ -1622,6 +1798,7 @@ def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path)
 def render_proveedores_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Catálogo de proveedores / abastecimiento importado (solo lectura)."""
     st.subheader("Proveedores")
+    _render_page_status("Proveedores")
     st.caption(
         "Abastecimiento y partners internacionales — fuente estructurada (workbook DeepSearch), "
         "independiente de `lead_master`. Solo lectura en esta versión."
@@ -1966,6 +2143,12 @@ def _render_lead_manual_enrichment_panel(conn: sqlite3.Connection, db_path: Path
 def render_leads_y_cuentas_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Leer `lead_master`, coincidencias con archivo, enriquecimiento opcional y rollup de cuentas."""
     st.subheader("Leads y cuentas")
+    _render_page_status(
+        "Leads y cuentas",
+        note=(
+            "Si el modo RW está habilitado, el enriquecimiento manual se guarda en la base actual. Si no, esta vista queda en consulta."
+        ),
+    )
     _lb = st.session_state.pop("leads_today_banner", None)
     if _lb:
         st.info(_lb)
@@ -2164,6 +2347,13 @@ def render_leads_y_cuentas_page(conn: sqlite3.Connection, db_path: Path) -> None
 def render_que_hacer_hoy_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Workspace compacto: colas existentes, orden explícito, sin ranking opaco."""
     st.subheader("Qué hacer hoy")
+    _render_page_status(
+        "Qué hacer hoy",
+        note="Esto reúne prioridades del día desde distintas fuentes. No es una sola cola ni una única verdad del negocio.",
+    )
+    st.info(
+        "Workspace priorizado del día. Combina varias fuentes en una sola vista operativa: las filas no vienen todas del mismo lugar y cada una muestra su origen y su motivo."
+    )
     st.caption(
         "Sugerencias del día reunidas en un solo lugar. Cada fila dice **de dónde viene** y **por qué está acá**. "
         "No ejecuta acciones sola: solo orienta."
@@ -2603,6 +2793,7 @@ def main() -> None:
 
         if page == "Resumen":
             st.subheader("Resumen ejecutivo")
+            _render_page_status("Resumen")
             st.caption(
                 "Panorama del archivo importado y del mart de negocio. Las tareas sugeridas del día están en **Qué hacer hoy**."
             )
@@ -2915,6 +3106,7 @@ def main() -> None:
             st.subheader("Contactos")
             q = st.text_input("Buscar (email / dominio / organización)", value="")
             min_total = st.number_input("Mínimo de correos", min_value=0, value=3, step=1)
+            hide_suppressed = st.checkbox("Ocultar emails marcados como rebotados / no contactar", value=True)
             st.caption("Busca por email, dominio u organización. Se priorizan coincidencias más exactas.")
 
             dfc = _load_df(
@@ -2942,10 +3134,18 @@ def main() -> None:
                 dfc = dfc.sort_values(["_search_score", "total", "ultima"], ascending=[False, False, False])
             else:
                 dfc = dfc.sort_values(["total", "ultima"], ascending=[False, False])
+            supp_map = fetch_contact_email_suppression_map(conn, dfc["email"].dropna().astype(str).tolist())
+            if supp_map:
+                dfc["email_suppressed"] = dfc["email"].map(
+                    lambda x: "Sí" if str(x).strip().lower() in supp_map else ""
+                )
+                if hide_suppressed:
+                    dfc = dfc[dfc["email_suppressed"] != "Sí"]
             st.caption(f"Resultados: {len(dfc):,}")
             # Nombres de columnas más amigables para la tabla principal.
             dfc_display = dfc.rename(
                 columns={
+                    "email_suppressed": "Rebotado / bloqueado",
                     "dominio": "Dominio",
                     "organizacion": "Organización",
                     "tipo_org": "Tipo de organización",
@@ -2967,10 +3167,16 @@ def main() -> None:
                 row = _load_df(conn, "SELECT * FROM contact_master WHERE email=?", (sel,))
                 if not row.empty:
                     r = row.iloc[0]
+                    supp = fetch_contact_email_suppression_row(conn, str(r["email"]))
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         st.markdown("**Identidad del contacto**")
-                        st.markdown(f"- Email: `{r['email']}`")
+                        _render_copyable_email_row(str(r["email"]), key=f"copy_contact_{r['email']}")
+                        if supp:
+                            st.warning(
+                                "Email marcado para no reutilizarse: "
+                                f"{_contact_suppression_reason_label(str(supp.get('suppression_reason_code') or ''))}."
+                            )
                         st.markdown(f"- Dominio: `{r['domain']}`" if r.get("domain") else "- Dominio: (no detectado)")
                         org_name = r.get("organization_name_guess") or "Sin nombre de organización"
                         st.markdown(f"- Organización: {org_name}")
@@ -3006,6 +3212,98 @@ def main() -> None:
 
                     with st.expander("Ver datos técnicos del contacto"):
                         st.json(r.to_dict())
+
+                    if not contact_email_suppression_table_exists(conn):
+                        if _ensure_contact_email_suppression_ddl(db_path):
+                            st.info("Se creó la tabla para registrar rebotes/bloqueos de emails. Recargue la vista si no la ve aún.")
+                        else:
+                            st.caption("Si quiere registrar rebotes desde la app, use una base grabable para crear la tabla de supresión.")
+
+                    rw_supp = streamlit_contact_suppression_rw_enabled()
+                    st.markdown("### Estado del email")
+                    if supp:
+                        st.write(
+                            {
+                                "Estado": _contact_suppression_reason_label(str(supp.get("suppression_reason_code") or "")),
+                                "Detalle": supp.get("suppression_reason_text") or "—",
+                                "Origen": supp.get("suppression_source") or "—",
+                                "Último rebote": supp.get("last_bounced_at") or "—",
+                                "Actualizado": supp.get("updated_at") or "—",
+                                "Por": supp.get("updated_by") or "—",
+                            }
+                        )
+                    else:
+                        st.caption("Este email no está marcado como rebotado o bloqueado.")
+
+                    if rw_supp:
+                        with st.form(f"contact_suppression_form_{r['email']}", clear_on_submit=False):
+                            st.markdown("#### Marcar / actualizar rebote o bloqueo")
+                            reason_idx = 0
+                            if supp and str(supp.get("suppression_reason_code") or "") in SUPPRESSION_REASON_CODES:
+                                reason_idx = list(SUPPRESSION_REASON_CODES).index(str(supp.get("suppression_reason_code")))
+                            st_reason = st.selectbox(
+                                "Motivo",
+                                options=list(SUPPRESSION_REASON_CODES),
+                                index=reason_idx,
+                                format_func=_contact_suppression_reason_label,
+                                key=f"contact_supp_reason_{r['email']}",
+                            )
+                            st_reason_text = st.text_area(
+                                "Detalle breve (opcional)",
+                                value=str(supp.get("suppression_reason_text") or "") if supp else "",
+                                height=90,
+                                key=f"contact_supp_reason_text_{r['email']}",
+                            )
+                            st_source = st.text_input(
+                                "Origen del dato",
+                                value=str(supp.get("suppression_source") or "rebote manual") if supp else "rebote manual",
+                                key=f"contact_supp_source_{r['email']}",
+                            )
+                            st_bounced_at = st.text_input(
+                                "Fecha/hora del rebote (opcional)",
+                                value=str(supp.get("last_bounced_at") or "") if supp else "",
+                                key=f"contact_supp_bounced_at_{r['email']}",
+                            )
+                            st_by = st.text_input(
+                                "Quién actualiza (opcional)",
+                                value=str(supp.get("updated_by") or "") if supp else "",
+                                key=f"contact_supp_by_{r['email']}",
+                            )
+                            submitted = st.form_submit_button("Guardar marca de rebote/bloqueo")
+                            if submitted:
+                                conn_rw = sqlite3.connect(str(db_path), timeout=60.0)
+                                try:
+                                    ensure_contact_email_suppression_table(conn_rw)
+                                    payload = validate_contact_email_suppression_payload(
+                                        email=str(r["email"]),
+                                        suppression_reason_code=st_reason,
+                                        suppression_reason_text=st_reason_text or None,
+                                        suppression_source=st_source or None,
+                                        last_bounced_at=st_bounced_at or None,
+                                        updated_by=st_by or None,
+                                    )
+                                    upsert_contact_email_suppression(conn_rw, payload=payload)
+                                    conn_rw.commit()
+                                    st.success("Email marcado para no reutilizarse.")
+                                    st.rerun()
+                                except ValueError as err:
+                                    st.error(str(err))
+                                finally:
+                                    conn_rw.close()
+                        if supp and st.button("Quitar marca de rebote/bloqueo", key=f"contact_supp_delete_{r['email']}"):
+                            conn_rw = sqlite3.connect(str(db_path), timeout=60.0)
+                            try:
+                                ensure_contact_email_suppression_table(conn_rw)
+                                delete_contact_email_suppression(conn_rw, str(r["email"]))
+                                conn_rw.commit()
+                                st.success("Marca de rebote eliminada.")
+                                st.rerun()
+                            finally:
+                                conn_rw.close()
+                    else:
+                        st.info(
+                            "Para registrar rebotes desde esta app, use una base grabable y habilite `ORIGENLAB_STREAMLIT_CONTACT_SUPPRESSION_RW=1`."
+                        )
 
                     # Drill-down: documentos asociados al dominio del contacto.
                     st.markdown("### Documentos asociados a este contacto")
@@ -3377,8 +3675,16 @@ def main() -> None:
                     if contacts.empty:
                         st.info("No se encontraron contactos asociados a esta organización.")
                     else:
+                        contacts_supp_map = fetch_contact_email_suppression_map(
+                            conn, contacts["email"].dropna().astype(str).tolist()
+                        )
+                        if contacts_supp_map:
+                            contacts["email_suppressed"] = contacts["email"].map(
+                                lambda x: "Sí" if str(x).strip().lower() in contacts_supp_map else ""
+                            )
                         contacts_display = contacts.rename(
                             columns={
+                                "email_suppressed": "Rebotado / bloqueado",
                                 "dominio": "Dominio",
                                 "organizacion": "Organización",
                                 "primera": "Primera interacción",
@@ -3391,6 +3697,9 @@ def main() -> None:
                             }
                         )
                         st.dataframe(contacts_display, use_container_width=True, hide_index=True)
+                        st.caption("Copiar email de un contacto:")
+                        for i, email in enumerate(contacts["email"].dropna().astype(str).tolist()):
+                            _render_copyable_email_row(email, key=f"copy_org_contact_{r['domain']}_{i}", prefix="Contacto")
 
                     # Drill-down: documentos recientes de la organización.
                     st.markdown("### Documentos comerciales recientes")
@@ -3565,6 +3874,10 @@ def main() -> None:
 
         if page == "Candidatos comerciales":
             st.subheader("Candidatos comerciales (inteligencia comercial v1)")
+            _render_page_status(
+                "Candidatos comerciales",
+                note="Puede revisar la cola siempre; las acciones de aprobar, rechazar o posponer solo escriben en la base si el modo RW está habilitado.",
+            )
             st.caption(
                 "Cola de revisión humana sobre lo detectado en el correo. Los estados se guardan en la base "
                 "(no reemplaza un CRM)."
@@ -3720,6 +4033,7 @@ def main() -> None:
 
         if page == "Oportunidades":
             st.subheader("Oportunidades")
+            _render_page_status("Oportunidades")
             dfs = _load_df(
                 conn,
                 """

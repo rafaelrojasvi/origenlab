@@ -21,6 +21,7 @@ def _load_app_module():
 
 
 app = _load_app_module()
+APP_SOURCE = (Path(__file__).resolve().parents[1] / "apps" / "business_mart_app.py").read_text(encoding="utf-8")
 
 
 def test_date_prefix_and_days_since_helpers():
@@ -190,6 +191,32 @@ def test_load_existing_pilot_batch_reads_csv_and_case_json(tmp_path: Path) -> No
     assert cases is not None
     assert len(cases) == 1
     assert cases[0]["case"]["case_id"] == "c1"
+
+
+def test_page_status_values_cover_key_client_pages() -> None:
+    expected_pages = {
+        "Resumen",
+        "Salud de datos",
+        "Actividad contacto Gmail",
+        "Casos para revisar",
+        "Borrador comercial",
+        "Qué hacer hoy",
+        "Leads y cuentas",
+        "Proveedores",
+        "Candidatos comerciales",
+        "Oportunidades",
+    }
+    assert expected_pages.issubset(set(app.PAGE_STATUS_PRESETS.keys()))
+    for page in expected_pages:
+        values = app._page_status_values(page)
+        assert values["source"]
+        assert values["freshness"]
+
+
+def test_client_clarity_copy_mentions_are_present_in_source() -> None:
+    assert "Esto reúne prioridades del día desde distintas fuentes." in APP_SOURCE
+    assert "### Revisar borradores guardados" in APP_SOURCE
+    assert "### Crear nuevo borrador" in APP_SOURCE
 
 
 def test_navigate_to_sets_session_state_and_calls_rerun(monkeypatch):
