@@ -115,6 +115,17 @@ Commercial schema is added through `migrate_sqlite_schema(..., layers={SchemaLay
 
 ---
 
+<a id="m-schema-operator-sidecar"></a>
+## Operator sidecar (durable, lazy DDL)
+
+Small tables for **human / operator state** that must not live on raw `emails`. DDL is applied via `CREATE TABLE IF NOT EXISTS` when callers invoke `ensure_*`; they are **not** part of the default `migrate_sqlite_schema` stack (same pattern as `contact_email_suppression`).
+
+| Object | DDL / helpers | Data | Notes |
+|--------|----------------|------|--------|
+| `outreach_contact_state` | [`outreach_contact_state.py`](../../src/origenlab_email_pipeline/outreach_contact_state.py) `ensure_outreach_contact_state_table` | Upsert/fetch helpers | Contact-level outreach status (`not_contacted`, `contacted`, `replied`, `snoozed`). Optional `lead_id` is a plain INTEGER (no FK) so the table can exist before `lead_master`. Hard excludes remain [`contact_email_suppression.py`](../../src/origenlab_email_pipeline/contact_email_suppression.py). **Inferred “we contacted them” from raw mail should use the OrigenLab mailbox / `@origenlab.cl`, not LabDelivery (`labdelivery.cl`)—see module docstring. |
+
+---
+
 <a id="m-schema-summary"></a>
 ## Clean vs split (summary)
 

@@ -86,12 +86,24 @@ Las siguientes veces **no** debería abrir el navegador si el refresh token sigu
 
 ## Carpetas IMAP (Gmail)
 
-| Uso | `--folder` típico (Gmail en inglés) |
-|-----|-------------------------------------|
-| Bandeja de entrada | `INBOX` |
-| Enviados | `[Gmail]/Sent Mail` |
+Los nombres bajo `[Gmail]/...` dependen del **idioma de la interfaz de Gmail** del buzón (no del cliente IMAP). Si `--folder` falla con *Could not select folder*, no uses el nombre “de manual” en inglés: lista lo que devuelve el servidor y copia la línea tal cual.
 
-Si falla `SELECT`, en Gmail → **Configuración** → **Etiquetas** revisa el nombre IMAP exacto (cambia con el idioma).
+```bash
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders
+```
+
+| Uso | Gmail UI **inglés** (típico) | Gmail UI **español** (típico) |
+|-----|------------------------------|--------------------------------|
+| Bandeja de entrada | `INBOX` | `INBOX` |
+| Enviados | `[Gmail]/Sent Mail` | `[Gmail]/Enviados` |
+| Borradores | `[Gmail]/Drafts` | `[Gmail]/Borradores` |
+| Destacados | `[Gmail]/Starred` | `[Gmail]/Destacados` |
+| Importantes | `[Gmail]/Important` | `[Gmail]/Importantes` |
+| Spam | `[Gmail]/Spam` | `[Gmail]/Spam` |
+| Papelera | `[Gmail]/Trash` | `[Gmail]/Papelera` |
+| Todos | `[Gmail]/All Mail` | `[Gmail]/Todos` |
+
+No uses solo `[Gmail]` como `--folder`: es contenedor; elige una carpeta hoja (p. ej. `[Gmail]/Enviados`). Para el nombre exacto en tu cuenta, prioriza la salida de `--list-folders`.
 
 ---
 
