@@ -3,6 +3,8 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Catálogo técnico editorial OrigenLab: electroforesis, osmometría, centrifugación, dispersión y ultrasonidos.">
 <title>OrigenLab · Catálogo técnico editorial</title>
 <style>
   @page { size: A4; margin: 0; }
@@ -13,7 +15,7 @@
     --page-pad-top: 10mm; --page-pad-x: 12mm; --page-pad-bottom: 12mm;
   }
   * { box-sizing: border-box; }
-  html { background: #d9d1c4; }
+  html { background: #d9d1c4; scroll-behavior: smooth; }
   body {
     margin:0; font-family:"DejaVu Sans", Arial, sans-serif; color:var(--ink); background:var(--bg);
     line-height:1.36; font-size:10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact;
@@ -21,11 +23,24 @@
   h1,h2,h3,h4 { margin:0 0 6px 0; font-family:Georgia, "Times New Roman", serif; color:var(--teal-dark); line-height:1.08; font-weight:700; }
   h1 { font-size:30pt; color:white; } h2 { font-size:21pt; } h3 { font-size:14.2pt; } h4 { font-size:11.2pt; }
   p { margin:0 0 7px 0; }
-  .page { width:210mm; min-height:297mm; padding:var(--page-pad-top) var(--page-pad-x) var(--page-pad-bottom) var(--page-pad-x); background:var(--bg); page-break-after:always; break-after:page; position:relative; overflow:hidden; }
-  /* :last-of-type: trailing whitespace after </section> breaks :last-child and leaves page-break-after on the final page → blank PDF sheet */
+  /* Screen-first: fluid sections; print restores A4 sheet semantics in @media print */
+  .page {
+    width: 100%;
+    max-width: 210mm;
+    margin-left: auto;
+    margin-right: auto;
+    min-height: 0;
+    padding: clamp(1rem, 4vw, var(--page-pad-top)) clamp(0.85rem, 4vw, var(--page-pad-x)) clamp(1.1rem, 4vw, var(--page-pad-bottom)) clamp(0.85rem, 4vw, var(--page-pad-x));
+    background: var(--bg);
+    position: relative;
+    overflow: visible;
+    page-break-after: auto;
+    break-after: auto;
+  }
+  /* :last-of-type: trailing text node after </section> can break :last-child → blank PDF sheet */
   .page:last-of-type { page-break-after:auto; break-after:auto; }
   .cover-page { padding:0; }
-  .cover-grid { min-height:297mm; display:grid; grid-template-columns:1.16fr 0.84fr; }
+  .cover-grid { min-height:auto; display:grid; grid-template-columns:1.16fr 0.84fr; }
   .cover-left {
     position:relative; color:white; padding:22mm 15mm 16mm 15mm;
     background:linear-gradient(180deg, rgba(20,89,84,.98), rgba(26,116,110,.96));
@@ -149,6 +164,62 @@
   .selection-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:5mm; }
   .selection-box { background:white; border:1px solid var(--line); border-radius:4mm; padding:5mm; min-height:44mm; }
 
+  .catalog-nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(251, 248, 243, 0.94);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 4px 24px rgba(25, 45, 45, 0.07);
+  }
+  .catalog-nav-inner {
+    max-width: min(100%, 210mm);
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.45rem 0.65rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    font-size: clamp(0.68rem, 2.6vw, 0.78rem);
+  }
+  .catalog-nav-brand {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 700;
+    color: var(--teal-dark);
+    flex-shrink: 0;
+    margin-right: 0.25rem;
+    letter-spacing: 0.02em;
+  }
+  .catalog-nav a {
+    color: var(--teal-dark);
+    text-decoration: none;
+    white-space: nowrap;
+    padding: 0.35rem 0.45rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+  }
+  .catalog-nav a:hover,
+  .catalog-nav a:focus-visible {
+    background: var(--sage);
+    outline: none;
+  }
+  .catalog-nav .nav-pdf {
+    margin-left: auto;
+    flex-shrink: 0;
+    background: var(--teal);
+    color: #fff !important;
+    font-weight: 700;
+    border-color: rgba(20, 89, 84, 0.2);
+  }
+  .catalog-nav .nav-pdf:hover,
+  .catalog-nav .nav-pdf:focus-visible {
+    background: var(--teal-dark);
+  }
+
   .card,
   .product-box,
   .brand,
@@ -158,20 +229,84 @@
   .mini-card,
   .contact-card,
   .hero-panel,
-  .mini-stat,
-  .data-table {
+  .mini-stat {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
   @media screen {
     body {
-      padding: 18px;
+      padding: 0 0 clamp(1.5rem, 5vw, 2.25rem);
     }
 
     .page {
-      margin: 0 auto 22px auto;
-      box-shadow: 0 18px 46px rgba(41, 45, 44, .16);
+      margin: 0 auto clamp(1.25rem, 3.5vw, 1.75rem) auto;
+      box-shadow: 0 14px 40px rgba(41, 45, 44, 0.11);
+      border-radius: 2px;
+      scroll-margin-top: 3.25rem;
+    }
+
+    .data-table {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+    }
+    .data-table table {
+      min-width: min(100%, 36rem);
+    }
+    .data-table.dense table {
+      min-width: 44rem;
+    }
+
+    @media (max-width: 900px) {
+      .cover-grid {
+        grid-template-columns: 1fr;
+      }
+      .cover-left {
+        border-radius: 0 0 8mm 8mm;
+      }
+    }
+
+    @media (max-width: 768px) {
+      body {
+        font-size: clamp(0.82rem, 2.9vw, 0.95rem);
+      }
+      h2 { font-size: clamp(1.15rem, 4.2vw, 1.45rem); }
+      h3 { font-size: clamp(0.95rem, 3.2vw, 1.05rem); }
+      .two-pane { grid-template-columns: 1fr; gap: 5mm; }
+      .grid-2,
+      .grid-3,
+      .grid-4,
+      .product-grid,
+      .brand-strip,
+      .stats,
+      .selection-grid,
+      .mini-stats {
+        grid-template-columns: 1fr;
+      }
+      .hero-panel,
+      .hero-panel.tall,
+      .hero-panel.compact {
+        min-height: 11rem;
+        padding: 5mm;
+      }
+      .hero-callout {
+        position: static;
+        max-width: none;
+        margin-top: 4mm;
+      }
+      .cta-panel {
+        min-height: auto;
+        padding: 7mm;
+      }
+      .figure-label {
+        position: static;
+        display: inline-block;
+        margin-bottom: 3mm;
+      }
+      .hero-panel.darkshot .figure-label.inverse {
+        margin-bottom: 2mm;
+      }
     }
   }
 
@@ -183,21 +318,81 @@
       background: var(--bg);
     }
 
+    .catalog-nav {
+      display: none !important;
+    }
+
     .page {
-      margin: 0;
-      box-shadow: none;
+      width: 210mm !important;
+      max-width: none !important;
+      overflow: visible !important;
+      min-height: auto !important;
+      height: auto !important;
+      box-shadow: none !important;
+      margin: 0 !important;
+      padding: var(--page-pad-top) var(--page-pad-x) var(--page-pad-bottom) var(--page-pad-x) !important;
+      border-radius: 0 !important;
+      break-after: page;
+      page-break-after: always;
+    }
+
+    .cover-grid {
+      min-height: 297mm;
+    }
+
+    .page.cover-page {
+      min-height: 297mm;
     }
 
     .page:last-of-type {
-      page-break-after: avoid;
-      break-after: avoid;
+      break-after: auto;
+      page-break-after: auto;
+    }
+
+    .data-table {
+      overflow: visible !important;
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+
+    .data-table table {
+      min-width: 0 !important;
+    }
+
+    .data-table thead {
+      display: table-header-group;
+    }
+
+    .data-table tr,
+    .data-table td,
+    .data-table th {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
   }
 </style>
 </head>
 <body>
 
-<section class="page cover-page">
+<nav class="catalog-nav" aria-label="Índice del catálogo">
+  <div class="catalog-nav-inner">
+    <span class="catalog-nav-brand">OrigenLab</span>
+    <a href="#portada">Portada</a>
+    <a href="#mapa">Mapa</a>
+    <a href="#serva-linea">SERVA</a>
+    <a href="#serva-sistema">SERVA · tabla</a>
+    <a href="#biocen22">BIOCEN 22</a>
+    <a href="#biocen22r">BIOCEN 22 R</a>
+    <a href="#loser-gama">Löser</a>
+    <a href="#knauer">KNAUER</a>
+    <a href="#ika">IKA</a>
+    <a href="#hielscher">Hielscher</a>
+    <a href="#contacto">Contacto</a>
+    <a href="catalog-multipage.pdf" class="nav-pdf" download>Descargar PDF</a>
+  </div>
+</nav>
+
+<section id="portada" class="page cover-page">
   <div class="cover-grid">
     <div class="cover-left">
       <div class="overlay"></div>
@@ -223,11 +418,11 @@
       <div class="contact-card">
         <h3>Catálogo técnico</h3>
         <div class="contact-line"><strong>Formato</strong><br>Documento técnico-comercial</div>
-        <div class="contact-line"><strong>Base pública</strong><br>Valdivia, Chile</div>
+        <div class="contact-line"><strong>Sede</strong><br>Valdivia, Chile</div>
         <div class="contact-line"><strong>Email</strong><br>contacto@origenlab.cl</div>
         <div class="contact-line"><strong>Teléfono / WhatsApp</strong><br>+56 9 6256 7816</div>
         <div class="contact-line"><strong>Uso recomendado</strong><br>Presentación comercial, envío inicial y apoyo a cotización</div>
-        <div class="mini-note">Para ampliar fichas, accesorios o prioridades de portafolio, escríbanos; adaptamos el detalle a su mercado.</div>
+        <div class="mini-note">Para fichas ampliadas, accesorios o cotizaciones específicas, contacte a OrigenLab.</div>
       </div>
       <div class="mini-card">
         <h3>Enfoque del documento</h3>
@@ -237,29 +432,18 @@
   </div>
 </section>
 
-<section class="page">
+<section id="mapa" class="page">
   <div class="section-kicker">01 · Mapa del catálogo</div>
   <h2>Cómo está organizado</h2>
   <div class="divider"></div>
-  <div class="grid-2">
-    <div class="card soft">
-      <h3>Qué incluye</h3>
-      <ul class="spec-list">
-        <li>Marcas y líneas organizadas por aplicación.</li>
-        <li>Fichas resumidas con especificaciones clave, capacidad, rangos, interfaces y accesorios destacados.</li>
-        <li>Comparativas para orientar la cotización según el uso.</li>
-        <li>Notas de contexto breves para presentar cada línea con rigor técnico.</li>
-      </ul>
-    </div>
-    <div class="card soft">
-      <h3>Trabajo conjunto con OrigenLab</h3>
-      <ul class="spec-list">
-        <li>Ajuste del portafolio visible y del nivel de detalle por marca o familia.</li>
-        <li>Priorización de líneas según su foco (entrada, premium, especializado).</li>
-        <li>Inclusión de accesorios y configuraciones bajo demanda al cotizar.</li>
-        <li>Apoyo para alinear su comunicación con la documentación oficial del fabricante.</li>
-      </ul>
-    </div>
+  <div class="card soft">
+    <h3>Qué incluye</h3>
+    <ul class="spec-list">
+      <li>Marcas y líneas organizadas por aplicación.</li>
+      <li>Fichas resumidas con especificaciones clave, capacidad, rangos, interfaces y accesorios destacados.</li>
+      <li>Comparativas para orientar la cotización según el uso.</li>
+      <li>Contexto técnico conciso para presentar cada línea con rigor.</li>
+    </ul>
   </div>
   <div style="height:7mm"></div>
   <div class="brand-strip">
@@ -271,7 +455,7 @@
   </div>
   <div class="stats">
     <div class="stat"><div class="k">Marcas / familias</div><div class="v">5 grupos<br>principales</div></div>
-    <div class="stat"><div class="k">Equipos destacados</div><div class="v">12+ fichas<br>curadas</div></div>
+    <div class="stat"><div class="k">Equipos destacados</div><div class="v">12+ fichas<br>técnicas</div></div>
     <div class="stat"><div class="k">Cobertura</div><div class="v">Investigación, QC,<br>clínico, alimentos</div></div>
     <div class="stat"><div class="k">Formato</div><div class="v">Referencia técnica<br>para cotizar</div></div>
   </div>
@@ -280,30 +464,30 @@
 </section>
 
 
-<section class="page">
+<section id="serva-linea" class="page">
   <div class="section-kicker">02 · SERVA</div>
-  <h2>Electroforesis: una línea más visual, modular y orientada a workflow</h2>
+  <h2>Electroforesis: línea visual, modular y pensada para el laboratorio</h2>
   <div class="divider"></div>
   <div class="two-pane">
     <div>
       <div class="hero-panel darkshot tall">
         <span class="figure-label inverse">SERVA · HPE™ BlueHorizon™</span>
         <img src="catalog_assets_premium/serva_bluehorizon.jpg" alt="SERVA HPE BlueHorizon">
-        <div class="hero-callout"><strong>Sistema flatbed</strong>Para geles precasteados, self-cast e IPG strips, con foco en separaciones reproducibles y alta resolución.</div>
+        <div class="hero-callout"><strong>Sistema flatbed.</strong> Para geles precasteados, autocast e tiras IPG; separaciones reproducibles y alta resolución.</div>
       </div>
       <div class="mini-stats">
         <div class="mini-stat"><div class="k">Sistema</div><div class="v">HPE™<br>BlueHorizon™</div></div>
         <div class="mini-stat"><div class="k">Formato gel</div><div class="v">hasta<br>260 × 205 mm</div></div>
         <div class="mini-stat"><div class="k">Electrodos</div><div class="v">3 posiciones</div></div>
       </div>
-      <div class="footer-line">Referencia visual del sistema HPE™ BlueHorizon™ para electroforesis horizontal.</div>
+      <div class="footer-line">HPE™ BlueHorizon™ — sistema de electroforesis horizontal.</div>
     </div>
     <div>
       <div class="card serva-gradient">
         <h3>Panorama de la línea</h3>
         <p>SERVA ofrece un conjunto amplio en electroforesis: geles precasteados, reactivos, buffers, kits de blotting y equipos horizontales de alta resolución.</p>
         <div style="height:3mm"></div>
-        <p class="small">La línea encaja bien cuando se requiere un flujo completo: sistema + gel + buffer + reactivos + consumibles de transferencia.</p>
+        <p class="small">Apta cuando se busca una solución integrada: sistema, geles, buffers, reactivos y consumibles de transferencia.</p>
         <div style="height:6mm"></div>
         <span class="tag" style="background:rgba(255,255,255,.14);color:white;border:1px solid rgba(255,255,255,.12);">SDS / Native PAGE</span>
         <span class="tag" style="background:rgba(255,255,255,.14);color:white;border:1px solid rgba(255,255,255,.12);">IEF / 2D PAGE</span>
@@ -315,7 +499,7 @@
       <div class="accent-box">
         <h3>Argumentos clave</h3>
         <ul class="spec-list">
-          <li>Categorías claras para estructurar una solución modular: SDS and Native PAGE, IEF, Western Blotting y equipos.</li>
+          <li>Categorías claras para una solución modular: SDS y Native PAGE, IEF, Western blotting y equipos.</li>
           <li>Los SERVAGel™ verticales son precasteados, listos para uso, en cassette plástico irrompible y empaque al vacío.</li>
           <li>Los sistemas HPE™ BlueHorizon™ permiten correr geles horizontales con control térmico y posiciones de electrodo configurables.</li>
           <li>Kits rápidos de blotting y reactivos puntuales útiles para ampliar capacidades de forma escalonada.</li>
@@ -323,7 +507,13 @@
       </div>
     </div>
   </div>
-  <div style="height:6mm"></div>
+</section>
+
+<section id="serva-productos" class="page">
+  <div class="section-kicker">02 · SERVA · continuación</div>
+  <h2>Productos destacados</h2>
+  <p class="small muted" style="margin:0 0 5mm 0">Reactivos, geles y kits · referencia rápida de códigos.</p>
+  <div class="divider"></div>
   <div class="product-grid">
     <div class="product-box">
       <div class="code">42500.01 · 250 ml</div>
@@ -353,7 +543,7 @@
 </section>
 
 
-<section class="page">
+<section id="serva-sistema" class="page">
   <div class="section-kicker">03 · SERVA</div>
   <h2>Sistema, geles y consumibles recurrentes</h2>
   <div class="divider"></div>
@@ -363,26 +553,26 @@
         <tr><th>Línea / producto</th><th>Dato técnico útil</th><th>Código / formato</th><th>Nota de aplicación</th></tr>
       </thead>
       <tbody>
-        <tr><td>HPE™ BlueHorizon™ System</td><td>Sistema completo con cámara flatbed, BluePower 3000 HPE™ y unidad de enfriamiento. Geles soportados hasta 260 × 205 mm. 3 posiciones de electrodo: 270 / 195 / 115 mm.</td><td>HPE-BHSYS.01</td><td>Plataforma completa (equipo e insumos), no solo consumibles aislados.</td></tr>
+        <tr><td>HPE™ BlueHorizon™ System</td><td>Sistema completo con cámara flatbed, BluePower 3000 HPE™ y unidad de enfriamiento. Geles soportados hasta 260 × 205 mm. 3 posiciones de electrodo: 270 / 195 / 115 mm.</td><td>HPE-BHSYS.01</td><td>Plataforma equipo + insumos para electroforesis horizontal.</td></tr>
         <tr><td>SERVAGel™ Neutral pH 7.4</td><td>Formato 10 × 10 cm; distintos números de wells. Compatible con varios sistemas buffer. Shelf life extendida por buffer neutro.</td><td>43256.01 / 43220.01 / 43222.01</td><td>Punto de partida claro para geles precasteados.</td></tr>
         <tr><td>SERVAGel™ Neutral HSE</td><td>Gel neutral optimizado para alta velocidad; corrida típica de 20 min (30 min en 2D).</td><td>43249.01 / 43245.01 / 43246.01 / 43247.01</td><td>Adecuado para corridas rápidas y blotting.</td></tr>
-        <tr><td>SDS Gel Kits horizontales</td><td>4 gels film-backed de 250 × 125 × 0,45 mm + buffer kit; 25 o 52 slots según variante.</td><td>43359.01–43364.01 / 43391.01</td><td>Coherente con sistemas horizontales ya definidos.</td></tr>
+        <tr><td>SDS Gel Kits horizontales</td><td>4 gels film-backed de 250 × 125 × 0,45 mm + buffer kit; 25 o 52 slots según variante.</td><td>43359.01–43364.01 / 43391.01</td><td>Compatible con sistemas horizontales de la gama.</td></tr>
         <tr><td>Excellent Gel Kits 1D SDS PAGE</td><td>25 muestras por gel, 15 µl por muestra, tamaño 260 × 125 × 0,43 mm.</td><td>43421.01–43426.01</td><td>Buena opción para alta resolución en 1D SDS.</td></tr>
-        <tr><td>Acrylamide/Bis Solutions</td><td>Soluciones listas 29:1 y 37.5:1 en 30 % o 40 %; también APS y TEMED grado electroforesis.</td><td>10680.xx / 10681.xx / 10687.xx / 10688.xx / 13376.xx / 35930.xx</td><td>Soporte sólido de consumibles de reposición junto al equipo.</td></tr>
+        <tr><td>Acrylamide/Bis Solutions</td><td>Soluciones listas 29:1 y 37.5:1 en 30 % o 40 %; también APS y TEMED grado electroforesis.</td><td>10680.xx / 10681.xx / 10687.xx / 10688.xx / 13376.xx / 35930.xx</td><td>Reposición alineada con equipos y geles de la línea.</td></tr>
       </tbody>
     </table>
   </div>
   <div style="height:6mm"></div>
   <div class="grid-3">
-    <div class="selection-box"><h4>Workflow sugerido</h4><p class="small">Equipo HPE™ + gel precasteado + buffer + reactivo puntual: conjunto integrado y fácil de especificar.</p></div>
-    <div class="selection-box"><h4>Primeros insumos</h4><p class="small">BlueSlick™ y TEMED son adecuados para iniciar o ampliar capacidad sin comprometer todo el portafolio de una vez.</p></div>
+    <div class="selection-box"><h4>Conjunto típico</h4><p class="small">Equipo HPE™, gel precasteado, buffer y reactivos puntuales para una especificación clara y coherente.</p></div>
+    <div class="selection-box"><h4>Ampliación gradual</h4><p class="small">BlueSlick™ y TEMED permiten iniciar o ampliar capacidad paso a paso.</p></div>
     <div class="selection-box"><h4>Reposición</h4><p class="small">Geles, buffers, acrylamide/Bis, APS y consumibles de blotting sostienen el suministro periódico del laboratorio.</p></div>
   </div>
-  <div class="footer-line">La línea se entiende bien por familias: sistema, gel, buffer y reactivo, lo que facilita soluciones completas y recurrentes.</div>
+  <div class="footer-line">La gama se organiza por familias—sistema, gel, buffer y reactivo—para soluciones completas y reposiciones claras.</div>
 </section>
 
 
-<section class="page">
+<section id="biocen22" class="page">
   <div class="section-kicker">04 · Ortoalresa</div>
   <h2>BIOCEN 22 · microcentrífuga ventilada</h2>
   <div class="divider"></div>
@@ -391,7 +581,7 @@
       <div class="hero-panel tall">
         <span class="figure-label">BIOCEN 22</span>
         <img src="catalog_assets_premium/biocen22.jpg" alt="BIOCEN 22">
-        <div class="hero-callout"><strong>Microcentrífuga compacta</strong>Diseñada para microhematocrito y microtubos con footprint compacto y control simple.</div>
+        <div class="hero-callout"><strong>Microcentrífuga compacta.</strong> Microhematocrito y microtubos; gabinete reducido y manejo sencillo.</div>
       </div>
       
       <div class="mini-stats">
@@ -400,10 +590,10 @@
         <div class="mini-stat"><div class="k">Capacidad</div><div class="v">24 × 2 ml<br>12 × 5 ml</div></div>
       </div>
 
-      <div class="footer-line">Vista del BIOCEN 22 con datos operativos a primera vista.</div>
+      <div class="footer-line">BIOCEN 22: vista general y datos principales.</div>
     </div>
     <div>
-      <div class="card"><div class="code">BIOCEN 22 · ventilada</div><h3>Ficha rápida</h3><p>Microcentrífuga compacta para laboratorios que requieren aplicaciones en microhematocrito y microtubos. Su tamaño reducido y versatilidad la vuelven una base fuerte para laboratorios que necesitan rendimiento sin ocupar demasiado espacio.</p></div>
+      <div class="card"><div class="code">BIOCEN 22 · ventilada</div><h3>Ficha rápida</h3><p>Microcentrífuga compacta para microhematocrito y microtubos. Gabinete reducido y buen desempeño para quienes necesitan capacidad sin ocupar demasiado espacio.</p></div>
       <div style="height:4mm"></div>
       <div class="data-table"><table><tbody>
         <tr><th>Capacidad máxima</th><td>24 × 2 ml / 12 × 5 ml</td></tr>
@@ -434,7 +624,12 @@
       <li>Ventilación forzada para reducir incremento de temperatura.</li>
     </ul></div>
   </div>
-  <div style="height:6mm"></div>
+</section>
+
+<section id="biocen22-rotores" class="page">
+  <div class="section-kicker">04 · Ortoalresa · continuación</div>
+  <h2>BIOCEN 22 · rotores disponibles</h2>
+  <div class="divider"></div>
   <div class="data-table dense"><table>
     <thead><tr><th>Rotor</th><th>Tipo</th><th>Capacidad máx.</th><th>RPM máx.</th><th>Radio</th><th>FCR máx.</th></tr></thead>
     <tbody>
@@ -446,8 +641,7 @@
 </section>
 
 
-
-<section class="page">
+<section id="biocen22r" class="page">
   <div class="section-kicker">05 · Ortoalresa</div>
   <h2>BIOCEN 22 R · microcentrífuga refrigerada</h2>
   <div class="divider"></div>
@@ -456,7 +650,7 @@
       <div class="hero-panel tall">
         <span class="figure-label">BIOCEN 22 R</span>
         <img src="catalog_assets_premium/biocen22r.jpg" alt="BIOCEN 22 R">
-        <div class="hero-callout"><strong>Control térmico</strong>Versión refrigerada con orientación a investigación y biotecnología, con control térmico y mayor capacidad de configuración.</div>
+        <div class="hero-callout"><strong>Control térmico.</strong> Versión refrigerada para investigación y biotecnología; amplio rango de temperatura y configuración.</div>
       </div>
       
       <div class="mini-stats">
@@ -465,10 +659,10 @@
         <div class="mini-stat"><div class="k">Temperatura</div><div class="v">-20 a 40<br>°C</div></div>
       </div>
 
-      <div class="footer-line">BIOCEN 22 R: vista del equipo con énfasis en desempeño y control térmico.</div>
+      <div class="footer-line">BIOCEN 22 R — refrigerada, alto desempeño.</div>
     </div>
     <div>
-      <div class="card"><div class="code">BIOCEN 22 R · refrigerada</div><h3>Ficha rápida</h3><p>Versión refrigerada con enfoque fuerte en investigación y biotecnología. Robusta, versátil y eficiente; está pensada para laboratorios que requieren control térmico y mayor desempeño.</p></div>
+      <div class="card"><div class="code">BIOCEN 22 R · refrigerada</div><h3>Ficha rápida</h3><p>Versión refrigerada para investigación y biotecnología: robusta, versátil y con control térmico preciso para mayor desempeño.</p></div>
       <div style="height:4mm"></div>
       <div class="data-table"><table><tbody>
         <tr><th>Capacidad máxima</th><td>8 × 15 ml</td></tr>
@@ -498,7 +692,12 @@
       <li>Rotores y reductores autoclavables.</li><li>Desconexión automática para ahorro energético.</li>
     </ul></div>
   </div>
-  <div style="height:6mm"></div>
+</section>
+
+<section id="biocen22r-rotores" class="page">
+  <div class="section-kicker">05 · Ortoalresa · continuación</div>
+  <h2>BIOCEN 22 R · rotores disponibles</h2>
+  <div class="divider"></div>
   <div class="data-table dense"><table>
     <thead><tr><th>Rotor</th><th>Tipo</th><th>Capacidad</th><th>RPM máx.</th><th>FCR máx.</th><th>Uso típico</th></tr></thead>
     <tbody>
@@ -512,12 +711,12 @@
 </section>
 
 
-<section class="page">
+<section id="loser-gama" class="page">
   <div class="section-kicker">06 · Löser</div>
   <h2>Osmometría por punto de congelación · familia Löser</h2>
   <div class="divider"></div>
   <div class="grid-2">
-    <div class="card"><h3>Alcance de la gama</h3><p>La gama Löser se organiza por nivel de complejidad: modelos basic para necesidad esencial, versiones “i” con interfaces de datos y versiones completas con impresora / escáner integrados.</p><div style="height:3mm"></div><p class="small">La lógica “M” reduce el volumen de muestra requerido y es especialmente útil cuando el volumen disponible es limitado.</p></div>
+    <div class="card"><h3>Alcance de la gama</h3><p>La gama Löser se organiza por nivel de funcionalidad: modelos Basic para operación esencial, versiones «i» con interfaz de datos y equipos completos con impresora y escáner integrados.</p><div style="height:3mm"></div><p class="small">Las variantes «M» permiten menor volumen de muestra (10–50 µl), útil cuando la muestra es escasa.</p></div>
     <div class="card"><h3>Rasgos comunes</h3><ul class="spec-list small"><li>Principio de medición por depresión del punto de congelación.</li><li>Enfriamiento por aire, sin suministro externo de agua.</li><li>Display táctil con iconos y acceso multinivel.</li><li>Tubos plásticos de un solo uso y calibración variable de 3 puntos.</li><li>Rango de medición: 0–2500 mosm/kg H₂O en la línea basic / i.</li></ul></div>
   </div>
   <div style="height:6mm"></div>
@@ -539,23 +738,24 @@
   </div>
 </section>
 
-<section class="page">
+<section id="loser-imagen" class="page">
   <div class="section-kicker">07 · Löser</div>
-  <h2>Selección rápida y especificación común</h2>
+  <h2>Imagen del producto y datos técnicos de referencia</h2>
+  <p class="small" style="margin:0 0 4mm 0;max-width:48rem;opacity:.88">Resumen del modelo ilustrado y de los datos que normalmente se solicitan en cotización. Las variantes Basic, «i» y M aparecen en la tabla de la sección anterior.</p>
   <div class="divider"></div>
   <div class="grid-2">
-    <div><div class="hero-panel tall"><span class="figure-label">Löser · i Osmometer</span><img src="catalog_assets_premium/loser_i.jpg" alt="Löser i Osmometer"><div class="hero-callout"><strong>Familia modular</strong>Versiones basic, i y M según trazabilidad y volumen de muestra.</div></div><div class="footer-line">Ejemplo representativo de la familia Löser para lectura rápida en catálogo.</div></div>
+    <div><div class="hero-panel tall"><span class="figure-label">Löser · i Osmometer</span><img src="catalog_assets_premium/loser_i.jpg" alt="Löser i Osmometer"><div class="hero-callout"><strong>Familia modular.</strong> Versiones Basic, i y M según volumen de muestra y necesidad de trazabilidad de datos.</div></div><div class="footer-line">Ilustración: i Osmometer, gama modular Löser.</div></div>
     <div class="card">
-      <h3>Especificación común útil para cotización</h3>
+      <h3>Parámetros técnicos recurrentes</h3>
       <ul class="spec-list small">
-        <li>Dimensiones recurrentes: 190 × 278 × 216 mm.</li>
+        <li>Dimensiones habituales: 190 × 278 × 216 mm.</li>
         <li>Rango de medida declarado: 0–2500 mosm/kg H₂O.</li>
         <li>Display con unidades conmutables (mosm / m°C / %0,9 NaCl).</li>
         <li>Calibración con soluciones 300 y 900 mosm/kg H₂O; otros puntos configurables.</li>
         <li>Accesorios usuales: salida analógica XY plotter y soluciones de calibración.</li>
       </ul>
       <div style="height:4mm"></div>
-      <h3>Incluido según folleto</h3>
+      <h3>Contenido habitual del equipo</h3>
       <ul class="spec-list small">
         <li>50 tubos plásticos.</li>
         <li>2 × 10 viales de soluciones patrón 300 y 900 mosm/kg H₂O.</li>
@@ -568,16 +768,16 @@
   <div class="selection-grid">
     <div class="selection-box"><h4>Elegir “M”</h4><p class="small">Cuando el volumen de muestra disponible es limitado y se quiere operar entre 10 y 50 µl.</p></div>
     <div class="selection-box"><h4>Elegir “i”</h4><p class="small">Cuando la trazabilidad de datos y la conexión a PC / impresora importan más que el costo base.</p></div>
-    <div class="selection-box"><h4>Elegir “i Osmometer”</h4><p class="small">Cuando el flujo pide impresora, scanner y memoria ampliada integrados en el equipo.</p></div>
+    <div class="selection-box"><h4>Elegir “i Osmometer”</h4><p class="small">Cuando se requiere impresora, escáner y memoria ampliada integrados en el equipo.</p></div>
   </div>
 </section>
 
-<section class="page">
+<section id="knauer" class="page">
   <div class="section-kicker">08 · KNAUER</div>
   <h2>K-7400S Semi-Micro Osmometer</h2>
   <div class="divider"></div>
   <div class="two-pane">
-    <div><div class="hero-panel tall"><span class="figure-label">KNAUER · K-7400S</span><img src="catalog_assets_premium/knauer_k7400s.png" alt="K-7400S"><div class="hero-callout"><strong>Semi-Micro Osmometer</strong>Punto fuerte para control de calidad y laboratorio con muestra pequeña.</div></div><div class="footer-line">Vista de producto del K-7400S para presentaciones y cotización.</div></div>
+    <div><div class="hero-panel tall"><span class="figure-label">KNAUER · K-7400S</span><img src="catalog_assets_premium/knauer_k7400s.png" alt="K-7400S"><div class="hero-callout"><strong>Semi-Micro Osmometer.</strong> Osmolalidad con volumen de muestra reducido; adecuado para QC y laboratorio.</div></div><div class="footer-line">K-7400S — referencia visual para propuestas y cotización.</div></div>
     <div>
       <div class="card"><div class="code">A0006AC · K-7400S</div><h3>Propuesta de valor</h3><p>Osmómetro semimicro por punto de congelación diseñado para determinación rápida y robusta de osmolalidad en soluciones acuosas. Se presta bien para control de calidad en farma y para análisis de bebidas, industria y academia.</p></div>
       <div style="height:4mm"></div>
@@ -593,23 +793,23 @@
   </div>
   <div style="height:6mm"></div>
   <div class="grid-2">
-    <div class="card"><h3>Aplicaciones declaradas</h3><ul class="spec-list small"><li>Control de calidad de soluciones farmacéuticas e infusiones isotónicas.</li><li>Análisis y control de bebidas isotónicas, cerveza y soft drinks.</li><li>Investigación en academia: savia vegetal, hemolinfa, medios de cultivo y soluciones nutritivas.</li><li>Industry: monitoreo de proceso y chequeo de reactivos / químicos.</li></ul></div>
+    <div class="card"><h3>Aplicaciones declaradas</h3><ul class="spec-list small"><li>Control de calidad de soluciones farmacéuticas e infusiones isotónicas.</li><li>Análisis y control de bebidas isotónicas, cerveza y refrescos.</li><li>Investigación en academia: savia vegetal, hemolinfa, medios de cultivo y soluciones nutritivas.</li><li>Industria: monitoreo de proceso y control de reactivos y productos químicos.</li></ul></div>
     <div class="card"><h3>Software y accesorios</h3><ul class="spec-list small"><li>EuroOsmo 7400 para control por PC, archivo de resultados y exportación a *.xls, ASCII o texto tabulado.</li><li>Soporte para identificación de muestra y lector de código de barras opcional.</li><li>Impresora opcional, soluciones de calibración 100 / 300 / 400 / 850 / 2000 mOsmol/kg y tubos plásticos en 100 / 500 / 1000 pcs.</li></ul></div>
   </div>
   <div style="height:5mm"></div>
-  <div class="note-band"><strong>Punto fuerte para argumento técnico.</strong> El K-7400S se presenta como compatible con la European Pharmacopoeia para osmolality (Ph. Eur. 2.2.35), lo que lo vuelve especialmente sólido para conversaciones farmacéuticas y de control regulado.</div>
+  <div class="note-band"><strong>Nota regulatoria.</strong> El K-7400S se indica compatible con la European Pharmacopoeia para osmolalidad (Ph. Eur. 2.2.35), relevante para entornos farmacéuticos y control de calidad bajo normativa.</div>
 </section>
 
-<section class="page">
+<section id="ika" class="page">
   <div class="section-kicker">09 · IKA</div>
   <h2>ULTRA-TURRAX® T-series · dispersión rotor-estator</h2>
   <div class="divider"></div>
   <div class="grid-2">
-    <div class="card"><h3>Lectura de línea</h3><p>Los dispersores IKA cubren desde microvolúmenes hasta escalas intermedias de laboratorio y pequeña producción. La serie T permite seleccionar volumen, velocidad y potencia según el proceso.</p></div>
+    <div class="card"><h3>Visión general</h3><p>Los dispersores IKA abarcan desde microvolúmenes hasta laboratorio intermedio y pequeña producción. La serie T ofrece distintas combinaciones de volumen útil, velocidad y potencia.</p></div>
     <div class="card"><h3>Rasgos compartidos</h3><ul class="spec-list small"><li>Amplia gama de herramientas de dispersión.</li><li>Acoplamiento de conexión rápida.</li><li>Protección del motor y display digital según modelo.</li><li>Volúmenes de 0,5 ml a 50 l según modelo.</li></ul></div>
   </div>
   <div style="height:6mm"></div>
-  <div><div class="hero-panel compact"><span class="figure-label">IKA · T 25 digital</span><img src="catalog_assets_premium/ika_t25.webp" alt="IKA T25 digital"><div class="hero-callout"><strong>ULTRA-TURRAX®</strong>Referencia de la serie T: dispersión rotor-estator para volúmenes de mesada.</div></div><div class="footer-line">T 25 digital: uno de los puntos más versátiles de la gama (1–2000 ml).</div></div>
+  <div><div class="hero-panel compact"><span class="figure-label">IKA · T 25 digital</span><img src="catalog_assets_premium/ika_t25.webp" alt="IKA T25 digital"><div class="hero-callout"><strong>ULTRA-TURRAX®.</strong> Dispersión rotor-estator para volúmenes de mesada; referencia de la serie T.</div></div><div class="footer-line">T 25 digital — gama 1–2000 ml, muy versátil en laboratorio.</div></div>
   <div style="height:6mm"></div>
   <div class="data-table dense"><table>
     <thead><tr><th>Modelo</th><th>Potencia entrada / salida</th><th>Rango de volumen (H₂O)</th><th>Viscosidad máx.</th><th>Velocidad</th><th>Dimensiones</th><th>Peso</th><th>IP</th></tr></thead>
@@ -623,51 +823,51 @@
     </tbody></table></div>
   <div style="height:5mm"></div>
   <div class="grid-3">
-    <div class="selection-box"><h4>T 10 basic</h4><p class="small">Ideal para volúmenes pequeños, bench-top y batch corto.</p></div>
+    <div class="selection-box"><h4>T 10 basic</h4><p class="small">Ideal para volúmenes pequeños en mesa de trabajo y lotes cortos.</p></div>
     <div class="selection-box"><h4>T 25 digital</h4><p class="small">Uno de los puntos más versátiles de la línea para 1–2000 ml.</p></div>
     <div class="selection-box"><h4>T 50 / T 65</h4><p class="small">Escalan la familia a volúmenes de laboratorio avanzado y pequeña producción.</p></div>
   </div>
 </section>
 
-<section class="page">
+<section id="hielscher" class="page">
   <div class="section-kicker">10 · Hielscher</div>
   <h2>Ultrasonidos para laboratorio y pequeña escala</h2>
   <div class="divider"></div>
   <div class="grid-2">
-    <div class="card"><h3>Cómo leer la línea</h3><p>Los ultrasonidos Hielscher sirven cuando el cliente necesita dispersar, deaglomerar, emulsionar, hacer lisis o extracción y quiere ir más allá del mezclado rotor-estator clásico.</p></div>
-    <div class="card"><h3>Diferencia rápida</h3><p class="small"><strong>UP200St</strong> es la opción versátil de 200 W para uso manual o con soporte. <strong>UP400St</strong> sube a 400 W y empieza a ser una base fuerte para mayor volumen, operación en flujo y pequeña producción.</p></div>
+    <div class="card"><h3>Aplicaciones</h3><p>Los sistemas Hielscher cubren dispersión, desaglomeración, emulsificación, lisis, extracción y otras aplicaciones acústicas cuando se requiere más que el mezclado rotor-estator convencional.</p></div>
+    <div class="card"><h3>Elección entre modelos</h3><p class="small"><strong>UP200St</strong> — 200 W, uso manual o con soporte; apropiado para laboratorio e I+D. <strong>UP400St</strong> — 400 W para mayor volumen, proceso en continuo y pequeña producción.</p></div>
   </div>
   <div style="height:6mm"></div>
   <div class="grid-2">
-    <div><div class="hero-panel compact"><span class="figure-label">Hielscher · UP200St</span><img src="catalog_assets_premium/hielscher_up200st.jpg" alt="UP200St"><div class="hero-callout"><strong>200 W · handheld / stand</strong>Equipo 200 W versátil; generador y transductor en conjunto.</div></div><div class="footer-line">UP200St: formato compacto para laboratorio e I+D.</div></div>
-    <div><div class="hero-panel compact"><span class="figure-label">Hielscher · UP400St</span><img src="catalog_assets_premium/hielscher_up400st.jpg" alt="UP400St"><div class="hero-callout"><strong>400 W · stand-mounted</strong>Mayor potencia para volúmenes amplios, flujo y pequeña escala.</div></div><div class="footer-line">UP400St: base sólida cuando la conversación incluye throughput y proceso.</div></div>
+    <div><div class="hero-panel compact"><span class="figure-label">Hielscher · UP200St</span><img src="catalog_assets_premium/hielscher_up200st.jpg" alt="UP200St"><div class="hero-callout"><strong>200 W · manual o con soporte.</strong> Generador y transductor integrados; instalación compacta.</div></div><div class="footer-line">UP200St — laboratorio e I+D.</div></div>
+    <div><div class="hero-panel compact"><span class="figure-label">Hielscher · UP400St</span><img src="catalog_assets_premium/hielscher_up400st.jpg" alt="UP400St"><div class="hero-callout"><strong>400 W · montaje fijo.</strong> Mayor caudal, proceso por lotes o en continuo y pequeña producción.</div></div><div class="footer-line">UP400St — mayor throughput y escalado de proceso.</div></div>
   </div>
 </section>
 
-<section class="page">
+<section id="hielscher-compara" class="page">
   <div class="section-kicker">11 · Hielscher</div>
   <h2>Comparativa UP200St vs UP400St</h2>
   <div class="divider"></div>
   <div class="data-table dense"><table>
     <thead><tr><th>Modelo</th><th>Potencia / frecuencia</th><th>Modo de uso</th><th>Control</th><th>Rango técnico útil</th><th>Aplicaciones declaradas</th></tr></thead>
     <tbody>
-      <tr><td>UP200St</td><td>200 W · 26 kHz</td><td>Manual o con soporte</td><td>Touch color + LAN</td><td>Amplitud 20–100 %, pulso 0–100 %, dry running protected, titanio Ø 14 mm, amplitud en horn 70 µm</td><td>Homogeneización, dispersión, deagglomeration, emulsificación, lisis, extracción, degasificación, sonochemistry y sonocatalysis</td></tr>
-      <tr><td>UP400St</td><td>400 W · 24 kHz</td><td>Stand-mounted</td><td>Touch color + SD + LAN + sensor T</td><td>Amplitud 20–100 %, pulso 0–100 %, IP41, batch 5 ml–4 l, aprox. 10–50 l/h con flow cell</td><td>Homogeneización, dispersión, deagglomeration, wet-milling & grinding, emulsificación, lisis, extracción y sonochemistry</td></tr>
+      <tr><td>UP200St</td><td>200 W · 26 kHz</td><td>Manual o con soporte</td><td>Pantalla táctil a color + LAN</td><td>Amplitud 20–100 %, pulso 0–100 %, protección contra marcha en seco, titanio Ø 14 mm, amplitud en sonotrodo 70 µm</td><td>Homogeneización, dispersión, desaglomeración, emulsificación, lisis, extracción, desgasificación, sonoquímica y sonocatálisis</td></tr>
+      <tr><td>UP400St</td><td>400 W · 24 kHz</td><td>Montaje fijo</td><td>Pantalla táctil a color + SD + LAN + sensor T</td><td>Amplitud 20–100 %, pulso 0–100 %, IP41, lote 5 ml–4 l, ~10–50 l/h con célula de flujo</td><td>Homogeneización, dispersión, desaglomeración, molienda húmeda, emulsificación, lisis, extracción y sonoquímica</td></tr>
     </tbody></table></div>
   <div style="height:6mm"></div>
   <div class="grid-2">
-    <div class="card"><h3>Items típicos UP200St</h3><p class="small">Equipo + generador y transductor, sonotrodos S26d2 / S26d7 / S26d14, soporte ST1-16 y caja de protección acústica SPB-L.</p></div>
-    <div class="card"><h3>Items típicos UP400St</h3><p class="small">Equipo, sonotrodos S24d7 y S24d14, flow cell FC22K (~15 ml), sonotrodo S24d22D con sello para FC22K, soporte ST1-16 y Sound Protection Box SPB-L.</p></div>
+    <div class="card"><h3>Configuración frecuente · UP200St</h3><p class="small">Equipo (generador y transductor), sonotrodos S26d2 / S26d7 / S26d14, soporte ST1-16 y caja de protección acústica SPB-L.</p></div>
+    <div class="card"><h3>Configuración frecuente · UP400St</h3><p class="small">Equipo, sonotrodos S24d7 y S24d14, célula de flujo FC22K (~15 ml), sonotrodo S24d22D con sello para FC22K, soporte ST1-16 y caja de protección acústica SPB-L.</p></div>
   </div>
   <div style="height:6mm"></div>
   <div class="selection-grid">
     <div class="selection-box"><h4>Perfil típico · UP200St</h4><p class="small">Trabajo variable, I+D, mesada y volúmenes moderados; uso manual o con soporte según la aplicación.</p></div>
     <div class="selection-box"><h4>Perfil típico · UP400St</h4><p class="small">Procesos con flujo continuo, mayor caudal o pequeña producción.</p></div>
-    <div class="selection-box"><h4>Argumento común</h4><p class="small">La línea Hielscher destaca por control digital, registro de datos y una propuesta claramente técnica para procesos exigentes.</p></div>
+    <div class="selection-box"><h4>Valor de la línea</h4><p class="small">Control digital, registro de datos y equipamiento orientado a procesos exigentes en laboratorio.</p></div>
   </div>
 </section>
 
-<section class="page">
+<section id="contacto" class="page">
   <div class="section-kicker">12 · Cierre</div>
   <h2>Contacto</h2>
   <div class="divider"></div>
@@ -678,7 +878,7 @@
       <div style="height:6mm"></div>
       <div class="contact-item"><strong>Email</strong><br>contacto@origenlab.cl</div>
       <div class="contact-item"><strong>Teléfono / WhatsApp</strong><br>+56 9 6256 7816</div>
-      <div class="contact-item"><strong>Base pública</strong><br>Valdivia, Chile</div>
+      <div class="contact-item"><strong>Sede</strong><br>Valdivia, Chile</div>
       <div class="contact-item"><strong>Cobertura</strong><br>Atención en todo Chile</div>
       <div class="contact-item"><strong>Uso</strong><br>Presentación comercial, envío inicial y apoyo a cotización</div>
     </div>

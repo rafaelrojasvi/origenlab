@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-03-24
+Last reviewed: 2026-04-07
 
 <a id="m-eparch-flow"></a>
 ## Data flow
@@ -32,6 +32,18 @@ Sits **above** the SQLite database and **repo-local operational outputs**, not i
 - **Logic:** [`operational_trust.py`](../src/origenlab_email_pipeline/operational_trust.py) is a thin facade that re-exports checks from focused modules (`operational_trust_pack`, `operational_trust_cohort`, `operational_trust_evidence`, `operational_trust_provenance`, `operational_trust_csv`, `operational_trust_paths`, `operational_trust_types`). [`scripts/qa/`](../scripts/qa/) CLIs import the facade and set exit codes from **critical** failures only.
 - **Outputs:** Scorecards [`reports/out/active/operational_trust_scorecard.json`](../reports/out/README.md) and [`docs/generated/operational_trust_scorecard.md`](generated/operational_trust_scorecard.md) (from [`audit_operational_trust.py`](../scripts/qa/audit_operational_trust.py)).
 - **Publication:** The gate is a **pre-share consistency** step; it does not replace human review of client-facing narrative. Procedure: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-publish-qa).
+
+<a id="m-eparch-export-gate"></a>
+## Cold outreach export eligibility (shared gate)
+
+Separate from the **publication** QA gate: **marketing / cold-outreach candidate** selection uses [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py). **`evaluate_export_eligibility()`** is invoked from:
+
+- [`next_marketing_queue.py`](../src/origenlab_email_pipeline/next_marketing_queue.py) → `compute_next_marketing_recipients()` (Streamlit **Cola outreach marketing** reads `lead_master` through this path).
+- [`export_marketing_from_contact_master.py`](../scripts/leads/export_marketing_from_contact_master.py) (optional pool from **`contact_master`**).
+
+So the **lead** and **`contact_master`** export paths share one policy layer (parity fixed in Phase 1). Block reasons include invalid email, internal domains, suppression list, addresses already in **Sent**, **`outreach_contact_state`** in **`contacted`** / **`replied`** / **`snoozed`**, configured **supplier** domains, and **noise** heuristics on email or institution name.
+
+**Truth boundary:** This gate removes known **explicit leaks**; it does not make **`contact_master`** CRM-grade buyer truth or justify high-volume autonomous outbound. **`lead_master`** remains the cleaner external-prospect source; archive and mart tables remain **evidence** and **exploration** layers. Read-only auditing: [`scripts/qa/export_candidate_audit.py`](../scripts/qa/export_candidate_audit.py). Procedure and tests: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-cold-export-gate).
 
 <a id="m-eparch-constraints"></a>
 ## Design constraints

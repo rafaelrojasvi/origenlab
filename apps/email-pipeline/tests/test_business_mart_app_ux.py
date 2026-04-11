@@ -193,12 +193,38 @@ def test_load_existing_pilot_batch_reads_csv_and_case_json(tmp_path: Path) -> No
     assert cases[0]["case"]["case_id"] == "c1"
 
 
+def test_load_existing_pilot_batch_orders_cases_like_csv_not_glob(tmp_path: Path) -> None:
+    """Filenames sort as c1 before c2, but CSV lists c2 first — cases must follow CSV."""
+    batch = tmp_path / "pilot_batch_order"
+    batch.mkdir()
+    (batch / "pilot_review.csv").write_text(
+        "case_id,subject_input,generated_subject\n"
+        "c2,Second,Gen2\n"
+        "c1,First,Gen1\n",
+        encoding="utf-8",
+    )
+    (batch / "case_c1.json").write_text(
+        '{"case":{"case_id":"c1","subject":"First"},"generated_draft":"A","prompt_blocks":{}}',
+        encoding="utf-8",
+    )
+    (batch / "case_c2.json").write_text(
+        '{"case":{"case_id":"c2","subject":"Second"},"generated_draft":"B","prompt_blocks":{}}',
+        encoding="utf-8",
+    )
+    _df, cases, err = app._load_existing_pilot_batch(str(batch))
+    assert err is None
+    assert cases is not None
+    assert len(cases) == 2
+    assert [cases[i]["case"]["case_id"] for i in range(2)] == ["c2", "c1"]
+
+
 def test_page_status_values_cover_key_client_pages() -> None:
     expected_pages = {
         "Resumen",
         "Salud de datos",
         "Actividad contacto Gmail",
         "Casos para revisar",
+        "Cola outreach marketing",
         "Borrador comercial",
         "Qué hacer hoy",
         "Leads y cuentas",

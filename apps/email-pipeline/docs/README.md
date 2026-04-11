@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-03-29
+Last reviewed: 2026-04-07
 
 Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/docs/`](./).
 
@@ -15,7 +15,7 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
 - [`APP_CONTEXT.md`](APP_CONTEXT.md#m-epapp-start)
 - [`BUSINESS_CONTEXT.md`](BUSINESS_CONTEXT.md#m-epbiz-objective)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow)
-- [`RUNBOOK.md`](RUNBOOK.md#m-eprun-path) — incl. [**publicación / gate QA**](RUNBOOK.md#m-eprun-publish-qa) ([`publish_gate.py`](../scripts/qa/publish_gate.py))
+- [`RUNBOOK.md`](RUNBOOK.md#m-eprun-path) — incl. [**publicación / gate QA**](RUNBOOK.md#m-eprun-publish-qa) ([`publish_gate.py`](../scripts/qa/publish_gate.py)) y [**elegibilidad export frío / gate compartido**](RUNBOOK.md#m-eprun-cold-export-gate)
 - [`DATA_LOCATIONS.md`](DATA_LOCATIONS.md#m-epdata-root)
 - [`REPORTING.md`](REPORTING.md#m-eprep-mail) (+ [`REPORT_SCOPE_CLIENT.md`](REPORT_SCOPE_CLIENT.md) para el texto de alcance que se adjunta al informe de correo); **validación pack + CSVs operativos:** [§ QA leads](REPORTING.md#m-eprep-leads-qa)
 
@@ -28,7 +28,7 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
 
 ## Deep references by domain
 
-- Operations: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-path), [publish-safe QA / gate](RUNBOOK.md#m-eprun-publish-qa)
+- Operations: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-path), [publish-safe QA / gate](RUNBOOK.md#m-eprun-publish-qa), [cold outreach shared export gate](RUNBOOK.md#m-eprun-cold-export-gate)
 - Reporting: [`REPORTING.md`](REPORTING.md#m-eprep-mail), [QA vs artefactos leads](REPORTING.md#m-eprep-leads-qa), [`REPORT_SCOPE_CLIENT.md`](REPORT_SCOPE_CLIENT.md), [`reporting/OUTPUTS_OVERVIEW.md`](reporting/OUTPUTS_OVERVIEW.md)
 - Pipeline architecture:
   - [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md)

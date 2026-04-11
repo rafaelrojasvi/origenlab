@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: project-maintainers  
-Last reviewed: 2026-03-29
+Last reviewed: 2026-04-07
 
 This file is the source of truth for documentation placement, intent, and lifecycle.
 
@@ -43,11 +43,12 @@ This file is the source of truth for documentation placement, intent, and lifecy
 Paths below are under [`apps/email-pipeline/docs/`](../apps/email-pipeline/docs/).
 
 - Canonical operations:
-  - [RUNBOOK.md](../apps/email-pipeline/docs/RUNBOOK.md#m-eprun-path)
+  - [RUNBOOK.md](../apps/email-pipeline/docs/RUNBOOK.md#m-eprun-path) (incl. [cold outreach / shared export gate](../apps/email-pipeline/docs/RUNBOOK.md#m-eprun-cold-export-gate))
   - [REPORTING.md](../apps/email-pipeline/docs/REPORTING.md#m-eprep-mail) (informe correo + paquete leads)
   - [REPORT_SCOPE_CLIENT.md](../apps/email-pipeline/docs/REPORT_SCOPE_CLIENT.md) (alcance del informe de correo; copiado por [`generate_client_report.py`](../apps/email-pipeline/scripts/reports/generate_client_report.py) a `ALCANCE_INFORME.md`)
   - [reporting/OUTPUTS_OVERVIEW.md](../apps/email-pipeline/docs/reporting/OUTPUTS_OVERVIEW.md) (includes derived-insights backlog)
 - Canonical architecture:
+  - [ARCHITECTURE.md](../apps/email-pipeline/docs/ARCHITECTURE.md#m-eparch-flow) (incl. [shared cold-outreach export gate](../apps/email-pipeline/docs/ARCHITECTURE.md#m-eparch-export-gate))
   - [pipeline/BUSINESS_MART.md](../apps/email-pipeline/docs/pipeline/BUSINESS_MART.md)
   - [pipeline/BUSINESS_FILTERING.md](../apps/email-pipeline/docs/pipeline/BUSINESS_FILTERING.md)
   - [pipeline/SCHEMA_OWNERSHIP.md](../apps/email-pipeline/docs/pipeline/SCHEMA_OWNERSHIP.md#m-schema-orchestrated)

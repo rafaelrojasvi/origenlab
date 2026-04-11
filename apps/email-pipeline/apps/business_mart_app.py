@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import sqlite3
@@ -51,6 +52,7 @@ from origenlab_email_pipeline.lead_contact_research import (
     validate_contact_research_payload,
 )
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables_ddl_base
+from origenlab_email_pipeline.next_marketing_queue import compute_next_marketing_recipients
 from origenlab_email_pipeline.streamlit_leads_browse import (
     LeadBrowseFilters,
     fetch_lead_account_rollups_df,
@@ -86,7 +88,7 @@ _NAV_GROUPS: list[tuple[str, list[str]]] = [
     ("Resumen y sistema", ["Resumen", "Salud de datos", "Actividad contacto Gmail"]),
     (
         "Prioridad del día",
-        ["Qué hacer hoy", "Casos para revisar", "Borrador comercial"],
+        ["Qué hacer hoy", "Casos para revisar", "Cola outreach marketing", "Borrador comercial"],
     ),
     (
         "Clientes e historial (archivo)",
@@ -162,7 +164,9 @@ def _load_existing_pilot_batch(batch_dir_raw: str) -> tuple[pd.DataFrame | None,
         df = pd.read_csv(review_csv).fillna("")
     except Exception as exc:
         return None, None, f"No se pudo leer `pilot_review.csv`: {exc}"
-    cases: list[dict[str, Any]] = []
+    # Load all case_*.json; then order list to match pilot_review.csv rows so the
+    # tabla y el selectbox «Elegir draft» queden alineados (evita orden por nombre de archivo).
+    raw_cases: list[dict[str, Any]] = []
     for cf in sorted(p.glob("case_*.json")):
         try:
             obj = json.loads(cf.read_text(encoding="utf-8"))
@@ -171,7 +175,24 @@ def _load_existing_pilot_batch(batch_dir_raw: str) -> tuple[pd.DataFrame | None,
         if isinstance(obj, dict):
             obj["_case_path"] = str(cf)
             obj["_case_file"] = cf.name
-            cases.append(obj)
+            raw_cases.append(obj)
+    case_by_id: dict[str, dict[str, Any]] = {}
+    for obj in raw_cases:
+        case = dict(obj.get("case") or {})
+        cid = str(case.get("case_id") or "").strip()
+        if cid:
+            case_by_id[cid] = obj
+    cases: list[dict[str, Any]] = []
+    used: set[str] = set()
+    if "case_id" in df.columns:
+        for cid_raw in df["case_id"].astype(str).tolist():
+            cid = str(cid_raw).strip()
+            if cid and cid in case_by_id and cid not in used:
+                cases.append(case_by_id[cid])
+                used.add(cid)
+    for cid in sorted(case_by_id.keys()):
+        if cid not in used:
+            cases.append(case_by_id[cid])
     return df, cases, None
 
 
@@ -893,6 +914,10 @@ PAGE_STATUS_PRESETS: dict[str, dict[str, str]] = {
         "source": "Gmail contacto o entrada manual + borradores guardados",
         "freshness": "Mixto: casos recientes y archivos ya guardados para revisión",
     },
+    "Cola outreach marketing": {
+        "source": "lead_master + exclusión por Enviados ingestados en emails",
+        "freshness": "Al vuelo sobre el SQLite abierto (sin envío ni OpenAI automático)",
+    },
     "Qué hacer hoy": {
         "source": "Múltiples fuentes: Gmail contacto, candidatos, leads y oportunidades",
         "freshness": "Mixto: combina filas recientes y vistas derivadas",
@@ -992,6 +1017,7 @@ def _contact_suppression_reason_label(code: str | None) -> str:
         "bounce_access_denied": "Rebote: acceso denegado",
         "bounce_other": "Rebote: otro motivo",
         "manual_do_not_contact": "No contactar",
+        "reported_non_delivery": "Informa no recibir correo (heurística)",
     }.get(code or "", code or "—")
 
 
@@ -1355,6 +1381,147 @@ def render_cases_to_review_page(conn: sqlite3.Connection, db_path: Path) -> None
         st.session_state["borrador_handoff_email_id"] = int(pick)
         _navigate_to("Borrador comercial")
 
+    st.caption(f"Base de datos (solo lectura): `{db_path}`")
+
+
+def render_next_marketing_queue_page(conn: sqlite3.Connection, db_path: Path) -> None:
+    """Lista operativa de próximos contactos comerciales (sin envío; sin OpenAI aquí)."""
+    st.subheader("Cola outreach marketing")
+    _render_page_status(
+        "Cola outreach marketing",
+        note="**No envía correos** y **no llama a OpenAI** en esta pantalla. "
+        "Ordena candidatos desde `lead_master` con la **misma** regla de elegibilidad que "
+        "`export_marketing_from_contact_master.py` (supresión, Enviados, estados **contacted/replied/snoozed**, "
+        "proveedores y ruido según `candidate_export_gate`). No valida “comprador”; use lotes pequeños y revisión humana. "
+        "Para redactar con el modelo use **Borrador comercial** y envíe usted desde Gmail.",
+    )
+    if not _has_table(conn, "lead_master"):
+        st.error("No hay `lead_master` en esta base. Importe o normalice leads antes.")
+        st.caption(f"SQLite: `{db_path}`")
+        return
+
+    stg = load_settings()
+    default_user = (stg.gmail_workspace_user or "contacto@origenlab.cl").strip()
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        limit_n = st.number_input("Filas objetivo (emails únicos)", min_value=1, max_value=500, value=40, step=1)
+        fetch_cap = st.number_input("Máx. leads a escanear", min_value=50, max_value=50000, value=4000, step=50)
+    with c2:
+        gmail_user = st.text_input("Buzón Gmail (Sent / Enviados)", value=default_user)
+        include_low = st.checkbox("Incluir low_fit", value=False)
+    with c3:
+        min_pri_raw = st.text_input("Mín. priority_score (vacío = sin filtro)", value="")
+        variant_pick = st.selectbox(
+            "Variante por defecto (handoff a borrador)",
+            options=[
+                MARKETING_VARIANT_GENERAL,
+                MARKETING_VARIANT_UNIVERSIDADES,
+                MARKETING_VARIANT_HOSPITALES,
+                MARKETING_VARIANT_INDUSTRIA,
+                MARKETING_VARIANT_PUBLICO,
+                MARKETING_VARIANT_FOLLOWUP,
+            ],
+            format_func=_fmt_marketing_variant,
+        )
+
+    min_pri: float | None = None
+    if (min_pri_raw or "").strip():
+        try:
+            min_pri = float(min_pri_raw.strip().replace(",", "."))
+        except ValueError:
+            st.error("Mín. priority_score no es un número válido.")
+            return
+
+    try:
+        rows, stats = compute_next_marketing_recipients(
+            conn,
+            gmail_user=gmail_user.strip(),
+            limit=int(limit_n),
+            fetch_cap=int(fetch_cap),
+            include_low_fit=include_low,
+            min_priority=min_pri,
+            variant_type=variant_pick,
+        )
+    except sqlite3.Error as exc:
+        st.error(f"No se pudo calcular la cola: {exc}")
+        return
+
+    _kpi("Excluidos (Enviados parseados)", f"{stats.n_sent_folder_recipients:,}")
+    _kpi("Suprimidos", f"{stats.n_suppressed:,}", help_text="contact_email_suppression")
+    _kpi(
+        "Estado outreach",
+        f"{stats.n_outreach_state:,}",
+        help_text="Filas distintas en outreach_contact_state con contacted, replied o snoozed (bloquean export)",
+    )
+
+    st.caption(
+        f"Escaneados **{stats.n_scanned}** filas de `lead_master` · "
+        f"Buzón **{stats.gmail_user}** · Meta **{int(limit_n)}** direcciones únicas · "
+        f"Obtenidas **{stats.n_kept}**."
+    )
+
+    if not rows:
+        st.warning("La cola está vacía con estos filtros. Revise emails en leads o use «Incluir low_fit».")
+        st.caption(f"SQLite: `{db_path}`")
+        return
+
+    df = pd.DataFrame(rows)
+    disp = df.rename(
+        columns={
+            "contact_email": "Email",
+            "recipient_name": "Contacto",
+            "institution_name": "Institución",
+            "sector": "Sector",
+            "fit_bucket": "Fit",
+            "priority_score": "Prioridad",
+            "id_lead": "id_lead",
+            "variant_type": "Variante",
+        }
+    )
+    show_cols = [c for c in ["Email", "Contacto", "Institución", "Sector", "Fit", "Prioridad", "id_lead", "Variante"] if c in disp.columns]
+    st.dataframe(disp[show_cols], use_container_width=True, hide_index=True)
+
+    csv_buf = io.StringIO()
+    df.to_csv(csv_buf, index=False)
+    st.download_button(
+        "Descargar cola (CSV)",
+        data=csv_buf.getvalue().encode("utf-8"),
+        file_name="next_marketing_queue.csv",
+        mime="text/csv",
+        key="dl_next_mkt_queue",
+    )
+
+    labels = [
+        f"{r['contact_email']} · {str(r.get('institution_name') or '')[:40]} · id {r['id_lead']}"
+        for r in rows
+    ]
+    pick_idx = st.selectbox("Elegir contacto para prellenar borrador", range(len(labels)), format_func=lambda i: labels[i])
+    if st.button("Prellenar y abrir «Borrador comercial» (outreach)", type="primary", key="mktq_to_borrador"):
+        r = rows[int(pick_idx)]
+        inst = str(r.get("institution_name") or "").strip()
+        st.session_state.pop("borrador_last_pkg", None)
+        st.session_state.pop("borrador_handoff_email_id", None)
+        st.session_state.pop("borrador_pick_email", None)
+        st.session_state["borrador_origen_caso"] = "Entrada manual"
+        st.session_state["borrador_manual_kind"] = "Outreach / presentacion comercial"
+        st.session_state["borrador_case_id"] = str(r.get("case_id") or "")
+        st.session_state["borrador_subject_in"] = f"Presentacion OrigenLab | {inst}" if inst else "Presentacion OrigenLab"
+        st.session_state["borrador_mkt_recipient"] = str(r.get("recipient_name") or "")
+        st.session_state["borrador_mkt_inst"] = str(r.get("institution_name") or "")
+        st.session_state["borrador_mkt_contact_email"] = str(r.get("contact_email") or "")
+        st.session_state["borrador_mkt_sector"] = str(r.get("sector") or "")
+        st.session_state["borrador_mkt_variant"] = str(r.get("variant_type") or variant_pick)
+        st.session_state["borrador_mkt_product_focus"] = ""
+        st.session_state["borrador_mkt_use_case"] = ""
+        st.session_state["borrador_mkt_custom_note"] = ""
+        st.session_state["borrador_body_in"] = ""
+        st.session_state["borrador_nfr"] = f"id_lead={r.get('id_lead')} fit={r.get('fit_bucket')} · cola outreach"
+        _navigate_to("Borrador comercial")
+
+    st.caption(
+        "El CLI `scripts/leads/export_next_marketing_recipients.py` usa la misma lógica y puede generar "
+        "`--pilot-csv` para `run_tatiana_pilot_batch.py` (OpenAI por lote, fuera de Streamlit)."
+    )
     st.caption(f"Base de datos (solo lectura): `{db_path}`")
 
 
@@ -2770,6 +2937,10 @@ def main() -> None:
 
         if page == "Casos para revisar":
             render_cases_to_review_page(conn, db_path)
+            return
+
+        if page == "Cola outreach marketing":
+            render_next_marketing_queue_page(conn, db_path)
             return
 
         if page == "Borrador comercial":

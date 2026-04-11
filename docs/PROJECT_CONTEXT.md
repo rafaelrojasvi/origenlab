@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: project-maintainers  
-Last reviewed: 2026-03-29
+Last reviewed: 2026-04-07
 
 This is the primary monorepo context document for coding agents and contributors.
 
@@ -21,6 +21,8 @@ Support OrigenLab's commercial operation by:
 
 - presenting clear, trustworthy public website content for quotation flows.
 - extracting business signal from historical email archives into operational reports.
+
+**Cold-outreach candidate lists (email-pipeline):** The lead queue used in Streamlit (**Cola outreach marketing**) and CSV export from **`contact_master`** share the same **export eligibility** logic in code ([`candidate_export_gate.py`](../apps/email-pipeline/src/origenlab_email_pipeline/candidate_export_gate.py)): suppression, Sent-folder history, operator **`outreach_contact_state`** (`contacted` / `replied` / **`snoozed`**), supplier domains, and noise heuristics. That reduces obvious leaks but is **not** automated buyer validation. Treat **`lead_master`** as the cleaner curated prospect source; **`contact_master`** remains a mail-graph / exploration layer—prefer **human review** and **small batches** for outbound. Role-state schema for commercial review is still **deferred**.
 
 **Commercial truth rules** (quotes, suppliers, what may be claimed): [`docs/business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md`](./business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md). Policy there is **canonical** for the monorepo; templates and LLM prompts must align.
 

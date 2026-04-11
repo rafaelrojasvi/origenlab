@@ -111,7 +111,7 @@ For fetch-only + shorter export path without pack/gate, keep using `run_leads_pi
 
 ## Commands
 
-Run from repo root. DB is the same as the rest of the project (`ORIGENLAB_SQLITE_PATH` or default `~/data/origenlab-email/sqlite/emails.sqlite`).
+Run from **`apps/email-pipeline/`** (monorepo: `cd apps/email-pipeline`). DB is the same as the rest of the project (`ORIGENLAB_SQLITE_PATH` or default `~/data/origenlab-email/sqlite/emails.sqlite`).
 
 **Sample files** are in `scripts/leads/samples/` so you can run the pipeline without real data:
 
@@ -190,6 +190,10 @@ bash scripts/leads/run_leads_pipeline.sh
 ```
 
 Override DB: `--db /path/to/emails.sqlite` on any script.
+
+## Cold outreach queue (shared export gate)
+
+Streamlit **Cola outreach marketing** ranks candidates from **`lead_master`** using [`compute_next_marketing_recipients()`](../../src/origenlab_email_pipeline/next_marketing_queue.py). That path shares **[`candidate_export_gate.py`](../../src/origenlab_email_pipeline/candidate_export_gate.py)** with [`export_marketing_from_contact_master.py`](../../scripts/leads/export_marketing_from_contact_master.py) (optional **`contact_master`** pool)—same suppression, Sent-folder, **`outreach_contact_state`** (**`contacted`** / **`replied`** / **`snoozed`**), supplier, and noise rules. Eligibility is **not** buyer validation; keep outbound **human-reviewed** and **small-batch**. Audit helper and commands: [`RUNBOOK.md` § Cold outreach](../RUNBOOK.md#m-eprun-cold-export-gate).
 
 ## Where outputs go
 

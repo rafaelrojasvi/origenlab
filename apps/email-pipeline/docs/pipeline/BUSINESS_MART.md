@@ -88,7 +88,7 @@ Fields include:
 No es “resumen inteligente”; es **limpieza conservadora**.
 
 ## 6) Contact master (`contact_master`)
-One row per **external contact email**.
+One row per **external contact email** aggregated from the **archive / mail graph**. Use for exploration, rollups, and joins—not as a guaranteed **buyer** or **procurement truth** layer. Cold-outreach exports that draw from this pool still pass [`candidate_export_gate.py`](../../src/origenlab_email_pipeline/candidate_export_gate.py) (shared with the lead-based Streamlit queue), which trims obvious leaks but **does not** certify commercial intent.
 
 Direction:
 - outbound email: sender domain is internal → external recipients are counted
@@ -133,11 +133,12 @@ Estructura:
 2. **Salud de datos** (conteos, rango `date_iso`, desglose `source_file`, heurística mart vs crudo, `pipeline_kv` / `pipeline_run` si existen) — ver [`STREAMLIT_DATA_FRESHNESS.md`](STREAMLIT_DATA_FRESHNESS.md)
 3. **Actividad contacto Gmail** — correos recientes con `source_file` tipo `gmail:contacto@origenlab.cl%`, resúmenes 7/30/90 días, documentos y señales unidos por `email_id` si el mart existe; no sustituye un visor de bandeja completo.
 4. **Casos para revisar** — cola operativa mensaje a mensaje (Gmail contacto), enriquecimiento opcional con `commercial_email_signal_fact`, entrega a **Borrador comercial**; ver [`CASOS_PARA_REVISAR.md`](CASOS_PARA_REVISAR.md).
-5. **Borrador comercial** (revisión OrigenLab, sin envío)
-6. **Oportunidades** (señales con explicación en español)
-7. **Equipos**
-8. **Organizaciones**
-9. **Contactos**
-10. **Documentos** (preview limpio + texto crudo en expander)
-11. **Candidatos comerciales** (si existe la capa commercial intel en el mismo SQLite)
+5. **Cola outreach marketing** — candidatos desde `lead_master` vía [`compute_next_marketing_recipients()`](../../src/origenlab_email_pipeline/next_marketing_queue.py); **misma política de elegibilidad** que [`export_marketing_from_contact_master.py`](../../scripts/leads/export_marketing_from_contact_master.py) ([`candidate_export_gate.py`](../../src/origenlab_email_pipeline/candidate_export_gate.py)). Sin envío automático; no reemplaza revisión humana ni “verdad comprador”.
+6. **Borrador comercial** (revisión OrigenLab, sin envío)
+7. **Oportunidades** (señales con explicación en español)
+8. **Equipos**
+9. **Organizaciones**
+10. **Contactos**
+11. **Documentos** (preview limpio + texto crudo en expander)
+12. **Candidatos comerciales** (si existe la capa commercial intel en el mismo SQLite)
 

@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-03-28
+Last reviewed: 2026-04-07
 
 Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.).
 
@@ -232,6 +232,79 @@ uv run python scripts/reports/generate_client_report.py --out reports/out/client
 ```
 
 **Paths:** DB = `ORIGENLAB_SQLITE_PATH` or default under `~/data/origenlab-email/sqlite/`. Reports = `ORIGENLAB_REPORTS_DIR` or per-run `--out`. See [`DATA_LOCATIONS.md`](DATA_LOCATIONS.md#m-epdata-policy).
+
+---
+
+<a id="m-eprun-cold-export-gate"></a>
+## Cold outreach export eligibility (shared gate, Phase 1)
+
+**Not** the publish-safe QA gate (§4). This is the **technical eligibility** layer for cold-outreach **candidates**: [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py), used by both:
+
+- [`compute_next_marketing_recipients()`](../src/origenlab_email_pipeline/next_marketing_queue.py) — Streamlit **Cola outreach marketing** (`apps/business_mart_app.py`).
+- [`export_marketing_from_contact_master.py`](../scripts/leads/export_marketing_from_contact_master.py) — optional export sample from **`contact_master`**.
+
+Shared rules include: valid external email, **not** internal domains, **`contact_email_suppression`**, recipients already seen in **Sent** for the configured Gmail user, **`outreach_contact_state`** in **`contacted`**, **`replied`**, or **`snoozed`**, supplier-domain blocklist, and noise heuristics. Parity between lead and contact paths is intentional—**do not** duplicate policy in the UI.
+
+**Operational caution:** Passing the gate means “not auto-rejected by these checks,” not “validated buyer” or “safe for bulk autonomous send.” **`contact_master`** is still a **mail-graph** rollup; many rows remain low-signal for outbound. Prefer **human review** and **small batches**. A fuller **role-state** schema for commercial review remains **deferred**.
+
+### Troubleshooting: few or zero rows from `export_next_marketing_recipients.py`
+
+**Resolve which DB the app uses** (from `apps/email-pipeline/`):
+
+```bash
+uv run python -c "from origenlab_email_pipeline.config import load_settings; print(load_settings().resolved_sqlite_path())"
+```
+
+**Stage counts on `lead_master`** (upstream-active = not soft-retired for missing raw; predicate matches [`lead_upstream_reconcile.sql_upstream_active`](../src/origenlab_email_pipeline/lead_upstream_reconcile.py)):
+
+```sql
+-- Any fit_bucket, must have email
+SELECT COUNT(*) FROM lead_master lm
+WHERE (COALESCE(NULLIF(TRIM(lm.upstream_sync_state), ''), 'active') != 'retired_no_raw')
+  AND NULLIF(TRIM(COALESCE(lm.email_norm, lm.email)), '') IS NOT NULL;
+
+-- Default export also excludes low_fit
+SELECT COUNT(*) FROM lead_master lm
+WHERE (COALESCE(NULLIF(TRIM(lm.upstream_sync_state), ''), 'active') != 'retired_no_raw')
+  AND COALESCE(lm.fit_bucket, 'low_fit') != 'low_fit'
+  AND NULLIF(TRIM(COALESCE(lm.email_norm, lm.email)), '') IS NOT NULL;
+```
+
+**Outreach / suppression / Sent footprint:**
+
+```sql
+SELECT state, COUNT(*) FROM outreach_contact_state GROUP BY state;
+SELECT COUNT(*) FROM contact_email_suppression;
+-- Use the same mailbox string as ORIGENLAB_GMAIL_WORKSPACE_USER (default contacto@origenlab.cl):
+SELECT folder, COUNT(*) FROM emails
+WHERE lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'
+GROUP BY folder ORDER BY COUNT(*) DESC;
+```
+
+**Gate reasons on a sample:** raise `--lead-limit` and inspect `reject_reasons` in the audit CSV:
+
+```bash
+uv run python scripts/qa/export_candidate_audit.py --out /tmp/export_audit.csv --lead-limit 5000 --contact-limit 0
+```
+
+### Read-only export audit (CSV)
+
+Samples **lead_master** and **contact_master** rows, runs the **same** gate, and writes one CSV (eligible flag + reject reason). Use for spot checks and regression baselines—not as proof of list quality.
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/qa/export_candidate_audit.py --out /tmp/export_audit.csv --lead-limit 2000 --contact-limit 2000
+```
+
+Optional: `--db /path/to/emails.sqlite`. Interpretation: **eligible** = gate returned no block reason; **reject_reasons** (CSV column) is the first reason code from [`evaluate_export_eligibility()`](../src/origenlab_email_pipeline/candidate_export_gate.py); boolean `*_hit` columns mirror that primary reason. Supplier/noise flags mean the row matched those heuristics—**not** that remaining “eligible” rows are high-intent buyers.
+
+### Regression tests
+
+```bash
+cd apps/email-pipeline
+uv run pytest tests/test_candidate_export_gate.py -q
+uv run pytest tests/test_business_mart_app_ux.py -q
+```
 
 ---
 

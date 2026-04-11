@@ -31,6 +31,7 @@ SUPPRESSION_REASON_CODES: tuple[str, ...] = (
     "bounce_access_denied",
     "bounce_other",
     "manual_do_not_contact",
+    "reported_non_delivery",
 )
 
 _MAX_EMAIL = 320
