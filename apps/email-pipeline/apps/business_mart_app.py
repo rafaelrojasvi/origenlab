@@ -4,7 +4,6 @@ import io
 import json
 import os
 import sqlite3
-from dataclasses import astuple
 from datetime import date
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -13,11 +12,6 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from origenlab_email_pipeline.cases_review_queue import (
-    commercial_hint_es,
-    fetch_case_detail,
-    fetch_cases_review_queue,
-)
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.freshness_dates import MART_DATE_SLACK_DAYS_DEFAULT
 from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
@@ -32,16 +26,6 @@ from origenlab_email_pipeline.contact_email_suppression import (
     upsert_contact_email_suppression,
     validate_contact_email_suppression_payload,
 )
-from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
-    CANONICAL_BASE_PRESENTATION_EMAIL_ES,
-    MARKETING_VARIANT_FOLLOWUP,
-    MARKETING_VARIANT_GENERAL,
-    MARKETING_VARIANT_HOSPITALES,
-    MARKETING_VARIANT_INDUSTRIA,
-    MARKETING_VARIANT_PUBLICO,
-    MARKETING_VARIANT_UNIVERSIDADES,
-)
-from origenlab_email_pipeline.tatiana_copilot.pilot_schemas import extract_asunto_from_draft
 from origenlab_email_pipeline.lead_contact_research import (
     CONTACT_RESEARCH_STATUSES,
     archive_org_hint_for_domain,
@@ -52,7 +36,6 @@ from origenlab_email_pipeline.lead_contact_research import (
     validate_contact_research_payload,
 )
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables_ddl_base
-from origenlab_email_pipeline.next_marketing_queue import compute_next_marketing_recipients
 from origenlab_email_pipeline.streamlit_leads_browse import (
     LeadBrowseFilters,
     fetch_lead_account_rollups_df,
@@ -66,23 +49,25 @@ from origenlab_email_pipeline.streamlit_suppliers_browse import (
     supplier_browse_filter_options,
     supplier_browse_ready,
 )
-from origenlab_email_pipeline.streamlit_today_workspace import (
-    TodayWorkspaceSpec,
-    TodayWorkspaceRow,
-    apply_today_row_handoff,
-    gather_today_workspace_rows,
-    source_label_es,
+from origenlab_email_pipeline.streamlit_borrador_support import contact_suppression_reason_label
+from origenlab_email_pipeline.streamlit_page_status import render_kpi_metric, render_page_status
+from origenlab_email_pipeline.streamlit_prioridad_copy import (
+    PRIORIDAD_DEL_DIA_GROUP_TITLE,
+    PRIORIDAD_GROUP_NAV_CAPTION_ES,
 )
-from origenlab_email_pipeline.tatiana_copilot.streamlit_draft_helpers import (
-    draft_case_from_email_row,
-    draft_case_from_manual,
-    export_streamlit_review_artifact,
-    get_cached_tatiana_index,
-    load_contacto_gmail_email_choices_df,
-    new_streamlit_export_dir,
-    run_origenlab_draft_package,
+from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
+    SESSION_CI_TODAY_HINT,
+    SESSION_LEADS_TODAY_BANNER,
+    SESSION_OPP_SIGNAL_FILTER,
+    SESSION_START_PAGE,
+    navigate_to_page,
 )
-
+from origenlab_email_pipeline.streamlit_prioridad_pages import (
+    render_cases_to_review_page,
+    render_commercial_draft_review_page,
+    render_next_marketing_queue_page,
+    render_que_hacer_hoy_page,
+)
 # Áreas de navegación: mismas vistas que antes, agrupadas para reducir ruido visual.
 _NAV_GROUPS: list[tuple[str, list[str]]] = [
     ("Resumen y sistema", ["Resumen", "Salud de datos", "Actividad contacto Gmail"]),
@@ -132,110 +117,6 @@ def _fmt_ci_status(v: str) -> str:
 
 def _fmt_ci_action(v: str) -> str:
     return {"approve": "Aprobar", "reject": "Rechazar", "snooze": "Posponer"}.get(v, v)
-
-
-def _fmt_marketing_variant(v: str) -> str:
-    return {
-        MARKETING_VARIANT_GENERAL: "Presentacion general",
-        MARKETING_VARIANT_UNIVERSIDADES: "Universidades / investigacion",
-        MARKETING_VARIANT_HOSPITALES: "Hospitales / laboratorio clinico",
-        MARKETING_VARIANT_INDUSTRIA: "Industria / QA / alimentos",
-        MARKETING_VARIANT_PUBLICO: "Instituciones publicas / compras",
-        MARKETING_VARIANT_FOLLOWUP: "Follow-up sin respuesta",
-    }.get(v, v)
-
-
-def _load_existing_pilot_batch(batch_dir_raw: str) -> tuple[pd.DataFrame | None, list[dict[str, Any]] | None, str | None]:
-    """Load an existing Tatiana pilot batch folder for read-only review in Streamlit."""
-    raw = (batch_dir_raw or "").strip()
-    if not raw:
-        return None, None, "Ingrese una carpeta de batch."
-    p = Path(raw).expanduser()
-    if not p.is_absolute():
-        p = Path.cwd() / p
-    if not p.exists():
-        return None, None, f"No existe la carpeta: {p}"
-    if not p.is_dir():
-        return None, None, f"La ruta no es carpeta: {p}"
-    review_csv = p / "pilot_review.csv"
-    if not review_csv.is_file():
-        return None, None, f"No se encontró `pilot_review.csv` en: {p}"
-    try:
-        df = pd.read_csv(review_csv).fillna("")
-    except Exception as exc:
-        return None, None, f"No se pudo leer `pilot_review.csv`: {exc}"
-    # Load all case_*.json; then order list to match pilot_review.csv rows so the
-    # tabla y el selectbox «Elegir draft» queden alineados (evita orden por nombre de archivo).
-    raw_cases: list[dict[str, Any]] = []
-    for cf in sorted(p.glob("case_*.json")):
-        try:
-            obj = json.loads(cf.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if isinstance(obj, dict):
-            obj["_case_path"] = str(cf)
-            obj["_case_file"] = cf.name
-            raw_cases.append(obj)
-    case_by_id: dict[str, dict[str, Any]] = {}
-    for obj in raw_cases:
-        case = dict(obj.get("case") or {})
-        cid = str(case.get("case_id") or "").strip()
-        if cid:
-            case_by_id[cid] = obj
-    cases: list[dict[str, Any]] = []
-    used: set[str] = set()
-    if "case_id" in df.columns:
-        for cid_raw in df["case_id"].astype(str).tolist():
-            cid = str(cid_raw).strip()
-            if cid and cid in case_by_id and cid not in used:
-                cases.append(case_by_id[cid])
-                used.add(cid)
-    for cid in sorted(case_by_id.keys()):
-        if cid not in used:
-            cases.append(case_by_id[cid])
-    return df, cases, None
-
-
-def _pilot_batch_signature(batch_dir_raw: str) -> str | None:
-    raw = (batch_dir_raw or "").strip()
-    if not raw:
-        return None
-    p = Path(raw).expanduser()
-    if not p.is_absolute():
-        p = Path.cwd() / p
-    review_csv = p / "pilot_review.csv"
-    if not review_csv.is_file():
-        return None
-    case_files = sorted(p.glob("case_*.json"))
-    try:
-        review_mtime = review_csv.stat().st_mtime_ns
-        case_sig = ",".join(f"{cf.name}:{cf.stat().st_mtime_ns}" for cf in case_files)
-    except OSError:
-        return None
-    return f"{review_mtime}|{len(case_files)}|{case_sig}"
-
-
-@st.cache_data(ttl=90, show_spinner=False)
-def _cached_gather_today_rows(path_str: str, mtime_ns: int, spec_tuple: tuple[Any, ...]) -> list[dict[str, Any]]:
-    """Cache de solo lectura: invalida cuando cambia la marca de tiempo del archivo SQLite."""
-    spec = TodayWorkspaceSpec(*spec_tuple)
-    uri = f"file:{Path(path_str).resolve().as_posix()}?mode=ro&immutable=1"
-    c = sqlite3.connect(uri, uri=True, timeout=60.0)
-    c.row_factory = sqlite3.Row
-    try:
-        rows = gather_today_workspace_rows(c, spec)
-        return [x.to_test_dict() for x in rows]
-    finally:
-        c.close()
-
-
-def _today_workspace_rows_cached(db_path: Path, spec: TodayWorkspaceSpec) -> list[TodayWorkspaceRow]:
-    try:
-        mt = int(db_path.stat().st_mtime_ns)
-    except OSError:
-        mt = 0
-    raw = _cached_gather_today_rows(str(db_path.resolve()), mt, astuple(spec))
-    return [TodayWorkspaceRow(**d) for d in raw]
 
 
 def _connect_ro(db_path: Path) -> sqlite3.Connection:
@@ -467,7 +348,7 @@ def load_email_date_health(
 def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Read-only snapshot: DB path, counts, date span, sources, mart vs raw hints."""
     st.subheader("Salud de datos y vigencia")
-    _render_page_status("Salud de datos")
+    render_page_status("Salud de datos")
     st.caption(
         "Vista técnica: el archivo SQLite mostrado es el que ve esta app. "
         "No sustituye registros de ingest ni ejecuta reconstrucción del mart."
@@ -889,82 +770,6 @@ BRAND = {
 }
 
 
-def _kpi(label: str, value: str, *, help_text: str | None = None) -> None:
-    st.metric(label, value, help=help_text)
-
-
-PAGE_STATUS_PRESETS: dict[str, dict[str, str]] = {
-    "Resumen": {
-        "source": "Archivo histórico + vistas derivadas del mart",
-        "freshness": "Mixto: resumen derivado del archivo cargado y del mart reconstruido",
-    },
-    "Salud de datos": {
-        "source": "Archivo histórico y estado técnico de la base actual",
-        "freshness": "Según el SQLite abierto y la última reconstrucción disponible",
-    },
-    "Actividad contacto Gmail": {
-        "source": "Gmail contacto",
-        "freshness": "Reciente, según correos ya ingestados en esta base",
-    },
-    "Casos para revisar": {
-        "source": "Gmail contacto",
-        "freshness": "Reciente, filtrado sobre correos del buzón operativo",
-    },
-    "Borrador comercial": {
-        "source": "Gmail contacto o entrada manual + borradores guardados",
-        "freshness": "Mixto: casos recientes y archivos ya guardados para revisión",
-    },
-    "Cola outreach marketing": {
-        "source": "lead_master + exclusión por Enviados ingestados en emails",
-        "freshness": "Al vuelo sobre el SQLite abierto (sin envío ni OpenAI automático)",
-    },
-    "Qué hacer hoy": {
-        "source": "Múltiples fuentes: Gmail contacto, candidatos, leads y oportunidades",
-        "freshness": "Mixto: combina filas recientes y vistas derivadas",
-    },
-    "Leads y cuentas": {
-        "source": "Leads externos + vínculos con el archivo histórico",
-        "freshness": "Mixto: import externo más coincidencias/enriquecimiento sobre la base actual",
-    },
-    "Proveedores": {
-        "source": "Proveedores importados",
-        "freshness": "Depende del último workbook importado a esta base",
-    },
-    "Candidatos comerciales": {
-        "source": "Candidatos comerciales",
-        "freshness": "Vista derivada del mart y de señales ya construidas",
-    },
-    "Oportunidades": {
-        "source": "Vista derivada del mart",
-        "freshness": "Derivada de señales heurísticas reconstruidas",
-    },
-}
-
-
-def _page_status_values(page_key: str) -> dict[str, str]:
-    return dict(PAGE_STATUS_PRESETS.get(page_key) or {})
-
-
-def _render_page_status(
-    page_key: str,
-    *,
-    note: str | None = None,
-) -> None:
-    info = _page_status_values(page_key)
-    if not info:
-        return
-    st.markdown("##### Fuente y frescura")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.caption("Fuente")
-        st.markdown(info.get("source", "—"))
-    with c2:
-        st.caption("Frescura")
-        st.markdown(info.get("freshness", "—"))
-    if note:
-        st.caption(note)
-
-
 def _render_copy_email_button(email: str, *, key: str, label: str = "Copiar") -> None:
     value = (email or "").strip()
     if not value:
@@ -1009,16 +814,6 @@ def _render_copyable_email_row(email: str, *, key: str, prefix: str = "Email") -
         st.markdown(f"**{prefix}:** `{value}`")
     with c2:
         _render_copy_email_button(value, key=key)
-
-
-def _contact_suppression_reason_label(code: str | None) -> str:
-    return {
-        "bounce_no_such_user": "Rebote: no existe la casilla",
-        "bounce_access_denied": "Rebote: acceso denegado",
-        "bounce_other": "Rebote: otro motivo",
-        "manual_do_not_contact": "No contactar",
-        "reported_non_delivery": "Informa no recibir correo (heurística)",
-    }.get(code or "", code or "—")
 
 
 def _ensure_contact_email_suppression_ddl(db_path: Path) -> bool:
@@ -1105,17 +900,8 @@ EQUIPMENT_INFO: dict[str, dict[str, str]] = {
 
 
 def _navigate_to(page: str, **flags: object) -> None:
-    """Actualizar session_state para navegación guiada y forzar recarga ligera."""
-    st.session_state["start_page"] = page
-    for k, v in flags.items():
-        st.session_state[k] = v
-    # En Streamlit moderno, st.rerun() es la forma soportada.
-    try:
-        st.rerun()
-    except AttributeError:
-        # Compatibilidad defensiva con versiones antiguas.
-        if hasattr(st, "experimental_rerun"):
-            st.experimental_rerun()
+    """Delegación al contrato centralizado (misma semántica que antes)."""
+    navigate_to_page(page, **flags)
 
 
 def _friendly_org_type(code: str | None) -> str:
@@ -1167,7 +953,7 @@ def _signal_label(signal_type: str) -> tuple[str, str]:
 def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Read-only recent activity for Gmail-ingested contacto@origenlab.cl mailbox."""
     st.subheader("Actividad reciente (contacto Gmail)")
-    _render_page_status("Actividad contacto Gmail")
+    render_page_status("Actividad contacto Gmail")
     st.caption(
         "Muestra correos con **`source_file` tipo Gmail Workspace** para `contacto@origenlab.cl`. "
         "No incluye buzón Titan (`imap:contacto@...`); para mezcla de orígenes use **Salud de datos**."
@@ -1187,13 +973,13 @@ def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path)
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        _kpi("Mensajes contacto Gmail (total)", f"{summary.total_rows:,}")
+        render_kpi_metric("Mensajes contacto Gmail (total)", f"{summary.total_rows:,}")
     with c2:
-        _kpi("Últimos 7 días", f"{summary.count_7d:,}", help_text="date_iso parseable por SQLite en ventana.")
+        render_kpi_metric("Últimos 7 días", f"{summary.count_7d:,}", help_text="date_iso parseable por SQLite en ventana.")
     with c3:
-        _kpi("Últimos 30 días", f"{summary.count_30d:,}")
+        render_kpi_metric("Últimos 30 días", f"{summary.count_30d:,}")
     with c4:
-        _kpi("Últimos 90 días", f"{summary.count_90d:,}")
+        render_kpi_metric("Últimos 90 días", f"{summary.count_90d:,}")
     st.markdown(
         f"**Última fecha plausible (`date_iso`):** `{summary.most_recent_plausible_iso or '—'}` "
         "(excluye fechas > hoy + 2 días en calendario SQLite)."
@@ -1267,705 +1053,10 @@ def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path)
     st.caption(f"Archivo: `{db_path}` · Vista informativa (no es bandeja de entrada completa).")
 
 
-def render_cases_to_review_page(conn: sqlite3.Connection, db_path: Path) -> None:
-    """Cola operativa de mensajes Gmail contacto para revisión; entrega a Borrador comercial (sin redactar aquí)."""
-    st.subheader("Casos para revisar")
-    _render_page_status("Casos para revisar")
-    st.caption(
-        "Una fila = un correo del buzón **Gmail de contacto** (no es la bandeja completa). "
-        "Solo lectura aquí; para redactar respuesta vaya a **Borrador comercial**."
-    )
-    with st.expander("Qué es esta cola", expanded=False):
-        st.caption(
-            "Sirve para priorizar mensajes con pistas comerciales. Si activa «solo señal positiva», "
-            "hace falta haber corrido la capa de inteligencia comercial v1 sobre este SQLite."
-        )
-    if not _has_table(conn, "emails"):
-        st.error("No se encontró la tabla de mensajes en este archivo.")
-        return
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        win = st.selectbox(
-            "Ventana de fechas",
-            options=[7, 30, 90],
-            format_func=lambda d: f"Últimos {d} días",
-            index=1,
-            key="casos_win",
-        )
-    with c2:
-        ex_noise = st.checkbox("Excluir rebotes / avisos de entrega obvios", value=True, key="casos_noise")
-    with c3:
-        enrich = _has_table(conn, "commercial_email_signal_fact")
-        solo_pos = st.checkbox(
-            "Solo con señal comercial positiva",
-            value=False,
-            key="casos_solo_pos",
-            disabled=not enrich,
-            help="Requiere capa CI v1 (`commercial_email_signal_fact`).",
-        )
-    with c4:
-        lim = st.number_input("Máx. filas", min_value=20, max_value=400, value=150, step=10, key="casos_lim")
-
-    try:
-        result = fetch_cases_review_queue(
-            conn,
-            days_window=int(win),
-            exclude_obvious_noise=ex_noise,
-            positive_signal_only=solo_pos,
-            limit=int(lim),
-        )
-    except sqlite3.Error as exc:
-        st.error(f"No se pudo cargar la cola: {exc}")
-        return
-
-    st.caption(result.caption_es)
-
-    if not result.rows:
-        st.info("No hay mensajes con los filtros actuales.")
-        st.caption(f"Base de datos (solo lectura): `{db_path}`")
-        return
-
-    disp = []
-    for r in result.rows:
-        disp.append(
-            {
-                "ID": r["email_id"],
-                "Fecha": r.get("date_iso") or "—",
-                "Asunto (extracto)": r.get("subject_preview") or "",
-                "Remitente (extracto)": r.get("sender_preview") or "",
-                "Pista comercial": commercial_hint_es(r, enrichment_available=result.enrichment_available),
-            }
-        )
-    st.dataframe(pd.DataFrame(disp), use_container_width=True, hide_index=True)
-
-    ids = [int(r["email_id"]) for r in result.rows]
-    _pre_caso = st.session_state.pop("today_handoff_caso_email_id", None)
-    if _pre_caso is not None:
-        try:
-            _pe = int(_pre_caso)
-            if _pe in ids:
-                st.session_state["casos_pick"] = _pe
-        except (TypeError, ValueError):
-            pass
-
-    def _fmt_caso(eid: int) -> str:
-        row = next(x for x in result.rows if int(x["email_id"]) == eid)
-        sub = str(row.get("subject_preview") or "")[:56]
-        return f"ID {eid} · {sub}"
-
-    pick = st.selectbox("Seleccionar caso para ver detalle", ids, format_func=_fmt_caso, key="casos_pick")
-
-    det = fetch_case_detail(conn, email_id=int(pick))
-    if det:
-        st.markdown("#### Detalle del mensaje")
-        st.write(
-            {
-                "Fecha": det.get("date_iso") or "—",
-                "Asunto": det.get("subject") or "—",
-                "Remitente": det.get("sender") or "—",
-                "Origen técnico": det.get("source_file") or "—",
-                "Message-ID": det.get("message_id") or "—",
-            }
-        )
-        st.text_area("Vista previa del cuerpo", value=det.get("body_preview") or "(sin cuerpo extraíble)", height=240, disabled=True)
-        dc = det.get("document_count")
-        if dc is not None:
-            st.caption(f"Documentos comerciales ligados a este correo (mart): **{dc}**")
-        sigs = det.get("commercial_signals") or []
-        if sigs:
-            with st.expander("Señales de inteligencia comercial (por mensaje)", expanded=False):
-                st.dataframe(pd.DataFrame(sigs), use_container_width=True, hide_index=True)
-
-    if st.button("Redactar borrador en «Borrador comercial»", type="primary", key="casos_to_borrador"):
-        st.session_state["borrador_handoff_email_id"] = int(pick)
-        _navigate_to("Borrador comercial")
-
-    st.caption(f"Base de datos (solo lectura): `{db_path}`")
-
-
-def render_next_marketing_queue_page(conn: sqlite3.Connection, db_path: Path) -> None:
-    """Lista operativa de próximos contactos comerciales (sin envío; sin OpenAI aquí)."""
-    st.subheader("Cola outreach marketing")
-    _render_page_status(
-        "Cola outreach marketing",
-        note="**No envía correos** y **no llama a OpenAI** en esta pantalla. "
-        "Ordena candidatos desde `lead_master` con la **misma** regla de elegibilidad que "
-        "`export_marketing_from_contact_master.py` (supresión, Enviados, estados **contacted/replied/snoozed**, "
-        "proveedores y ruido según `candidate_export_gate`). No valida “comprador”; use lotes pequeños y revisión humana. "
-        "Para redactar con el modelo use **Borrador comercial** y envíe usted desde Gmail.",
-    )
-    if not _has_table(conn, "lead_master"):
-        st.error("No hay `lead_master` en esta base. Importe o normalice leads antes.")
-        st.caption(f"SQLite: `{db_path}`")
-        return
-
-    stg = load_settings()
-    default_user = (stg.gmail_workspace_user or "contacto@origenlab.cl").strip()
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        limit_n = st.number_input("Filas objetivo (emails únicos)", min_value=1, max_value=500, value=40, step=1)
-        fetch_cap = st.number_input("Máx. leads a escanear", min_value=50, max_value=50000, value=4000, step=50)
-    with c2:
-        gmail_user = st.text_input("Buzón Gmail (Sent / Enviados)", value=default_user)
-        include_low = st.checkbox("Incluir low_fit", value=False)
-    with c3:
-        min_pri_raw = st.text_input("Mín. priority_score (vacío = sin filtro)", value="")
-        variant_pick = st.selectbox(
-            "Variante por defecto (handoff a borrador)",
-            options=[
-                MARKETING_VARIANT_GENERAL,
-                MARKETING_VARIANT_UNIVERSIDADES,
-                MARKETING_VARIANT_HOSPITALES,
-                MARKETING_VARIANT_INDUSTRIA,
-                MARKETING_VARIANT_PUBLICO,
-                MARKETING_VARIANT_FOLLOWUP,
-            ],
-            format_func=_fmt_marketing_variant,
-        )
-
-    min_pri: float | None = None
-    if (min_pri_raw or "").strip():
-        try:
-            min_pri = float(min_pri_raw.strip().replace(",", "."))
-        except ValueError:
-            st.error("Mín. priority_score no es un número válido.")
-            return
-
-    try:
-        rows, stats = compute_next_marketing_recipients(
-            conn,
-            gmail_user=gmail_user.strip(),
-            limit=int(limit_n),
-            fetch_cap=int(fetch_cap),
-            include_low_fit=include_low,
-            min_priority=min_pri,
-            variant_type=variant_pick,
-        )
-    except sqlite3.Error as exc:
-        st.error(f"No se pudo calcular la cola: {exc}")
-        return
-
-    _kpi("Excluidos (Enviados parseados)", f"{stats.n_sent_folder_recipients:,}")
-    _kpi("Suprimidos", f"{stats.n_suppressed:,}", help_text="contact_email_suppression")
-    _kpi(
-        "Estado outreach",
-        f"{stats.n_outreach_state:,}",
-        help_text="Filas distintas en outreach_contact_state con contacted, replied o snoozed (bloquean export)",
-    )
-
-    st.caption(
-        f"Escaneados **{stats.n_scanned}** filas de `lead_master` · "
-        f"Buzón **{stats.gmail_user}** · Meta **{int(limit_n)}** direcciones únicas · "
-        f"Obtenidas **{stats.n_kept}**."
-    )
-
-    if not rows:
-        st.warning("La cola está vacía con estos filtros. Revise emails en leads o use «Incluir low_fit».")
-        st.caption(f"SQLite: `{db_path}`")
-        return
-
-    df = pd.DataFrame(rows)
-    disp = df.rename(
-        columns={
-            "contact_email": "Email",
-            "recipient_name": "Contacto",
-            "institution_name": "Institución",
-            "sector": "Sector",
-            "fit_bucket": "Fit",
-            "priority_score": "Prioridad",
-            "id_lead": "id_lead",
-            "variant_type": "Variante",
-        }
-    )
-    show_cols = [c for c in ["Email", "Contacto", "Institución", "Sector", "Fit", "Prioridad", "id_lead", "Variante"] if c in disp.columns]
-    st.dataframe(disp[show_cols], use_container_width=True, hide_index=True)
-
-    csv_buf = io.StringIO()
-    df.to_csv(csv_buf, index=False)
-    st.download_button(
-        "Descargar cola (CSV)",
-        data=csv_buf.getvalue().encode("utf-8"),
-        file_name="next_marketing_queue.csv",
-        mime="text/csv",
-        key="dl_next_mkt_queue",
-    )
-
-    labels = [
-        f"{r['contact_email']} · {str(r.get('institution_name') or '')[:40]} · id {r['id_lead']}"
-        for r in rows
-    ]
-    pick_idx = st.selectbox("Elegir contacto para prellenar borrador", range(len(labels)), format_func=lambda i: labels[i])
-    if st.button("Prellenar y abrir «Borrador comercial» (outreach)", type="primary", key="mktq_to_borrador"):
-        r = rows[int(pick_idx)]
-        inst = str(r.get("institution_name") or "").strip()
-        st.session_state.pop("borrador_last_pkg", None)
-        st.session_state.pop("borrador_handoff_email_id", None)
-        st.session_state.pop("borrador_pick_email", None)
-        st.session_state["borrador_origen_caso"] = "Entrada manual"
-        st.session_state["borrador_manual_kind"] = "Outreach / presentacion comercial"
-        st.session_state["borrador_case_id"] = str(r.get("case_id") or "")
-        st.session_state["borrador_subject_in"] = f"Presentacion OrigenLab | {inst}" if inst else "Presentacion OrigenLab"
-        st.session_state["borrador_mkt_recipient"] = str(r.get("recipient_name") or "")
-        st.session_state["borrador_mkt_inst"] = str(r.get("institution_name") or "")
-        st.session_state["borrador_mkt_contact_email"] = str(r.get("contact_email") or "")
-        st.session_state["borrador_mkt_sector"] = str(r.get("sector") or "")
-        st.session_state["borrador_mkt_variant"] = str(r.get("variant_type") or variant_pick)
-        st.session_state["borrador_mkt_product_focus"] = ""
-        st.session_state["borrador_mkt_use_case"] = ""
-        st.session_state["borrador_mkt_custom_note"] = ""
-        st.session_state["borrador_body_in"] = ""
-        st.session_state["borrador_nfr"] = f"id_lead={r.get('id_lead')} fit={r.get('fit_bucket')} · cola outreach"
-        _navigate_to("Borrador comercial")
-
-    st.caption(
-        "El CLI `scripts/leads/export_next_marketing_recipients.py` usa la misma lógica y puede generar "
-        "`--pilot-csv` para `run_tatiana_pilot_batch.py` (OpenAI por lote, fuera de Streamlit)."
-    )
-    st.caption(f"Base de datos (solo lectura): `{db_path}`")
-
-
-def render_commercial_draft_review_page(conn: sqlite3.Connection, db_path: Path) -> None:
-    """OrigenLab-mode drafting for human review only (no send; optional filesystem export under reports/out)."""
-    _handoff = st.session_state.pop("borrador_handoff_email_id", None)
-    if _handoff is not None:
-        st.session_state["borrador_origen_caso"] = "Correo reciente (Gmail contacto)"
-        st.session_state["borrador_pick_email"] = int(_handoff)
-
-    st.subheader("Borrador comercial (revisión)")
-    _render_page_status(
-        "Borrador comercial",
-        note="No envía correos. Aquí puede revisar borradores guardados o crear uno nuevo y guardar el resultado en archivos.",
-    )
-    st.caption(
-        "**Solo revisión humana:** no envía correos, no escribe en el buzón y no modifica filas en la tabla de correos. "
-        "Modo **OrigenLab** siempre. El texto exacto del mensaje puede ingresarse a mano o tomarse del archivo de correos "
-        "(**Gmail** de contacto); el resto de tablas de negocio es contexto indirecto, no la fuente única del texto."
-    )
-
-    settings = load_settings()
-    st.markdown("### Revisar borradores guardados")
-    st.caption("Abra una carpeta ya generada para revisar textos, emails de contacto y metadatos del batch.")
-    default_batch_dir = str(settings.resolved_reports_dir() / "latest_tatiana_pilot_batch")
-    batch_dir_in = st.text_input(
-        "Carpeta de batch existente",
-        value=default_batch_dir,
-        key="borrador_existing_batch_dir",
-        help="Puede usar la carpeta exacta del batch o el symlink `latest_tatiana_pilot_batch`.",
-    )
-    current_batch_sig = _pilot_batch_signature(batch_dir_in)
-    loaded_batch_dir = str(st.session_state.get("borrador_existing_batch_dir_loaded") or "")
-    loaded_batch_sig = st.session_state.get("borrador_existing_batch_sig")
-    if st.button("Cargar batch existente", key="borrador_load_existing_batch"):
-        df_batch, cases_batch, err = _load_existing_pilot_batch(batch_dir_in)
-        if err:
-            st.error(err)
-        else:
-            st.session_state["borrador_existing_batch_df"] = df_batch
-            st.session_state["borrador_existing_batch_cases"] = cases_batch
-            st.session_state["borrador_existing_batch_dir_loaded"] = batch_dir_in
-            st.session_state["borrador_existing_batch_sig"] = current_batch_sig
-            st.success("Batch cargado para revisión.")
-    elif loaded_batch_dir == batch_dir_in and current_batch_sig and current_batch_sig != loaded_batch_sig:
-        df_batch, cases_batch, err = _load_existing_pilot_batch(batch_dir_in)
-        if not err:
-            st.session_state["borrador_existing_batch_df"] = df_batch
-            st.session_state["borrador_existing_batch_cases"] = cases_batch
-            st.session_state["borrador_existing_batch_sig"] = current_batch_sig
-            st.info("Se recargó el batch porque cambió su contenido en disco.")
-
-    df_batch = st.session_state.get("borrador_existing_batch_df")
-    cases_batch = st.session_state.get("borrador_existing_batch_cases")
-    if isinstance(df_batch, pd.DataFrame) and cases_batch:
-        with st.expander("Ver drafts ya generados", expanded=True):
-            show = df_batch.copy()
-            batch_supp_map: dict[str, dict[str, object]] = {}
-            if "case_id" in show.columns:
-                case_email_map: dict[str, str] = {}
-                for obj in cases_batch:
-                    case = dict(obj.get("case") or {})
-                    cid = str(case.get("case_id") or "")
-                    meta = dict(case.get("context_metadata") or {})
-                    email = str(meta.get("contact_email") or "").strip()
-                    if cid and email:
-                        case_email_map[cid] = email
-                if case_email_map:
-                    show["contact_email"] = show["case_id"].map(case_email_map).fillna("")
-                    batch_supp_map = fetch_contact_email_suppression_map(conn, list(case_email_map.values()))
-                    if batch_supp_map:
-                        show["email_suppressed"] = show["contact_email"].map(
-                            lambda x: "Sí" if str(x).strip().lower() in batch_supp_map else ""
-                        )
-            rename_map = {
-                "case_id": "Caso",
-                "contact_email": "Email contacto",
-                "email_suppressed": "Rebotado / bloqueado",
-                "subject_input": "Asunto entrada",
-                "generated_subject": "Asunto generado",
-                "abstained": "¿Abstuvo?",
-                "provider_name": "Proveedor",
-                "system_notes": "Notas sistema",
-                "reviewer_decision": "Decision",
-                "reviewer_notes": "Notas revisor",
-            }
-            keep_cols = [c for c in rename_map.keys() if c in show.columns]
-            st.dataframe(show[keep_cols].rename(columns=rename_map), use_container_width=True, hide_index=True)
-            case_labels = []
-            case_index: dict[str, dict[str, Any]] = {}
-            for obj in cases_batch:
-                case = dict(obj.get("case") or {})
-                cid = str(case.get("case_id") or obj.get("_case_file") or "case")
-                subj = str(case.get("subject") or "")[:72]
-                label = f"{cid} · {subj}" if subj else cid
-                case_labels.append(label)
-                case_index[label] = obj
-            if case_labels:
-                picked = st.selectbox("Elegir draft del batch", options=case_labels, key="borrador_existing_case_pick")
-                chosen = case_index[picked]
-                case = dict(chosen.get("case") or {})
-                selected_case_key = str(case.get("case_id") or chosen.get("_case_file") or "case")
-                chosen_email = str((case.get("context_metadata") or {}).get("contact_email") or "").strip().lower()
-                chosen_supp = batch_supp_map.get(chosen_email) if chosen_email else None
-                st.markdown("#### Caso original")
-                st.write(
-                    {
-                        "case_id": case.get("case_id") or "—",
-                        "subject": case.get("subject") or "—",
-                        "expected_label": case.get("expected_label") or "—",
-                        "archivo_json": chosen.get("_case_file") or "—",
-                    }
-                )
-                if chosen_email:
-                    st.caption(f"Email de contacto: `{chosen_email}`")
-                if chosen_supp:
-                    st.warning(
-                        "Este email está marcado para no reutilizarse: "
-                        f"{_contact_suppression_reason_label(str(chosen_supp.get('suppression_reason_code') or ''))}."
-                    )
-                st.text_area(
-                    "Contexto / briefing del caso",
-                    value=str(case.get("body_text") or ""),
-                    height=220,
-                    disabled=True,
-                    key=f"borrador_existing_case_body_{selected_case_key}",
-                )
-                st.markdown("#### Draft generado")
-                st.text_area(
-                    "Texto del draft",
-                    value=str(chosen.get("generated_draft") or ""),
-                    height=320,
-                    disabled=True,
-                    key=f"borrador_existing_generated_{selected_case_key}",
-                )
-                with st.expander("Metadata y referencias del package", expanded=False):
-                    st.json(
-                        {
-                            "prompt_blocks": chosen.get("prompt_blocks"),
-                            "guardrails": chosen.get("guardrails"),
-                            "retrieved_style_examples": chosen.get("retrieved_style_examples"),
-                            "retrieved_examples": chosen.get("retrieved_examples"),
-                            "notes": chosen.get("notes"),
-                            "provider_name": chosen.get("provider_name"),
-                            "abstained": chosen.get("abstained"),
-                        }
-                    )
-                st.download_button(
-                    "Descargar case JSON del batch",
-                    data=json.dumps(chosen, ensure_ascii=False, indent=2),
-                    file_name=str(chosen.get("_case_file") or "case.json"),
-                    mime="application/json",
-                    key="borrador_existing_dl_case",
-                )
-
-    st.divider()
-    st.markdown("### Crear nuevo borrador")
-    st.caption("Elija si quiere partir desde un correo reciente de Gmail contacto o desde una entrada manual/outreach.")
-    mode = st.radio(
-        "Origen del caso",
-        ("Entrada manual", "Correo reciente (Gmail contacto)"),
-        horizontal=True,
-        key="borrador_origen_caso",
-    )
-
-    _GEN_OPENAI_LABEL = "OpenAI (requiere API configurada)"
-    _GEN_SIM_LABEL = "Simulación sin API (solo prueba, sin costo)"
-
-    selected_email_id: int | None = None
-    if mode == "Entrada manual":
-        draft_kind = st.radio(
-            "Tipo de borrador manual",
-            ("Respuesta comercial / caso puntual", "Outreach / presentacion comercial"),
-            horizontal=True,
-            key="borrador_manual_kind",
-        )
-        st.text_input("Identificador del caso", value="streamlit_manual_001", key="borrador_case_id")
-        if draft_kind == "Outreach / presentacion comercial":
-            st.text_input("Asunto sugerido", value="Presentacion OrigenLab", key="borrador_subject_in")
-            st.caption(
-                "Modo review-first para correos de presentacion. Si deja el cuerpo vacio, la app arma una base "
-                "canonica y la envia al modelo con los campos de personalizacion confirmados."
-            )
-            c1, c2 = st.columns(2)
-            with c1:
-                st.text_input("Nombre del destinatario (opcional)", key="borrador_mkt_recipient")
-                st.text_input("Institucion / empresa (opcional)", key="borrador_mkt_inst")
-                st.text_input("Correo del contacto (solo registro, opcional)", key="borrador_mkt_contact_email")
-                st.selectbox(
-                    "Variante",
-                    options=[
-                        MARKETING_VARIANT_GENERAL,
-                        MARKETING_VARIANT_UNIVERSIDADES,
-                        MARKETING_VARIANT_HOSPITALES,
-                        MARKETING_VARIANT_INDUSTRIA,
-                        MARKETING_VARIANT_PUBLICO,
-                        MARKETING_VARIANT_FOLLOWUP,
-                    ],
-                    format_func=_fmt_marketing_variant,
-                    key="borrador_mkt_variant",
-                )
-            with c2:
-                st.text_input("Sector (opcional)", key="borrador_mkt_sector")
-                st.text_input("Foco de producto (opcional)", key="borrador_mkt_product_focus")
-                st.text_input("Caso de uso probable (opcional)", key="borrador_mkt_use_case")
-                st.text_area("Nota personalizada confirmada (opcional)", height=90, key="borrador_mkt_custom_note")
-            st.text_area(
-                "Cuerpo base / briefing adicional (opcional)",
-                height=180,
-                key="borrador_body_in",
-                help="Opcional. Si lo deja vacio, se usa una base canonica de presentacion OrigenLab y los campos confirmados.",
-            )
-            st.text_area("Notas internas para quien revisa (opcional)", height=70, key="borrador_nfr")
-            with st.expander("Base canonica de presentacion usada como referencia", expanded=False):
-                st.text_area(
-                    "Referencia",
-                    value=CANONICAL_BASE_PRESENTATION_EMAIL_ES,
-                    height=180,
-                    disabled=True,
-                )
-        else:
-            st.text_input("Asunto del mensaje entrante", key="borrador_subject_in")
-            st.text_area("Cuerpo del mensaje entrante", height=220, key="borrador_body_in")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.text_input("Nombre del solicitante (opcional)", key="borrador_rn")
-                st.text_input("Correo del solicitante (opcional)", key="borrador_re")
-                st.text_input("Producto o categoría solicitada (opcional)", key="borrador_rpc")
-            with c2:
-                st.text_area("Hechos ya confirmados (opcional)", height=90, key="borrador_ekf")
-                st.text_area("Información que aún falta (opcional)", height=90, key="borrador_mi")
-            st.text_area("Notas internas para quien revisa (opcional)", height=70, key="borrador_nfr")
-    else:
-        if not _has_table(conn, "emails"):
-            st.error("No se encontró la tabla de mensajes de correo en este archivo.")
-            return
-        try:
-            _ensure = st.session_state.get("borrador_pick_email")
-            _ensure_ids = [int(_ensure)] if _ensure is not None else None
-            pick_df = load_contacto_gmail_email_choices_df(
-                conn, limit=200, ensure_email_ids=_ensure_ids
-            )
-        except Exception as exc:
-            st.error(f"No se pudieron leer los mensajes: {exc}")
-            return
-        if pick_df.empty:
-            st.warning(
-                "No hay correos del buzón **Gmail de contacto** en el archivo. "
-                "Puede importarlos con el script de Gmail (Workspace) o usar entrada manual."
-            )
-            return
-        _cols_es = {
-            "id": "ID",
-            "date_iso": "Fecha",
-            "subject_preview": "Asunto (extracto)",
-            "sender_preview": "Remitente (extracto)",
-            "source_file": "Origen técnico",
-        }
-        st.dataframe(
-            pick_df.rename(columns={k: v for k, v in _cols_es.items() if k in pick_df.columns}),
-            use_container_width=True,
-            hide_index=True,
-        )
-        ids = [int(x) for x in pick_df["id"].tolist()]
-
-        def _fmt_row(eid: int) -> str:
-            row = pick_df.loc[pick_df["id"] == eid].iloc[0]
-            subj = str(row.get("subject_preview") or "")
-            ds = str(row.get("date_iso") or "")
-            return f"{ds} · {subj[:72]} · ID {eid}"
-
-        selected_email_id = st.selectbox("Elegir un correo de la lista", ids, format_func=_fmt_row, key="borrador_pick_email")
-
-    gen_mode = st.radio(
-        "Motor de generación",
-        (_GEN_OPENAI_LABEL, _GEN_SIM_LABEL),
-        horizontal=True,
-        key="borrador_gen_mode",
-        help="Si no elige simulación, se usa OpenAI; si falta la clave de API, verá un mensaje de error claro (sin cambiar solo a modo simulado).",
-    )
-    use_mock = gen_mode == _GEN_SIM_LABEL
-
-    _btn_label = (
-        "Generar borrador de outreach (OrigenLab)"
-        if mode == "Entrada manual"
-        and st.session_state.get("borrador_manual_kind") == "Outreach / presentacion comercial"
-        else "Generar borrador (OrigenLab)"
-    )
-    if st.button(_btn_label, type="primary", key="borrador_gen_btn"):
-        try:
-            if mode == "Entrada manual":
-                body_raw = (st.session_state.get("borrador_body_in") or "").strip()
-                is_outreach = st.session_state.get("borrador_manual_kind") == "Outreach / presentacion comercial"
-                if not body_raw and not is_outreach:
-                    st.error("El cuerpo del mensaje entrante es obligatorio.")
-                else:
-                    case = draft_case_from_manual(
-                        case_id=str(st.session_state.get("borrador_case_id") or "streamlit_manual_case"),
-                        subject=str(st.session_state.get("borrador_subject_in") or ""),
-                        body_text=body_raw,
-                        requester_name=(st.session_state.get("borrador_rn") or "").strip() or None,
-                        requester_email=(st.session_state.get("borrador_re") or "").strip() or None,
-                        requested_product_or_category=(st.session_state.get("borrador_rpc") or "").strip() or None,
-                        explicit_known_facts=(st.session_state.get("borrador_ekf") or "").strip() or None,
-                        missing_information=(st.session_state.get("borrador_mi") or "").strip() or None,
-                        notes_for_reviewer=(st.session_state.get("borrador_nfr") or "").strip() or None,
-                        recipient_name=(st.session_state.get("borrador_mkt_recipient") or "").strip() or None,
-                        institution_name=(st.session_state.get("borrador_mkt_inst") or "").strip() or None,
-                        sector=(st.session_state.get("borrador_mkt_sector") or "").strip() or None,
-                        product_focus=(st.session_state.get("borrador_mkt_product_focus") or "").strip() or None,
-                        use_case=(st.session_state.get("borrador_mkt_use_case") or "").strip() or None,
-                        variant_type=(st.session_state.get("borrador_mkt_variant") or "").strip() or None,
-                        contact_email=(st.session_state.get("borrador_mkt_contact_email") or "").strip() or None,
-                        custom_note=(st.session_state.get("borrador_mkt_custom_note") or "").strip() or None,
-                        marketing_outreach=is_outreach,
-                    )
-                    index = get_cached_tatiana_index(settings, st.session_state)
-                    pkg = run_origenlab_draft_package(
-                        case=case,
-                        settings=settings,
-                        index=index,
-                        generator_name="openai_chat",
-                        use_mock_explicit=use_mock,
-                    )
-                    st.session_state["borrador_last_pkg"] = pkg
-            else:
-                if selected_email_id is None:
-                    st.error("Seleccione un correo de la lista.")
-                else:
-                    case = draft_case_from_email_row(conn, email_id=selected_email_id)
-                    if case is None:
-                        st.error("No se encontró el correo seleccionado.")
-                    else:
-                        index = get_cached_tatiana_index(settings, st.session_state)
-                        pkg = run_origenlab_draft_package(
-                            case=case,
-                            settings=settings,
-                            index=index,
-                            generator_name="openai_chat",
-                            use_mock_explicit=use_mock,
-                        )
-                        st.session_state["borrador_last_pkg"] = pkg
-        except (RuntimeError, ValueError, FileNotFoundError) as exc:
-            st.error(str(exc))
-        except Exception as exc:
-            st.exception(exc)
-
-    pkg = st.session_state.get("borrador_last_pkg")
-    if not pkg:
-        st.info("Pulse **Generar borrador (OrigenLab)** arriba para ver el resultado y los campos de revisión.")
-        st.caption(f"Base de datos (solo lectura): `{db_path}`")
-        return
-
-    gen_subject = extract_asunto_from_draft(pkg.generated_draft or "")
-    st.markdown("### Borrador generado")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("¿Se abstuvo el modelo?", "Sí" if pkg.abstained else "No")
-    with c2:
-        st.metric("Proveedor técnico", pkg.provider_name or "—")
-    with c3:
-        st.metric("Asunto sugerido (1.ª línea)", gen_subject[:80] + ("…" if len(gen_subject) > 80 else ""))
-
-    st.text_area("Texto completo del borrador", value=pkg.generated_draft or "", height=320, disabled=True)
-
-    st.markdown("#### Ejemplos usados como referencia (estilo y precedentes)")
-    st.write(
-        "**Identificadores de estilo:** "
-        + ", ".join(str(x.get("example_id", "")) for x in pkg.retrieved_style_examples)
-        + "  \n**Identificadores de precedentes:** "
-        + ", ".join(str(x.get("example_id", "")) for x in pkg.retrieved_examples)
-    )
-
-    blocks = pkg.prompt_blocks or {}
-    with st.expander("Hechos de empresa y política comercial (resumen)", expanded=False):
-        st.json(
-            {
-                "hechos_empresa": blocks.get("company_facts"),
-                "politica_comercial": blocks.get("commercial_policy"),
-                "firma_aprobada": blocks.get("approved_signature_block"),
-                "fuentes_de_hechos": blocks.get("origenlab_fact_sources"),
-                "complemento_del_caso": blocks.get("case_context_supplement"),
-                "marketing_outreach": blocks.get("marketing_outreach_supplement"),
-            }
-        )
-    with st.expander("Límites y reglas enviadas al modelo", expanded=False):
-        st.caption("El sistema usa este texto en **inglés** al generar el borrador (convención técnica).")
-        for g in pkg.guardrails or []:
-            st.write(f"- {g}")
-
-    st.download_button(
-        "Descargar paquete (archivo JSON)",
-        data=json.dumps(pkg.to_dict(), ensure_ascii=False, indent=2),
-        file_name="borrador_paquete.json",
-        mime="application/json",
-        key="borrador_dl_json",
-    )
-
-    st.markdown("### Revisión humana (solo en pantalla o al exportar)")
-    st.caption(
-        "En el archivo exportado, el campo de «aprobado para envío» queda siempre en **no**; esta aplicación **no envía** correos."
-    )
-
-    decision_labels = {
-        "": "(sin decidir)",
-        "approve": "Aprobar",
-        "approve_with_edits": "Aprobar con ediciones",
-        "reject": "Rechazar",
-        "needs_clarification": "Falta información del cliente",
-    }
-    rev_decision = st.selectbox(
-        "Decisión del revisor",
-        options=list(decision_labels.keys()),
-        format_func=lambda k: decision_labels[k],
-        key="borrador_rev_decision",
-    )
-    rev_notes = st.text_area("Comentarios del revisor", key="borrador_rev_notes")
-    rev_subj = st.text_input("Asunto final (tras revisión)", value=gen_subject, key="borrador_rev_subj")
-    rev_body = st.text_area("Cuerpo final (tras revisión)", value=pkg.generated_draft or "", height=200, key="borrador_rev_body")
-
-    if st.button("Guardar revisión en carpeta de informes (reports/out)", key="borrador_export_btn"):
-        try:
-            out_dir = new_streamlit_export_dir(settings)
-            info = export_streamlit_review_artifact(
-                out_dir=out_dir,
-                pkg=pkg,
-                reviewer_decision=rev_decision,
-                reviewer_notes=rev_notes,
-                reviewer_final_subject=rev_subj,
-                reviewer_final_body=rev_body,
-            )
-            st.success(
-                f"Guardado en `{info['out_dir']}`: paquete JSON, tabla de revisión (CSV) y copia del contexto OrigenLab."
-            )
-        except OSError as exc:
-            st.error(f"No se pudo guardar en el disco: {exc}")
-
-    st.caption(f"Base de datos (solo lectura): `{db_path}`")
-
-
 def render_proveedores_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Catálogo de proveedores / abastecimiento importado (solo lectura)."""
     st.subheader("Proveedores")
-    _render_page_status("Proveedores")
+    render_page_status("Proveedores")
     st.caption(
         "Abastecimiento y partners internacionales — fuente estructurada (workbook DeepSearch), "
         "independiente de `lead_master`. Solo lectura en esta versión."
@@ -2310,13 +1401,13 @@ def _render_lead_manual_enrichment_panel(conn: sqlite3.Connection, db_path: Path
 def render_leads_y_cuentas_page(conn: sqlite3.Connection, db_path: Path) -> None:
     """Leer `lead_master`, coincidencias con archivo, enriquecimiento opcional y rollup de cuentas."""
     st.subheader("Leads y cuentas")
-    _render_page_status(
+    render_page_status(
         "Leads y cuentas",
         note=(
             "Si el modo RW está habilitado, el enriquecimiento manual se guarda en la base actual. Si no, esta vista queda en consulta."
         ),
     )
-    _lb = st.session_state.pop("leads_today_banner", None)
+    _lb = st.session_state.pop(SESSION_LEADS_TODAY_BANNER, None)
     if _lb:
         st.info(_lb)
     st.caption(
@@ -2324,253 +1415,6 @@ def render_leads_y_cuentas_page(conn: sqlite3.Connection, db_path: Path) -> None
         "y columnas de **enriquecimiento manual** cuando exista `lead_contact_research`. "
         "Los datos de import no se sobreescriben desde aquí."
     )
-
-    ok, reason = lead_browse_ready(conn)
-    if not ok:
-        st.warning(
-            "En esta base **no existe** la tabla `lead_master`. "
-            "La capa de leads vive en el mismo SQLite tras normalizar leads (ver `docs/leads/LEAD_PIPELINE.md`)."
-        )
-        if reason:
-            st.caption(f"Técnico: `{reason}` · archivo `{db_path}`")
-        return
-
-    if not _has_table(conn, "lead_contact_research"):
-        if _ensure_lead_contact_research_ddl(db_path):
-            st.success(
-                "Se creó la tabla `lead_contact_research` (esquema de leads). Recargando la vista…"
-            )
-            st.rerun()
-        else:
-            st.warning(
-                "**Falta** la tabla `lead_contact_research` y no se pudo crear automáticamente "
-                "(p. ej. archivo SQLite montado solo lectura). Opciones: use una copia grabable del `.sqlite`, "
-                "o ejecute una vez: `uv run python scripts/leads/normalize_leads.py --ensure-schema-only`."
-            )
-
-    opts = lead_browse_filter_options(conn)
-    st.markdown("#### Filtros")
-    r0, r1, r2 = st.columns(3)
-    with r0:
-        fit_pick = st.multiselect(
-            "Encaje (fit / bucket)",
-            options=opts["fit_bucket"],
-            default=[],
-            help="Vacío = todos los valores que ya aparecen en los datos.",
-            key="leads_f_fit",
-        )
-        st_pick = st.multiselect(
-            "Estado (`status`)",
-            options=opts["status"],
-            default=[],
-            key="leads_f_status",
-        )
-    with r1:
-        src_pick = st.multiselect(
-            "Fuente (`source_name`)",
-            options=opts["source_name"],
-            default=[],
-            key="leads_f_src",
-        )
-        arch_match = st.radio(
-            "Enlace al archivo",
-            options=["any", "has", "none"],
-            format_func=lambda x: {
-                "any": "Cualquiera",
-                "has": "Con coincidencia en archivo",
-                "none": "Sin coincidencia en archivo",
-            }[x],
-            horizontal=True,
-            key="leads_f_arch",
-        )
-    with r2:
-        needs_act = st.checkbox(
-            "Solo pendientes de `next_action`",
-            value=False,
-            key="leads_f_next",
-            help="Filas donde `next_action` está vacío.",
-        )
-        row_cap = st.number_input(
-            "Máx. filas",
-            min_value=50,
-            max_value=4000,
-            value=1200,
-            step=50,
-            key="leads_f_limit",
-        )
-
-    flt = LeadBrowseFilters(
-        fit_buckets=tuple(fit_pick) if fit_pick else None,
-        statuses=tuple(st_pick) if st_pick else None,
-        sources=tuple(src_pick) if src_pick else None,
-        archive_match=str(arch_match),
-        needs_action_only=needs_act,
-        limit=int(row_cap),
-    )
-    df = fetch_leads_browse_df(conn, flt)
-    if df.empty:
-        st.info("No hay filas que cumplan los filtros (o la tabla está vacía para leads activos aguas arriba).")
-    else:
-        display = df.copy()
-        display["evidence_summary"] = display["evidence_summary"].fillna("").astype(str).str.slice(0, 280)
-        display["notes"] = display["notes"].fillna("").astype(str).str.slice(0, 200)
-        if "research_contact_notes" in display.columns:
-            display["research_contact_notes"] = (
-                display["research_contact_notes"].fillna("").astype(str).str.slice(0, 200)
-            )
-        display = display.rename(
-            columns={
-                "lead_id": "ID lead",
-                "source_name": "Fuente",
-                "source_record_id": "ID en fuente",
-                "org_name": "Organización (lead)",
-                "source_domain": "Dominio (import)",
-                "source_website": "Sitio web (import)",
-                "contact_name": "Contacto",
-                "email": "Correo",
-                "fit_bucket": "Encaje",
-                "priority_score": "Prioridad",
-                "priority_reason": "Motivo prioridad",
-                "status": "Estado",
-                "next_action": "Próxima acción",
-                "review_owner": "Responsable revisión",
-                "last_reviewed_at": "Última revisión",
-                "evidence_summary": "Evidencia (extracto)",
-                "notes": "Notas (extracto)",
-                "buyer_kind": "Tipo comprador",
-                "region": "Región",
-                "first_seen_at": "Primera vez",
-                "last_seen_at": "Última vez",
-                "known_in_archive_any": "¿En archivo?",
-                "org_match_domain": "Dominio archivo (org)",
-                "org_match_org_name": "Nombre org. archivo",
-                "org_match_type": "Tipo match org",
-                "org_match_confidence": "Conf. org",
-                "org_already_in_archive": "Flag archivo (org)",
-                "contact_match_email": "Contacto archivo",
-                "contact_match_type": "Tipo match contacto",
-                "contact_match_confidence": "Conf. contacto",
-                "contact_already_in_archive": "Flag archivo (contacto)",
-                "lead_account_id": "ID cuenta",
-                "lead_account_name": "Cuenta lead",
-                "lead_account_domain": "Dominio cuenta",
-                "account_lead_count": "Licitaciones en cuenta",
-                "archive_org_total_emails": "Correos en org (mart)",
-                "archive_org_last_seen": "Última actividad org",
-                "archive_org_quote_emails": "Correos cotización org",
-                "contact_research_status": "Inv. contacto — estado",
-                "research_resolved_domain": "Inv. — dominio resuelto",
-                "research_resolved_contact_name": "Inv. — contacto resuelto",
-                "research_resolved_contact_email": "Inv. — correo resuelto",
-                "research_contact_source": "Inv. — origen del dato",
-                "research_contact_notes": "Inv. — notas",
-                "contact_research_updated_at": "Inv. — actualizado",
-                "contact_research_updated_by": "Inv. — por",
-            }
-        )
-        st.markdown("#### Tabla de leads (activos aguas arriba)")
-        st.caption(
-            "«¿En archivo?» resume si hay match por organización o contacto con el mart. "
-            "Valores numéricos del mart son aproximados a partir de `organization_master`. "
-            "Columnas «Inv. …» vienen de **enriquecimiento manual** (`lead_contact_research`), no del CSV de import."
-        )
-        st.dataframe(display, use_container_width=True, hide_index=True)
-        _render_lead_manual_enrichment_panel(conn, db_path, df)
-
-    st.divider()
-    st.markdown("### Cuentas de leads (rollup)")
-    acc = fetch_lead_account_rollups_df(conn, limit=80)
-    if acc is None:
-        st.info(
-            "Aquí aparecerían filas de `lead_account_master` tras ejecutar el rollup de cuentas "
-            "(`scripts/leads/build_lead_account_rollup.py`). Tablas aún no presentes o vacías de DDL."
-        )
-    elif acc.empty:
-        st.info("`lead_account_master` existe pero no hay filas; ejecute el rollup tras tener `lead_master`.")
-    else:
-        acc_d = acc.rename(
-            columns={
-                "account_id": "ID cuenta",
-                "canonical_name": "Nombre canónico",
-                "primary_domain": "Dominio principal",
-                "lead_count": "Nº licitaciones/leads",
-                "source_count": "Nº fuentes",
-                "quality_status": "Calidad",
-                "region": "Región",
-                "last_seen_at": "Última vez",
-                "first_seen_at": "Primera vez",
-            }
-        )
-        st.dataframe(acc_d, use_container_width=True, hide_index=True)
-
-    _rw_hint = (
-        " Lectura/escritura de enriquecimiento de leads habilitada (`ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW=1`)."
-        if streamlit_leads_review_rw_enabled()
-        else ""
-    )
-    st.caption(f"Archivo SQLite: `{db_path}`.{_rw_hint}")
-
-
-def render_que_hacer_hoy_page(conn: sqlite3.Connection, db_path: Path) -> None:
-    """Workspace compacto: colas existentes, orden explícito, sin ranking opaco."""
-    st.subheader("Qué hacer hoy")
-    _render_page_status(
-        "Qué hacer hoy",
-        note="Esto reúne prioridades del día desde distintas fuentes. No es una sola cola ni una única verdad del negocio.",
-    )
-    st.info(
-        "Workspace priorizado del día. Combina varias fuentes en una sola vista operativa: las filas no vienen todas del mismo lugar y cada una muestra su origen y su motivo."
-    )
-    st.caption(
-        "Sugerencias del día reunidas en un solo lugar. Cada fila dice **de dónde viene** y **por qué está acá**. "
-        "No ejecuta acciones sola: solo orienta."
-    )
-    spec = TodayWorkspaceSpec()
-    rows = _today_workspace_rows_cached(db_path, spec)
-    with st.expander("Cómo funciona esta vista", expanded=False):
-        st.markdown(
-            """
-Las filas siguen un **orden fijo** (no es una IA que «adivina» prioridades):
-
-1. **Correos de contacto** con señal comercial positiva (capa CI en el mensaje).
-2. **Candidatos** marcados como pendientes de revisión, con confianza sobre un mínimo.
-3. **Leads** de encaje alto o medio **sin** próxima acción escrita.
-4. **Cuentas dormidas** detectadas en el mart (señal heurística).
-
-Dentro de cada grupo el orden es numérico y transparente (fechas o puntajes ya guardados en la base). \
-Se limita la cantidad de filas para que la pantalla sea usable. **No se cruzan ni fusionan** duplicados entre fuentes en esta versión.
-            """
-        )
-        st.caption(
-            "Los datos se actualizan al recargar la página; la caché de unos segundos solo evita repetir lecturas "
-            "si la base no cambió en el disco."
-        )
-
-    if not rows:
-        st.info(
-            "Por ahora no hay filas que cumplan los criterios, o faltan datos/tablas en este SQLite "
-            "(correos con CI, leads, oportunidades). Revise **Salud de datos** y el runbook de pipelines."
-        )
-        st.caption(f"Base: `{db_path}`")
-        return
-
-    st.caption(f"Hasta **{len(rows)}** sugerencias · `{db_path}`")
-
-    for i, r in enumerate(rows):
-        _src_es = source_label_es(r.source_code)
-        with st.container():
-            c1, c2 = st.columns([5, 1])
-            with c1:
-                st.markdown(f"**{r.tier_label_es}** · Origen: **{_src_es}**")
-                st.write(f"**Referencia:** {r.reference_es}")
-                st.caption(r.reason_es)
-                st.caption(f"**Siguiente paso:** {r.next_step_es}")
-            with c2:
-                if st.button("Ir a la vista", key=f"today_go_{i}"):
-                    apply_today_row_handoff(r, st.session_state)
-                    _navigate_to(r.navigate_page)
-        if i < len(rows) - 1:
-            st.divider()
 
 
 def _split_tags(value: object) -> list[str]:
@@ -2891,10 +1735,10 @@ def main() -> None:
 
     conn = _connect_ro(db_path)
     try:
-        # Navegación por área + vista (mismas rutas; `_navigate_to` sigue pasando `start_page`).
+        # Navegación por área + vista (mismas rutas; handoff vía ``SESSION_START_PAGE``).
         all_pages = _all_nav_pages()
-        if "start_page" in st.session_state:
-            _sp = st.session_state.pop("start_page")
+        if SESSION_START_PAGE in st.session_state:
+            _sp = st.session_state.pop(SESSION_START_PAGE)
             if _sp in all_pages:
                 _gi = _nav_group_index_for_page(_sp)
                 st.session_state["nav_area_ix"] = _gi
@@ -2912,6 +1756,8 @@ def main() -> None:
             label_visibility="collapsed",
             key="nav_area_ix",
         )
+        if _NAV_GROUPS[int(_g_ix)][0] == PRIORIDAD_DEL_DIA_GROUP_TITLE:
+            st.caption(PRIORIDAD_GROUP_NAV_CAPTION_ES)
         _plist = _NAV_GROUPS[int(_g_ix)][1]
         page = st.radio(
             "Vista",
@@ -2964,7 +1810,7 @@ def main() -> None:
 
         if page == "Resumen":
             st.subheader("Resumen ejecutivo")
-            _render_page_status("Resumen")
+            render_page_status("Resumen")
             st.caption(
                 "Panorama del archivo importado y del mart de negocio. Las tareas sugeridas del día están en **Qué hacer hoy**."
             )
@@ -2974,13 +1820,13 @@ def main() -> None:
             docs_n = int(_load_df(conn, "SELECT COUNT(*) AS c FROM document_master").iloc[0]["c"])
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                _kpi("Mensajes analizados", f"{total_msgs:,}")
+                render_kpi_metric("Mensajes analizados", f"{total_msgs:,}")
             with c2:
-                _kpi("Contactos externos", f"{contacts_n:,}")
+                render_kpi_metric("Contactos externos", f"{contacts_n:,}")
             with c3:
-                _kpi("Organizaciones externas", f"{orgs_n:,}")
+                render_kpi_metric("Organizaciones externas", f"{orgs_n:,}")
             with c4:
-                _kpi("Documentos útiles", f"{docs_n:,}")
+                render_kpi_metric("Documentos útiles", f"{docs_n:,}")
 
             # Periodo aproximado de cobertura del archivo de correo.
             try:
@@ -3346,7 +2192,7 @@ def main() -> None:
                         if supp:
                             st.warning(
                                 "Email marcado para no reutilizarse: "
-                                f"{_contact_suppression_reason_label(str(supp.get('suppression_reason_code') or ''))}."
+                                f"{contact_suppression_reason_label(str(supp.get('suppression_reason_code') or ''))}."
                             )
                         st.markdown(f"- Dominio: `{r['domain']}`" if r.get("domain") else "- Dominio: (no detectado)")
                         org_name = r.get("organization_name_guess") or "Sin nombre de organización"
@@ -3395,7 +2241,7 @@ def main() -> None:
                     if supp:
                         st.write(
                             {
-                                "Estado": _contact_suppression_reason_label(str(supp.get("suppression_reason_code") or "")),
+                                "Estado": contact_suppression_reason_label(str(supp.get("suppression_reason_code") or "")),
                                 "Detalle": supp.get("suppression_reason_text") or "—",
                                 "Origen": supp.get("suppression_source") or "—",
                                 "Último rebote": supp.get("last_bounced_at") or "—",
@@ -3416,7 +2262,7 @@ def main() -> None:
                                 "Motivo",
                                 options=list(SUPPRESSION_REASON_CODES),
                                 index=reason_idx,
-                                format_func=_contact_suppression_reason_label,
+                                format_func=contact_suppression_reason_label,
                                 key=f"contact_supp_reason_{r['email']}",
                             )
                             st_reason_text = st.text_area(
@@ -4045,7 +2891,7 @@ def main() -> None:
 
         if page == "Candidatos comerciales":
             st.subheader("Candidatos comerciales (inteligencia comercial v1)")
-            _render_page_status(
+            render_page_status(
                 "Candidatos comerciales",
                 note="Puede revisar la cola siempre; las acciones de aprobar, rechazar o posponer solo escriben en la base si el modo RW está habilitado.",
             )
@@ -4078,10 +2924,10 @@ def main() -> None:
                 )
                 return
 
-            if "ci_today_hint" in st.session_state:
+            if SESSION_CI_TODAY_HINT in st.session_state:
                 st.info(
                     "Sugerencia **Qué hacer hoy**: candidato `"
-                    + st.session_state.pop("ci_today_hint")
+                    + st.session_state.pop(SESSION_CI_TODAY_HINT)
                     + "`. Revise la tabla inferior; los filtros pueden quedar en **pendiente de revisión**."
                 )
 
@@ -4204,7 +3050,7 @@ def main() -> None:
 
         if page == "Oportunidades":
             st.subheader("Oportunidades")
-            _render_page_status("Oportunidades")
+            render_page_status("Oportunidades")
             dfs = _load_df(
                 conn,
                 """
@@ -4220,7 +3066,7 @@ def main() -> None:
             signal_options = ["Todas", "Cotización + documento", "Universidad con cotización", "Cuenta dormida", "Tema de equipo recurrente"]
             # Si venimos desde quick-action de cuentas dormidas, seleccionar por defecto esa opción.
             default_signal = 0
-            if st.session_state.pop("opp_signal_filter", None) == "dormant_contact":
+            if st.session_state.pop(SESSION_OPP_SIGNAL_FILTER, None) == "dormant_contact":
                 default_signal = signal_options.index("Cuenta dormida")
             tipo_señal = st.selectbox("Tipo de señal", options=signal_options, index=default_signal)
             signal_map = {

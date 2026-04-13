@@ -1,0 +1,32 @@
+---
+description: Every change ships with tests; definition of done and coverage by change type
+alwaysApply: true
+---
+
+# Testing — definition of done (OrigenLab)
+
+A task is **not complete** until: code is implemented, **relevant tests are added or updated**, **tests pass**, and the handoff **names changed files, tests touched, and the exact test command(s) + outcome**.
+
+Do not ship refactors, cleanup, new workflows, or rule changes **without** appropriate tests. If something seems untestable, **narrow scope** until it is testable, or document the blocker and still add tests for everything else that moved.
+
+## By change type
+
+**Pure rules** — Focused unit tests; regression cases for **real examples** that motivated the change; **1–3 counterexamples** that must stay allowed.
+
+**CRUD / sidecar tables** — Unit tests for validation + persistence; lifecycle (create / update / state transitions); normalization + invalid inputs.
+
+**CLI** — Subprocess-style tests where applicable: happy path, invalid args / validation, missing DB or file, **exit codes**, output shape.
+
+**Query / export / audit** — Tests that lock **column sets** and **reason / semantics**; fixture-based rows where useful; **no silent CSV or column drift**.
+
+**Refactors** — Behavior preserved: tests exist before/after; logic moved from scripts into modules must gain **tests on the extracted code**. No “pure cleanup” without proof.
+
+**Streamlit / UI** — Business logic lives in **imported, testable functions** first; tests target those modules even when the UI stays thin.
+
+## Style
+
+Prefer **small, local** tests over giant E2E. Name tests after **observable behavior**, not private implementation. Add a regression test for **every real bug or audit finding** that drove a change.
+
+## Handoff template
+
+In the final message, include: files changed; **which tests were added or updated**; command(s) run (e.g. `uv run pytest …`); **pass/fail summary**.

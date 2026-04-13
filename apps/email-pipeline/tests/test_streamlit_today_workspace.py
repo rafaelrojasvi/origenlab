@@ -4,6 +4,14 @@ from __future__ import annotations
 
 import sqlite3
 
+from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
+    SESSION_CI_ENTITY_KIND,
+    SESSION_CI_STATUS,
+    SESSION_CI_TODAY_HINT,
+    SESSION_LEADS_TODAY_BANNER,
+    SESSION_OPP_SIGNAL_FILTER,
+    SESSION_TODAY_HANDOFF_CASO_EMAIL_ID,
+)
 from origenlab_email_pipeline.streamlit_today_workspace import (
     TIER_CANDIDATO_NEEDS_REVIEW,
     TIER_CASO_SENAL_POSITIVA,
@@ -74,7 +82,8 @@ def test_apply_handoff_caso() -> None:
         handoff_email_id=42,
     )
     apply_today_row_handoff(r, sess)
-    assert sess["today_handoff_caso_email_id"] == 42
+    assert sess[SESSION_TODAY_HANDOFF_CASO_EMAIL_ID] == 42
+    assert SESSION_TODAY_HANDOFF_CASO_EMAIL_ID == "today_handoff_caso_email_id"
 
 
 def test_apply_handoff_ci_and_lead() -> None:
@@ -96,9 +105,9 @@ def test_apply_handoff_ci_and_lead() -> None:
         ),
         s1,
     )
-    assert s1["ci_entity_kind"] == "organization"
-    assert s1["ci_status"] == "needs_review"
-    assert s1["ci_today_hint"] == "organization | x.cl"
+    assert s1[SESSION_CI_ENTITY_KIND] == "organization"
+    assert s1[SESSION_CI_STATUS] == "needs_review"
+    assert s1[SESSION_CI_TODAY_HINT] == "organization | x.cl"
 
     s2: dict[str, object] = {}
     apply_today_row_handoff(
@@ -118,8 +127,8 @@ def test_apply_handoff_ci_and_lead() -> None:
         ),
         s2,
     )
-    assert "leads_today_banner" in s2
-    assert "7" in str(s2["leads_today_banner"])
+    assert SESSION_LEADS_TODAY_BANNER in s2
+    assert "7" in str(s2[SESSION_LEADS_TODAY_BANNER])
 
     s3: dict[str, object] = {}
     apply_today_row_handoff(
@@ -137,7 +146,7 @@ def test_apply_handoff_ci_and_lead() -> None:
         ),
         s3,
     )
-    assert s3["opp_signal_filter"] == "dormant_contact"
+    assert s3[SESSION_OPP_SIGNAL_FILTER] == "dormant_contact"
 
 
 def test_gather_empty_db() -> None:

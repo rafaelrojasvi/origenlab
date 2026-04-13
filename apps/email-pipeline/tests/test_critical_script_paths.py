@@ -22,6 +22,8 @@ REPO = Path(__file__).resolve().parents[1]
         "scripts/leads/match_lead_accounts_to_existing_orgs.py",
         "scripts/leads/validate_lead_account_rollup.py",
         "scripts/leads/audit_lead_org_quality.py",
+        "scripts/leads/mark_outreach_state.py",
+        "scripts/leads/audit_emails_export_gate.py",
         "scripts/build_lead_account_rollup.py",
         "scripts/match_lead_accounts_to_existing_orgs.py",
         "scripts/validate_lead_account_rollup.py",

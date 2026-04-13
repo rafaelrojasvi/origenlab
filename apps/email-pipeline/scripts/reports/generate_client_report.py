@@ -19,28 +19,11 @@ import sqlite3
 import sys
 import threading
 import time
-from email.header import decode_header
 from collections import Counter
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 
-
-def _decode_mime_header(s: str | None) -> str:
-    """Decode MIME encoded-word (e.g. =?utf-8?B?...?=) in subject/header to readable str."""
-    if not s or "=?" not in s:
-        return (s or "").strip()
-    try:
-        parts = decode_header(s)
-        out = []
-        for part, charset in parts:
-            if isinstance(part, bytes):
-                out.append(part.decode(charset or "utf-8", errors="replace"))
-            else:
-                out.append(part or "")
-        return "".join(out).strip()
-    except Exception:
-        return (s or "").strip()
 
 def _repo_root() -> Path:
     # scripts/reports/generate_client_report.py -> apps/email-pipeline
@@ -51,6 +34,9 @@ _ROOT = _repo_root()
 if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
+from origenlab_email_pipeline.client_report_domains import primary_domain, recip_domains
+from origenlab_email_pipeline.client_report_serialize import dumps_report_json
+from origenlab_email_pipeline.client_report_text import decode_mime_header_value, is_bounce_sender_for_report
 from origenlab_email_pipeline.client_report_metrics import (
     run_attachment_extract_metrics,
     run_attachment_metrics,
@@ -59,47 +45,6 @@ from origenlab_email_pipeline.client_report_metrics import (
     run_year_counts,
 )
 from origenlab_email_pipeline.config import load_settings
-
-try:
-    import orjson
-except ImportError:
-    orjson = None  # type: ignore
-
-EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}", re.I)
-
-
-def emails_in(s: str) -> list[str]:
-    return EMAIL_RE.findall(s or "")
-
-
-def primary_domain(sender: str) -> str:
-    addrs = emails_in(sender or "")
-    if not addrs:
-        return "(no address)"
-    return addrs[0].split("@")[-1].lower()
-
-
-def recip_domains(recipients: str) -> list[str]:
-    out = []
-    for a in emails_in(recipients or ""):
-        out.append(a.split("@")[-1].lower())
-    return out
-
-
-def dumps(obj) -> bytes:
-    if orjson:
-        return orjson.dumps(obj, option=orjson.OPT_INDENT_2)
-    return json.dumps(obj, indent=2, ensure_ascii=False).encode()
-
-
-def _is_bounce_sender(sender: str) -> bool:
-    sl = (sender or "").lower()
-    return (
-        "mailer-daemon" in sl
-        or "mail delivery subsystem" in sl
-        or sl.startswith("postmaster@")
-        or "postmaster@" in sl
-    )
 
 
 def _domain_process_chunk(
@@ -124,12 +69,12 @@ def _domain_process_chunk(
             n += 1
             s, r = s or "", r or ""
             sender_raw[s[:500]] += 1
-            if not _is_bounce_sender(s):
+            if not is_bounce_sender_for_report(s):
                 sender_raw_ops[s[:500]] += 1
             d = primary_domain(s)
             if d != "(no address)":
                 sender_dom[d] += 1
-                if not _is_bounce_sender(s):
+                if not is_bounce_sender_for_report(s):
                     sender_dom_ops[d] += 1
             for rd in recip_domains(r):
                 recip_dom[rd] += 1
@@ -213,12 +158,12 @@ def stream_domain_counts(
         ):
             s, r = row[0] or "", row[1] or ""
             sender_raw[s[:500]] += 1
-            if not _is_bounce_sender(s):
+            if not is_bounce_sender_for_report(s):
                 sender_raw_ops[s[:500]] += 1
             d = primary_domain(s)
             if d != "(no address)":
                 sender_dom[d] += 1
-                if not _is_bounce_sender(s):
+                if not is_bounce_sender_for_report(s):
                     sender_dom_ops[d] += 1
             for rd in recip_domains(r):
                 recip_dom[rd] += 1
@@ -295,7 +240,7 @@ def build_html(summary: dict) -> str:
         for x in summary["top_recipient_domains"][:35]
     )
     rows_raw = "".join(
-        f"<tr><td class=\"mono\">{escape(_decode_mime_header(x['name'])[:120])}</td><td>{x['count']:,}</td></tr>"
+        f"<tr><td class=\"mono\">{escape(decode_mime_header_value(x['name'])[:120])}</td><td>{x['count']:,}</td></tr>"
         for x in summary["top_senders_raw"][:25]
     )
     excl = ", ".join(summary.get("exclude_recip_domains") or ["labdelivery.cl"])
@@ -308,7 +253,7 @@ def build_html(summary: dict) -> str:
         for x in (summary.get("top_sender_domains_operational") or [])[:35]
     )
     rows_raw_ops = "".join(
-        f"<tr><td class=\"mono\">{escape(_decode_mime_header(x['name'])[:120])}</td><td>{x['count']:,}</td></tr>"
+        f"<tr><td class=\"mono\">{escape(decode_mime_header_value(x['name'])[:120])}</td><td>{x['count']:,}</td></tr>"
         for x in (summary.get("top_senders_operational") or [])[:25]
     )
     rows_year_cotiz = "".join(
@@ -370,7 +315,7 @@ def build_html(summary: dict) -> str:
         rows_dom_ops = "".join(f"<tr><td>{escape(x['name'])}</td><td>{x['count']:,}</td></tr>" for x in top_ops[:25])
         rows_dom_bo = "".join(f"<tr><td>{escape(x['name'])}</td><td>{x['count']:,}</td></tr>" for x in top_bo[:25])
         rows_dom_bo_ext = "".join(f"<tr><td>{escape(x['name'])}</td><td>{x['count']:,}</td></tr>" for x in top_bo_ext[:25])
-        rows_senders_bo = "".join(f"<tr><td class=\"mono\">{escape(_decode_mime_header(x['name'])[:100])}</td><td>{x['count']:,}</td></tr>" for x in top_senders_bo[:20])
+        rows_senders_bo = "".join(f"<tr><td class=\"mono\">{escape(decode_mime_header_value(x['name'])[:100])}</td><td>{x['count']:,}</td></tr>" for x in top_senders_bo[:20])
         business_filter_block = f"""
   <section class="card" style="border-color:#3dd68c">
     <h2>Exact vs Heuristic vs Exploratory</h2>
@@ -958,14 +903,14 @@ def main() -> None:
                         )
                     },
                 }
-                (out_dir / "clusters.json").write_bytes(dumps(payload))
+                (out_dir / "clusters.json").write_bytes(dumps_report_json(payload))
                 clusters_written = True
                 cluster_summary_for_html = [
                     {
                         "id": k,
                         "n": len(v),
                         "subjects": [
-                            _decode_mime_header(x.get("subject") or "(sin asunto)")[:90]
+                            decode_mime_header_value(x.get("subject") or "(sin asunto)")[:90]
                             for x in v[:5]
                         ],
                     }
@@ -1026,9 +971,9 @@ def main() -> None:
                 "domain_by_view": bf_domains,
             }
             (out_dir / "business_filter_summary.json").write_bytes(
-                dumps({**bf_summary, "db": str(db_path.resolve())})
+                dumps_report_json({**bf_summary, "db": str(db_path.resolve())})
             )
-            (out_dir / "business_only_sample.json").write_bytes(dumps(bf_sample))
+            (out_dir / "business_only_sample.json").write_bytes(dumps_report_json(bf_sample))
             with (out_dir / "category_counts.csv").open("w", newline="", encoding="utf-8") as f:
                 w = __import__("csv").writer(f)
                 w.writerow(["category", "count"])
@@ -1154,7 +1099,7 @@ def main() -> None:
     if scope_src.is_file():
         (out_dir / "ALCANCE_INFORME.md").write_text(scope_src.read_text(encoding="utf-8"), encoding="utf-8")
 
-    (out_dir / "summary.json").write_bytes(dumps(summary))
+    (out_dir / "summary.json").write_bytes(dumps_report_json(summary))
     (out_dir / "index.html").write_text(build_html(summary), encoding="utf-8")
     print("Wrote:", out_dir / "index.html")
     print("Wrote:", out_dir / "summary.json")

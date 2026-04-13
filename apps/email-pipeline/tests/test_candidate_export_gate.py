@@ -28,6 +28,7 @@ def _ctx(**kwargs) -> GateContext:
         blocked_domains=frozenset({"origenlab.cl", "labdelivery.cl"}),
         skip_noise_filter=False,
         skip_supplier_domain_filter=False,
+        strict_contact_graph_noise=False,
     )
     base.update(kwargs)
     return GateContext(**base)
@@ -52,6 +53,18 @@ def test_noise_email_blocks() -> None:
     ctx = _ctx()
     r = evaluate_export_eligibility(contact_email="noreply@cliente.cl", institution_name="ACME", ctx=ctx)
     assert r == ExportGateResult(eligible=False, reasons=(REASON_NOISE_EMAIL,))
+
+
+def test_strict_contact_graph_noise_blocks_reply_local() -> None:
+    ctx = _ctx(strict_contact_graph_noise=True)
+    r = evaluate_export_eligibility(contact_email="reply@cliente.cl", institution_name="ACME", ctx=ctx)
+    assert r == ExportGateResult(eligible=False, reasons=(REASON_NOISE_EMAIL,))
+
+
+def test_reply_local_not_blocked_without_strict_contact_graph() -> None:
+    ctx = _ctx(strict_contact_graph_noise=False)
+    r = evaluate_export_eligibility(contact_email="reply@cliente.cl", institution_name="ACME", ctx=ctx)
+    assert r.eligible is True
 
 
 def test_noise_org_blocks() -> None:

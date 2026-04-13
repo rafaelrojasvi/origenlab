@@ -1,8 +1,11 @@
 """Next cold-outreach recipients from ``lead_master`` (ranked SQL + shared export gate).
 
-Eligibility uses ``candidate_export_gate.evaluate_export_eligibility`` (Sent parse, suppression,
-``outreach_contact_state`` including ``snoozed``, supplier domains, noise). Not a fallback to
-``contact_master``—that path lives in ``export_marketing_from_contact_master.py``.
+**This module:** ``compute_next_marketing_recipients`` — ranked candidate selection and
+per-row gate evaluation.
+
+**Gate context loading** (Sent, suppression, ``outreach_contact_state``, supplier domains,
+blocked domains, ``GateContext`` assembly) lives in ``marketing_export_context``. The
+symbols below are re-exported so existing ``from next_marketing_queue import …`` keeps working.
 """
 
 from __future__ import annotations
@@ -10,138 +13,27 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from origenlab_email_pipeline.business_mart import emails_in
-from origenlab_email_pipeline.candidate_export_gate import (
-    GateContext,
-    evaluate_export_eligibility,
-)
+from origenlab_email_pipeline.candidate_export_gate import evaluate_export_eligibility
 from origenlab_email_pipeline.lead_export_queries import (
     sql_left_join_best_org_match,
     sql_upstream_active_lead_master,
+)
+from origenlab_email_pipeline.marketing_export_context import (
+    DEFAULT_EXCLUDE_DOMAINS,
+    DEFAULT_SENT_FOLDERS,
+    build_marketing_export_gate_context,
+    load_outreach_state_map,
+    load_sent_recipient_norms,
+    load_suppressed_norms,
+    norm_lead_email,
 )
 from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
     MARKETING_VARIANT_GENERAL,
     MARKETING_VARIANT_TYPES,
 )
 
-DEFAULT_SENT_FOLDERS: tuple[str, ...] = ("[Gmail]/Enviados", "[Gmail]/Sent Mail")
-DEFAULT_EXCLUDE_DOMAINS: tuple[str, ...] = ("origenlab.cl", "labdelivery.cl")
-
 _LM_UPSTREAM_ACTIVE = sql_upstream_active_lead_master("lm")
 _JOIN_BEST_ORG = sql_left_join_best_org_match(variant="org_and_archive")
-
-
-def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
-        (name,),
-    ).fetchone()
-    return bool(row)
-
-
-def norm_lead_email(email_norm: str | None, email: str | None) -> str | None:
-    raw = (email_norm or "").strip() or (email or "").strip()
-    if not raw:
-        return None
-    found = emails_in(raw)
-    if not found:
-        return None
-    return found[0]
-
-
-def load_sent_recipient_norms(
-    conn: sqlite3.Connection,
-    *,
-    gmail_user: str,
-    sent_folders: tuple[str, ...],
-) -> set[str]:
-    if not _table_exists(conn, "emails"):
-        return set()
-    user = gmail_user.strip()
-    folders = tuple(f.strip() for f in sent_folders if f.strip())
-    if not user or not folders:
-        return set()
-    like_pat = f"gmail:{user}/%".lower()
-    out: set[str] = set()
-    ph = ",".join("?" * len(folders))
-    cur = conn.execute(
-        f"""
-        SELECT recipients FROM emails
-        WHERE lower(source_file) LIKE ?
-          AND folder IN ({ph})
-        """,
-        (like_pat, *folders),
-    )
-    for (recipients,) in cur:
-        if not recipients:
-            continue
-        for e in emails_in(recipients):
-            out.add(e)
-    return out
-
-
-def load_suppressed_norms(conn: sqlite3.Connection) -> set[str]:
-    if not _table_exists(conn, "contact_email_suppression"):
-        return set()
-    rows = conn.execute(
-        "SELECT lower(trim(email)) AS e FROM contact_email_suppression WHERE e != ''"
-    ).fetchall()
-    return {str(r[0]) for r in rows if r[0]}
-
-
-def load_outreach_state_map(conn: sqlite3.Connection) -> dict[str, str]:
-    """email_norm -> state for rows that block cold export (contacted, replied, snoozed)."""
-    if not _table_exists(conn, "outreach_contact_state"):
-        return {}
-    rows = conn.execute(
-        """
-        SELECT lower(trim(contact_email_norm)) AS e, lower(trim(state)) AS s
-        FROM outreach_contact_state
-        WHERE state IN ('contacted', 'replied', 'snoozed')
-          AND length(trim(contact_email_norm)) > 0
-        """
-    ).fetchall()
-    out: dict[str, str] = {}
-    for e, s in rows:
-        if e and s:
-            out[str(e)] = str(s)
-    return out
-
-
-def load_outreach_contacted_norms(conn: sqlite3.Connection) -> frozenset[str]:
-    """Set of emails blocked by outreach state (contacted, replied, snoozed)."""
-    return frozenset(load_outreach_state_map(conn).keys())
-
-
-def build_marketing_export_gate_context(
-    conn: sqlite3.Connection,
-    *,
-    gmail_user: str,
-    sent_folders: tuple[str, ...],
-    extra_exclude_domains: tuple[str, ...] = (),
-    skip_noise_filter: bool = False,
-    skip_supplier_domain_filter: bool = False,
-) -> GateContext:
-    """Load DB-backed sets once per export; same context for lead and contact_master paths."""
-    from origenlab_email_pipeline.marketing_supplier_domains import supplier_email_domains
-
-    supplier_dom = frozenset() if skip_supplier_domain_filter else supplier_email_domains(conn)
-    blocked = frozenset(
-        d.strip().lower()
-        for d in (list(DEFAULT_EXCLUDE_DOMAINS) + list(extra_exclude_domains))
-        if d.strip()
-    )
-    return GateContext(
-        sent_recipient_norms=frozenset(
-            load_sent_recipient_norms(conn, gmail_user=gmail_user, sent_folders=sent_folders)
-        ),
-        suppressed_norms=frozenset(load_suppressed_norms(conn)),
-        outreach_state_by_email=load_outreach_state_map(conn),
-        supplier_domains=supplier_dom,
-        blocked_domains=blocked,
-        skip_noise_filter=skip_noise_filter,
-        skip_supplier_domain_filter=skip_supplier_domain_filter,
-    )
 
 
 @dataclass(frozen=True)

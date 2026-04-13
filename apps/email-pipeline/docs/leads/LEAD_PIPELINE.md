@@ -193,7 +193,9 @@ Override DB: `--db /path/to/emails.sqlite` on any script.
 
 ## Cold outreach queue (shared export gate)
 
-Streamlit **Cola outreach marketing** ranks candidates from **`lead_master`** using [`compute_next_marketing_recipients()`](../../src/origenlab_email_pipeline/next_marketing_queue.py). That path shares **[`candidate_export_gate.py`](../../src/origenlab_email_pipeline/candidate_export_gate.py)** with [`export_marketing_from_contact_master.py`](../../scripts/leads/export_marketing_from_contact_master.py) (optional **`contact_master`** pool)—same suppression, Sent-folder, **`outreach_contact_state`** (**`contacted`** / **`replied`** / **`snoozed`**), supplier, and noise rules. Eligibility is **not** buyer validation; keep outbound **human-reviewed** and **small-batch**. Audit helper and commands: [`RUNBOOK.md` § Cold outreach](../RUNBOOK.md#m-eprun-cold-export-gate).
+Streamlit **Cola outreach marketing** ranks candidates from **`lead_master`** using [`compute_next_marketing_recipients()`](../../src/origenlab_email_pipeline/next_marketing_queue.py). That path shares **[`candidate_export_gate.py`](../../src/origenlab_email_pipeline/candidate_export_gate.py)** with [`export_marketing_from_contact_master.py`](../../scripts/leads/export_marketing_from_contact_master.py) (optional **`contact_master`** pool)—same suppression, Sent-folder, **`outreach_contact_state`** (**`contacted`** / **`replied`** / **`snoozed`**), supplier, and shared noise rules, with **stricter email-noise** on the **`contact_master`** export path. Eligibility is **not** buyer validation; keep outbound **human-reviewed** and **small-batch**. Audit helper and commands: [`RUNBOOK.md` § Cold outreach](../RUNBOOK.md#m-eprun-cold-export-gate).
+
+Canonical outbound lane/source-of-truth policy (including archive-first lane and `contacto@origenlab.cl` sender-blocker context): [`../OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md).
 
 ## Where outputs go
 
@@ -231,7 +233,6 @@ Matching only **reads** the mart; it does not change `organization_master`.
 
 ## v1 limitations
 
-- No Streamlit tab; use CSV and SQLite for review.
 - No Mercado Público API; file-based ChileCompra only.
 - No INN/CORFO crawler; CSV only.
 - Duplicate leads (same org from two sources) are not merged; you may see two rows.

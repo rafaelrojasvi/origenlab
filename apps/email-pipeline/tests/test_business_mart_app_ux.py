@@ -168,12 +168,21 @@ def test_signal_label_returns_business_friendly_spanish():
 
 
 def test_fmt_marketing_variant_labels() -> None:
-    assert "Presentacion" in app._fmt_marketing_variant("presentacion_general")
-    assert "Universidades" in app._fmt_marketing_variant("universidades_investigacion")
-    assert "Follow-up" in app._fmt_marketing_variant("followup_sin_respuesta")
+    from origenlab_email_pipeline.streamlit_borrador_support import fmt_marketing_variant
+    from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
+        MARKETING_VARIANT_FOLLOWUP,
+        MARKETING_VARIANT_GENERAL,
+        MARKETING_VARIANT_UNIVERSIDADES,
+    )
+
+    assert "Presentacion" in fmt_marketing_variant(MARKETING_VARIANT_GENERAL)
+    assert "Universidades" in fmt_marketing_variant(MARKETING_VARIANT_UNIVERSIDADES)
+    assert "Follow-up" in fmt_marketing_variant(MARKETING_VARIANT_FOLLOWUP)
 
 
 def test_load_existing_pilot_batch_reads_csv_and_case_json(tmp_path: Path) -> None:
+    from origenlab_email_pipeline.streamlit_borrador_support import load_existing_pilot_batch
+
     batch = tmp_path / "pilot_batch"
     batch.mkdir()
     (batch / "pilot_review.csv").write_text(
@@ -184,7 +193,7 @@ def test_load_existing_pilot_batch_reads_csv_and_case_json(tmp_path: Path) -> No
         '{"case":{"case_id":"c1","subject":"Subj"},"generated_draft":"Hola","prompt_blocks":{}}',
         encoding="utf-8",
     )
-    df, cases, err = app._load_existing_pilot_batch(str(batch))
+    df, cases, err = load_existing_pilot_batch(str(batch))
     assert err is None
     assert df is not None
     assert len(df) == 1
@@ -195,6 +204,8 @@ def test_load_existing_pilot_batch_reads_csv_and_case_json(tmp_path: Path) -> No
 
 def test_load_existing_pilot_batch_orders_cases_like_csv_not_glob(tmp_path: Path) -> None:
     """Filenames sort as c1 before c2, but CSV lists c2 first — cases must follow CSV."""
+    from origenlab_email_pipeline.streamlit_borrador_support import load_existing_pilot_batch
+
     batch = tmp_path / "pilot_batch_order"
     batch.mkdir()
     (batch / "pilot_review.csv").write_text(
@@ -211,7 +222,7 @@ def test_load_existing_pilot_batch_orders_cases_like_csv_not_glob(tmp_path: Path
         '{"case":{"case_id":"c2","subject":"Second"},"generated_draft":"B","prompt_blocks":{}}',
         encoding="utf-8",
     )
-    _df, cases, err = app._load_existing_pilot_batch(str(batch))
+    _df, cases, err = load_existing_pilot_batch(str(batch))
     assert err is None
     assert cases is not None
     assert len(cases) == 2
@@ -219,6 +230,8 @@ def test_load_existing_pilot_batch_orders_cases_like_csv_not_glob(tmp_path: Path
 
 
 def test_page_status_values_cover_key_client_pages() -> None:
+    from origenlab_email_pipeline.streamlit_page_status import PAGE_STATUS_PRESETS, page_status_values
+
     expected_pages = {
         "Resumen",
         "Salud de datos",
@@ -232,17 +245,23 @@ def test_page_status_values_cover_key_client_pages() -> None:
         "Candidatos comerciales",
         "Oportunidades",
     }
-    assert expected_pages.issubset(set(app.PAGE_STATUS_PRESETS.keys()))
+    assert expected_pages.issubset(set(PAGE_STATUS_PRESETS.keys()))
     for page in expected_pages:
-        values = app._page_status_values(page)
+        values = page_status_values(page)
         assert values["source"]
         assert values["freshness"]
 
 
 def test_client_clarity_copy_mentions_are_present_in_source() -> None:
-    assert "Esto reúne prioridades del día desde distintas fuentes." in APP_SOURCE
-    assert "### Revisar borradores guardados" in APP_SOURCE
-    assert "### Crear nuevo borrador" in APP_SOURCE
+    prior_src = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "origenlab_email_pipeline"
+        / "streamlit_prioridad_pages.py"
+    ).read_text(encoding="utf-8")
+    assert "Cada tarjeta viene de **una** cola SQL distinta" in prior_src
+    assert "### Revisar borradores guardados" in prior_src
+    assert "### Crear nuevo borrador" in prior_src
 
 
 def test_navigate_to_sets_session_state_and_calls_rerun(monkeypatch):

@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-07
+Last reviewed: 2026-04-13
 
 Primary context for [`apps/email-pipeline/`](../).
 
@@ -29,6 +29,7 @@ Optional **OrigenLab / Labdelivery** commercial-email support: retrieval over cu
 2. Technical design and data flow → [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow)
 3. Business/reporting intent → [`BUSINESS_CONTEXT.md`](BUSINESS_CONTEXT.md#m-epbiz-reporting)
 4. Data path policy → [`DATA_LOCATIONS.md`](DATA_LOCATIONS.md#m-epdata-policy)
+5. Outbound lane/source-of-truth model → [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)
 
 <a id="m-epapp-model"></a>
 ## Current operating model
@@ -39,4 +40,4 @@ Optional **OrigenLab / Labdelivery** commercial-email support: retrieval over cu
 - **Streamlit “Salud de datos”:** Solo lectura sobre el SQLite montado; vigencia crudo vs mart y orígenes `source_file`. [`pipeline/STREAMLIT_DATA_FRESHNESS.md`](pipeline/STREAMLIT_DATA_FRESHNESS.md).
 - **Streamlit “Actividad contacto Gmail”:** Lista compacta de correos `gmail:contacto@origenlab.cl` y vínculos a documentos/señales; ver sección Streamlit UI en [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md).
 - **Operational trust / publication gate:** Scripts under [`scripts/qa/`](../scripts/qa/) (orchestrated by [`publish_gate.py`](../scripts/qa/publish_gate.py)) compare the client pack snapshot, SQLite lead totals, operational CSVs under [`reports/out/active/`](../reports/out/README.md), and evidence URLs. Logic lives in [`operational_trust.py`](../src/origenlab_email_pipeline/operational_trust.py). Use this as an automated **consistency** bar before treating lead/client outputs as publish-safe — not as proof of business claims. How to run: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-publish-qa). **Provenance** in `summary.json`, `operational_stack_last_run.json`, per-run `operational_run_manifests/<run_id>.json`, and the scorecard JSON documents `run_id`, `publish_gate` outcome on the manifest, DB paths, and stack flags; the pack explicitly does **not** claim gate validation ([`REPORTING.md`](REPORTING.md#m-eprep-leads-qa)).
-- **Cold outreach / marketing export eligibility (Phase 1):** [`compute_next_marketing_recipients()`](../src/origenlab_email_pipeline/next_marketing_queue.py) (Streamlit **Cola outreach marketing**) and [`export_marketing_from_contact_master.py`](../scripts/leads/export_marketing_from_contact_master.py) both call [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py)—same policy (suppression, Sent history, **`outreach_contact_state`** including **`snoozed`**, supplier domains, noise heuristics). This is **technical eligibility**, not proof of buyer quality; **`contact_master`** stays exploratory. Read-only sample audit: [`scripts/qa/export_candidate_audit.py`](../scripts/qa/export_candidate_audit.py). Commands: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-cold-export-gate).
+- **Cold outreach / marketing export eligibility (Phase 1):** two-lane outbound model with shared gate. Archive-first revival lane uses archive-derived contacts; lead lane uses `lead_master`. Both call [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py), with current sender/blocker context anchored to `contacto@origenlab.cl` (Sent history + operator memory tables). `contact_master` remains exploratory (not CRM truth). Canonical policy: [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md). Read-only sample audit: [`scripts/qa/export_candidate_audit.py`](../scripts/qa/export_candidate_audit.py). Commands: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-cold-export-gate).

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-import sqlite3
+from dataclasses import replace
 import sys
 from pathlib import Path
 
@@ -34,11 +34,14 @@ from origenlab_email_pipeline.candidate_export_gate import (
 )
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
+from origenlab_email_pipeline.contact_export_queries import (
+    sql_contact_master_candidate_audit_contacts,
+)
 from origenlab_email_pipeline.lead_export_queries import (
     sql_left_join_best_org_match,
     sql_upstream_active_lead_master,
 )
-from origenlab_email_pipeline.next_marketing_queue import (
+from origenlab_email_pipeline.marketing_export_context import (
     DEFAULT_SENT_FOLDERS,
     build_marketing_export_gate_context,
     load_outreach_state_map,
@@ -93,13 +96,18 @@ def main() -> int:
 
     conn = connect(db_path)
     try:
-        gate_ctx = build_marketing_export_gate_context(
+        gate_ctx_lead = build_marketing_export_gate_context(
             conn,
             gmail_user=gmail_user,
             sent_folders=sent_folders,
             extra_exclude_domains=extra_dom,
             skip_noise_filter=bool(args.skip_noise_filter),
             skip_supplier_domain_filter=bool(args.skip_supplier_domain_filter),
+            strict_contact_graph_noise=False,
+        )
+        gate_ctx_contact = replace(
+            gate_ctx_lead,
+            strict_contact_graph_noise=True,
         )
         outreach_map = load_outreach_state_map(conn)
 
@@ -127,19 +135,7 @@ def main() -> int:
         LIMIT ?
         """
 
-        contact_sql = """
-        SELECT
-          lower(trim(email)) AS contact_email,
-          COALESCE(organization_name_guess, '') AS institution_name,
-          '' AS fit_bucket,
-          NULL AS id_lead
-        FROM contact_master
-        WHERE email IS NOT NULL
-          AND trim(email) != ''
-          AND instr(email, '@') > 0
-        ORDER BY COALESCE(total_emails, 0) DESC, COALESCE(last_seen_at, '') DESC
-        LIMIT ?
-        """
+        contact_sql = sql_contact_master_candidate_audit_contacts()
 
         rows_out: list[dict[str, object]] = []
 
@@ -157,7 +153,7 @@ def main() -> int:
             gres = evaluate_export_eligibility(
                 contact_email=em,
                 institution_name=inst or None,
-                ctx=gate_ctx,
+                ctx=gate_ctx_lead,
             )
             reason = gres.reasons[0] if gres.reasons else ""
             hits = _reason_hits(str(reason))
@@ -187,7 +183,7 @@ def main() -> int:
             gres = evaluate_export_eligibility(
                 contact_email=em,
                 institution_name=inst_s or None,
-                ctx=gate_ctx,
+                ctx=gate_ctx_contact,
             )
             reason = gres.reasons[0] if gres.reasons else ""
             hits = _reason_hits(str(reason))

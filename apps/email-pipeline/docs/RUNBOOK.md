@@ -243,7 +243,7 @@ uv run python scripts/reports/generate_client_report.py --out reports/out/client
 - [`compute_next_marketing_recipients()`](../src/origenlab_email_pipeline/next_marketing_queue.py) — Streamlit **Cola outreach marketing** (`apps/business_mart_app.py`).
 - [`export_marketing_from_contact_master.py`](../scripts/leads/export_marketing_from_contact_master.py) — optional export sample from **`contact_master`**.
 
-Shared rules include: valid external email, **not** internal domains, **`contact_email_suppression`**, recipients already seen in **Sent** for the configured Gmail user, **`outreach_contact_state`** in **`contacted`**, **`replied`**, or **`snoozed`**, supplier-domain blocklist, and noise heuristics. Parity between lead and contact paths is intentional—**do not** duplicate policy in the UI.
+Shared rules include: valid external email, **not** internal domains, **`contact_email_suppression`**, recipients already seen in **Sent** for the configured Gmail user, **`outreach_contact_state`** in **`contacted`**, **`replied`**, or **`snoozed`**, supplier-domain blocklist, and noise heuristics. The same gate module applies to both paths; **`contact_master`** exports and audit rows for `contact_master` also enable **stricter marketing-noise rules** (e.g. machine-style `reply@…` locals) because the mail graph is noisier than **`lead_master`**. **`export_candidate_audit.py`** evaluates leads and contacts with the matching strictness so CSVs match each export path.
 
 **Operational caution:** Passing the gate means “not auto-rejected by these checks,” not “validated buyer” or “safe for bulk autonomous send.” **`contact_master`** is still a **mail-graph** rollup; many rows remain low-signal for outbound. Prefer **human review** and **small batches**. A fuller **role-state** schema for commercial review remains **deferred**.
 
@@ -269,6 +269,8 @@ WHERE (COALESCE(NULLIF(TRIM(lm.upstream_sync_state), ''), 'active') != 'retired_
   AND COALESCE(lm.fit_bucket, 'low_fit') != 'low_fit'
   AND NULLIF(TRIM(COALESCE(lm.email_norm, lm.email)), '') IS NOT NULL;
 ```
+
+**Manual outreach memory (sidecar, no Sent sync):** to set or reset `outreach_contact_state` explicitly (e.g. after a call), use [`scripts/leads/mark_outreach_state.py`](../scripts/leads/mark_outreach_state.py). `contacted`, `replied`, and `snoozed` **block** cold-export eligibility for that email; `not_contacted` **does not** block and clears first/last timestamps on write.
 
 **Outreach / suppression / Sent footprint:**
 

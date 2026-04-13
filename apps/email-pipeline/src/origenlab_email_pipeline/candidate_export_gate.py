@@ -45,6 +45,8 @@ class GateContext:
     blocked_domains: frozenset[str]
     skip_noise_filter: bool = False
     skip_supplier_domain_filter: bool = False
+    #: Tighter ``marketing_contact_noise`` rules for ``contact_master`` mail-graph exports.
+    strict_contact_graph_noise: bool = False
 
 
 @dataclass(frozen=True)
@@ -56,7 +58,7 @@ class ExportGateResult:
 
 
 def normalize_export_email(contact_email: str) -> str | None:
-    """Match ``norm_lead_email`` / contact_master export: first mailbox in string."""
+    """Match ``marketing_export_context.norm_lead_email`` / contact_master export: first mailbox."""
     raw = (contact_email or "").strip()
     if not raw:
         return None
@@ -100,7 +102,9 @@ def evaluate_export_eligibility(
             return ExportGateResult(eligible=False, reasons=(REASON_SUPPLIER_DOMAIN,))
 
     if not ctx.skip_noise_filter:
-        if marketing_outreach_noise_email(em):
+        if marketing_outreach_noise_email(
+            em, strict_contact_graph=ctx.strict_contact_graph_noise
+        ):
             return ExportGateResult(eligible=False, reasons=(REASON_NOISE_EMAIL,))
         if marketing_outreach_noise_organization_guess(institution_name or ""):
             return ExportGateResult(eligible=False, reasons=(REASON_NOISE_ORGANIZATION,))

@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-07
+Last reviewed: 2026-04-13
 
 <a id="m-eparch-flow"></a>
 ## Data flow
@@ -20,6 +20,7 @@ Last reviewed: 2026-04-07
 - Commercial intelligence v1: [`pipeline/COMMERCIAL_INTEL_V1.md`](pipeline/COMMERCIAL_INTEL_V1.md)
 - Business signal filters: [`pipeline/BUSINESS_FILTERING.md`](pipeline/BUSINESS_FILTERING.md)
 - Lead flow: [`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md)
+- Outbound source-of-truth model (two-lane + shared gate): [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)
 - Schema ownership: [`pipeline/SCHEMA_OWNERSHIP.md`](pipeline/SCHEMA_OWNERSHIP.md#m-schema-orchestrated)
 - Phase-2 extraction chain: [`pipeline/PHASE2_EMAIL_PIPELINE.md`](pipeline/PHASE2_EMAIL_PIPELINE.md)
 
@@ -41,9 +42,9 @@ Separate from the **publication** QA gate: **marketing / cold-outreach candidate
 - [`next_marketing_queue.py`](../src/origenlab_email_pipeline/next_marketing_queue.py) → `compute_next_marketing_recipients()` (Streamlit **Cola outreach marketing** reads `lead_master` through this path).
 - [`export_marketing_from_contact_master.py`](../scripts/leads/export_marketing_from_contact_master.py) (optional pool from **`contact_master`**).
 
-So the **lead** and **`contact_master`** export paths share one policy layer (parity fixed in Phase 1). Block reasons include invalid email, internal domains, suppression list, addresses already in **Sent**, **`outreach_contact_state`** in **`contacted`** / **`replied`** / **`snoozed`**, configured **supplier** domains, and **noise** heuristics on email or institution name.
+So the **lead** and **`contact_master`** export paths share one policy module (`evaluate_export_eligibility`). Block reasons include invalid email, internal domains, suppression list, addresses already in **Sent**, **`outreach_contact_state`** in **`contacted`** / **`replied`** / **`snoozed`**, configured **supplier** domains, and **noise** heuristics on email or institution name. **`contact_master`** uses a **stricter** subset of email-noise rules (mail-graph senders) than **`lead_master`**; audit CSVs apply the same strictness per row source. Current sender/blocker context is the OrigenLab mailbox (`contacto@origenlab.cl`) for Sent-history and operator memory.
 
-**Truth boundary:** This gate removes known **explicit leaks**; it does not make **`contact_master`** CRM-grade buyer truth or justify high-volume autonomous outbound. **`lead_master`** remains the cleaner external-prospect source; archive and mart tables remain **evidence** and **exploration** layers. Read-only auditing: [`scripts/qa/export_candidate_audit.py`](../scripts/qa/export_candidate_audit.py). Procedure and tests: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-cold-export-gate).
+**Truth boundary:** This gate removes known **explicit leaks**; it does not make **`contact_master`** CRM-grade buyer truth or justify high-volume autonomous outbound. **`lead_master`** remains the cleaner external-prospect source; archive and mart tables remain **evidence** and **exploration** layers. Use the canonical lane guidance in [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md). Read-only auditing: [`scripts/qa/export_candidate_audit.py`](../scripts/qa/export_candidate_audit.py). Procedure and tests: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-cold-export-gate).
 
 <a id="m-eparch-constraints"></a>
 ## Design constraints

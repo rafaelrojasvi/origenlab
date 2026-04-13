@@ -32,11 +32,11 @@ if str(_ROOT) not in sys.path:
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
-from origenlab_email_pipeline.next_marketing_queue import (
+from origenlab_email_pipeline.marketing_export_context import (
     DEFAULT_EXCLUDE_DOMAINS,
     DEFAULT_SENT_FOLDERS,
-    compute_next_marketing_recipients,
 )
+from origenlab_email_pipeline.next_marketing_queue import compute_next_marketing_recipients
 from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
     MARKETING_VARIANT_GENERAL,
     MARKETING_VARIANT_TYPES,

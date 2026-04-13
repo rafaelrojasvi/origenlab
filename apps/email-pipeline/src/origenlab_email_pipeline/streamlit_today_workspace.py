@@ -19,6 +19,14 @@ from typing import Any, Literal
 from origenlab_email_pipeline.cases_review_queue import fetch_cases_review_queue
 from origenlab_email_pipeline.lead_export_queries import sql_upstream_active_lead_master
 from origenlab_email_pipeline.streamlit_leads_browse import lead_browse_ready
+from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
+    SESSION_CI_ENTITY_KIND,
+    SESSION_CI_STATUS,
+    SESSION_CI_TODAY_HINT,
+    SESSION_LEADS_TODAY_BANNER,
+    SESSION_OPP_SIGNAL_FILTER,
+    SESSION_TODAY_HANDOFF_CASO_EMAIL_ID,
+)
 
 __all__ = [
     "TodayWorkspaceSpec",
@@ -166,21 +174,21 @@ def sort_today_rows(rows: list[TodayWorkspaceRow]) -> list[TodayWorkspaceRow]:
 def apply_today_row_handoff(row: TodayWorkspaceRow, sess: MutableMapping[str, Any]) -> None:
     """Escribir claves que consumen Casos / Candidatos / Leads / Oportunidades."""
     if row.handoff_kind == "caso" and row.handoff_email_id is not None:
-        sess["today_handoff_caso_email_id"] = int(row.handoff_email_id)
+        sess[SESSION_TODAY_HANDOFF_CASO_EMAIL_ID] = int(row.handoff_email_id)
     elif row.handoff_kind == "ci":
         if row.handoff_ci_entity_kind and row.handoff_ci_entity_key:
-            sess["ci_entity_kind"] = row.handoff_ci_entity_kind
-            sess["ci_status"] = "needs_review"
-            sess["ci_today_hint"] = f"{row.handoff_ci_entity_kind} | {row.handoff_ci_entity_key}"
+            sess[SESSION_CI_ENTITY_KIND] = row.handoff_ci_entity_kind
+            sess[SESSION_CI_STATUS] = "needs_review"
+            sess[SESSION_CI_TODAY_HINT] = f"{row.handoff_ci_entity_kind} | {row.handoff_ci_entity_key}"
     elif row.handoff_kind == "lead" and row.handoff_lead_id is not None:
         org = row.handoff_lead_org or "—"
         lid = int(row.handoff_lead_id)
-        sess["leads_today_banner"] = (
+        sess[SESSION_LEADS_TODAY_BANNER] = (
             f"Sugerencia desde **Qué hacer hoy**: revisar lead **{lid}** — {org}. "
             "Use filtros en esta página si no ve la fila."
         )
     elif row.handoff_kind == "dormant":
-        sess["opp_signal_filter"] = "dormant_contact"
+        sess[SESSION_OPP_SIGNAL_FILTER] = "dormant_contact"
 
 
 def _float_metric(value: object, *, default: float = 0.0) -> float:

@@ -103,6 +103,38 @@ def normalize_contact_email_for_outreach(email: str) -> str:
     return lowered
 
 
+def outreach_touch_timestamps_for_upsert(
+    *,
+    new_state: str,
+    existing_row: dict[str, object] | None,
+    touch_at_iso: str,
+) -> tuple[str | None, str | None]:
+    """Compute ``first_contacted_at`` / ``last_contacted_at`` for operator upserts (e.g. CLI).
+
+    Semantics:
+    - ``not_contacted``: both timestamps cleared (explicit reset; row may remain for audit).
+    - ``contacted`` / ``replied`` / ``snoozed``: preserve existing ``first_contacted_at`` when
+      already set; always set ``last_contacted_at`` to ``touch_at_iso``. If there is no prior
+      first timestamp, set both to ``touch_at_iso``.
+
+    Gate note: only ``contacted``, ``replied``, and ``snoozed`` block cold export; ``not_contacted``
+    does not (see ``marketing_export_context.load_outreach_state_map``).
+    """
+    st = (new_state or "").strip().lower()
+    if st == "not_contacted":
+        return None, None
+    if st not in ("contacted", "replied", "snoozed"):
+        raise ValueError(f"Estado no soportado para timestamps: {new_state!r}")
+    prev_first = None
+    if existing_row and existing_row.get("first_contacted_at"):
+        raw = existing_row["first_contacted_at"]
+        if raw is not None and str(raw).strip():
+            prev_first = str(raw).strip()
+    if prev_first:
+        return prev_first, touch_at_iso
+    return touch_at_iso, touch_at_iso
+
+
 def validate_outreach_contact_state_payload(
     *,
     contact_email: str,

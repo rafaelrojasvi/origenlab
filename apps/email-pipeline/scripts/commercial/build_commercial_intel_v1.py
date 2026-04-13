@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
 import sqlite3
 import sys
 from pathlib import Path
@@ -22,6 +21,18 @@ if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
 from origenlab_email_pipeline.business_mart import domain_of, primary_sender_email
+from origenlab_email_pipeline.commercial_intel_queries import (
+    derive_existing_client_domains,
+    derive_internal_domains,
+    derive_vendor_domains,
+    fetch_candidate_suppressed_counts,
+    fetch_commercial_email_signal_fact_rows,
+    fetch_contact_rollup_for_contact_candidates,
+    fetch_emails_for_commercial_build,
+    fetch_opportunity_fact_for_opp_candidates,
+    fetch_org_rollup_for_opportunity_insert,
+    fetch_org_rollup_for_org_candidates,
+)
 from origenlab_email_pipeline.commercial_intel_rules import (
     derive_email_signal_facts,
     now_iso,
@@ -36,67 +47,6 @@ WATERMARK_KEY = "commercial_v1_last_email_id"
 SUMMARY_KEY = "commercial_v1_last_summary"
 
 
-def _derive_internal_domains(conn: sqlite3.Connection, *, max_n: int = 4) -> set[str]:
-    rows = conn.execute(
-        """
-        SELECT sender, COUNT(*) c
-        FROM emails
-        WHERE sender IS NOT NULL AND length(trim(sender)) > 0
-        GROUP BY sender
-        ORDER BY c DESC
-        LIMIT 80
-        """
-    ).fetchall()
-    counts: Counter[str] = Counter()
-    for sender, n in rows:
-        d = domain_of(primary_sender_email(sender or ""))
-        if d:
-            counts[d] += int(n or 0)
-    return {d for d, _ in counts.most_common(max_n)}
-
-
-def _derive_vendor_domains(conn: sqlite3.Connection, *, min_rows: int = 4) -> set[str]:
-    if not _table_exists(conn, "contact_master"):
-        return set()
-    rows = conn.execute(
-        """
-        SELECT domain
-        FROM contact_master
-        WHERE domain IS NOT NULL
-          AND length(trim(domain)) > 0
-          AND (invoice_email_count + purchase_email_count) >= ?
-          AND quote_email_count = 0
-        """,
-        (min_rows,),
-    ).fetchall()
-    return {str(r[0]).lower().strip() for r in rows if r and r[0]}
-
-
-def _derive_existing_client_domains(conn: sqlite3.Connection, *, min_total: int = 25) -> set[str]:
-    if not _table_exists(conn, "organization_master"):
-        return set()
-    rows = conn.execute(
-        """
-        SELECT domain
-        FROM organization_master
-        WHERE domain IS NOT NULL
-          AND length(trim(domain)) > 0
-          AND total_emails >= ?
-          AND (quote_email_count >= 2 OR invoice_email_count >= 2 OR purchase_email_count >= 2)
-        """,
-        (min_total,),
-    ).fetchall()
-    return {str(r[0]).lower().strip() for r in rows if r and r[0]}
-
-
-def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?",
-        (table_name,),
-    ).fetchone()
-    return row is not None
-
-
 def _clear_rebuildable(conn: sqlite3.Connection) -> None:
     conn.executescript(
         """
@@ -107,45 +57,6 @@ def _clear_rebuildable(conn: sqlite3.Connection) -> None:
         """
     )
     conn.commit()
-
-
-def _selected_email_where_clause(last_watermark: int, reprocess_days: int | None) -> tuple[str, tuple[object, ...]]:
-    if reprocess_days is None:
-        return "WHERE id > ?", (last_watermark,)
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=reprocess_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return "WHERE id > ? OR (date_iso IS NOT NULL AND date_iso >= ?)", (last_watermark, cutoff)
-
-
-def _fetch_selected_email_rows(
-    conn: sqlite3.Connection,
-    *,
-    rebuild: bool,
-    last_watermark: int,
-    reprocess_days: int | None,
-) -> list[sqlite3.Row]:
-    conn.row_factory = sqlite3.Row
-    if rebuild:
-        return conn.execute(
-            """
-            SELECT id, source_file, date_iso, sender, recipients, subject,
-                   COALESCE(top_reply_clean, '') AS top_reply_clean,
-                   COALESCE(full_body_clean, '') AS full_body_clean
-            FROM emails
-            ORDER BY id
-            """
-        ).fetchall()
-    where_sql, params = _selected_email_where_clause(last_watermark, reprocess_days)
-    return conn.execute(
-        f"""
-        SELECT id, source_file, date_iso, sender, recipients, subject,
-               COALESCE(top_reply_clean, '') AS top_reply_clean,
-               COALESCE(full_body_clean, '') AS full_body_clean
-        FROM emails
-        {where_sql}
-        ORDER BY id
-        """,
-        params,
-    ).fetchall()
 
 
 def _delete_existing_facts_for_emails(conn: sqlite3.Connection, email_ids: list[int]) -> None:
@@ -247,13 +158,7 @@ def _safe_mean(nums: list[float]) -> float:
 
 
 def _rebuild_rollups(conn: sqlite3.Connection, *, run_id: int) -> dict[str, int]:
-    rows = conn.execute(
-        """
-        SELECT email_id, sent_at, contact_email, org_domain, signal_code, signal_kind, reason_code,
-               confidence_score, strength_score
-        FROM commercial_email_signal_fact
-        """
-    ).fetchall()
+    rows = fetch_commercial_email_signal_fact_rows(conn)
 
     org_acc: dict[str, dict[str, object]] = defaultdict(
         lambda: {
@@ -423,15 +328,7 @@ def _rebuild_rollups(conn: sqlite3.Connection, *, run_id: int) -> dict[str, int]
         contact_payload,
     )
 
-    opportunity_rows = conn.execute(
-        """
-        SELECT org_domain, quote_signal_count, procurement_signal_count, technical_signal_count,
-               repeated_interaction_count, confidence_score, strength_score, is_suppressed,
-               suppression_reason_codes, evidence_email_count
-        FROM commercial_org_signal_rollup
-        WHERE evidence_email_count >= 2
-        """
-    ).fetchall()
+    opportunity_rows = fetch_org_rollup_for_opportunity_insert(conn)
     opportunity_payload = []
     for (
         org_domain,
@@ -500,14 +397,7 @@ def _persist_candidates(conn: sqlite3.Connection, *, run_id: int) -> dict[str, i
     old_contact = _load_status_map(conn, "contact_candidate", "contact_email")
     old_opp = _load_status_map(conn, "opportunity_candidate", "opportunity_key")
 
-    org_rows = conn.execute(
-        """
-        SELECT org_domain, confidence_score, strength_score, evidence_email_count, last_seen_at,
-               suppression_reason_codes, is_suppressed, positive_signal_count
-        FROM commercial_org_signal_rollup
-        WHERE evidence_email_count >= 2
-        """
-    ).fetchall()
+    org_rows = fetch_org_rollup_for_org_candidates(conn)
     for domain, conf, strength, evidence, last_seen, sup_codes, is_supp, pos_count in org_rows:
         base_status = "suppressed" if int(is_supp or 0) else ("needs_review" if int(pos_count or 0) >= 2 else "new")
         conn.execute(
@@ -547,14 +437,7 @@ def _persist_candidates(conn: sqlite3.Connection, *, run_id: int) -> dict[str, i
             ),
         )
 
-    contact_rows = conn.execute(
-        """
-        SELECT contact_email, org_domain, confidence_score, strength_score, evidence_email_count, last_seen_at,
-               suppression_reason_codes, is_suppressed, positive_signal_count
-        FROM commercial_contact_signal_rollup
-        WHERE evidence_email_count >= 2
-        """
-    ).fetchall()
+    contact_rows = fetch_contact_rollup_for_contact_candidates(conn)
     for contact, org_domain, conf, strength, evidence, last_seen, sup_codes, is_supp, pos_count in contact_rows:
         base_status = "suppressed" if int(is_supp or 0) else ("needs_review" if int(pos_count or 0) >= 2 else "new")
         conn.execute(
@@ -596,14 +479,7 @@ def _persist_candidates(conn: sqlite3.Connection, *, run_id: int) -> dict[str, i
             ),
         )
 
-    opp_rows = conn.execute(
-        """
-        SELECT opportunity_key, org_domain, confidence_score, strength_score, evidence_email_count, is_suppressed,
-               suppression_summary, top_signal_codes
-        FROM commercial_opportunity_fact
-        WHERE evidence_email_count >= 2
-        """
-    ).fetchall()
+    opp_rows = fetch_opportunity_fact_for_opp_candidates(conn)
     for key, org_domain, conf, strength, evidence, is_supp, sup_summary, top_codes in opp_rows:
         base_status = "suppressed" if int(is_supp or 0) else ("needs_review" if float(conf or 0.0) >= 0.55 else "new")
         conn.execute(
@@ -735,9 +611,9 @@ def main() -> int:
     run_id = start_run(conn, script_name="scripts/commercial/build_commercial_intel_v1.py", notes="commercial-intel-v1")
 
     try:
-        internal_domains = {d.strip().lower() for d in args.internal_domain if d.strip()} or _derive_internal_domains(conn)
-        vendor_domains = {d.strip().lower() for d in args.vendor_domain if d.strip()} | _derive_vendor_domains(conn)
-        existing_client_domains = {d.strip().lower() for d in args.existing_client_domain if d.strip()} | _derive_existing_client_domains(conn)
+        internal_domains = {d.strip().lower() for d in args.internal_domain if d.strip()} or derive_internal_domains(conn)
+        vendor_domains = {d.strip().lower() for d in args.vendor_domain if d.strip()} | derive_vendor_domains(conn)
+        existing_client_domains = {d.strip().lower() for d in args.existing_client_domain if d.strip()} | derive_existing_client_domains(conn)
 
         if args.rebuild:
             _clear_rebuildable(conn)
@@ -749,7 +625,7 @@ def main() -> int:
             except ValueError:
                 last_watermark = 0
 
-        rows = _fetch_selected_email_rows(
+        rows = fetch_emails_for_commercial_build(
             conn,
             rebuild=args.rebuild,
             last_watermark=last_watermark,
@@ -802,17 +678,10 @@ def main() -> int:
             f"opportunity_candidates={candidate_summary['opportunity_candidates']} "
             f"review_events_written={candidate_summary['review_events_written']}"
         )
-        suppressed = conn.execute(
-            """
-            SELECT
-              (SELECT COUNT(*) FROM organization_candidate WHERE status='suppressed'),
-              (SELECT COUNT(*) FROM contact_candidate WHERE status='suppressed'),
-              (SELECT COUNT(*) FROM opportunity_candidate WHERE status='suppressed')
-            """
-        ).fetchone()
+        org_sup, contact_sup, opp_sup = fetch_candidate_suppressed_counts(conn)
         print(
             "Suppressed summary: "
-            f"org={suppressed[0]} contact={suppressed[1]} opportunity={suppressed[2]}"
+            f"org={org_sup} contact={contact_sup} opportunity={opp_sup}"
         )
         return 0
     finally:

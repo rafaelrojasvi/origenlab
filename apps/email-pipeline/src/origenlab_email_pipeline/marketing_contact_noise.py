@@ -3,6 +3,10 @@
 ``contact_master`` reflects the email archive: it legitimately contains
 transactional / platform / carrier addresses. Do not delete those rows from the
 mart; filter them when exporting marketing batches.
+
+``strict_contact_graph`` tightens rules for mail-graph exports (``contact_master``):
+extra machine-style locals (e.g. ``reply@``) that can appear on legitimate-looking
+domains in the archive. The lead path typically keeps ``strict_contact_graph=False``.
 """
 
 from __future__ import annotations
@@ -39,6 +43,22 @@ _NOISE_DOMAINS: frozenset[str] = frozenset(
         "createsend.com",
         "campaign-archive.com",
         "list-manage.com",
+        # B2B / vendor media and newsletter platforms (archive junk, not prospect mailboxes).
+        "labx.com",
+        "biocompare.com",
+        "globalspec.com",
+        "engineering360.com",
+        "thomasnet.com",
+        "scienceconnect.com",
+        # Marketplace / promo senders (audit: mailer.* / mkt.* / notify.* on these registrable domains).
+        # FP: a human buyer who only ever uses a marketplace relay address is rare for OrigenLab cold lists.
+        "solostocks.com",
+        "solostocks.cl",
+        # B2B “market research” / newsletter domains (audit: reports@ / info@ promos). FP: a real buyer
+        # employed there contacting you directly is possible but uncommon vs newsletter traffic.
+        "leadingmarketresearch.com",
+        # Vendor media newsletter (audit: news@… promos). FP: editorial staff as a named prospect—low vs blast news@.
+        "rapidmicrobiology.com",
     }
 )
 
@@ -47,6 +67,7 @@ _NOISE_LOCAL_PREFIXES: tuple[str, ...] = (
     "noreply",
     "no-reply",
     "donotreply",
+    "do-not-reply",
     "do_not_reply",
     "mailer-daemon",
     "postmaster",
@@ -62,6 +83,7 @@ _NOISE_LOCAL_PREFIXES: tuple[str, ...] = (
     "invite",
     "system",
     "newsletter",
+    "newsletters",
     "unsub",
     "unsubscribe",
     "mailing",
@@ -69,11 +91,38 @@ _NOISE_LOCAL_PREFIXES: tuple[str, ...] = (
     "promo",
     "promos",
     "campaign",
+    "boletin",
+    "boletines",
+    "promociones",
+    "updates",
+    "marketing",
+    # Chile procurement ecosystem: automated / role mailboxes on non-mercadopublico.cl hosts (audit).
+    # FP: a mailbox literally named mercadopublico@ at a real org (very rare).
+    "mercadopublico",
 )
 
 
-def marketing_outreach_noise_email(email: str) -> bool:
-    """True if ``email`` should be excluded from cold marketing exports."""
+def _marketing_outreach_noise_contact_graph_strict(email: str) -> bool:
+    """Extra exclusions for ``contact_master`` path only (mail graph is noisier)."""
+    raw = (email or "").strip().lower()
+    if not raw or "@" not in raw:
+        return False
+    local, _, _domain = raw.partition("@")
+    local = local.strip()
+    if not local:
+        return False
+    # Vendor / ESP style one-word locals (high false-positive risk on lead path; OK on mail graph).
+    if local == "reply" or local.startswith("reply+") or local.startswith("reply."):
+        return True
+    return False
+
+
+def marketing_outreach_noise_email(email: str, *, strict_contact_graph: bool = False) -> bool:
+    """True if ``email`` should be excluded from cold marketing exports.
+
+    When ``strict_contact_graph`` is True (``contact_master`` exports), apply
+    additional machine-local heuristics on top of the shared domain/local lists.
+    """
     raw = (email or "").strip().lower()
     if not raw or "@" not in raw:
         return True
@@ -90,6 +139,8 @@ def marketing_outreach_noise_email(email: str) -> bool:
     for p in _NOISE_LOCAL_PREFIXES:
         if local == p or local.startswith(p + ".") or local.startswith(p + "+"):
             return True
+    if strict_contact_graph and _marketing_outreach_noise_contact_graph_strict(raw):
+        return True
     return False
 
 
@@ -106,5 +157,14 @@ def marketing_outreach_noise_organization_guess(name: str | None) -> bool:
         "facebookmail",
         "twitter",
         "linkedin",
+        "biocompare",
+        "globalspec",
+        "engineering360",
+        "labx",
+        "thomasnet",
+        "scienceconnect",
+        "solostocks",
+        "leadingmarketresearch",
+        "rapidmicrobiology",
     )
     return any(x in n for x in noise_names)

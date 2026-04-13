@@ -14,6 +14,7 @@ from origenlab_email_pipeline.outreach_contact_state import (
     fetch_outreach_contact_state_row,
     normalize_contact_email_for_outreach,
     outreach_contact_state_table_exists,
+    outreach_touch_timestamps_for_upsert,
     upsert_outreach_contact_state,
     validate_outreach_contact_state_payload,
 )
@@ -38,6 +39,47 @@ def test_ensure_creates_table_idempotent(tmp_path: Path) -> None:
 
 def test_normalize_contact_email() -> None:
     assert normalize_contact_email_for_outreach("  Person@Example.CL ") == "person@example.cl"
+
+
+def test_outreach_touch_timestamps_not_contacted_clears() -> None:
+    assert outreach_touch_timestamps_for_upsert(
+        new_state="not_contacted",
+        existing_row={"first_contacted_at": "2020-01-01"},
+        touch_at_iso="2026-06-01T00:00:00Z",
+    ) == (None, None)
+
+
+def test_outreach_touch_timestamps_first_contact() -> None:
+    assert outreach_touch_timestamps_for_upsert(
+        new_state="contacted",
+        existing_row=None,
+        touch_at_iso="2026-06-01T12:00:00Z",
+    ) == ("2026-06-01T12:00:00Z", "2026-06-01T12:00:00Z")
+
+
+def test_outreach_touch_timestamps_preserves_first_on_followup() -> None:
+    assert outreach_touch_timestamps_for_upsert(
+        new_state="replied",
+        existing_row={"first_contacted_at": "2026-01-01"},
+        touch_at_iso="2026-06-02T00:00:00Z",
+    ) == ("2026-01-01", "2026-06-02T00:00:00Z")
+
+
+def test_outreach_touch_timestamps_snoozed() -> None:
+    assert outreach_touch_timestamps_for_upsert(
+        new_state="snoozed",
+        existing_row=None,
+        touch_at_iso="2026-06-03T00:00:00Z",
+    ) == ("2026-06-03T00:00:00Z", "2026-06-03T00:00:00Z")
+
+
+def test_outreach_touch_timestamps_rejects_unknown_state() -> None:
+    with pytest.raises(ValueError, match="no soportado"):
+        outreach_touch_timestamps_for_upsert(
+            new_state="banana",
+            existing_row=None,
+            touch_at_iso="2026-06-01T00:00:00Z",
+        )
 
 
 def test_normalize_rejects_multi_or_invalid() -> None:

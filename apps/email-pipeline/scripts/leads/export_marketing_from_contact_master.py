@@ -23,6 +23,9 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.contact_export_queries import (
+    sql_contact_master_marketing_export_candidates,
+)
 from origenlab_email_pipeline.candidate_export_gate import (
     REASON_NOISE_EMAIL,
     REASON_NOISE_ORGANIZATION,
@@ -30,7 +33,7 @@ from origenlab_email_pipeline.candidate_export_gate import (
     evaluate_export_eligibility,
 )
 from origenlab_email_pipeline.db import connect
-from origenlab_email_pipeline.next_marketing_queue import (
+from origenlab_email_pipeline.marketing_export_context import (
     DEFAULT_SENT_FOLDERS,
     build_marketing_export_gate_context,
     load_outreach_state_map,
@@ -85,27 +88,14 @@ def main() -> int:
         extra_exclude_domains=extra_dom,
         skip_noise_filter=bool(args.skip_noise_filter),
         skip_supplier_domain_filter=bool(args.skip_supplier_domain_filter),
+        strict_contact_graph_noise=True,
     )
     sent = load_sent_recipient_norms(conn, gmail_user=gmail_user, sent_folders=sent_folders)
     supp = load_suppressed_norms(conn)
     outreach_map = load_outreach_state_map(conn)
 
     cur = conn.execute(
-        """
-        SELECT
-          lower(trim(email)) AS contact_email,
-          COALESCE(contact_name_best, '') AS recipient_name,
-          COALESCE(organization_name_guess, '') AS institution_name,
-          COALESCE(total_emails, 0) AS total_emails,
-          COALESCE(last_seen_at, '') AS last_seen_at,
-          COALESCE(confidence_score, 0) AS confidence_score
-        FROM contact_master
-        WHERE email IS NOT NULL
-          AND trim(email) != ''
-          AND instr(email, '@') > 0
-        ORDER BY COALESCE(total_emails, 0) DESC, COALESCE(last_seen_at, '') DESC
-        LIMIT ?
-        """,
+        sql_contact_master_marketing_export_candidates(),
         (int(args.fetch_cap),),
     )
     cols = [d[0] for d in cur.description]
