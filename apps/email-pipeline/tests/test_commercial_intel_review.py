@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from origenlab_email_pipeline.commercial_intel_review import (
+from origenlab_email_pipeline.commercial.commercial_intel_review import (
     QueueFilters,
     apply_review_action,
     export_queue_csv,

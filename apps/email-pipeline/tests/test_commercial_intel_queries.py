@@ -6,7 +6,7 @@ import sqlite3
 
 import pytest
 
-from origenlab_email_pipeline.commercial_intel_queries import (
+from origenlab_email_pipeline.commercial.commercial_intel_queries import (
     SQL_COMMERCIAL_EMAIL_SIGNAL_FACT_FOR_ROLLUP,
     SQL_CONTACT_ROLLUP_FOR_CONTACT_CANDIDATES,
     SQL_OPPORTUNITY_FACT_FOR_OPP_CANDIDATES,

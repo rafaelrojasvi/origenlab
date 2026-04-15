@@ -46,8 +46,9 @@ def test_resolve_mock() -> None:
 
 
 def test_missing_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("ORIGENLAB_TATIANA_OPENAI_API_KEY", raising=False)
+    # Empty strings override optional keys from apps/email-pipeline/.env (pydantic env > env_file).
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("ORIGENLAB_TATIANA_OPENAI_API_KEY", "")
     s = Settings()
     assert s.resolved_tatiana_openai_api_key() is None
     with pytest.raises(TatianaLLMConfigurationError, match="API key missing"):

@@ -14,10 +14,8 @@ from origenlab_email_pipeline.candidate_export_gate import (
     REASON_INVALID_EMAIL,
     evaluate_export_eligibility,
 )
-from origenlab_email_pipeline.marketing_export_context import (
-    DEFAULT_SENT_FOLDERS,
-    build_marketing_export_gate_context,
-)
+from origenlab_email_pipeline.marketing_export_context import DEFAULT_SENT_FOLDERS
+from origenlab_email_pipeline.outbound_core import gate_context_for_archive_batch
 
 ARCHIVE_OUTREACH_COLUMN_NAMES: tuple[str, ...] = (
     "case_id",
@@ -426,7 +424,7 @@ def audit_archive_outreach_candidates(
 ) -> ArchiveOutreachAuditResult:
     """Run existing gate on archive candidates; returns eligible + blocked rows with reason."""
     cands = fetch_archive_outreach_candidates(conn, fetch_cap=fetch_cap, limit=limit)
-    gate_ctx = build_marketing_export_gate_context(
+    gate_ctx = gate_context_for_archive_batch(
         conn,
         gmail_user=gmail_user,
         sent_folders=sent_folders,

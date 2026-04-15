@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from origenlab_email_pipeline.commercial_intel_schema import ensure_commercial_intel_tables
+from origenlab_email_pipeline.commercial.commercial_intel_schema import ensure_commercial_intel_tables
 from origenlab_email_pipeline.db import connect, init_schema
 from origenlab_email_pipeline.sqlite_migrate import SchemaLayer, migrate_sqlite_schema
 

@@ -1,6 +1,12 @@
 # Lead pipeline scripts (v1)
 
-File-based ingest and normalization for Chile external leads. Run from **repo root** with `uv run python scripts/leads/<script>.py`.
+File-based ingest and normalization for Chile external leads. Run from **repo root** with `uv run python scripts/leads/<script>.py` (or `scripts/leads/advanced/…` / `scripts/leads/campaigns/…` where noted).
+
+## Layout
+
+- **`scripts/leads/`** (Python files in this directory root): default operator and pipeline entrypoints — normalize, score, match, canonical outbound CLIs, weekly focus, operational stack drivers.
+- **`advanced/`:** hunt merge/import, lead-account rollup, exploratory exports, deeper audits — **not** the default outbound surface; see [`advanced/README.md`](advanced/README.md).
+- **`campaigns/`:** DR50 / ready-8 cohort automation and versioned payload JSON; see [`campaigns/README.md`](campaigns/README.md).
 
 ## Order of execution
 
@@ -25,27 +31,27 @@ bash scripts/leads/run_leads_operational_stack.sh --skip-fetch
 5. **Match** — `match_leads_to_mart.py` (lead_master vs organization_master → lead_matches_existing_orgs).
 6. **Export** — `export_leads_csv.py --out <path>`.
 7. **Shortlist (weekly)** — `export_leads_shortlist.py --out <path>` (high_fit/medium_fit prioritized).
-8. **QA/inspection** — `inspect_leads_quality.py` (counts + top leads).
-9. **Client review CSV** — `export_client_review_csv.py --out <path>` (includes archive comparison + existing contacts).
-10. **Contact-hunt sheet (v1.2)** — `export_contact_hunt_sheet.py --out <path>` (estructura para hunting de contactos en español).
-11. **Merge + import hunt CSV** — `merge_contact_hunt_enrichment.py` (Deep Research → mismo CSV), luego validar con `validate_contact_hunt_alignment.py` (misma población de `id_lead` que `leads_contact_hunt_current.csv`), después `import_contact_hunt_to_sqlite.py` (recomendado: `--require-aligned-with` apuntando al hunt actual).
+8. **QA/inspection** — `advanced/inspect_leads_quality.py` (counts + top leads).
+9. **Client review CSV** — `advanced/export_client_review_csv.py --out <path>` (includes archive comparison + existing contacts).
+10. **Contact-hunt sheet (v1.2)** — `advanced/export_contact_hunt_sheet.py --out <path>` (estructura para hunting de contactos en español).
+11. **Merge + import hunt CSV** — `advanced/merge_contact_hunt_enrichment.py` (Deep Research → mismo CSV), luego validar con `advanced/validate_contact_hunt_alignment.py` (misma población de `id_lead` que `leads_contact_hunt_current.csv`), después `advanced/import_contact_hunt_to_sqlite.py` (recomendado: `--require-aligned-with` apuntando al hunt actual).
 12. **Weekly canonical focus (safe mode)** — `run_weekly_focus.py` (genera CSV operativo + resumen ES con clasificación USAR/REFERENCIA/NO OPERATIVO).
-13. **Limpiar `active/` + deepsearch + CSV unificado** — `prepare_active_workspace.py` (mantiene en `active/` solo foco semanal + resumen + hunt current ± for_deepsearch; archiva otros CSV; opcional `--deepsearch` y `--unified`).
+13. **Limpiar `active/` + deepsearch + CSV unificado** — `advanced/prepare_active_workspace.py` (mantiene en `active/` solo foco semanal + resumen + hunt current ± for_deepsearch; archiva otros CSV; opcional `--deepsearch` y `--unified`).
 14. **Paquete cliente (HTML + MD + anexo)** — `uv run python scripts/reports/build_leads_client_pack.py` → `reports/out/client_pack_latest/`. Ver `docs/REPORTING.md`.
-15. **DR50 ready-8 → hunt + top20 informe** — `apply_ready8_contact_patch.py` (actualiza `leads_contact_hunt_current.csv` desde `leads_dr50_ready_candidates.csv`, escribe `leads_contact_hunt_current_ready8_patch.csv`, `leads_top20_for_client_report.csv`, `docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md`). Luego import + `audit_contact_readiness.py`.
-16. **Reconciliación DR 50 filas (solo análisis)** — `reconcile_deepresearch_50_with_current_cohort.py` → CSVs `leads_dr50_*` y `docs/generated/DEEP_RESEARCH_RECONCILIATION.md`.
+15. **DR50 ready-8 → hunt + top20 informe** — `campaigns/apply_ready8_contact_patch.py` (actualiza `leads_contact_hunt_current.csv` desde `leads_dr50_ready_candidates.csv`, escribe `leads_contact_hunt_current_ready8_patch.csv`, `leads_top20_for_client_report.csv`, `docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md`). Luego import + `advanced/audit_contact_readiness.py`.
+16. **Reconciliación DR 50 filas (solo análisis)** — `campaigns/reconcile_deepresearch_50_with_current_cohort.py` → CSVs `leads_dr50_*` y `docs/generated/DEEP_RESEARCH_RECONCILIATION.md`.
 
 Or run the full pipeline.
 
 <a id="m-leads-dr50-payload"></a>
 ### DR50 payload (versionado, no hardcoded)
 
-[`reconcile_deepresearch_50_with_current_cohort.py`](reconcile_deepresearch_50_with_current_cohort.py) carga las filas de contacto del lote DR50 desde JSON versionado bajo [`scripts/leads/data/`](data/) (no están embebidas en el script):
+[`reconcile_deepresearch_50_with_current_cohort.py`](campaigns/reconcile_deepresearch_50_with_current_cohort.py) carga las filas de contacto del lote DR50 desde JSON versionado bajo [`scripts/leads/campaigns/data/`](campaigns/data/) (no están embebidas en el script):
 
 | Archivo | Rol |
 |---------|-----|
-| [`data/dr50_manifest_v1.json`](data/dr50_manifest_v1.json) | Apunta al fichero payload, `row_count`, y `expected_sha256` sobre **bytes** del JSON |
-| [`data/dr50_payload_v1.json`](data/dr50_payload_v1.json) | Array de objetos fila (p. ej. `id_lead`, contactos DR) |
+| [`campaigns/data/dr50_manifest_v1.json`](campaigns/data/dr50_manifest_v1.json) | Apunta al fichero payload, `row_count`, y `expected_sha256` sobre **bytes** del JSON |
+| [`campaigns/data/dr50_payload_v1.json`](campaigns/data/dr50_payload_v1.json) | Array de objetos fila (p. ej. `id_lead`, contactos DR) |
 
 Carga verificada: [`origenlab_email_pipeline/dr50_payload_loader.py`](../../src/origenlab_email_pipeline/dr50_payload_loader.py) — rechaza checksum incorrecto, conteo distinto o `id_lead` duplicado. **Por qué:** reproducibilidad y trazabilidad cuando el CSV de DR cambia (actualizar payload + manifest; recalcular SHA256 del fichero tal cual en disco).
 
@@ -103,13 +109,13 @@ uv run python scripts/leads/export_leads_shortlist.py --out reports/out/leads_sh
 uv run python scripts/leads/export_leads_shortlist.py --out reports/out/leads_shortlist_all.csv --include-low --limit 500
 
 # QA counts + top leads
-uv run python scripts/leads/inspect_leads_quality.py --top 20
+uv run python scripts/leads/advanced/inspect_leads_quality.py --top 20
 
 # Client-friendly review file (best for emailing/sharing)
-uv run python scripts/leads/export_client_review_csv.py --out reports/out/leads_client_review.csv --limit 250
+uv run python scripts/leads/advanced/export_client_review_csv.py --out reports/out/leads_client_review.csv --limit 250
 
 # Contact-hunt sheet (v1.2), Spanish headers for manual/semi-assisted enrichment
-uv run python scripts/leads/export_contact_hunt_sheet.py --out reports/out/leads_contact_hunt_es.csv --limit 200
+uv run python scripts/leads/advanced/export_contact_hunt_sheet.py --out reports/out/leads_contact_hunt_es.csv --limit 200
 ```
 
 ## Local Web UI (CSV download)
@@ -120,7 +126,7 @@ If your client is on the same WiFi/LAN, you can host a simple authenticated page
 ```bash
 export LEADS_WEB_USER="cliente"
 export LEADS_WEB_PASS="cambia-este-password"
-uv run python scripts/leads/run_contact_hunt_web_server.py --port 8000
+uv run python scripts/leads/advanced/run_contact_hunt_web_server.py --port 8000
 ```
 
 2. From your client’s browser, open:
@@ -151,16 +157,16 @@ uv run python scripts/leads/match_leads_to_mart.py
 
 # 4) Salidas core (truth semanal)
 uv run python scripts/leads/export_leads_shortlist.py --out reports/out/leads_shortlist.csv --limit 200
-uv run python scripts/leads/export_client_review_csv.py --out reports/out/leads_client_review.csv --limit 250
+uv run python scripts/leads/advanced/export_client_review_csv.py --out reports/out/leads_client_review.csv --limit 250
 
 # 5) Hoja operativa de hunting (IDs actuales)
-uv run python scripts/leads/export_contact_hunt_sheet.py --out reports/out/leads_contact_hunt_current.csv --limit 200
+uv run python scripts/leads/advanced/export_contact_hunt_sheet.py --out reports/out/leads_contact_hunt_current.csv --limit 200
 
 # 6) Resumen canónico semanal + CSV foco
 uv run python scripts/leads/run_weekly_focus.py
 
 # 7) (Opcional) Dejar active/ limpio + slice Deep Search + CSV unificado (ejecutar **después** del paso 6)
-uv run python scripts/leads/prepare_active_workspace.py --deepsearch --unified
+uv run python scripts/leads/advanced/prepare_active_workspace.py --deepsearch --unified
 ```
 
 Qué esperar:

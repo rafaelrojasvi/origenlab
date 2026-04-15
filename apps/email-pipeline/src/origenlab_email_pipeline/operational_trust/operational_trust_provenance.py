@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from origenlab_email_pipeline.operational_trust_csv import load_client_pack_summary, parse_iso_utc
-from origenlab_email_pipeline.operational_trust_types import AUDIT_DB_LINE_RE, TrustCheck
+from .operational_trust_csv import load_client_pack_summary, parse_iso_utc
+from .operational_trust_types import AUDIT_DB_LINE_RE, TrustCheck
 
 
 def check_stale_client_pack(

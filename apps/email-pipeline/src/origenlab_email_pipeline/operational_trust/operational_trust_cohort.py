@@ -5,12 +5,12 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from origenlab_email_pipeline.operational_trust_csv import (
+from .operational_trust_csv import (
     duplicate_ids,
     id_leads_from_rows,
     read_csv_rows,
 )
-from origenlab_email_pipeline.operational_trust_types import (
+from .operational_trust_types import (
     ALLOWED_BUYER_KINDS,
     ALLOWED_FIT_BUCKETS,
     TrustCheck,

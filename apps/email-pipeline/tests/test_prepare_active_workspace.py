@@ -10,7 +10,7 @@ from pathlib import Path
 
 def _load_script():
     root = Path(__file__).resolve().parents[1]
-    script_path = root / "scripts" / "leads" / "prepare_active_workspace.py"
+    script_path = root / "scripts" / "leads" / "advanced" / "prepare_active_workspace.py"
     spec = importlib.util.spec_from_file_location("prepare_active_workspace", script_path)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

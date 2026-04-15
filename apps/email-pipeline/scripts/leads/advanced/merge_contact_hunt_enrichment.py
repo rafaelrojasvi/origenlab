@@ -13,7 +13,7 @@ Cohort drift: if ``leads_contact_hunt_current_merged.csv`` was built from an old
 ``leads_contact_hunt_current.csv``, re-base merged onto current while keeping overlapping
 enrichment by ``id_lead``::
 
-    uv run python scripts/leads/merge_contact_hunt_enrichment.py \\
+    uv run python scripts/leads/advanced/merge_contact_hunt_enrichment.py \\
       -b reports/out/active/leads_contact_hunt_current.csv \\
       -e reports/out/active/leads_contact_hunt_current_merged.csv \\
       -o reports/out/active/leads_contact_hunt_current_merged.csv

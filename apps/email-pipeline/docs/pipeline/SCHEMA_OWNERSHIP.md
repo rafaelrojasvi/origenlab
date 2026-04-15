@@ -16,7 +16,7 @@ Outbound lane/source-of-truth usage guidance (operator model, not DDL ownership)
 
 Callers may still use `ensure_leads_tables()` / `ensure_lead_account_tables()` alone; defaults preserve prior behavior (backfill + view refresh).
 
-**Phase 2 adoption:** [`build_business_mart.py`](../../scripts/mart/build_business_mart.py), [`match_leads_to_mart.py`](../../scripts/leads/match_leads_to_mart.py), [`build_lead_account_rollup.py`](../../scripts/leads/build_lead_account_rollup.py), and [`match_lead_accounts_to_existing_orgs.py`](../../scripts/leads/match_lead_accounts_to_existing_orgs.py) call `migrate_sqlite_schema` with the appropriate `SchemaLayer` set. Thin wrappers at [`scripts/build_lead_account_rollup.py`](../../scripts/build_lead_account_rollup.py) and [`scripts/match_lead_accounts_to_existing_orgs.py`](../../scripts/match_lead_accounts_to_existing_orgs.py) keep older paths working. Operational one-shot: [`scripts/pipeline/run_aligned_stack.sh`](../../scripts/pipeline/run_aligned_stack.sh).
+**Phase 2 adoption:** [`build_business_mart.py`](../../scripts/mart/build_business_mart.py), [`match_leads_to_mart.py`](../../scripts/leads/match_leads_to_mart.py), [`build_lead_account_rollup.py`](../../scripts/leads/advanced/build_lead_account_rollup.py), and [`match_lead_accounts_to_existing_orgs.py`](../../scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py) call `migrate_sqlite_schema` with the appropriate `SchemaLayer` set. Thin wrappers at [`scripts/build_lead_account_rollup.py`](../../scripts/build_lead_account_rollup.py) and [`scripts/match_lead_accounts_to_existing_orgs.py`](../../scripts/match_lead_accounts_to_existing_orgs.py) keep shorter paths working. Operational one-shot: [`scripts/pipeline/run_aligned_stack.sh`](../../scripts/pipeline/run_aligned_stack.sh).
 
 ---
 
@@ -80,10 +80,10 @@ Also invoked from `init_schema`, `ensure_leads_tables`, `ensure_lead_account_tab
 
 | Object | DDL owner | ALTER / deferred index | Data rebuild | View | Ownership |
 |--------|-----------|------------------------|--------------|------|-----------|
-| `lead_account_master` | [`lead_accounts_schema.py`](../../src/origenlab_email_pipeline/lead_accounts_schema.py) | — | [`build_lead_account_rollup.py`](../../scripts/leads/build_lead_account_rollup.py) | optional via `refresh_view` | **Clean** |
+| `lead_account_master` | [`lead_accounts_schema.py`](../../src/origenlab_email_pipeline/lead_accounts_schema.py) | — | [`build_lead_account_rollup.py`](../../scripts/leads/advanced/build_lead_account_rollup.py) | optional via `refresh_view` | **Clean** |
 | `lead_account_aliases` | same | — | rollup | — | **Clean** |
 | `lead_account_membership` | same | — | rollup | — | **Clean** |
-| `lead_account_matches_existing_orgs` | same | `ADD pipeline_run_id` + index after (legacy DBs) | [`match_lead_accounts_to_existing_orgs.py`](../../scripts/leads/match_lead_accounts_to_existing_orgs.py) | — | **Clean** (deferred index pattern) |
+| `lead_account_matches_existing_orgs` | same | `ADD pipeline_run_id` + index after (legacy DBs) | [`match_lead_accounts_to_existing_orgs.py`](../../scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py) | — | **Clean** (deferred index pattern) |
 | `lead_account_overrides` | same | — | manual | — | **Clean** |
 
 ---
@@ -94,7 +94,7 @@ Also invoked from `init_schema`, `ensure_leads_tables`, `ensure_lead_account_tab
 | Object | Owner | Behavior |
 |--------|-------|------------|
 | `v_lead_match_summary` | [`bi_views.py`](../../src/origenlab_email_pipeline/bi_views.py) `refresh_lead_match_summary_view` | Prerequisites checked before DROP; transactional replace; returns status string. Core vs full SQL depends on account tables. Excludes `lead_master` rows with `upstream_sync_state = 'retired_no_raw'` (soft-retired missing raw). |
-| `v_commercial_candidate_queue` | [`commercial_intel_schema.py`](../../src/origenlab_email_pipeline/commercial_intel_schema.py) `ensure_commercial_intel_tables` | Recreated idempotently; unions durable candidate tables for operational review queues. |
+| `v_commercial_candidate_queue` | [`commercial/commercial_intel_schema.py`](../../src/origenlab_email_pipeline/commercial/commercial_intel_schema.py) `ensure_commercial_intel_tables` | Recreated idempotently; unions durable candidate tables for operational review queues. |
 
 ---
 
@@ -103,15 +103,15 @@ Also invoked from `init_schema`, `ensure_leads_tables`, `ensure_lead_account_tab
 
 | Object | DDL owner | Data rebuild/ownership | Notes |
 |--------|-----------|------------------------|-------|
-| `commercial_email_signal_fact` | [`commercial_intel_schema.py`](../../src/origenlab_email_pipeline/commercial_intel_schema.py) | [`build_commercial_intel_v1.py`](../../scripts/commercial/build_commercial_intel_v1.py) rewrites selected email ids idempotently | Rebuildable evidence facts, linked to `emails.id`. |
-| `commercial_org_signal_rollup` | `commercial_intel_schema.py` | `build_commercial_intel_v1.py` recomputes from facts | Rebuildable org-level evidence/suppression rollup. |
-| `commercial_contact_signal_rollup` | `commercial_intel_schema.py` | `build_commercial_intel_v1.py` recomputes from facts | Rebuildable contact-level rollup. |
-| `commercial_opportunity_fact` | `commercial_intel_schema.py` | `build_commercial_intel_v1.py` recomputes from org rollups | Rebuildable opportunity facts for candidate promotion. |
-| `organization_candidate` | `commercial_intel_schema.py` | Durable UPSERT target from builder + manual review | Human-facing durable state. |
-| `contact_candidate` | `commercial_intel_schema.py` | Durable UPSERT target from builder + manual review | Human-facing durable state. |
-| `opportunity_candidate` | `commercial_intel_schema.py` | Durable UPSERT target from builder + manual review | Human-facing durable state. |
-| `candidate_review_event` | `commercial_intel_schema.py` | Append audit events from builder/manual ops | Durable review audit trail. |
-| `candidate_manual_override` | `commercial_intel_schema.py` | Manual operational input | Durable overrides applied by builder sync. |
+| `commercial_email_signal_fact` | [`commercial/commercial_intel_schema.py`](../../src/origenlab_email_pipeline/commercial/commercial_intel_schema.py) | [`build_commercial_intel_v1.py`](../../scripts/commercial/build_commercial_intel_v1.py) rewrites selected email ids idempotently | Rebuildable evidence facts, linked to `emails.id`. |
+| `commercial_org_signal_rollup` | `commercial/commercial_intel_schema.py` | `build_commercial_intel_v1.py` recomputes from facts | Rebuildable org-level evidence/suppression rollup. |
+| `commercial_contact_signal_rollup` | `commercial/commercial_intel_schema.py` | `build_commercial_intel_v1.py` recomputes from facts | Rebuildable contact-level rollup. |
+| `commercial_opportunity_fact` | `commercial/commercial_intel_schema.py` | `build_commercial_intel_v1.py` recomputes from org rollups | Rebuildable opportunity facts for candidate promotion. |
+| `organization_candidate` | `commercial/commercial_intel_schema.py` | Durable UPSERT target from builder + manual review | Human-facing durable state. |
+| `contact_candidate` | `commercial/commercial_intel_schema.py` | Durable UPSERT target from builder + manual review | Human-facing durable state. |
+| `opportunity_candidate` | `commercial/commercial_intel_schema.py` | Durable UPSERT target from builder + manual review | Human-facing durable state. |
+| `candidate_review_event` | `commercial/commercial_intel_schema.py` | Append audit events from builder/manual ops | Durable review audit trail. |
+| `candidate_manual_override` | `commercial/commercial_intel_schema.py` | Manual operational input | Durable overrides applied by builder sync. |
 
 Commercial schema is added through `migrate_sqlite_schema(..., layers={SchemaLayer.COMMERCIAL_INTEL})`.
 

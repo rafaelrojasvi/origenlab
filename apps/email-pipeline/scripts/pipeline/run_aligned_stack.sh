@@ -32,9 +32,9 @@ echo ">>> Match leads to mart"
 uv run python scripts/leads/match_leads_to_mart.py
 
 echo ">>> Lead account rollup"
-uv run python scripts/leads/build_lead_account_rollup.py
+uv run python scripts/leads/advanced/build_lead_account_rollup.py
 
 echo ">>> Match lead accounts to organization_master"
-uv run python scripts/leads/match_lead_accounts_to_existing_orgs.py
+uv run python scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py
 
 echo "=== Aligned stack complete ==="

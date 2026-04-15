@@ -59,10 +59,10 @@ Con la hoja `leads_contact_hunt_current.csv` ya parcheada y **reimportada** a SQ
 ## Comandos para alinear SQLite y regenerar auditoría / cliente
 
 ```bash
-uv run python scripts/leads/import_contact_hunt_to_sqlite.py \
+uv run python scripts/leads/advanced/import_contact_hunt_to_sqlite.py \
   --csv reports/out/active/leads_contact_hunt_current.csv \
   --promote-procurement
-uv run python scripts/leads/audit_contact_readiness.py
+uv run python scripts/leads/advanced/audit_contact_readiness.py
 uv run python scripts/reports/build_leads_client_pack.py
 ```
 
@@ -71,4 +71,4 @@ uv run python scripts/reports/build_leads_client_pack.py
 - **Client pack:** regenera `reports/out/client_pack_latest/`.
 
 ---
-Generado por `scripts/leads/apply_ready8_contact_patch.py`.
+Generado por `scripts/leads/campaigns/apply_ready8_contact_patch.py`.

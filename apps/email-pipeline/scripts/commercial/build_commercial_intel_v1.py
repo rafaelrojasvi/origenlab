@@ -21,7 +21,7 @@ if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
 from origenlab_email_pipeline.business_mart import domain_of, primary_sender_email
-from origenlab_email_pipeline.commercial_intel_queries import (
+from origenlab_email_pipeline.commercial.commercial_intel_queries import (
     derive_existing_client_domains,
     derive_internal_domains,
     derive_vendor_domains,
@@ -33,7 +33,7 @@ from origenlab_email_pipeline.commercial_intel_queries import (
     fetch_org_rollup_for_opportunity_insert,
     fetch_org_rollup_for_org_candidates,
 )
-from origenlab_email_pipeline.commercial_intel_rules import (
+from origenlab_email_pipeline.commercial.commercial_intel_rules import (
     derive_email_signal_facts,
     now_iso,
     pick_external_contact,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper — implementation: ``scripts/leads/validate_lead_account_rollup.py``."""
+"""Compatibility wrapper — implementation: ``scripts/leads/advanced/validate_lead_account_rollup.py``."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ import runpy
 import sys
 from pathlib import Path
 
-_IMPLEMENTATION = Path(__file__).resolve().parent / "leads" / "validate_lead_account_rollup.py"
+_IMPLEMENTATION = (
+    Path(__file__).resolve().parent / "leads" / "advanced" / "validate_lead_account_rollup.py"
+)
 
 if __name__ == "__main__":
     sys.argv[0] = str(_IMPLEMENTATION)

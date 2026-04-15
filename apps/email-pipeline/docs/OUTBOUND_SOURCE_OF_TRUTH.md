@@ -2,9 +2,32 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-13
+Last reviewed: 2026-04-15
 
 Single reference for how outbound decisions should use SQLite layers, operator state, and gate policy.
+
+## Canonical operator CLIs (do not bypass)
+
+From `apps/email-pipeline/`:
+
+| Lane | Primary command | Purpose |
+|------|-----------------|--------|
+| **Archive (warm revival)** | `uv run python scripts/leads/build_archive_send_batch.py` | Full batch: audit → shortlist → gate snapshot → commercial precheck → `archive_outreach_send_ready.csv` / `archive_outreach_review_required.csv`. |
+| **Archive audit only** | Same script with `--audit-only` | Writes `archive_outreach_audit.csv` + `archive_outreach_audit_summary.json` only (no shortlist/precheck). Prefer this over legacy standalone audit scripts. |
+| **Lead (curated prospects)** | `uv run python scripts/leads/export_next_marketing_recipients.py` | Next N from `lead_master` using the **same** shared export gate as Streamlit’s queue. |
+
+**Not a send lane:** ChileCompra / `external_leads_raw` / `lead_master` **ingest and scoring** are prospecting data prep, not a parallel mailbox-send path. Outbound still flows through one of the two lanes above plus human review.
+
+**Advanced / exploratory (not default daily workflow):**
+
+- `scripts/leads/advanced/export_archive_outreach_candidates.py` — thin **audit-only** wrapper; prefer `build_archive_send_batch.py --audit-only`.
+- `scripts/leads/advanced/export_marketing_from_contact_master.py` — optional `contact_master` pool export; **`contact_master` is not CRM truth**; use for exploration, not as the default archive batch.
+
+**Streamlit** (`apps/business_mart_app.py`): **review, read/write sidecars** (suppression, outreach state, visibility), and surfaces that call the **same library functions** as the CLIs. It must **not** be treated as the sole source of “what we exported for this send” — the canonical commands above produce reproducible artifacts under `reports/out/...`.
+
+### Shared runtime defaults (`outbound_core`)
+
+[`outbound_core.py`](../src/origenlab_email_pipeline/outbound_core.py) centralizes **how** operators resolve mailbox identity, default Sent folders, and **which** `GateContext` constructor applies per lane (`gate_context_for_archive_batch` uses stricter contact-graph noise; `gate_context_for_lead_master_export` matches `lead_master` / Cola). Policy remains in [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py) and [`marketing_export_context.py`](../src/origenlab_email_pipeline/marketing_export_context.py). Summary JSON from archive runs includes a nested **`outbound_run`** block (schema version, lane, paths, counts) for drift-resistant auditing; the lead CLI can emit a sibling summary with `--write-outbound-summary`.
 
 ## Executive model
 
@@ -91,7 +114,7 @@ Recommended operating order:
 
 - **Qué hacer hoy:** operator command center; daily priorities and handoffs.
 - **Casos para revisar:** review-focused queueing and manual decision support (quality/safety check surface).
-- **Cola outreach marketing:** lead-based lane operational queue from `lead_master` through shared gate.
+- **Cola outreach marketing:** lead-based lane operational queue from `lead_master` through shared gate (same policy as `export_next_marketing_recipients.py`).
 - **Borrador comercial:** drafting support surface; assists composition, does not replace gate/human review.
 
 Operator rule of thumb:
@@ -99,6 +122,18 @@ Operator rule of thumb:
 - Use archive-first candidates for warm revival and history-aware opportunities.
 - Use `lead_master` queue for curated net-new prospecting.
 - Never bypass shared gate + human review before sending.
+- For **auditability**, prefer saving the CSV/JSON from the **canonical CLIs** in this doc over treating a Streamlit screen as the only record of who was selected.
+
+## Commercial precheck vs shared export gate (archive batch)
+
+The **shared export gate** ([`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py)) is the **primary hard blocker** for invalid/internal mail, suppression, Sent history, blocking outreach states, supplier/noise, etc.
+
+**Commercial intel precheck** (archive batch step that reads `contact_candidate` / org / opportunity rows) adds **Engine B** context. Policy (archive batch builder):
+
+- **Default (`commercial_precheck_policy=advisory`):** if precheck would recommend **drop** only because of commercial status (suppressed/rejected), the row is placed in **`review_required`** with `final_decision_path=advisory_commercial_drop`, not silently omitted.
+- **Strict (`--strict-commercial-drop`):** those rows are **final drops** (omitted from both `send_ready` and `review_required` CSVs), matching the earlier “precheck drop” behavior.
+
+Gate-ineligible rows are always final drops regardless of this flag. See `archive_outreach_build_summary.json` for `commercial_precheck_policy` and `strict_commercial_drop`.
 
 ## Archive outreach status
 

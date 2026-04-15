@@ -11,7 +11,7 @@ import pytest
 from origenlab_email_pipeline.dr50_payload_loader import Dr50PayloadError, load_verified_dr50_rows
 
 REPO = Path(__file__).resolve().parents[1]
-_DEFAULT_DATA = REPO / "scripts" / "leads" / "data"
+_DEFAULT_DATA = REPO / "scripts" / "leads" / "campaigns" / "data"
 _MANIFEST = _DEFAULT_DATA / "dr50_manifest_v1.json"
 
 
@@ -39,7 +39,7 @@ def test_load_verified_dr50_rows_happy_path(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(not _MANIFEST.is_file(), reason="Repo DR50 data not present (optional checkout)")
 def test_load_verified_dr50_rows_repo_payload_when_present() -> None:
-    """Integration: real committed payload under scripts/leads/data/ when available."""
+    """Integration: real committed payload under scripts/leads/campaigns/data/ when available."""
     rows = load_verified_dr50_rows(repo_root=REPO)
     assert len(rows) == 23
     ids = [int(r["id_lead"]) for r in rows]

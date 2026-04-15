@@ -1,8 +1,11 @@
-"""Facade for operational trust / publication QA (import this module from scripts, not the ``operational_trust_*`` siblings).
+"""Facade for operational trust / publication QA.
 
-Implementation is split across ``operational_trust_*`` modules; this file re-exports the public API
-so imports stay ``from origenlab_email_pipeline.operational_trust import ...``. ``__all__`` is
-the stability contract (see tests/test_operational_trust_facade.py).
+Import from ``origenlab_email_pipeline.operational_trust`` (this package). Implementation
+modules live alongside as ``operational_trust_*.py``. Root-level
+``origenlab_email_pipeline.operational_trust_*`` modules (same basename) are **compatibility
+shims** that re-export those submodules.
+
+``__all__`` is the stability contract (see ``tests/test_operational_trust_facade.py``).
 """
 
 from __future__ import annotations
@@ -11,13 +14,13 @@ from collections.abc import Iterable
 from typing import Any
 from urllib.request import urlopen
 
-from origenlab_email_pipeline.operational_trust_cohort import (
+from .operational_trust_cohort import (
     check_cohort_partition,
     check_readiness_critical_fields,
     check_taxonomy_hunt,
     verify_top20_and_readiness,
 )
-from origenlab_email_pipeline.operational_trust_csv import (
+from .operational_trust_csv import (
     dedupe_urls,
     duplicate_ids,
     id_leads_from_rows,
@@ -25,24 +28,24 @@ from origenlab_email_pipeline.operational_trust_csv import (
     parse_iso_utc,
     read_csv_rows,
 )
-from origenlab_email_pipeline.operational_trust_evidence import (
+from .operational_trust_evidence import (
     check_evidence_url_formats,
     check_urls_batch,
     collect_urls_from_csvs,
     is_valid_http_url,
     probe_url,
 )
-from origenlab_email_pipeline.operational_trust_pack import (
+from .operational_trust_pack import (
     db_lead_totals,
     normalized_fit_bucket_counts,
     verify_client_pack_against_db,
 )
-from origenlab_email_pipeline.operational_trust_paths import LeadsActivePaths, leads_active_paths
-from origenlab_email_pipeline.operational_trust_provenance import (
+from .operational_trust_paths import LeadsActivePaths, leads_active_paths
+from .operational_trust_provenance import (
     check_provenance_db_path,
     check_stale_client_pack,
 )
-from origenlab_email_pipeline.operational_trust_types import (
+from .operational_trust_types import (
     ALLOWED_BUYER_KINDS,
     ALLOWED_FIT_BUCKETS,
     AUDIT_DB_LINE_RE,

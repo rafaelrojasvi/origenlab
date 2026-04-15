@@ -1,11 +1,15 @@
 """Next cold-outreach recipients from ``lead_master`` (ranked SQL + shared export gate).
 
+**Canonical lead lane:** ``export_next_marketing_recipients.py`` and Streamlit Cola use
+``compute_next_marketing_recipients``; keep this module aligned with ``outbound_core`` and
+``candidate_export_gate`` — do not remove or bypass without a migrated, tested replacement.
+
 **This module:** ``compute_next_marketing_recipients`` — ranked candidate selection and
 per-row gate evaluation.
 
-**Gate context loading** (Sent, suppression, ``outreach_contact_state``, supplier domains,
-blocked domains, ``GateContext`` assembly) lives in ``marketing_export_context``. The
-symbols below are re-exported so existing ``from next_marketing_queue import …`` keeps working.
+**Gate context:** ``compute_next_marketing_recipients`` uses ``outbound_core.gate_context_for_lead_master_export``
+(same defaults as canonical lead CLI). ``marketing_export_context`` still owns ``GateContext`` assembly;
+the symbols below are re-exported so existing ``from next_marketing_queue import …`` keeps working.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from origenlab_email_pipeline.marketing_export_context import (
     load_suppressed_norms,
     norm_lead_email,
 )
+from origenlab_email_pipeline.outbound_core import gate_context_for_lead_master_export
 from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
     MARKETING_VARIANT_GENERAL,
     MARKETING_VARIANT_TYPES,
@@ -62,13 +67,11 @@ def compute_next_marketing_recipients(
     sent_norms = load_sent_recipient_norms(conn, gmail_user=gmail_user, sent_folders=sent_folders)
     suppressed = load_suppressed_norms(conn)
     outreach_map = load_outreach_state_map(conn)
-    gate_ctx = build_marketing_export_gate_context(
+    gate_ctx = gate_context_for_lead_master_export(
         conn,
         gmail_user=gmail_user,
         sent_folders=sent_folders,
         extra_exclude_domains=extra_exclude_domains,
-        skip_noise_filter=False,
-        skip_supplier_domain_filter=False,
     )
 
     variant = str(variant_type).strip()

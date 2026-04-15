@@ -23,7 +23,7 @@ Thumbs.db
 .idea/
 
 # App-root local data only (PST/mbox/SQLite live outside repo; see .env.example).
-# Use leading slash so we do NOT ignore scripts/leads/data/ (versioned DR50 JSON manifests).
+# Use leading slash so we do NOT ignore scripts/leads/campaigns/data/ (versioned DR50 JSON manifests).
 /data/
 tmp/
 logs/

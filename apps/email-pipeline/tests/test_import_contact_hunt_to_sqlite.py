@@ -12,7 +12,7 @@ from pathlib import Path
 
 def _load_import_script():
     root = Path(__file__).resolve().parents[1]
-    script_path = root / "scripts" / "leads" / "import_contact_hunt_to_sqlite.py"
+    script_path = root / "scripts" / "leads" / "advanced" / "import_contact_hunt_to_sqlite.py"
     spec = importlib.util.spec_from_file_location("import_contact_hunt_to_sqlite", script_path)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

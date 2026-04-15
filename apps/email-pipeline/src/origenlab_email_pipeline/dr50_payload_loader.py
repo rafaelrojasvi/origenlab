@@ -1,6 +1,6 @@
 """Load versioned **DR50** (deep-research) contact JSON with SHA256 verification.
 
-Payload lives under ``scripts/leads/data/``; consumed by hunt/reconcile utilities — not a general
+Payload lives under ``scripts/leads/campaigns/data/``; consumed by hunt/reconcile utilities — not a general
 configuration layer."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ class Dr50PayloadError(ValueError):
 
 
 def default_dr50_data_dir(repo_root: Path) -> Path:
-    return repo_root / "scripts" / "leads" / "data"
+    return repo_root / "scripts" / "leads" / "campaigns" / "data"
 
 
 def load_verified_dr50_rows(
@@ -27,7 +27,7 @@ def load_verified_dr50_rows(
 ) -> list[dict[str, Any]]:
     """Load DR50 rows from JSON after verifying SHA256 against manifest.
 
-    ``data_dir`` defaults to ``<repo_root>/scripts/leads/data`` when ``repo_root`` is set.
+    ``data_dir`` defaults to ``<repo_root>/scripts/leads/campaigns/data`` when ``repo_root`` is set.
     """
     if data_dir is None:
         if repo_root is None:

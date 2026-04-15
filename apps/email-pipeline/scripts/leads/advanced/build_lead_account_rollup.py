@@ -4,9 +4,9 @@
 Does not modify external_leads_raw or lead_master. Clears and repopulates:
 lead_account_master, lead_account_aliases, lead_account_membership.
 
-Run ``scripts/leads/match_lead_accounts_to_existing_orgs.py`` after this to refresh mart links.
+Run ``scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py`` (or ``scripts/match_lead_accounts_to_existing_orgs.py``) after this to refresh mart links.
 
-Canonical path under ``scripts/leads/``; ``scripts/build_lead_account_rollup.py`` remains a
+Implementation path: ``scripts/leads/advanced/``; ``scripts/build_lead_account_rollup.py`` remains a
 compatibility wrapper.
 """
 
@@ -74,7 +74,7 @@ def main() -> int:
 
     run_id = start_run(
         conn,
-        script_name="scripts/leads/build_lead_account_rollup.py",
+        script_name="scripts/leads/advanced/build_lead_account_rollup.py",
         notes="lead account rollup full rebuild",
     )
 

@@ -7,7 +7,7 @@ or from stdin. Uses the same ``build_marketing_export_gate_context`` +
 
 Example::
 
-  uv run python scripts/leads/audit_emails_export_gate.py \\
+  uv run python scripts/leads/advanced/audit_emails_export_gate.py \\
     --file reports/out/active/sent_contacts.txt \\
     --gmail-user contacto@origenlab.cl
 """

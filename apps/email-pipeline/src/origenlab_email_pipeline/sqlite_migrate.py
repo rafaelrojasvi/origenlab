@@ -11,7 +11,7 @@ import sqlite3
 from enum import Enum, auto
 
 from origenlab_email_pipeline.bi_views import refresh_lead_match_summary_view
-from origenlab_email_pipeline.commercial_intel_schema import ensure_commercial_intel_tables
+from origenlab_email_pipeline.commercial.commercial_intel_schema import ensure_commercial_intel_tables
 from origenlab_email_pipeline.db import init_schema
 from origenlab_email_pipeline.lead_accounts_schema import ensure_lead_account_tables
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables

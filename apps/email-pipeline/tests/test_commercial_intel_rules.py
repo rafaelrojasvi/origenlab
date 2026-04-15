@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from origenlab_email_pipeline.commercial_intel_rules import derive_email_signal_facts
+from origenlab_email_pipeline.commercial.commercial_intel_rules import derive_email_signal_facts
 
 
 def test_rules_emit_positive_quote_and_procurement_signals() -> None:

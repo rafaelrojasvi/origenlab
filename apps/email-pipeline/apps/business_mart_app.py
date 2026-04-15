@@ -13,6 +13,14 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.marketing_contact_noise import (
+    marketing_outreach_noise_email,
+    marketing_outreach_noise_organization_guess,
+)
+from origenlab_email_pipeline.marketing_supplier_domains import (
+    is_supplier_email_domain,
+    supplier_email_domains,
+)
 from origenlab_email_pipeline.freshness_dates import MART_DATE_SLACK_DAYS_DEFAULT
 from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
 from origenlab_email_pipeline.contact_email_suppression import (
@@ -1550,6 +1558,17 @@ def _render_equipment_page(conn: sqlite3.Connection) -> None:
     if desc := info.get("description"):
         st.caption(desc)
 
+    suppress_noise = st.checkbox(
+        "Ocultar ruido operacional/proveedor en tablas de equipo",
+        value=True,
+        help=(
+            "Oculta dominios/plataformas transaccionales, organizaciones claramente ruido y "
+            "dominios marcados como proveedor en supplier_master."
+        ),
+        key="equipment_hide_operational_noise",
+    )
+    supplier_domains = supplier_email_domains(conn) if suppress_noise else frozenset()
+
     st.markdown("#### Organizaciones relacionadas con este equipo")
     org_eq = _load_df(
         conn,
@@ -1571,9 +1590,24 @@ def _render_equipment_page(conn: sqlite3.Connection) -> None:
     )
     mask_org_eq = org_eq["equipos"].fillna("").str.contains(selected_tag, case=False, na=False)
     org_eq = org_eq[mask_org_eq]
+    removed_org_noise = 0
+    if suppress_noise and not org_eq.empty:
+        org_domain = org_eq["dominio"].fillna("").astype(str).str.strip().str.lower()
+        org_name = org_eq["organizacion"].fillna("").astype(str)
+        org_noise_mask = org_domain.apply(
+            lambda d: bool(d)
+            and (
+                marketing_outreach_noise_email(f"info@{d}", strict_contact_graph=True)
+                or is_supplier_email_domain(f"info@{d}", supplier_domains)
+            )
+        ) | org_name.apply(marketing_outreach_noise_organization_guess)
+        removed_org_noise = int(org_noise_mask.sum())
+        org_eq = org_eq[~org_noise_mask]
     if org_eq.empty:
         st.info("No se encontraron organizaciones claramente asociadas a este equipo.")
     else:
+        if suppress_noise and removed_org_noise > 0:
+            st.caption(f"Se ocultaron {removed_org_noise} organizaciones de ruido operacional/proveedor.")
         org_eq_display = org_eq.copy()
         org_eq_display["tipo_org"] = org_eq_display["tipo_org"].apply(
             lambda x: _friendly_org_type(str(x)) if pd.notna(x) else _friendly_org_type(None)
@@ -1616,9 +1650,24 @@ def _render_equipment_page(conn: sqlite3.Connection) -> None:
     )
     mask_contact_eq = contact_eq["equipos"].fillna("").str.contains(selected_tag, case=False, na=False)
     contact_eq = contact_eq[mask_contact_eq]
+    removed_contact_noise = 0
+    if suppress_noise and not contact_eq.empty:
+        contact_email = contact_eq["email"].fillna("").astype(str).str.strip().str.lower()
+        org_name = contact_eq["organizacion"].fillna("").astype(str)
+        contact_noise_mask = contact_email.apply(
+            lambda e: bool(e)
+            and (
+                marketing_outreach_noise_email(e, strict_contact_graph=True)
+                or is_supplier_email_domain(e, supplier_domains)
+            )
+        ) | org_name.apply(marketing_outreach_noise_organization_guess)
+        removed_contact_noise = int(contact_noise_mask.sum())
+        contact_eq = contact_eq[~contact_noise_mask]
     if contact_eq.empty:
         st.info("No se encontraron contactos claramente asociados a este equipo.")
     else:
+        if suppress_noise and removed_contact_noise > 0:
+            st.caption(f"Se ocultaron {removed_contact_noise} contactos de ruido operacional/proveedor.")
         contact_eq_display = contact_eq.copy()
         contact_eq_display["tipo_org"] = contact_eq_display["tipo_org"].apply(
             lambda x: _friendly_org_type(str(x)) if pd.notna(x) else _friendly_org_type(None)
@@ -2931,7 +2980,7 @@ def main() -> None:
                     + "`. Revise la tabla inferior; los filtros pueden quedar en **pendiente de revisión**."
                 )
 
-            from origenlab_email_pipeline.commercial_intel_review import (
+            from origenlab_email_pipeline.commercial.commercial_intel_review import (
                 QueueFilters,
                 apply_review_action,
                 fetch_queue_rows,

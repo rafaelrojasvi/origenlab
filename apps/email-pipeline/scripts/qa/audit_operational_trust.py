@@ -101,7 +101,7 @@ def check_hunt_merged_alignment(current: Path, merged: Path) -> list[TrustCheck]
         ]
     hint = (
         " Remediation: re-run merge from current (e.g. "
-        "`uv run python scripts/leads/merge_contact_hunt_enrichment.py -b reports/out/active/leads_contact_hunt_current.csv "
+        "`uv run python scripts/leads/advanced/merge_contact_hunt_enrichment.py -b reports/out/active/leads_contact_hunt_current.csv "
         "-e <enrichment.csv> -o reports/out/active/leads_contact_hunt_current_merged.csv`) "
         "or align merged `id_lead` set to current before import."
     )

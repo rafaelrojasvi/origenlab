@@ -37,7 +37,7 @@ Durable tables:
 - `candidate_review_event`
 - `candidate_manual_override`
 
-Schema owner: `src/origenlab_email_pipeline/commercial_intel_schema.py`  
+Schema owner: `src/origenlab_email_pipeline/commercial/commercial_intel_schema.py` (root `commercial_intel_schema.py` remains a compatibility shim)  
 Build owner: `scripts/commercial/build_commercial_intel_v1.py`
 
 ## Processing contract (incremental correctness)

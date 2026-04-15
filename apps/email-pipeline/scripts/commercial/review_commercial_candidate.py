@@ -11,7 +11,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
-from origenlab_email_pipeline.commercial_intel_review import apply_review_action  # noqa: E402
+from origenlab_email_pipeline.commercial.commercial_intel_review import apply_review_action  # noqa: E402
 from origenlab_email_pipeline.config import load_settings  # noqa: E402
 from origenlab_email_pipeline.db import connect  # noqa: E402
 from origenlab_email_pipeline.sqlite_migrate import SchemaLayer, migrate_sqlite_schema  # noqa: E402

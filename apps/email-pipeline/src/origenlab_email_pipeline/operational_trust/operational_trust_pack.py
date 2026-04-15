@@ -10,8 +10,8 @@ from origenlab_email_pipeline.lead_provenance import read_operational_run_id_fro
 from origenlab_email_pipeline.lead_upstream_reconcile import sql_upstream_active_bare
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
 
-from origenlab_email_pipeline.operational_trust_csv import load_client_pack_summary
-from origenlab_email_pipeline.operational_trust_types import TrustCheck
+from .operational_trust_csv import load_client_pack_summary
+from .operational_trust_types import TrustCheck
 
 # Same expression as build_leads_client_pack: empty/whitespace fit_bucket counts as low_fit.
 _FIT_BUCKET_GROUP_SQL = "COALESCE(NULLIF(TRIM(fit_bucket), ''), 'low_fit')"

@@ -17,6 +17,10 @@ _NOISE_DOMAINS: frozenset[str] = frozenset(
         "mercadopublico.cl",
         "chilecompra.cl",
         "dhl.com",
+        # Banking transactional senders (archive noise for outbound prospecting context).
+        "santander.cl",
+        "itau.cl",
+        "bancoitau.cl",
         "wherex.com",
         "facebookmail.com",
         "twitter.com",
@@ -166,5 +170,8 @@ def marketing_outreach_noise_organization_guess(name: str | None) -> bool:
         "solostocks",
         "leadingmarketresearch",
         "rapidmicrobiology",
+        "santander",
+        "itau",
+        "banco itau",
     )
     return any(x in n for x in noise_names)

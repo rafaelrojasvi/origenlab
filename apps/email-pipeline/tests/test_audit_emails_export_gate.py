@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SCRIPT = REPO / "scripts" / "leads" / "audit_emails_export_gate.py"
+SCRIPT = REPO / "scripts" / "leads" / "advanced" / "audit_emails_export_gate.py"
 
 
 def test_audit_emails_export_gate_empty_file_exits_2(tmp_path: Path) -> None:

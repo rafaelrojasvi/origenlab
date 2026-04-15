@@ -102,7 +102,7 @@ def main() -> int:
 
     run_id = start_run(
         conn,
-        script_name="scripts/leads/match_lead_accounts_to_existing_orgs.py",
+        script_name="scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py",
         notes="match lead_account_master to organization_master",
     )
 

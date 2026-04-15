@@ -7,8 +7,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request
 
-from origenlab_email_pipeline.operational_trust_csv import dedupe_urls, read_csv_rows
-from origenlab_email_pipeline.operational_trust_types import TrustCheck
+from .operational_trust_csv import dedupe_urls, read_csv_rows
+from .operational_trust_types import TrustCheck
 
 
 def is_valid_http_url(url: str) -> bool:

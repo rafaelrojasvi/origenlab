@@ -25,7 +25,7 @@ def test_merge_fills_only_empty(tmp_path: Path) -> None:
     import importlib.util
     import sys
 
-    script_path = Path("scripts/leads/merge_contact_hunt_enrichment.py")
+    script_path = Path("scripts/leads/advanced/merge_contact_hunt_enrichment.py")
     spec = importlib.util.spec_from_file_location("merge_contact_hunt_enrichment", script_path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

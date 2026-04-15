@@ -88,7 +88,7 @@ uv run python scripts/ml/explore_email_clusters.py --limit 2000 --filter-any --n
 
 | Ubicación | Propósito |
 |-----------|-----------|
-| **`reports/out/active/`** | Archivos operativos **mínimos**: foco semanal, resumen MD, hoja de hunting actual, opcional `for_deepsearch`. Al ejecutar [`prepare_active_workspace.py`](../scripts/leads/prepare_active_workspace.py), otros CSV en esta carpeta se mueven a `archive/`. |
+| **`reports/out/active/`** | Archivos operativos **mínimos**: foco semanal, resumen MD, hoja de hunting actual, opcional `for_deepsearch`. Al ejecutar [`prepare_active_workspace.py`](../scripts/leads/advanced/prepare_active_workspace.py), otros CSV en esta carpeta se mueven a `archive/`. |
 | **`reports/out/client_pack_latest/`** | **Entregable cliente**: informe estático (HTML + MD + anexo CSV). Regenerar con [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py); puede sobrescribirse en cada ejecución. `summary.json` incluye un bloque **`provenance`** (DB resuelta, revisión git opcional, registro opcional del último `run_leads_operational_stack.sh` en disco). |
 | **`reports/out/archive/`** | Históricos, limpiezas, dumps grandes (`leads_export*.csv`, etc.). |
 | **`reports/out/reference/`** | Experimentos y recortes (p. ej. Deep Research de prueba). |
@@ -106,10 +106,10 @@ uv run python scripts/ml/explore_email_clusters.py --limit 2000 --filter-any --n
 uv run python scripts/reports/build_leads_client_pack.py
 
 # Validar que merged y current comparten los mismos id_lead antes de importar
-uv run python scripts/leads/validate_contact_hunt_alignment.py
+uv run python scripts/leads/advanced/validate_contact_hunt_alignment.py
 
 # Limpiar active/ (archivar CSV que no son del núcleo)
-uv run python scripts/leads/prepare_active_workspace.py
+uv run python scripts/leads/advanced/prepare_active_workspace.py
 ```
 
 Más detalle del pipeline de leads: **[leads/LEAD_PIPELINE.md](leads/LEAD_PIPELINE.md)**. Vista de arquitectura: **[ARCHITECTURE.md](ARCHITECTURE.md)**, contexto de negocio: **[BUSINESS_CONTEXT.md](BUSINESS_CONTEXT.md)**.
@@ -117,7 +117,7 @@ Más detalle del pipeline de leads: **[leads/LEAD_PIPELINE.md](leads/LEAD_PIPELI
 <a id="m-eprep-leads-qa"></a>
 ### QA operativa / publicación (coherencia de artefactos)
 
-Los informes y CSVs de leads son **instantáneas**: pueden quedar desalineados respecto a la base si no se regeneran. La capa de **operational trust** ([`operational_trust.py`](../src/origenlab_email_pipeline/operational_trust.py) + [`scripts/qa/`](../scripts/qa/)) contrasta:
+Los informes y CSVs de leads son **instantáneas**: pueden quedar desalineados respecto a la base si no se regeneran. La capa de **operational trust** ([paquete `operational_trust`](../src/origenlab_email_pipeline/operational_trust/__init__.py) + [`scripts/qa/`](../scripts/qa/)) contrasta:
 
 - **[`reports/out/client_pack_latest/summary.json`](#m-eprep-leads)** — totales `lead_master_rows` y `fit_bucket` frente al **SQLite** usado por el gate (mismo criterio que [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py): `fit_bucket` vacío tras `TRIM` cuenta como `low_fit`; la verificación también normaliza claves al comparar). Incluye **`provenance`**: `operational_run_id` si el pack se generó con `ORIGENLAB_LEADS_OPERATIONAL_RUN_ID` (stack), **`publish_gate_validated_this_artifact` siempre false** en el pack, rutas de DB, `generated_at_utc`, revisión git, copia del último [`operational_stack_last_run.json`](../reports/out/README.md) si está presente (ver `caveat`). Si el gate corre con el mismo env `ORIGENLAB_LEADS_OPERATIONAL_RUN_ID`, [`verify_client_pack_consistency.py`](../scripts/qa/verify_client_pack_consistency.py) exige que `provenance.operational_run_id` coincida (**crítico**). Puede marcar **no crítico** si `provenance.db_path_resolved` no coincide con el SQLite de la sesión del gate.
 - **[`reports/out/active/leads_top20_for_client_report.csv`](../reports/out/README.md)** — filas, `id_lead` únicos, alineación con `leads_ready_to_contact.csv`, subconjunto del hunt, existencia en `lead_master`, campos mínimos.

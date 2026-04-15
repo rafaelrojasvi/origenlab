@@ -14,7 +14,7 @@ def test_contact_hunt_sorting_prefers_high_fit_and_net_new(tmp_path: Path) -> No
     import importlib.util
     import sys
 
-    script_path = Path("scripts/leads/export_contact_hunt_sheet.py")
+    script_path = Path("scripts/leads/advanced/export_contact_hunt_sheet.py")
     spec = importlib.util.spec_from_file_location("export_contact_hunt_sheet", script_path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

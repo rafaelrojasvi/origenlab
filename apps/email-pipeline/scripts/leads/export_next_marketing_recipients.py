@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -32,11 +34,14 @@ if str(_ROOT) not in sys.path:
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
-from origenlab_email_pipeline.marketing_export_context import (
-    DEFAULT_EXCLUDE_DOMAINS,
-    DEFAULT_SENT_FOLDERS,
-)
 from origenlab_email_pipeline.next_marketing_queue import compute_next_marketing_recipients
+from origenlab_email_pipeline.outbound_core import (
+    DEFAULT_EXCLUDE_DOMAINS,
+    build_outbound_run_envelope,
+    resolve_outbound_gmail_user,
+    resolve_outbound_sent_folders,
+    sent_folder_defaults_were_used,
+)
 from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
     MARKETING_VARIANT_GENERAL,
     MARKETING_VARIANT_TYPES,
@@ -101,12 +106,19 @@ def main() -> int:
         default=MARKETING_VARIANT_GENERAL,
         help=f"Marketing variant for pilot CSV (default: {MARKETING_VARIANT_GENERAL})",
     )
+    ap.add_argument(
+        "--write-outbound-summary",
+        action="store_true",
+        help="Write <output_stem>_outbound_summary.json with shared outbound_run metadata (lane=lead).",
+    )
     args = ap.parse_args()
 
     settings = load_settings()
     db_path = args.db or settings.resolved_sqlite_path()
-    gmail_user = (args.gmail_user or settings.gmail_workspace_user or "contacto@origenlab.cl").strip()
-    sent_folders = tuple(args.sent_folder) if args.sent_folder else DEFAULT_SENT_FOLDERS
+    gmail_explicit = args.gmail_user.strip() if args.gmail_user and str(args.gmail_user).strip() else None
+    gmail_user = resolve_outbound_gmail_user(settings, explicit=gmail_explicit)
+    sent_folder_defaults_used = sent_folder_defaults_were_used(args.sent_folder)
+    sent_folders = resolve_outbound_sent_folders(args.sent_folder)
 
     extra_dom = tuple(args.exclude_domain) if args.exclude_domain else ()
 
@@ -124,6 +136,39 @@ def main() -> int:
         variant_type=str(args.variant_type),
     )
     conn.close()
+
+    if args.write_outbound_summary:
+        summary_path = args.out.with_name(args.out.stem + "_outbound_summary.json")
+        created = datetime.now(timezone.utc).isoformat()
+        payload = {
+            "outbound_run": build_outbound_run_envelope(
+                lane="lead",
+                gmail_user=gmail_user,
+                sqlite_path=str(db_path),
+                sent_folders=sent_folders,
+                sent_folder_defaults_used=sent_folder_defaults_used,
+                strict_contact_graph_noise=False,
+                extra_exclude_domains=extra_dom,
+                created_at_utc=created,
+                artifact_paths={"marketing_csv": str(args.out.resolve())},
+                counts={
+                    "n_exported": len(export_rows),
+                    "n_scanned": stats.n_scanned,
+                    "n_sent_folder_recipients": stats.n_sent_folder_recipients,
+                    "n_suppressed": stats.n_suppressed,
+                    "n_outreach_state": stats.n_outreach_state,
+                },
+            ),
+            "lead_queue": {
+                "limit_requested": int(args.limit),
+                "fetch_cap": int(args.fetch_cap),
+                "include_low_fit": bool(args.include_low_fit),
+                "min_priority": args.min_priority,
+            },
+        }
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"Outbound summary: {summary_path}")
 
     summary_fields = [
         "case_id",

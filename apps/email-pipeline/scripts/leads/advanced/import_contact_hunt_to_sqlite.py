@@ -11,12 +11,12 @@ imported them here (or typed them in).
 
 Usage::
 
-    uv run python scripts/leads/export_contact_hunt_sheet.py --out reports/out/hunt_base.csv --limit 500
-    uv run python scripts/leads/merge_contact_hunt_enrichment.py \\
+    uv run python scripts/leads/advanced/export_contact_hunt_sheet.py --out reports/out/hunt_base.csv --limit 500
+    uv run python scripts/leads/advanced/merge_contact_hunt_enrichment.py \\
         -b reports/out/hunt_base.csv -e ~/Downloads/enriched.csv -o reports/out/hunt_merged.csv
-    uv run python scripts/leads/validate_contact_hunt_alignment.py -c reports/out/active/leads_contact_hunt_current.csv \\
+    uv run python scripts/leads/advanced/validate_contact_hunt_alignment.py -c reports/out/active/leads_contact_hunt_current.csv \\
         -m reports/out/hunt_merged.csv
-    uv run python scripts/leads/import_contact_hunt_to_sqlite.py \\
+    uv run python scripts/leads/advanced/import_contact_hunt_to_sqlite.py \\
         --csv reports/out/hunt_merged.csv --promote-procurement \\
         --require-aligned-with reports/out/active/leads_contact_hunt_current.csv
 """

@@ -253,7 +253,7 @@ Con la hoja `leads_contact_hunt_current.csv` ya parcheada y **reimportada** a SQ
 - **Client pack:** regenera `reports/out/client_pack_latest/`.
 
 ---
-Generado por `scripts/leads/apply_ready8_contact_patch.py`.
+Generado por `scripts/leads/campaigns/apply_ready8_contact_patch.py`.
 """
     PLAN_MD.write_text(body, encoding="utf-8")
 
@@ -327,11 +327,11 @@ def main() -> int:
         )
 
     import_cmd = (
-        "uv run python scripts/leads/import_contact_hunt_to_sqlite.py \\\n"
+        "uv run python scripts/leads/advanced/import_contact_hunt_to_sqlite.py \\\n"
         "  --csv reports/out/active/leads_contact_hunt_current.csv \\\n"
         "  --promote-procurement"
     )
-    audit_cmd = "uv run python scripts/leads/audit_contact_readiness.py"
+    audit_cmd = "uv run python scripts/leads/advanced/audit_contact_readiness.py"
     pack_cmd = "uv run python scripts/reports/build_leads_client_pack.py"
 
     write_plan_md(ready_meta, needs12, audit_cmd, import_cmd, pack_cmd)

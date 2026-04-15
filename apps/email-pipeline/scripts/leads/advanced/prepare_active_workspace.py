@@ -68,7 +68,7 @@ FOCUS_COLS = [
 ]
 
 def _load_hunt_headers() -> list[str]:
-    path = _ROOT / "scripts" / "leads" / "export_contact_hunt_sheet.py"
+    path = _ROOT / "leads" / "advanced" / "export_contact_hunt_sheet.py"
     spec = importlib.util.spec_from_file_location("export_contact_hunt_sheet_mod", path)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -204,7 +204,7 @@ def main() -> int:
             return 2
         cmd = [
             sys.executable,
-            str(_ROOT / "scripts" / "leads" / "export_contact_hunt_sheet_existing_contacts_check.py"),
+            str(_ROOT / "leads" / "advanced" / "export_contact_hunt_sheet_existing_contacts_check.py"),
             "-i",
             str(inp),
             "-o",

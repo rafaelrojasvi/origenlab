@@ -238,10 +238,41 @@ uv run python scripts/reports/generate_client_report.py --out reports/out/client
 <a id="m-eprun-cold-export-gate"></a>
 ## Cold outreach export eligibility (shared gate, Phase 1)
 
-**Not** the publish-safe QA gate (§4). This is the **technical eligibility** layer for cold-outreach **candidates**: [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py), used by both:
+**Not** the publish-safe QA gate (§4). This is the **technical eligibility** layer for cold-outreach **candidates**: [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py).
+
+### Canonical operator entrypoints (use these first)
+
+From `apps/email-pipeline/`:
+
+```bash
+# Archive lane — full batch (audit, shortlist, precheck, send_ready / review_required)
+uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/active/archive_send_batch
+
+# Archive lane — audit CSV + summary only (no shortlist / precheck)
+uv run python scripts/leads/build_archive_send_batch.py --audit-only --out-dir reports/out/active/archive_audit
+
+# Lead lane — next recipients from lead_master (same gate as Streamlit Cola)
+uv run python scripts/leads/export_next_marketing_recipients.py -o reports/out/next_marketing.csv
+```
+
+**Shared outbound defaults:** canonical CLIs and preflight resolve the same Gmail user (CLI → `ORIGENLAB_GMAIL_WORKSPACE_USER` → `contacto@origenlab.cl`), the same default Sent folder pair (`[Gmail]/Enviados`, `[Gmail]/Sent Mail`), and the same `GateContext` builders via [`outbound_core.py`](../src/origenlab_email_pipeline/outbound_core.py). Archive builds write an `outbound_run` object (schema v1) into `archive_outreach_build_summary.json` and audit JSON summaries; the lead exporter can write `<stem>_outbound_summary.json` with `--write-outbound-summary`.
+
+**Preflight (read-only):** before building a batch, optionally run [`check_outbound_readiness.py`](../scripts/qa/check_outbound_readiness.py) — SQLite presence, core tables, Sent-folder coverage (**same resolution as** `outbound_core`), sidecar row counts, mart freshness, and optional commercial-layer checks (`--strict-commercial-required`). Use `--json-out` for a machine-readable summary; exit code `1` only when the verdict is `not_ready`.
+
+**Streamlit** is for **review**, **read/write** on `contact_email_suppression` / `outreach_contact_state`, and **visibility**; it should not replace the reproducible CSV/JSON from the commands above as the record of what was selected for a batch.
+
+**Demoted / advanced:**
+
+- [`export_archive_outreach_candidates.py`](../scripts/leads/advanced/export_archive_outreach_candidates.py) — legacy **audit-only** wrapper (prints a note to stderr); prefer `--audit-only` on the builder.
+- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export; not the default archive path (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)).
+
+**Archive batch — commercial precheck policy:** default is **advisory** (commercial “drop” → `review_required`). Use `--strict-commercial-drop` to omit those rows from both output CSVs. See `archive_outreach_build_summary.json` keys `commercial_precheck_policy` and `strict_commercial_drop`.
+
+The gate is invoked from:
 
 - [`compute_next_marketing_recipients()`](../src/origenlab_email_pipeline/next_marketing_queue.py) — Streamlit **Cola outreach marketing** (`apps/business_mart_app.py`).
-- [`export_marketing_from_contact_master.py`](../scripts/leads/export_marketing_from_contact_master.py) — optional export sample from **`contact_master`**.
+- [`build_archive_send_batch` / archive outreach audit](../src/origenlab_email_pipeline/archive_send_batch_builder.py) — archive lane.
+- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — optional export sample from **`contact_master`** (advanced).
 
 Shared rules include: valid external email, **not** internal domains, **`contact_email_suppression`**, recipients already seen in **Sent** for the configured Gmail user, **`outreach_contact_state`** in **`contacted`**, **`replied`**, or **`snoozed`**, supplier-domain blocklist, and noise heuristics. The same gate module applies to both paths; **`contact_master`** exports and audit rows for `contact_master` also enable **stricter marketing-noise rules** (e.g. machine-style `reply@…` locals) because the mail graph is noisier than **`lead_master`**. **`export_candidate_audit.py`** evaluates leads and contacts with the matching strictness so CSVs match each export path.
 
@@ -313,7 +344,7 @@ uv run pytest tests/test_business_mart_app_ux.py -q
 <a id="m-eprun-publish-qa"></a>
 ## 4. Publish-safe QA (operational trust gate)
 
-Scripts live under [`scripts/qa/`](../scripts/qa/). Shared checks and helpers: [`operational_trust.py`](../src/origenlab_email_pipeline/operational_trust.py). A **PASS** means every **critical** check in the executed steps succeeded (exit code `0`). A **FAIL** means at least one critical check failed (exit code `1`). Some checks are **non-critical** (they print `FAIL` but do not alone fail the step); the scripts only use **critical** outcomes for exit codes.
+Scripts live under [`scripts/qa/`](../scripts/qa/). Shared checks and helpers: [`operational_trust`](../src/origenlab_email_pipeline/operational_trust/__init__.py) package facade. A **PASS** means every **critical** check in the executed steps succeeded (exit code `0`). A **FAIL** means at least one critical check failed (exit code `1`). Some checks are **non-critical** (they print `FAIL` but do not alone fail the step); the scripts only use **critical** outcomes for exit codes.
 
 **What the gate does *not* do:** It does not prove commercial claims, email deliverability, or that every business fact in a narrative is true. It validates **internal consistency** between the SQLite DB, the latest client pack snapshot, the operational hunt/readiness CSVs, URL shape, and (unless skipped) live HTTP responses for collected links.
 
@@ -369,8 +400,8 @@ uv run python scripts/qa/check_evidence_links.py
 
 - **Pack vs DB mismatch** — Regenerate the pack after DB changes: `uv run python scripts/reports/build_leads_client_pack.py`.
 - **Stale client pack** — Regenerate the pack or raise `--max-pack-age-hours` only if you intentionally accept an older snapshot.
-- **Hunt merged vs current `id_lead` mismatch** — Re-align merged to the current cohort (see [`merge_contact_hunt_enrichment.py`](../scripts/leads/merge_contact_hunt_enrichment.py) docstring and [`RUNBOOK.md`](RUNBOOK.md#m-eprun-publish-qa) / [`scripts/README.md`](../scripts/README.md)).
-- **Readiness / top20 / cohort** — Re-run [`audit_contact_readiness.py`](../scripts/leads/audit_contact_readiness.py) and related lead scripts so `active/` exports match the hunt.
+- **Hunt merged vs current `id_lead` mismatch** — Re-align merged to the current cohort (see [`merge_contact_hunt_enrichment.py`](../scripts/leads/advanced/merge_contact_hunt_enrichment.py) docstring and [`RUNBOOK.md`](RUNBOOK.md#m-eprun-publish-qa) / [`scripts/README.md`](../scripts/README.md)).
+- **Readiness / top20 / cohort** — Re-run [`audit_contact_readiness.py`](../scripts/leads/advanced/audit_contact_readiness.py) and related lead scripts so `active/` exports match the hunt.
 - **Evidence URLs** — Fix or remove bad URLs in the CSVs; adjust thresholds only with care (they are safety limits, not business rules).
 - **Provenance / taxonomy warnings** — Some checks are **non-critical**; read the line marked `FAIL` without `[critical]` as advisory.
 

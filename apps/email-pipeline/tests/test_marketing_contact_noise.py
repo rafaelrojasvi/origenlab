@@ -20,6 +20,9 @@ def test_noise_domains_and_locals() -> None:
     assert marketing_outreach_noise_email("info@twitter.com")
     assert marketing_outreach_noise_email("invitations@linkedin.com")
     assert marketing_outreach_noise_email("support@dhl.com")
+    assert marketing_outreach_noise_email("mensajeria@santander.cl")
+    assert marketing_outreach_noise_email("alertas@itau.cl")
+    assert marketing_outreach_noise_email("noreply@bancoitau.cl")
 
 
 def test_not_noise_typical_lab_contact() -> None:
@@ -70,6 +73,8 @@ def test_noise_org_guess() -> None:
 def test_noise_org_guess_vendor_media() -> None:
     assert marketing_outreach_noise_organization_guess("LabX Media")
     assert marketing_outreach_noise_organization_guess("Biocompare Inc")
+    assert marketing_outreach_noise_organization_guess("Banco Santander")
+    assert marketing_outreach_noise_organization_guess("Itau")
 
 
 def test_second_pass_audit_ecosystem_marketplace_and_research_media() -> None:

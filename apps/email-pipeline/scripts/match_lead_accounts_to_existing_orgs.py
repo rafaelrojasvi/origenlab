@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper — implementation: ``scripts/leads/match_lead_accounts_to_existing_orgs.py``."""
+"""Compatibility wrapper — implementation: ``scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py``."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ import runpy
 import sys
 from pathlib import Path
 
-_IMPLEMENTATION = Path(__file__).resolve().parent / "leads" / "match_lead_accounts_to_existing_orgs.py"
+_IMPLEMENTATION = (
+    Path(__file__).resolve().parent / "leads" / "advanced" / "match_lead_accounts_to_existing_orgs.py"
+)
 
 if __name__ == "__main__":
     sys.argv[0] = str(_IMPLEMENTATION)

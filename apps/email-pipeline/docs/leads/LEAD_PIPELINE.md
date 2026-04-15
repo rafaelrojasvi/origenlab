@@ -142,7 +142,7 @@ uv run python scripts/leads/export_leads_csv.py --out reports/out/leads_export.c
 uv run python scripts/leads/export_leads_shortlist.py --out reports/out/leads_shortlist.csv --limit 200
 
 # QA / inspection
-uv run python scripts/leads/inspect_leads_quality.py --top 20
+uv run python scripts/leads/advanced/inspect_leads_quality.py --top 20
 
 # Source-key audit (read-only): blanks, per-source stats, duplicate groups, samples, ChileCompra ID hints
 uv run python scripts/leads/audit_lead_master_duplicates.py
@@ -153,20 +153,20 @@ uv run python scripts/leads/reconcile_lead_upstream.py
 # uv run python scripts/leads/reconcile_lead_upstream.py --apply
 
 # Client-friendly review CSV (includes archive comparison + existing contacts when available)
-uv run python scripts/leads/export_client_review_csv.py --out reports/out/leads_client_review.csv --limit 250
+uv run python scripts/leads/advanced/export_client_review_csv.py --out reports/out/leads_client_review.csv --limit 250
 
 # Contact-hunt sheet (v1.2) for manual/semi-assisted enrichment
-uv run python scripts/leads/export_contact_hunt_sheet.py --out reports/out/leads_contact_hunt_es.csv --limit 200
+uv run python scripts/leads/advanced/export_contact_hunt_sheet.py --out reports/out/leads_contact_hunt_es.csv --limit 200
 
 # --- Contact hunt → SQLite (recommended once you have real id_lead + enriched CSV) ---
 # 1) Export from YOUR database so id_lead matches lead_master.id (not a sample CSV).
 # 2) Merge Deep Research output into that base (same column names as the export).
 # 3) Import: stores full row JSON in lead_outreach_enrichment; optional copy of compras → lead_master.
-uv run python scripts/leads/merge_contact_hunt_enrichment.py \
+uv run python scripts/leads/advanced/merge_contact_hunt_enrichment.py \
   -b reports/out/leads_contact_hunt_es.csv \
   -e path/to/deep_research_enriched.csv \
   -o reports/out/leads_contact_hunt_merged.csv
-uv run python scripts/leads/import_contact_hunt_to_sqlite.py \
+uv run python scripts/leads/advanced/import_contact_hunt_to_sqlite.py \
   --csv reports/out/leads_contact_hunt_merged.csv \
   --promote-procurement
 
@@ -180,7 +180,7 @@ uv run python scripts/leads/run_weekly_focus.py
 # - reports/out/active/leads_weekly_focus_summary_es.md
 
 # Optional: tidy reports/out/active (archive EN duplicates + *_con_db / *_netnew_*), regenerate deepsearch slice, build unified CSV
-uv run python scripts/leads/prepare_active_workspace.py --deepsearch --unified
+uv run python scripts/leads/advanced/prepare_active_workspace.py --deepsearch --unified
 
 # Full pipeline (set LEADS_*_FILE to your CSV/JSON paths, or use samples)
 export LEADS_CHILECOMPRA_FILE=scripts/leads/samples/chilecompra_sample.csv
@@ -193,7 +193,7 @@ Override DB: `--db /path/to/emails.sqlite` on any script.
 
 ## Cold outreach queue (shared export gate)
 
-Streamlit **Cola outreach marketing** ranks candidates from **`lead_master`** using [`compute_next_marketing_recipients()`](../../src/origenlab_email_pipeline/next_marketing_queue.py). That path shares **[`candidate_export_gate.py`](../../src/origenlab_email_pipeline/candidate_export_gate.py)** with [`export_marketing_from_contact_master.py`](../../scripts/leads/export_marketing_from_contact_master.py) (optional **`contact_master`** pool)—same suppression, Sent-folder, **`outreach_contact_state`** (**`contacted`** / **`replied`** / **`snoozed`**), supplier, and shared noise rules, with **stricter email-noise** on the **`contact_master`** export path. Eligibility is **not** buyer validation; keep outbound **human-reviewed** and **small-batch**. Audit helper and commands: [`RUNBOOK.md` § Cold outreach](../RUNBOOK.md#m-eprun-cold-export-gate).
+Streamlit **Cola outreach marketing** ranks candidates from **`lead_master`** using [`compute_next_marketing_recipients()`](../../src/origenlab_email_pipeline/next_marketing_queue.py). That path shares **[`candidate_export_gate.py`](../../src/origenlab_email_pipeline/candidate_export_gate.py)** with [`export_marketing_from_contact_master.py`](../../scripts/leads/advanced/export_marketing_from_contact_master.py) (optional **`contact_master`** pool)—same suppression, Sent-folder, **`outreach_contact_state`** (**`contacted`** / **`replied`** / **`snoozed`**), supplier, and shared noise rules, with **stricter email-noise** on the **`contact_master`** export path. Eligibility is **not** buyer validation; keep outbound **human-reviewed** and **small-batch**. Audit helper and commands: [`RUNBOOK.md` § Cold outreach](../RUNBOOK.md#m-eprun-cold-export-gate).
 
 Canonical outbound lane/source-of-truth policy (including archive-first lane and `contacto@origenlab.cl` sender-blocker context): [`../OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md).
 
@@ -257,8 +257,8 @@ Mantener solo estos archivos como “activos” de trabajo diario (el script `pr
 - `leads_contact_hunt_current_merged.csv` — salida de `merge_contact_hunt_enrichment.py`. Antes de importar, validar alineación con la base actual:
 
   ```bash
-  uv run python scripts/leads/validate_contact_hunt_alignment.py
-  uv run python scripts/leads/import_contact_hunt_to_sqlite.py --csv .../merged.csv \
+  uv run python scripts/leads/advanced/validate_contact_hunt_alignment.py
+  uv run python scripts/leads/advanced/import_contact_hunt_to_sqlite.py --csv .../merged.csv \
     --require-aligned-with reports/out/active/leads_contact_hunt_current.csv
   ```
 
