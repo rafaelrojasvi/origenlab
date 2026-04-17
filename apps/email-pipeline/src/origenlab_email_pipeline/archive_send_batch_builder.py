@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from origenlab_email_pipeline.archive_outreach_queue import (
+    ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
     ARCHIVE_OUTREACH_COLUMN_NAMES,
     ArchiveOutreachAuditResult,
     audit_archive_outreach_candidates,
@@ -56,16 +57,41 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
+def _domain_key_for_shortlist_row(row: dict[str, Any]) -> str:
+    dom = str(row.get("domain") or "").strip().lower()
+    if dom:
+        return dom
+    em = str(row.get("contact_email") or "").strip().lower()
+    if "@" in em:
+        return em.rsplit("@", 1)[-1].strip().lower()
+    return ""
+
+
 def _build_archive_shortlist(
     *,
     audit_rows: list[dict[str, Any]],
     shortlist_limit: int,
     allow_weak_warmth: bool,
+    shortlist_one_per_domain: bool = False,
 ) -> list[dict[str, Any]]:
     eligible = [r for r in audit_rows if bool(r.get("eligible"))]
     if not allow_weak_warmth:
         eligible = [r for r in eligible if str(r.get("warmth_band") or "") != "weak"]
-    return eligible[: max(1, int(shortlist_limit))]
+    cap = max(1, int(shortlist_limit))
+    if not shortlist_one_per_domain:
+        return eligible[:cap]
+    seen_domains: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for r in eligible:
+        dk = _domain_key_for_shortlist_row(r)
+        if dk and dk in seen_domains:
+            continue
+        if dk:
+            seen_domains.add(dk)
+        out.append(r)
+        if len(out) >= cap:
+            break
+    return out
 
 
 def _run_gate_audit_rows(
@@ -183,6 +209,7 @@ def run_archive_outreach_audit(
     fetch_cap: int,
     audit_limit: int,
     strict_contact_graph_noise: bool = True,
+    archive_candidate_sort: str = ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
 ) -> ArchiveOutreachAuditResult:
     """Shared archive audit used by full batch build, ``--audit-only``, and thin export wrappers."""
     return audit_archive_outreach_candidates(
@@ -193,6 +220,7 @@ def run_archive_outreach_audit(
         fetch_cap=int(fetch_cap),
         limit=int(audit_limit),
         strict_contact_graph_noise=bool(strict_contact_graph_noise),
+        archive_candidate_sort=archive_candidate_sort,
     )
 
 
@@ -250,7 +278,11 @@ def build_archive_send_batch(
     audit_only: bool = False,
     strict_commercial_drop: bool = False,
     extra_exclude_domains: tuple[str, ...] = (),
+    manual_suppress_emails: tuple[str, ...] = (),
+    manual_suppress_domains: tuple[str, ...] = (),
     sent_folder_defaults_used: bool = False,
+    archive_candidate_sort: str = ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
+    shortlist_one_per_domain: bool = False,
 ) -> BuildResult:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -264,6 +296,7 @@ def build_archive_send_batch(
         fetch_cap=int(fetch_cap),
         audit_limit=int(audit_limit),
         strict_contact_graph_noise=bool(strict_contact_graph_noise),
+        archive_candidate_sort=archive_candidate_sort,
     )
     audit_rows = [r.to_dict() for r in audit.rows]
     audit_outbound_run = build_outbound_run_envelope(
@@ -300,6 +333,7 @@ def build_archive_send_batch(
             "archive_audited_rows": len(audit_rows),
             "archive_eligible_rows": audit.eligible_count,
             "archive_blocked_rows": audit.blocked_count,
+            "archive_candidate_sort": archive_candidate_sort,
             "gmail_user": gmail_user,
             "db_path": str(db_path),
             "out_dir": str(out_dir),
@@ -323,6 +357,7 @@ def build_archive_send_batch(
         audit_rows=audit_rows,
         shortlist_limit=int(shortlist_limit),
         allow_weak_warmth=bool(allow_weak_warmth),
+        shortlist_one_per_domain=bool(shortlist_one_per_domain),
     )
     if not shortlist_rows:
         raise ValueError("Shortlist produced 0 rows; check gate/quality constraints.")
@@ -399,13 +434,41 @@ def build_archive_send_batch(
     commercially_suppressed_rows = 0
     commercial_review_rows = 0
     final_drop_rows = 0
+    manual_suppressed_rows = 0
     policy_personal_domain_review_rows = 0
     weak_warmth_review_rows = 0
     advisory_commercial_drop_rows = 0
 
+    def _truthy_lab_flag(row: dict[str, Any]) -> bool:
+        v = row.get("last_contacted_by_labdelivery")
+        if isinstance(v, bool):
+            return v
+        return str(v or "").strip().lower() in {"1", "true", "yes", "y"}
+
+    suppress_emails = {str(e or "").strip().lower() for e in manual_suppress_emails if str(e or "").strip()}
+    suppress_domains = {str(d or "").strip().lower() for d in manual_suppress_domains if str(d or "").strip()}
+
+    def _is_manually_suppressed(*, email: str, shortlist_row: dict[str, Any]) -> bool:
+        em = str(email or "").strip().lower()
+        if not em:
+            return False
+        if em in suppress_emails:
+            return True
+        dom = str(shortlist_row.get("domain") or "").strip().lower()
+        if not dom and "@" in em:
+            dom = em.split("@", 1)[1].strip().lower()
+        if not dom:
+            return False
+        if dom in suppress_domains:
+            return True
+        return any(dom.endswith("." + d) for d in suppress_domains)
+
     for pre in precheck_rows:
         email = str(pre.get("contact_email") or "").strip().lower()
         shortlist_row = shortlist_by_email.get(email, {})
+        if _is_manually_suppressed(email=email, shortlist_row=shortlist_row):
+            manual_suppressed_rows += 1
+            continue
         final, final_decision_path = _final_classification(
             pre,
             shortlist_row,
@@ -451,15 +514,23 @@ def build_archive_send_batch(
     )
 
     gate_blocked_rows = sum(1 for r in gate_rows if r["gate_eligible"] != "yes")
+    shortlist_labdelivery_touch_rows = sum(1 for r in shortlist_rows if _truthy_lab_flag(r))
+    send_ready_labdelivery_touch_rows = sum(1 for r in send_ready_rows if _truthy_lab_flag(r))
+    review_required_labdelivery_touch_rows = sum(1 for r in review_required_rows if _truthy_lab_flag(r))
     summary = {
         "archive_audited_rows": len(audit_rows),
         "archive_eligible_rows": audit.eligible_count,
         "archive_blocked_rows": audit.blocked_count,
+        "archive_candidate_sort": archive_candidate_sort,
         "shortlist_rows": len(shortlist_rows),
+        "shortlist_labdelivery_touch_rows": shortlist_labdelivery_touch_rows,
+        "send_ready_labdelivery_touch_rows": send_ready_labdelivery_touch_rows,
+        "review_required_labdelivery_touch_rows": review_required_labdelivery_touch_rows,
         "gate_ok_rows": len(gate_rows) - gate_blocked_rows,
         "gate_blocked_rows": gate_blocked_rows,
         "commercially_suppressed_rows": commercially_suppressed_rows,
         "commercial_review_rows": commercial_review_rows,
+        "manual_suppressed_rows": manual_suppressed_rows,
         "policy_personal_domain_review_rows": policy_personal_domain_review_rows,
         "weak_warmth_review_rows": weak_warmth_review_rows,
         "advisory_commercial_drop_rows": advisory_commercial_drop_rows,
@@ -475,6 +546,9 @@ def build_archive_send_batch(
         ),
         "strict_commercial_drop": bool(strict_commercial_drop),
         "commercial_precheck_policy": "strict_drop" if strict_commercial_drop else "advisory",
+        "manual_suppress_emails": sorted(suppress_emails),
+        "manual_suppress_domains": sorted(suppress_domains),
+        "shortlist_one_per_domain": bool(shortlist_one_per_domain),
         "outbound_run": build_outbound_run_envelope(
             lane="archive",
             gmail_user=gmail_user,
@@ -502,6 +576,7 @@ def build_archive_send_batch(
                 "send_ready_rows": len(send_ready_rows),
                 "review_required_rows": len(review_required_rows),
                 "final_drop_rows": final_drop_rows,
+                "shortlist_labdelivery_touch_rows": shortlist_labdelivery_touch_rows,
             },
         ),
     }

@@ -15,6 +15,7 @@ import sqlite3
 
 from origenlab_email_pipeline.business_mart import emails_in
 from origenlab_email_pipeline.candidate_export_gate import GateContext
+from origenlab_email_pipeline.contact_domain_suppression import load_suppressed_contact_domain_norms
 
 DEFAULT_SENT_FOLDERS: tuple[str, ...] = ("[Gmail]/Enviados", "[Gmail]/Sent Mail")
 DEFAULT_EXCLUDE_DOMAINS: tuple[str, ...] = ("origenlab.cl", "labdelivery.cl")
@@ -78,6 +79,11 @@ def load_suppressed_norms(conn: sqlite3.Connection) -> set[str]:
     return {str(r[0]) for r in rows if r[0]}
 
 
+def load_suppressed_contact_domains(conn: sqlite3.Connection) -> frozenset[str]:
+    """Registrable domains blocked for cold export (``contact_domain_suppression`` table)."""
+    return load_suppressed_contact_domain_norms(conn)
+
+
 def load_outreach_state_map(conn: sqlite3.Connection) -> dict[str, str]:
     """email_norm -> state for rows that block cold export (contacted, replied, snoozed)."""
     if not _table_exists(conn, "outreach_contact_state"):
@@ -132,6 +138,7 @@ def build_marketing_export_gate_context(
         outreach_state_by_email=load_outreach_state_map(conn),
         supplier_domains=supplier_dom,
         blocked_domains=blocked,
+        suppressed_contact_domains=load_suppressed_contact_domains(conn),
         skip_noise_filter=skip_noise_filter,
         skip_supplier_domain_filter=skip_supplier_domain_filter,
         strict_contact_graph_noise=strict_contact_graph_noise,

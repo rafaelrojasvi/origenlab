@@ -28,6 +28,7 @@ from origenlab_email_pipeline.marketing_export_context import (
     build_marketing_export_gate_context,
     load_outreach_state_map,
     load_sent_recipient_norms,
+    load_suppressed_contact_domains,
     load_suppressed_norms,
     norm_lead_email,
 )

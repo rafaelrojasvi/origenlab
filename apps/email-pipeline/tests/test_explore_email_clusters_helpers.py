@@ -20,7 +20,7 @@ def test_voice_sender_domain_sql_or_builds_like_clauses() -> None:
     assert "LOWER(COALESCE(sender,''))" in sql
     assert "%@labdelivery.cl" in params
     assert "%.labdelivery.cl" in params
-    assert sql.count("LIKE ?") == 2
+    assert sql.count("LIKE ?") == 3
 
 
 def test_voice_sender_domain_sql_or_empty_domains() -> None:

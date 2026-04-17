@@ -7,12 +7,18 @@ import sqlite3
 import pytest
 
 from origenlab_email_pipeline.candidate_export_gate import GateContext
+from origenlab_email_pipeline.contact_domain_suppression import (
+    ensure_contact_domain_suppression_table,
+    upsert_contact_domain_suppression,
+    validate_contact_domain_suppression_payload,
+)
 from origenlab_email_pipeline.marketing_export_context import (
     DEFAULT_EXCLUDE_DOMAINS,
     DEFAULT_SENT_FOLDERS,
     build_marketing_export_gate_context,
     load_outreach_state_map,
     load_sent_recipient_norms,
+    load_suppressed_contact_domains,
     load_suppressed_norms,
     norm_lead_email,
 )
@@ -101,6 +107,22 @@ def test_load_outreach_state_map_only_blocking_states() -> None:
     conn.close()
 
 
+def test_load_suppressed_contact_domains() -> None:
+    conn = sqlite3.connect(":memory:")
+    ensure_contact_domain_suppression_table(conn)
+    upsert_contact_domain_suppression(
+        conn,
+        payload=validate_contact_domain_suppression_payload(
+            domain="blocked.example",
+            suppression_reason_text="t",
+            updated_by="t",
+        ),
+    )
+    conn.commit()
+    assert load_suppressed_contact_domains(conn) == frozenset({"blocked.example"})
+    conn.close()
+
+
 def test_build_marketing_export_gate_context_shape_and_blocked_domains() -> None:
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE emails (recipients TEXT, source_file TEXT, folder TEXT)")
@@ -121,6 +143,7 @@ def test_build_marketing_export_gate_context_shape_and_blocked_domains() -> None
     assert isinstance(ctx, GateContext)
     assert ctx.sent_recipient_norms == frozenset({"r@sent-in.cl"})
     assert ctx.suppressed_norms == frozenset()
+    assert ctx.suppressed_contact_domains == frozenset()
     assert ctx.outreach_state_by_email == {}
     assert ctx.supplier_domains == frozenset()
     assert ctx.skip_noise_filter is True
@@ -138,6 +161,7 @@ def test_next_marketing_queue_reexports_same_gate_helpers() -> None:
     import origenlab_email_pipeline.marketing_export_context as mec
 
     assert next_marketing_queue.build_marketing_export_gate_context is mec.build_marketing_export_gate_context
+    assert next_marketing_queue.load_suppressed_contact_domains is mec.load_suppressed_contact_domains
     assert next_marketing_queue.load_sent_recipient_norms is mec.load_sent_recipient_norms
     assert next_marketing_queue.load_suppressed_norms is mec.load_suppressed_norms
     assert next_marketing_queue.load_outreach_state_map is mec.load_outreach_state_map

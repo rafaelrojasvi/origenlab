@@ -1,7 +1,8 @@
 """Shared pre-export eligibility for cold outreach (lead path + contact_master path).
 
 Single policy implementation: Streamlit and CLIs must not duplicate these rules.
-Phase 1: no new tables; reuses suppression, Sent parse, outreach state, supplier_master, noise heuristics.
+Reuses email suppression, optional domain suppression (``contact_domain_suppression``),
+Sent parse, outreach state, supplier_master, and noise heuristics.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from origenlab_email_pipeline.marketing_supplier_domains import is_supplier_emai
 REASON_INVALID_EMAIL = "invalid_email"
 REASON_INTERNAL_DOMAIN = "internal_domain"
 REASON_SUPPRESSION = "suppression"
+REASON_DOMAIN_SUPPRESSION = "domain_suppression"
 REASON_SENT_HISTORY = "sent_history"
 REASON_OUTREACH_CONTACTED = "outreach_contacted"
 REASON_OUTREACH_REPLIED = "outreach_replied"
@@ -43,6 +45,8 @@ class GateContext:
     outreach_state_by_email: dict[str, str]
     supplier_domains: frozenset[str]
     blocked_domains: frozenset[str]
+    #: Registrable domains (and subdomains) blocked via ``contact_domain_suppression``.
+    suppressed_contact_domains: frozenset[str] = frozenset()
     skip_noise_filter: bool = False
     skip_supplier_domain_filter: bool = False
     #: Tighter ``marketing_contact_noise`` rules for ``contact_master`` mail-graph exports.
@@ -55,6 +59,16 @@ class ExportGateResult:
     """If not eligible, a single-element tuple with the first triggered rule (evaluation order fixed)."""
 
     reasons: tuple[str, ...]
+
+
+def email_domain_under_operator_domain_suppression(email_domain: str, suppressed: frozenset[str]) -> bool:
+    """True when ``email_domain`` matches or is a subdomain of a suppressed registrable domain."""
+    d = (email_domain or "").strip().lower()
+    if not d or not suppressed:
+        return False
+    if d in suppressed:
+        return True
+    return any(d.endswith("." + s) for s in suppressed if s)
 
 
 def normalize_export_email(contact_email: str) -> str | None:
@@ -87,6 +101,9 @@ def evaluate_export_eligibility(
 
     if em in ctx.suppressed_norms:
         return ExportGateResult(eligible=False, reasons=(REASON_SUPPRESSION,))
+
+    if email_domain_under_operator_domain_suppression(dom, ctx.suppressed_contact_domains):
+        return ExportGateResult(eligible=False, reasons=(REASON_DOMAIN_SUPPRESSION,))
 
     if em in ctx.sent_recipient_norms:
         return ExportGateResult(eligible=False, reasons=(REASON_SENT_HISTORY,))

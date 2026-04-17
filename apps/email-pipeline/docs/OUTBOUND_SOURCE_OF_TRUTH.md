@@ -12,7 +12,7 @@ From `apps/email-pipeline/`:
 
 | Lane | Primary command | Purpose |
 |------|-----------------|--------|
-| **Archive (warm revival)** | `uv run python scripts/leads/build_archive_send_batch.py` | Full batch: audit → shortlist → gate snapshot → commercial precheck → `archive_outreach_send_ready.csv` / `archive_outreach_review_required.csv`. |
+| **Archive (warm revival)** | `uv run python scripts/leads/build_archive_send_batch.py` | Full batch: audit → shortlist → gate snapshot → commercial precheck → `archive_outreach_send_ready.csv` / `archive_outreach_review_required.csv`. Default ``company_intro`` ordering favors non–free-personal domains, org procurement signals, and (when ``emails`` has ``sender``/``recipients``) historical **LabDelivery / voice-domain** touches (`last_contacted_by_labdelivery`, `labdelivery_last_contact_at`); tune pool size with ``--shortlist-limit`` / ``--audit-limit``. |
 | **Archive audit only** | Same script with `--audit-only` | Writes `archive_outreach_audit.csv` + `archive_outreach_audit_summary.json` only (no shortlist/precheck). Prefer this over legacy standalone audit scripts. |
 | **Lead (curated prospects)** | `uv run python scripts/leads/export_next_marketing_recipients.py` | Next N from `lead_master` using the **same** shared export gate as Streamlit’s queue. |
 
@@ -28,6 +28,10 @@ From `apps/email-pipeline/`:
 ### Shared runtime defaults (`outbound_core`)
 
 [`outbound_core.py`](../src/origenlab_email_pipeline/outbound_core.py) centralizes **how** operators resolve mailbox identity, default Sent folders, and **which** `GateContext` constructor applies per lane (`gate_context_for_archive_batch` uses stricter contact-graph noise; `gate_context_for_lead_master_export` matches `lead_master` / Cola). Policy remains in [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py) and [`marketing_export_context.py`](../src/origenlab_email_pipeline/marketing_export_context.py). Summary JSON from archive runs includes a nested **`outbound_run`** block (schema version, lane, paths, counts) for drift-resistant auditing; the lead CLI can emit a sibling summary with `--write-outbound-summary`.
+
+**Blocker-memory regression tests:** integration tests exercise the canonical **lead** queue (`tests/test_next_marketing_queue_outbound_integration.py`) and **archive** batch builder (`tests/test_archive_lane_outbound_integration.py`) against real SQLite fixtures — Sent-history norms (default Sent folders only), `outreach_contact_state`, and suppression — without changing gate policy.
+
+**Operator trust:** short runnable checklist (preflight, which CSV/JSON to trust, after-send memory) — [`pipeline/OUTBOUND_OPERATOR_CHECKLIST.md`](pipeline/OUTBOUND_OPERATOR_CHECKLIST.md). To pretty-print **`outbound_run`** from a saved summary: [`print_outbound_run_summary.py`](../scripts/qa/print_outbound_run_summary.py).
 
 ## Executive model
 
@@ -122,7 +126,9 @@ Operator rule of thumb:
 - Use archive-first candidates for warm revival and history-aware opportunities.
 - Use `lead_master` queue for curated net-new prospecting.
 - Never bypass shared gate + human review before sending.
-- For **auditability**, prefer saving the CSV/JSON from the **canonical CLIs** in this doc over treating a Streamlit screen as the only record of who was selected.
+- **Canonical CLIs** (`build_archive_send_batch.py`, `export_next_marketing_recipients.py`) produce the **record of what was run** for a batch; **Streamlit** is for ongoing **review and read/write sidecars**, not a substitute for those artifacts.
+- When mailbox or DB freshness is uncertain, run **`check_outbound_readiness.py`** before generating a batch.
+- **After sending**, refresh **Sent** ingest for `contacto@origenlab.cl` and update **`outreach_contact_state`** / **suppression** so the next export does not re-surface the same contacts.
 
 ## Commercial precheck vs shared export gate (archive batch)
 
@@ -142,4 +148,8 @@ Archive outreach is now a **parallel, operator-usable path** built from archive-
 - It should be treated as **production-usable with operator review**.
 - It is not a replacement for curated lead operations.
 - Keep it as a complementary lane with explicit human decision checkpoints.
+
+## See also
+
+- Operator checklist (artifacts, review order, after-send memory): [`pipeline/OUTBOUND_OPERATOR_CHECKLIST.md`](pipeline/OUTBOUND_OPERATOR_CHECKLIST.md)
 

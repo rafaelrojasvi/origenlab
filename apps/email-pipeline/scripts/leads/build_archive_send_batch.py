@@ -13,6 +13,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from origenlab_email_pipeline.archive_outreach_queue import ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO
 from origenlab_email_pipeline.archive_send_batch_builder import (
     BUILD_SUMMARY_JSON_NAME,
     build_archive_send_batch,
@@ -44,7 +45,12 @@ def main() -> int:
     ap.add_argument("--db", type=Path, default=None, help="SQLite path (default: from config)")
     ap.add_argument("--fetch-cap", type=int, default=20000, help="Archive source scan cap.")
     ap.add_argument("--audit-limit", type=int, default=500, help="Max audited archive rows.")
-    ap.add_argument("--shortlist-limit", type=int, default=25, help="Max archive shortlist rows.")
+    ap.add_argument(
+        "--shortlist-limit",
+        type=int,
+        default=25,
+        help="Max archive shortlist rows (e.g. 100 or 200 for a larger company-intro pool).",
+    )
     ap.add_argument(
         "--refresh-sent",
         action="store_true",
@@ -111,6 +117,39 @@ def main() -> int:
         default=[],
         help="Extra blocked domains for gate context (repeatable).",
     )
+    ap.add_argument(
+        "--suppress-email",
+        action="append",
+        default=[],
+        help="Hard exclude contact email from send_ready/review CSVs (repeatable).",
+    )
+    ap.add_argument(
+        "--suppress-domain",
+        action="append",
+        default=[],
+        help="Hard exclude domain (and subdomains) from send_ready/review CSVs (repeatable).",
+    )
+    ap.add_argument(
+        "--archive-candidate-sort",
+        choices=("company_intro", "company_intro_fresh_last_seen", "legacy"),
+        default=ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
+        help=(
+            "How archive candidates are ordered before gate audit: "
+            "'company_intro' (default) prefers org/business domains, procurement context, "
+            "and non-suppressed commercial contact rows over free-personal Gmail; "
+            "'company_intro_fresh_last_seen' is the same buckets with newest "
+            "contact_last_seen_at first within ties; "
+            "'legacy' uses warmth-only ordering."
+        ),
+    )
+    ap.add_argument(
+        "--shortlist-one-per-domain",
+        action="store_true",
+        help=(
+            "After sorting, keep at most one eligible contact per email domain in the shortlist "
+            "(spread sends across organizations; still capped by --shortlist-limit)."
+        ),
+    )
     args = ap.parse_args()
 
     settings = load_settings()
@@ -119,6 +158,8 @@ def main() -> int:
     sent_folder_defaults_used = sent_folder_defaults_were_used(args.sent_folder)
     sent_folders = resolve_outbound_sent_folders(args.sent_folder)
     extra_exclude_domains = tuple(args.exclude_domain) if args.exclude_domain else ()
+    manual_suppress_emails = tuple(args.suppress_email) if args.suppress_email else ()
+    manual_suppress_domains = tuple(args.suppress_domain) if args.suppress_domain else ()
 
     if args.refresh_sent:
         refresh_sent_mailbox(
@@ -148,7 +189,11 @@ def main() -> int:
             audit_only=bool(args.audit_only),
             strict_commercial_drop=bool(args.strict_commercial_drop),
             extra_exclude_domains=extra_exclude_domains,
+            manual_suppress_emails=manual_suppress_emails,
+            manual_suppress_domains=manual_suppress_domains,
             sent_folder_defaults_used=sent_folder_defaults_used,
+            archive_candidate_sort=str(args.archive_candidate_sort),
+            shortlist_one_per_domain=bool(args.shortlist_one_per_domain),
         )
     finally:
         conn.close()

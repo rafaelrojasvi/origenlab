@@ -54,10 +54,15 @@ def voice_sender_domain_sql_or(domains: frozenset[str]) -> tuple[str, list[str]]
         if not d0 or " " in d0 or "@" in d0:
             continue
         parts.append(
-            "(LOWER(COALESCE(sender,'')) LIKE ? OR LOWER(COALESCE(sender,'')) LIKE ?)"
+            "("
+            "LOWER(COALESCE(sender,'')) LIKE ? "
+            "OR LOWER(COALESCE(sender,'')) LIKE ? "
+            "OR LOWER(COALESCE(sender,'')) LIKE ?"
+            ")"
         )
         params.append(f"%@{d0}")
         params.append(f"%.{d0}")
+        params.append(f"%@{d0}>")
     if not parts:
         return "1=0", []
     return "(" + " OR ".join(parts) + ")", params

@@ -21,6 +21,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from origenlab_email_pipeline.archive_outreach_queue import ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO
 from origenlab_email_pipeline.archive_send_batch_builder import (
     run_archive_outreach_audit,
     write_archive_audit_csv_and_summary,
@@ -49,6 +50,12 @@ def main() -> int:
     ap.add_argument("--exclude-domain", action="append", default=[], help="Repeatable blocked domain")
     ap.add_argument("--fetch-cap", type=int, default=20000, help="Rows scanned from contact_master")
     ap.add_argument("--limit", type=int, default=500, help="Max audited rows after dedupe/sort")
+    ap.add_argument(
+        "--archive-candidate-sort",
+        choices=("company_intro", "company_intro_fresh_last_seen", "legacy"),
+        default=ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
+        help="Candidate ordering before gate audit (default: company_intro).",
+    )
     ap.add_argument(
         "--json-summary",
         type=Path,
@@ -82,6 +89,7 @@ def main() -> int:
             fetch_cap=int(args.fetch_cap),
             audit_limit=int(args.limit),
             strict_contact_graph_noise=True,
+            archive_candidate_sort=str(args.archive_candidate_sort),
         )
     finally:
         conn.close()

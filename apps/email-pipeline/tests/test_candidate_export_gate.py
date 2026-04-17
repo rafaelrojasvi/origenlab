@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from origenlab_email_pipeline.candidate_export_gate import (
+    REASON_DOMAIN_SUPPRESSION,
     REASON_INTERNAL_DOMAIN,
     REASON_INVALID_EMAIL,
     REASON_NOISE_EMAIL,
@@ -32,6 +33,18 @@ def _ctx(**kwargs) -> GateContext:
     )
     base.update(kwargs)
     return GateContext(**base)
+
+
+def test_operator_domain_suppression_blocks_registrable_domain_and_subdomain() -> None:
+    ctx = _ctx(suppressed_contact_domains=frozenset({"genesys.cl"}))
+    r1 = evaluate_export_eligibility(
+        contact_email="anyone@genesys.cl", institution_name="Genesys", ctx=ctx
+    )
+    assert r1 == ExportGateResult(eligible=False, reasons=(REASON_DOMAIN_SUPPRESSION,))
+    r2 = evaluate_export_eligibility(
+        contact_email="x@lab.genesys.cl", institution_name="Genesys", ctx=ctx
+    )
+    assert r2 == ExportGateResult(eligible=False, reasons=(REASON_DOMAIN_SUPPRESSION,))
 
 
 def test_supplier_domain_blocks() -> None:

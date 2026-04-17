@@ -248,6 +248,9 @@ From `apps/email-pipeline/`:
 # Archive lane — full batch (audit, shortlist, precheck, send_ready / review_required)
 uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/active/archive_send_batch
 
+# Same path, larger shortlist (e.g. 100–200 company-intro rows): tune --shortlist-limit (and --audit-limit if needed).
+uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/active/archive_send_batch --shortlist-limit 100 --audit-limit 800
+
 # Archive lane — audit CSV + summary only (no shortlist / precheck)
 uv run python scripts/leads/build_archive_send_batch.py --audit-only --out-dir reports/out/active/archive_audit
 
@@ -257,14 +260,53 @@ uv run python scripts/leads/export_next_marketing_recipients.py -o reports/out/n
 
 **Shared outbound defaults:** canonical CLIs and preflight resolve the same Gmail user (CLI → `ORIGENLAB_GMAIL_WORKSPACE_USER` → `contacto@origenlab.cl`), the same default Sent folder pair (`[Gmail]/Enviados`, `[Gmail]/Sent Mail`), and the same `GateContext` builders via [`outbound_core.py`](../src/origenlab_email_pipeline/outbound_core.py). Archive builds write an `outbound_run` object (schema v1) into `archive_outreach_build_summary.json` and audit JSON summaries; the lead exporter can write `<stem>_outbound_summary.json` with `--write-outbound-summary`.
 
-**Preflight (read-only):** before building a batch, optionally run [`check_outbound_readiness.py`](../scripts/qa/check_outbound_readiness.py) — SQLite presence, core tables, Sent-folder coverage (**same resolution as** `outbound_core`), sidecar row counts, mart freshness, and optional commercial-layer checks (`--strict-commercial-required`). Use `--json-out` for a machine-readable summary; exit code `1` only when the verdict is `not_ready`.
+**Preflight (read-only):** when ingest or sidecar freshness is uncertain, **run readiness before batch generation**: [`check_outbound_readiness.py`](../scripts/qa/check_outbound_readiness.py) — SQLite presence, core tables, Sent-folder coverage (**same resolution as** `outbound_core`), sidecar row counts, mart freshness, and optional commercial-layer checks (`--strict-commercial-required`). Use `--json-out` for a machine-readable summary; exit code `1` only when the verdict is `not_ready`.
 
-**Streamlit** is for **review**, **read/write** on `contact_email_suppression` / `outreach_contact_state`, and **visibility**; it should not replace the reproducible CSV/JSON from the commands above as the record of what was selected for a batch.
+**Operator checklist:** step-by-step canonical lane artifacts, what to review before send, and after-send memory — [`pipeline/OUTBOUND_OPERATOR_CHECKLIST.md`](pipeline/OUTBOUND_OPERATOR_CHECKLIST.md).
+
+**Trust summary printer:** [`print_outbound_run_summary.py`](../scripts/qa/print_outbound_run_summary.py) prints lane, mailbox, sqlite path, Sent folders, counts, and artifact paths from `archive_outreach_build_summary.json` or a lead `*_outbound_summary.json` (`--write-outbound-summary`).
+
+**Streamlit** is for **review**, **read/write** on `contact_email_suppression` / `outreach_contact_state`, and **visibility**; it is **not** the final record of what was exported in a given run. **Canonical CLI CSV/JSON** (and optional readiness JSON) are the reproducible record; update **Sent ingest** and **outreach/suppression sidecars** after sends so the next run’s blocker memory stays accurate.
 
 **Demoted / advanced:**
 
 - [`export_archive_outreach_candidates.py`](../scripts/leads/advanced/export_archive_outreach_candidates.py) — legacy **audit-only** wrapper (prints a note to stderr); prefer `--audit-only` on the builder.
 - [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export; not the default archive path (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)).
+
+### Manual HTML outreach batch (packaging only)
+
+After you **manually** narrow an archive `review_required` / shortlist CSV, package **one shared HTML body** and a **mark-contacted** file for later `outreach_contact_state` updates. **No send**, **no DB**, **no personalization**.
+
+From `apps/email-pipeline/`:
+
+```bash
+uv run python scripts/leads/build_manual_html_outreach_batch.py \
+  --input reports/out/active/<your_batch>/archive_manual_send_candidates_v3.csv \
+  --html /path/to/origenlab_presentacion_comercial_email_combined.html \
+  --subject "Presentación de OrigenLab" \
+  --out-dir reports/out/active/<your_batch>_manual_html_package \
+  --batch-name my_run_20260416
+```
+
+**Writes (under `--out-dir`):**
+
+| File | Purpose |
+|------|---------|
+| `manual_html_outreach_recipients.csv` | One row per recipient: `contact_email`, `institution_name`, `domain`, `subject`, `html_source_path`, `batch_name` |
+| `manual_html_outreach_send_manifest.json` | Counts, paths, subject, UTC timestamp |
+| `manual_html_outreach_mark_contacted.txt` | One email per line (for batch mark after you send) |
+| `shared_email.html` | Copy of the shared HTML (omit with `--no-copy-html`) |
+| `manual_html_outreach_preview.md` | Short human preview (omit with `--no-preview-md`) |
+
+**After manual send:** ingest Sent if you use that for gate memory, then e.g.:
+
+```bash
+uv run python scripts/leads/mark_outreach_state.py \
+  --batch-file reports/out/active/<your_batch>_manual_html_package/manual_html_outreach_mark_contacted.txt \
+  --state contacted --updated-by <you> --source manual_html_batch
+```
+
+Optional: `--limit N` caps recipients after dedupe; duplicate emails (case-insensitive) keep the **first** row’s metadata.
 
 **Archive batch — commercial precheck policy:** default is **advisory** (commercial “drop” → `review_required`). Use `--strict-commercial-drop` to omit those rows from both output CSVs. See `archive_outreach_build_summary.json` keys `commercial_precheck_policy` and `strict_commercial_drop`.
 

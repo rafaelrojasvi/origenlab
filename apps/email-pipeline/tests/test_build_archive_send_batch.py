@@ -7,6 +7,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from origenlab_email_pipeline.archive_outreach_queue import (
+    ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
+    ARCHIVE_CANDIDATE_SORT_LEGACY,
+)
 from origenlab_email_pipeline.archive_send_batch_builder import (
     AUDIT_CSV_NAME,
     AUDIT_SUMMARY_JSON_NAME,
@@ -120,6 +124,7 @@ def _seed_db(path: Path) -> None:
             ("weak@buyer.cl", "Weak", "2026-01-08", 1, 0, 0.1),
             ("blocked@buyer.cl", "Blocked", "2026-01-07", 65, 5, 0.8),
             ("suppressed@buyer.cl", "Suppressed", "2026-01-06", 60, 5, 0.8),
+            ("manual@buyer.cl", "Manual", "2026-01-05", 60, 5, 0.8),
         ],
     )
     conn.execute(
@@ -138,7 +143,379 @@ def _seed_db(path: Path) -> None:
         INSERT INTO contact_candidate (
           contact_email, org_domain, status, suppression_flags, rationale_text,
           confidence_score, strength_score, evidence_count, created_at, updated_at
+        ) VALUES ('manual@buyer.cl', 'buyer.cl', 'approved', '', 'ok', 0.9, 0.9, 3, 't', 't')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO contact_candidate (
+          contact_email, org_domain, status, suppression_flags, rationale_text,
+          confidence_score, strength_score, evidence_count, created_at, updated_at
         ) VALUES ('suppressed@buyer.cl', 'buyer.cl', 'suppressed', 'MANUAL_SUPPRESS', 'blocked', 0.9, 0.9, 3, 't', 't')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def _seed_manual_domain_suppress_db(path: Path) -> None:
+    conn = sqlite3.connect(str(path))
+    conn.executescript(
+        """
+        CREATE TABLE contact_master (
+          email TEXT PRIMARY KEY,
+          contact_name_best TEXT,
+          domain TEXT,
+          organization_name_guess TEXT,
+          organization_type_guess TEXT,
+          first_seen_at TEXT,
+          last_seen_at TEXT,
+          total_emails INTEGER,
+          inbound_emails INTEGER,
+          outbound_emails INTEGER,
+          quote_email_count INTEGER,
+          invoice_email_count INTEGER,
+          purchase_email_count INTEGER,
+          business_doc_email_count INTEGER,
+          quote_doc_count INTEGER,
+          invoice_doc_count INTEGER,
+          top_equipment_tags TEXT,
+          confidence_score REAL
+        );
+        CREATE TABLE organization_master (
+          domain TEXT PRIMARY KEY,
+          organization_name_guess TEXT,
+          organization_type_guess TEXT,
+          first_seen_at TEXT,
+          last_seen_at TEXT,
+          total_emails INTEGER,
+          total_contacts INTEGER,
+          quote_email_count INTEGER,
+          invoice_email_count INTEGER,
+          purchase_email_count INTEGER,
+          business_doc_email_count INTEGER,
+          quote_doc_count INTEGER,
+          invoice_doc_count INTEGER,
+          top_equipment_tags TEXT,
+          key_contacts TEXT
+        );
+        CREATE TABLE emails (recipients TEXT, source_file TEXT, folder TEXT);
+        CREATE TABLE contact_email_suppression (email TEXT PRIMARY KEY, suppression_reason_code TEXT);
+        CREATE TABLE outreach_contact_state (contact_email_norm TEXT PRIMARY KEY, state TEXT);
+        CREATE TABLE supplier_master (domain_norm TEXT);
+        CREATE TABLE opportunity_signals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          signal_type TEXT NOT NULL,
+          entity_kind TEXT NOT NULL,
+          entity_key TEXT NOT NULL,
+          email_id INTEGER,
+          attachment_id INTEGER,
+          score REAL,
+          details_json TEXT,
+          created_at TEXT
+        );
+        CREATE TABLE contact_candidate (
+          contact_email TEXT PRIMARY KEY,
+          org_domain TEXT,
+          status TEXT NOT NULL DEFAULT 'new',
+          suppression_flags TEXT NOT NULL DEFAULT '',
+          rationale_text TEXT NOT NULL DEFAULT '',
+          confidence_score REAL NOT NULL DEFAULT 0,
+          strength_score REAL NOT NULL DEFAULT 0,
+          evidence_count INTEGER NOT NULL DEFAULT 0,
+          display_name TEXT,
+          provenance_json TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL DEFAULT ''
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO organization_master (
+          domain, organization_name_guess, organization_type_guess, first_seen_at, last_seen_at,
+          total_emails, total_contacts, quote_email_count, invoice_email_count, purchase_email_count,
+          business_doc_email_count, quote_doc_count, invoice_doc_count, top_equipment_tags, key_contacts
+        ) VALUES ('blocked.com','Blocked','business','2021-01-01','2026-01-01',120,10,10,2,2,0,0,0,'','')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO contact_master (
+          email, contact_name_best, domain, organization_name_guess, organization_type_guess,
+          first_seen_at, last_seen_at, total_emails, inbound_emails, outbound_emails,
+          quote_email_count, invoice_email_count, purchase_email_count, business_doc_email_count,
+          quote_doc_count, invoice_doc_count, top_equipment_tags, confidence_score
+        ) VALUES (
+          'x@blocked.com', 'X', 'blocked.com', 'Blocked', 'business',
+          '2024-01-01', '2026-01-01', 80, 40, 40, 0, 0, 0, 0, 0, 0, '', 0.9
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO contact_candidate (
+          contact_email, org_domain, status, suppression_flags, rationale_text,
+          confidence_score, strength_score, evidence_count, created_at, updated_at
+        ) VALUES ('x@blocked.com', 'blocked.com', 'approved', '', 'ok', 0.9, 0.9, 3, 't', 't')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def _seed_volume_archive_contacts_only(path: Path, *, n: int) -> None:
+    """Many gate-clean buyer.cl contacts for shortlist sizing tests."""
+    conn = sqlite3.connect(str(path))
+    conn.executescript(
+        """
+        CREATE TABLE contact_master (
+          email TEXT PRIMARY KEY,
+          contact_name_best TEXT,
+          domain TEXT,
+          organization_name_guess TEXT,
+          organization_type_guess TEXT,
+          first_seen_at TEXT,
+          last_seen_at TEXT,
+          total_emails INTEGER,
+          inbound_emails INTEGER,
+          outbound_emails INTEGER,
+          quote_email_count INTEGER,
+          invoice_email_count INTEGER,
+          purchase_email_count INTEGER,
+          business_doc_email_count INTEGER,
+          quote_doc_count INTEGER,
+          invoice_doc_count INTEGER,
+          top_equipment_tags TEXT,
+          confidence_score REAL
+        );
+        CREATE TABLE organization_master (
+          domain TEXT PRIMARY KEY,
+          organization_name_guess TEXT,
+          organization_type_guess TEXT,
+          first_seen_at TEXT,
+          last_seen_at TEXT,
+          total_emails INTEGER,
+          total_contacts INTEGER,
+          quote_email_count INTEGER,
+          invoice_email_count INTEGER,
+          purchase_email_count INTEGER,
+          business_doc_email_count INTEGER,
+          quote_doc_count INTEGER,
+          invoice_doc_count INTEGER,
+          top_equipment_tags TEXT,
+          key_contacts TEXT
+        );
+        CREATE TABLE emails (recipients TEXT, source_file TEXT, folder TEXT);
+        CREATE TABLE contact_email_suppression (email TEXT PRIMARY KEY, suppression_reason_code TEXT);
+        CREATE TABLE outreach_contact_state (contact_email_norm TEXT PRIMARY KEY, state TEXT);
+        CREATE TABLE supplier_master (domain_norm TEXT);
+        CREATE TABLE opportunity_signals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          signal_type TEXT NOT NULL,
+          entity_kind TEXT NOT NULL,
+          entity_key TEXT NOT NULL,
+          email_id INTEGER,
+          attachment_id INTEGER,
+          score REAL,
+          details_json TEXT,
+          created_at TEXT
+        );
+        CREATE TABLE contact_candidate (
+          contact_email TEXT PRIMARY KEY,
+          org_domain TEXT,
+          status TEXT NOT NULL DEFAULT 'new',
+          suppression_flags TEXT NOT NULL DEFAULT '',
+          rationale_text TEXT NOT NULL DEFAULT '',
+          confidence_score REAL NOT NULL DEFAULT 0,
+          strength_score REAL NOT NULL DEFAULT 0,
+          evidence_count INTEGER NOT NULL DEFAULT 0,
+          display_name TEXT,
+          provenance_json TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL DEFAULT ''
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO organization_master (
+          domain, organization_name_guess, organization_type_guess, first_seen_at, last_seen_at,
+          total_emails, total_contacts, quote_email_count, invoice_email_count, purchase_email_count,
+          business_doc_email_count, quote_doc_count, invoice_doc_count, top_equipment_tags, key_contacts
+        ) VALUES ('buyer.cl','Buyer','business','2021-01-01','2026-01-01',120,10,10,2,2,0,0,0,'','')
+        """
+    )
+    cm_rows: list[tuple[object, ...]] = []
+    for i in range(n):
+        em = f"vol{i:03d}@buyer.cl"
+        tot = 40 + (i % 7)
+        cm_rows.append(
+            (
+                em,
+                f"U{i}",
+                "buyer.cl",
+                "Buyer Org",
+                "business",
+                "2021-01-01",
+                "2026-01-01",
+                tot,
+                tot // 2,
+                tot // 2,
+                2,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "",
+            0.75,
+            )
+        )
+    conn.executemany(
+        """
+        INSERT INTO contact_master (
+          email, contact_name_best, domain, organization_name_guess, organization_type_guess,
+          first_seen_at, last_seen_at, total_emails, inbound_emails, outbound_emails,
+          quote_email_count, invoice_email_count, purchase_email_count, business_doc_email_count,
+          quote_doc_count, invoice_doc_count, top_equipment_tags, confidence_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        cm_rows,
+    )
+    conn.executemany(
+        """
+        INSERT INTO contact_candidate (
+          contact_email, org_domain, status, suppression_flags, rationale_text,
+          confidence_score, strength_score, evidence_count, created_at, updated_at
+        ) VALUES (?, ?, ?, '', 'ok', 0.8, 0.8, 2, 't', 't')
+        """,
+        [(r[0], "buyer.cl", "approved") for r in cm_rows],
+    )
+    conn.commit()
+    conn.close()
+
+
+def _seed_company_intro_priority_db(path: Path) -> None:
+    conn = sqlite3.connect(str(path))
+    conn.executescript(
+        """
+        CREATE TABLE contact_master (
+          email TEXT PRIMARY KEY,
+          contact_name_best TEXT,
+          domain TEXT,
+          organization_name_guess TEXT,
+          organization_type_guess TEXT,
+          first_seen_at TEXT,
+          last_seen_at TEXT,
+          total_emails INTEGER,
+          inbound_emails INTEGER,
+          outbound_emails INTEGER,
+          quote_email_count INTEGER,
+          invoice_email_count INTEGER,
+          purchase_email_count INTEGER,
+          business_doc_email_count INTEGER,
+          quote_doc_count INTEGER,
+          invoice_doc_count INTEGER,
+          top_equipment_tags TEXT,
+          confidence_score REAL
+        );
+        CREATE TABLE organization_master (
+          domain TEXT PRIMARY KEY,
+          organization_name_guess TEXT,
+          organization_type_guess TEXT,
+          first_seen_at TEXT,
+          last_seen_at TEXT,
+          total_emails INTEGER,
+          total_contacts INTEGER,
+          quote_email_count INTEGER,
+          invoice_email_count INTEGER,
+          purchase_email_count INTEGER,
+          business_doc_email_count INTEGER,
+          quote_doc_count INTEGER,
+          invoice_doc_count INTEGER,
+          top_equipment_tags TEXT,
+          key_contacts TEXT
+        );
+        CREATE TABLE contact_email_suppression (email TEXT PRIMARY KEY, suppression_reason_code TEXT);
+        CREATE TABLE outreach_contact_state (contact_email_norm TEXT PRIMARY KEY, state TEXT);
+        CREATE TABLE supplier_master (domain_norm TEXT);
+         CREATE TABLE opportunity_signals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          signal_type TEXT NOT NULL,
+          entity_kind TEXT NOT NULL,
+          entity_key TEXT NOT NULL,
+          email_id INTEGER,
+          attachment_id INTEGER,
+          score REAL,
+          details_json TEXT,
+          created_at TEXT
+        );
+        CREATE TABLE contact_candidate (
+          contact_email TEXT PRIMARY KEY,
+          org_domain TEXT,
+          status TEXT NOT NULL DEFAULT 'new',
+          suppression_flags TEXT NOT NULL DEFAULT '',
+          rationale_text TEXT NOT NULL DEFAULT '',
+          confidence_score REAL NOT NULL DEFAULT 0,
+          strength_score REAL NOT NULL DEFAULT 0,
+          evidence_count INTEGER NOT NULL DEFAULT 0,
+          display_name TEXT,
+          provenance_json TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE emails (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          recipients TEXT,
+          source_file TEXT,
+          folder TEXT,
+          sender TEXT,
+          date_iso TEXT,
+          date_raw TEXT
+        );
+        """
+    )
+    conn.executemany(
+        """
+        INSERT INTO contact_master (
+          email, contact_name_best, domain, organization_name_guess, organization_type_guess,
+          first_seen_at, last_seen_at, total_emails, inbound_emails, outbound_emails,
+          quote_email_count, invoice_email_count, purchase_email_count, business_doc_email_count,
+          quote_doc_count, invoice_doc_count, top_equipment_tags, confidence_score
+        ) VALUES (?, ?, ?, 'Acme Org', 'business', '2021-01-01', ?, ?, 1, 1, ?, 0, 0, 0, 0, 0, '', ?)
+        """,
+        [
+            # Warmth capped by contact volume term; keep corp below heavy but out of weak band.
+            ("corp@acme.cl", "Corp", "acme.cl", "2026-01-10", 80, 0, 0.9),
+            ("corp2@acme.cl", "Corp2", "acme.cl", "2026-01-10", 80, 0, 0.9),
+            ("heavy@gmail.com", "Heavy", "gmail.com", "2026-01-10", 120, 0, 0.95),
+        ],
+    )
+    conn.executemany(
+        """
+        INSERT INTO contact_candidate (
+          contact_email, org_domain, status, suppression_flags, rationale_text,
+          confidence_score, strength_score, evidence_count, created_at, updated_at
+        ) VALUES (?, ?, ?, '', 'x', 0.8, 0.8, 2, 't', 't')
+        """,
+        [
+            ("corp@acme.cl", "acme.cl", "approved"),
+            ("corp2@acme.cl", "acme.cl", "approved"),
+            ("heavy@gmail.com", "gmail.com", "suppressed"),
+        ],
+    )
+    conn.execute(
+        """
+        INSERT INTO emails (recipients, source_file, folder, sender, date_iso, date_raw)
+        VALUES (
+          'corp@acme.cl',
+          'pst',
+          'Sent Items',
+          '"Tatiana" <ventas@labdelivery.cl>',
+          '2026-01-20T12:00:00+00:00',
+          ''
+        )
         """
     )
     conn.commit()
@@ -330,6 +707,7 @@ def test_build_archive_send_batch_happy_path_outputs_and_classification(tmp_path
         "gate_blocked_rows",
         "commercially_suppressed_rows",
         "commercial_review_rows",
+        "manual_suppressed_rows",
         "policy_personal_domain_review_rows",
         "weak_warmth_review_rows",
         "advisory_commercial_drop_rows",
@@ -340,8 +718,10 @@ def test_build_archive_send_batch_happy_path_outputs_and_classification(tmp_path
         "db_path",
         "strict_commercial_drop",
         "commercial_precheck_policy",
+        "archive_candidate_sort",
     ):
         assert key in summary
+    assert summary["archive_candidate_sort"] == ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO
     assert summary["send_ready_rows"] == len(send_ready)
     assert summary["review_required_rows"] == len(review_required)
     assert result.summary["send_ready_rows"] == len(send_ready)
@@ -353,6 +733,108 @@ def test_build_archive_send_batch_happy_path_outputs_and_classification(tmp_path
         assert k in summary["outbound_run"]
     assert all("decision_path" in row for row in precheck)
     assert all("final_decision_path" in row for row in send_ready + review_required)
+
+
+def test_build_archive_send_batch_shortlist_company_intro_before_legacy_warmth_order(tmp_path: Path) -> None:
+    db = tmp_path / "prio.sqlite"
+    _seed_company_intro_priority_db(db)
+    out_intro = tmp_path / "out_intro"
+    out_legacy = tmp_path / "out_legacy"
+
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    try:
+        build_archive_send_batch(
+            conn=conn,
+            db_path=db,
+            out_dir=out_intro,
+            gmail_user="contacto@origenlab.cl",
+            fetch_cap=1000,
+            audit_limit=500,
+            shortlist_limit=3,
+            sent_folders=("[Gmail]/Enviados",),
+            strict_contact_graph_noise=True,
+            allow_weak_warmth=True,
+            skip_commercial_precheck=False,
+            sent_folder_defaults_used=False,
+            archive_candidate_sort=ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
+        )
+    finally:
+        conn.close()
+
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    try:
+        build_archive_send_batch(
+            conn=conn,
+            db_path=db,
+            out_dir=out_legacy,
+            gmail_user="contacto@origenlab.cl",
+            fetch_cap=1000,
+            audit_limit=500,
+            shortlist_limit=3,
+            sent_folders=("[Gmail]/Enviados",),
+            strict_contact_graph_noise=True,
+            allow_weak_warmth=True,
+            skip_commercial_precheck=False,
+            sent_folder_defaults_used=False,
+            archive_candidate_sort=ARCHIVE_CANDIDATE_SORT_LEGACY,
+        )
+    finally:
+        conn.close()
+
+    intro_sl = _read_csv(out_intro / SHORTLIST_CSV_NAME)
+    legacy_sl = _read_csv(out_legacy / SHORTLIST_CSV_NAME)
+    assert [r["contact_email"] for r in intro_sl] == ["corp@acme.cl", "corp2@acme.cl", "heavy@gmail.com"]
+    # Legacy tie-break uses contact_email; corp2@ sorts before corp@ at equal warmth/volume.
+    assert [r["contact_email"] for r in legacy_sl] == ["heavy@gmail.com", "corp2@acme.cl", "corp@acme.cl"]
+
+    intro_summary = json.loads((out_intro / BUILD_SUMMARY_JSON_NAME).read_text(encoding="utf-8"))
+    assert intro_summary["archive_candidate_sort"] == ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO
+    assert intro_summary.get("shortlist_labdelivery_touch_rows", 0) >= 1
+
+    assert "last_contacted_by_labdelivery" in intro_sl[0]
+    assert intro_sl[0]["contact_email"] == "corp@acme.cl"
+    assert str(intro_sl[0].get("last_contacted_by_labdelivery") or "").lower() in {"true", "1", "yes"}
+    assert "2026-01-20" in (intro_sl[0].get("labdelivery_last_contact_at") or "")
+    assert intro_sl[1]["contact_email"] == "corp2@acme.cl"
+    assert str(intro_sl[1].get("last_contacted_by_labdelivery") or "").lower() not in {"true", "1", "yes"}
+
+    intro_send = _read_csv(out_intro / SEND_READY_CSV_NAME)
+    assert intro_send and intro_send[0]["contact_email"] == "corp@acme.cl"
+    assert not any(r["contact_email"] == "heavy@gmail.com" for r in intro_send)
+    assert "last_contacted_by_labdelivery" in intro_send[0]
+
+
+def test_build_archive_send_batch_large_shortlist_limit(tmp_path: Path) -> None:
+    db = tmp_path / "vol.sqlite"
+    _seed_volume_archive_contacts_only(db, n=160)
+    out_dir = tmp_path / "out_vol"
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    try:
+        build_archive_send_batch(
+            conn=conn,
+            db_path=db,
+            out_dir=out_dir,
+            gmail_user="contacto@origenlab.cl",
+            fetch_cap=5000,
+            audit_limit=220,
+            shortlist_limit=100,
+            sent_folders=("[Gmail]/Enviados",),
+            strict_contact_graph_noise=True,
+            allow_weak_warmth=True,
+            skip_commercial_precheck=False,
+            sent_folder_defaults_used=False,
+        )
+    finally:
+        conn.close()
+    sl = _read_csv(out_dir / SHORTLIST_CSV_NAME)
+    assert len(sl) == 100
+    assert "last_contacted_by_labdelivery" in sl[0]
+    assert "labdelivery_last_contact_at" in sl[0]
+    summary = json.loads((out_dir / BUILD_SUMMARY_JSON_NAME).read_text(encoding="utf-8"))
+    assert summary["shortlist_rows"] == 100
 
 
 def test_build_archive_send_batch_cli_works_without_refresh_sent(tmp_path: Path) -> None:
@@ -482,6 +964,209 @@ def test_build_archive_send_batch_strict_commercial_drop_omits_suppressed(tmp_pa
     summary = json.loads((out_dir / BUILD_SUMMARY_JSON_NAME).read_text(encoding="utf-8"))
     assert summary["commercial_precheck_policy"] == "strict_drop"
     assert summary["strict_commercial_drop"] is True
+
+
+def _seed_shortlist_one_per_domain_db(path: Path) -> None:
+    conn = sqlite3.connect(str(path))
+    conn.executescript(
+        """
+        CREATE TABLE contact_master (
+          email TEXT PRIMARY KEY,
+          contact_name_best TEXT,
+          domain TEXT,
+          organization_name_guess TEXT,
+          organization_type_guess TEXT,
+          first_seen_at TEXT,
+          last_seen_at TEXT,
+          total_emails INTEGER,
+          inbound_emails INTEGER,
+          outbound_emails INTEGER,
+          quote_email_count INTEGER,
+          invoice_email_count INTEGER,
+          purchase_email_count INTEGER,
+          business_doc_email_count INTEGER,
+          quote_doc_count INTEGER,
+          invoice_doc_count INTEGER,
+          top_equipment_tags TEXT,
+          confidence_score REAL
+        );
+        CREATE TABLE organization_master (
+          domain TEXT PRIMARY KEY,
+          organization_name_guess TEXT,
+          organization_type_guess TEXT,
+          first_seen_at TEXT,
+          last_seen_at TEXT,
+          total_emails INTEGER,
+          total_contacts INTEGER,
+          quote_email_count INTEGER,
+          invoice_email_count INTEGER,
+          purchase_email_count INTEGER,
+          business_doc_email_count INTEGER,
+          quote_doc_count INTEGER,
+          invoice_doc_count INTEGER,
+          top_equipment_tags TEXT,
+          key_contacts TEXT
+        );
+        CREATE TABLE emails (recipients TEXT, source_file TEXT, folder TEXT);
+        CREATE TABLE contact_email_suppression (email TEXT PRIMARY KEY, suppression_reason_code TEXT);
+        CREATE TABLE outreach_contact_state (contact_email_norm TEXT PRIMARY KEY, state TEXT);
+        CREATE TABLE supplier_master (domain_norm TEXT);
+        CREATE TABLE opportunity_signals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          signal_type TEXT NOT NULL,
+          entity_kind TEXT NOT NULL,
+          entity_key TEXT NOT NULL,
+          email_id INTEGER,
+          attachment_id INTEGER,
+          score REAL,
+          details_json TEXT,
+          created_at TEXT
+        );
+        CREATE TABLE contact_candidate (
+          contact_email TEXT PRIMARY KEY,
+          org_domain TEXT,
+          status TEXT NOT NULL DEFAULT 'new',
+          suppression_flags TEXT NOT NULL DEFAULT '',
+          rationale_text TEXT NOT NULL DEFAULT '',
+          confidence_score REAL NOT NULL DEFAULT 0,
+          strength_score REAL NOT NULL DEFAULT 0,
+          evidence_count INTEGER NOT NULL DEFAULT 0,
+          display_name TEXT,
+          provenance_json TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL DEFAULT ''
+        );
+        """
+    )
+    conn.executescript(
+        """
+        INSERT INTO organization_master (
+          domain, organization_name_guess, organization_type_guess, first_seen_at, last_seen_at,
+          total_emails, total_contacts, quote_email_count, invoice_email_count, purchase_email_count,
+          business_doc_email_count, quote_doc_count, invoice_doc_count, top_equipment_tags, key_contacts
+        ) VALUES
+          ('buyer.cl','Buyer','business','2021-01-01','2026-01-01',120,10,10,2,2,0,0,0,'',''),
+          ('other.cl','Other','business','2021-01-01','2026-01-01',80,5,5,1,1,0,0,0,'','');
+        INSERT INTO contact_master (
+          email, contact_name_best, domain, organization_name_guess, organization_type_guess,
+          first_seen_at, last_seen_at, total_emails, inbound_emails, outbound_emails,
+          quote_email_count, invoice_email_count, purchase_email_count, business_doc_email_count,
+          quote_doc_count, invoice_doc_count, top_equipment_tags, confidence_score
+        ) VALUES
+          ('first@buyer.cl','First','buyer.cl','Buyer','business','2021-01-01','2026-01-20',80,40,40,8,0,0,0,0,0,'',0.9),
+          ('second@buyer.cl','Second','buyer.cl','Buyer','business','2021-01-01','2026-01-19',75,38,37,7,0,0,0,0,0,'',0.85),
+          ('only@other.cl','Only','other.cl','Other','business','2021-01-01','2026-01-18',70,35,35,6,0,0,0,0,0,'',0.8);
+        INSERT INTO contact_candidate (
+          contact_email, org_domain, status, suppression_flags, rationale_text,
+          confidence_score, strength_score, evidence_count, created_at, updated_at
+        ) VALUES
+          ('first@buyer.cl', 'buyer.cl', 'approved', '', 'ok', 0.9, 0.9, 3, 't', 't'),
+          ('second@buyer.cl', 'buyer.cl', 'approved', '', 'ok', 0.85, 0.85, 3, 't', 't'),
+          ('only@other.cl', 'other.cl', 'approved', '', 'ok', 0.8, 0.8, 3, 't', 't');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_build_archive_send_batch_shortlist_one_per_domain(tmp_path: Path) -> None:
+    db = tmp_path / "dom.sqlite"
+    _seed_shortlist_one_per_domain_db(db)
+    out_dir = tmp_path / "out_dom"
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    try:
+        build_archive_send_batch(
+            conn=conn,
+            db_path=db,
+            out_dir=out_dir,
+            gmail_user="contacto@origenlab.cl",
+            fetch_cap=1000,
+            audit_limit=500,
+            shortlist_limit=10,
+            sent_folders=("[Gmail]/Enviados",),
+            strict_contact_graph_noise=True,
+            allow_weak_warmth=True,
+            skip_commercial_precheck=False,
+            sent_folder_defaults_used=False,
+            shortlist_one_per_domain=True,
+        )
+    finally:
+        conn.close()
+
+    shortlist = _read_csv(out_dir / SHORTLIST_CSV_NAME)
+    emails = [r["contact_email"] for r in shortlist]
+    assert set(emails) == {"first@buyer.cl", "only@other.cl"}
+    assert len([e for e in emails if e.endswith("@buyer.cl")]) == 1
+    summary = json.loads((out_dir / BUILD_SUMMARY_JSON_NAME).read_text(encoding="utf-8"))
+    assert summary["shortlist_one_per_domain"] is True
+    assert summary["shortlist_rows"] == 2
+
+
+def test_build_archive_send_batch_manual_suppress_email_omits_from_outputs(tmp_path: Path) -> None:
+    db = tmp_path / "t.sqlite"
+    _seed_db(db)
+    out_dir = tmp_path / "out_manual"
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    try:
+        build_archive_send_batch(
+            conn=conn,
+            db_path=db,
+            out_dir=out_dir,
+            gmail_user="contacto@origenlab.cl",
+            fetch_cap=1000,
+            audit_limit=500,
+            shortlist_limit=25,
+            sent_folders=("[Gmail]/Enviados",),
+            strict_contact_graph_noise=True,
+            allow_weak_warmth=True,
+            skip_commercial_precheck=False,
+            manual_suppress_emails=("manual@buyer.cl",),
+            sent_folder_defaults_used=False,
+        )
+    finally:
+        conn.close()
+    send_ready = _read_csv(out_dir / SEND_READY_CSV_NAME)
+    review_required = _read_csv(out_dir / REVIEW_REQUIRED_CSV_NAME)
+    emails_out = {r["contact_email"] for r in send_ready + review_required}
+    assert "manual@buyer.cl" not in emails_out
+    summary = json.loads((out_dir / BUILD_SUMMARY_JSON_NAME).read_text(encoding="utf-8"))
+    assert summary["manual_suppressed_rows"] >= 1
+    assert "manual@buyer.cl" in set(summary.get("manual_suppress_emails", []))
+
+
+def test_build_archive_send_batch_manual_suppress_domain_omits_from_outputs(tmp_path: Path) -> None:
+    db = tmp_path / "dom.sqlite"
+    _seed_manual_domain_suppress_db(db)
+    out_dir = tmp_path / "out_dom"
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    try:
+        build_archive_send_batch(
+            conn=conn,
+            db_path=db,
+            out_dir=out_dir,
+            gmail_user="contacto@origenlab.cl",
+            fetch_cap=1000,
+            audit_limit=500,
+            shortlist_limit=25,
+            sent_folders=("[Gmail]/Enviados",),
+            strict_contact_graph_noise=True,
+            allow_weak_warmth=True,
+            skip_commercial_precheck=False,
+            manual_suppress_domains=("blocked.com",),
+            sent_folder_defaults_used=False,
+        )
+    finally:
+        conn.close()
+    send_ready = _read_csv(out_dir / SEND_READY_CSV_NAME)
+    review_required = _read_csv(out_dir / REVIEW_REQUIRED_CSV_NAME)
+    emails_out = {r["contact_email"] for r in send_ready + review_required}
+    assert "x@blocked.com" not in emails_out
+    summary = json.loads((out_dir / BUILD_SUMMARY_JSON_NAME).read_text(encoding="utf-8"))
+    assert summary["manual_suppressed_rows"] >= 1
+    assert "blocked.com" in set(summary.get("manual_suppress_domains", []))
 
 
 def test_build_archive_send_batch_audit_only_writes_audit_files(tmp_path: Path) -> None:

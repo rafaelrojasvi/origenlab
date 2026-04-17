@@ -6,16 +6,33 @@ Candidate source is the historical mart (`contact_master` + optional `organizati
 
 from __future__ import annotations
 
+import re
 import sqlite3
-from dataclasses import asdict, dataclass
-from typing import Any
+from dataclasses import asdict, dataclass, replace
+from datetime import datetime
+from typing import Any, Final, Literal, Mapping, cast
 
+from origenlab_email_pipeline.archive_shortlist_commercial_precheck import COMMERCIAL_DROP_STATUSES
+from origenlab_email_pipeline.business_mart import primary_sender_email
 from origenlab_email_pipeline.candidate_export_gate import (
     REASON_INVALID_EMAIL,
     evaluate_export_eligibility,
 )
 from origenlab_email_pipeline.marketing_export_context import DEFAULT_SENT_FOLDERS
 from origenlab_email_pipeline.outbound_core import gate_context_for_archive_batch
+from origenlab_email_pipeline.tatiana_voice_cohort import (
+    load_voice_sender_domains,
+    sender_domain_matches_voice_domains,
+)
+
+ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO: Final[str] = "company_intro"
+ARCHIVE_CANDIDATE_SORT_LEGACY: Final[str] = "legacy"
+ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO_FRESH_LAST_SEEN: Final[str] = "company_intro_fresh_last_seen"
+ArchiveCandidateSortMode = Literal[
+    "company_intro",
+    "legacy",
+    "company_intro_fresh_last_seen",
+]
 
 ARCHIVE_OUTREACH_COLUMN_NAMES: tuple[str, ...] = (
     "case_id",
@@ -43,6 +60,15 @@ ARCHIVE_OUTREACH_COLUMN_NAMES: tuple[str, ...] = (
     "is_marketplace_like",
     "is_admin_transactional_like",
     "quality_flags",
+    "last_contacted_by_labdelivery",
+    "labdelivery_last_contact_at",
+    "labdelivery_signal_provenance",
+)
+
+LABDELIVERY_SIGNAL_PROVENANCE: Final[str] = (
+    "emails: max(date_iso) where From domain matches voice_sender_domains "
+    "(see tatiana_voice_cohort.load_voice_sender_domains) and comma-delimited "
+    "recipients contain the contact email token."
 )
 
 
@@ -73,6 +99,9 @@ class ArchiveOutreachCandidate:
     is_marketplace_like: bool
     is_admin_transactional_like: bool
     quality_flags: str
+    last_contacted_by_labdelivery: bool
+    labdelivery_last_contact_at: str
+    labdelivery_signal_provenance: str
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -105,6 +134,17 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
         (name,),
     ).fetchone()
     return bool(row)
+
+
+def _emails_table_has_lab_lookup_columns(conn: sqlite3.Connection) -> bool:
+    """True when ``emails`` has columns needed for labdelivery recipient/sender scan."""
+    if not _table_exists(conn, "emails"):
+        return False
+    cur = conn.execute("PRAGMA table_info(emails)")
+    cols = {str(r[1]).lower() for r in cur.fetchall() if len(r) > 1}
+    if "sender" not in cols or "recipients" not in cols:
+        return False
+    return "date_iso" in cols or "date_raw" in cols
 
 
 def _int(v: object) -> int:
@@ -242,6 +282,256 @@ def _warmth_band(score: float) -> str:
     return "medium"
 
 
+def commercial_contact_drop_penalties(conn: sqlite3.Connection, emails: set[str]) -> dict[str, bool]:
+    """Map normalized contact email -> True when ``contact_candidate.status`` is a commercial drop tier."""
+    if not emails or not _table_exists(conn, "contact_candidate"):
+        return {}
+    ph = ",".join("?" * len(emails))
+    rows = conn.execute(
+        f"""
+        SELECT lower(trim(contact_email)) AS em, lower(trim(status)) AS st
+        FROM contact_candidate
+        WHERE lower(trim(contact_email)) IN ({ph})
+        """,
+        tuple(sorted(emails)),
+    ).fetchall()
+    out: dict[str, bool] = {}
+    for em, st in rows:
+        if st in COMMERCIAL_DROP_STATUSES:
+            out[str(em)] = True
+    return out
+
+
+def _voice_sender_sql_or(domains: frozenset[str]) -> tuple[str, list[str]]:
+    """SQL fragment matching From-style ``sender`` text against voice cohort domains."""
+    parts: list[str] = []
+    params: list[str] = []
+    for d in sorted(domains):
+        d0 = (d or "").strip().lower()
+        if not d0 or " " in d0 or "@" in d0:
+            continue
+        parts.append(
+            "("
+            "LOWER(COALESCE(e.sender,'')) LIKE ? "
+            "OR LOWER(COALESCE(e.sender,'')) LIKE ? "
+            "OR LOWER(COALESCE(e.sender,'')) LIKE ?"
+            ")"
+        )
+        params.append(f"%@{d0}")
+        params.append(f"%.{d0}")
+        # RFC822-style ``Name <user@domain>`` often ends with ``>`` after the domain.
+        params.append(f"%@{d0}>")
+    if not parts:
+        return "1=0", []
+    return "(" + " OR ".join(parts) + ")", params
+
+
+def _sort_epoch_from_lab_date(iso: str) -> float:
+    s = (iso or "").strip()
+    if not s:
+        return 0.0
+    try:
+        s2 = s.replace("Z", "+00:00")
+        return float(datetime.fromisoformat(s2).timestamp())
+    except (ValueError, OSError, OverflowError):
+        pass
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        try:
+            return float(datetime.fromisoformat(s[:10] + "T00:00:00").timestamp())
+        except (ValueError, OSError, OverflowError):
+            return 0.0
+    return 0.0
+
+
+def _recipient_emails_from_recipients_field(recipients: str | None) -> set[str]:
+    """Split To/Cc-style ``recipients`` and parse each token into a bare email."""
+    out: set[str] = set()
+    for part in re.split(r"[;,]", str(recipients or "")):
+        p = part.strip()
+        if not p:
+            continue
+        e = primary_sender_email(p)
+        if e:
+            out.add(e.strip().lower())
+    return out
+
+
+def labdelivery_contact_last_seen(
+    conn: sqlite3.Connection,
+    contact_emails: set[str],
+    *,
+    voice_domains: frozenset[str] | None = None,
+) -> dict[str, str]:
+    """Map normalized contact email -> latest ``date_iso`` (fallback ``date_raw``) for archive rows.
+
+    Scans ``emails`` rows whose ``sender`` matches configured voice domains (defaults
+    include ``labdelivery.cl``), parses ``recipients`` into addresses (handles
+    ``Name <addr@dom>``), and keeps the max timestamp per matched needle. Ranking-only;
+    not a gate.
+    """
+    needles = {str(e or "").strip().lower() for e in contact_emails if str(e or "").strip()}
+    if not needles or not _emails_table_has_lab_lookup_columns(conn):
+        return {}
+    doms = voice_domains if voice_domains is not None else load_voice_sender_domains()
+    if not doms:
+        doms = frozenset({"labdelivery.cl"})
+    sender_sql, sender_params = _voice_sender_sql_or(doms)
+    if sender_sql == "1=0":
+        return {}
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT e.sender,
+               e.recipients,
+               NULLIF(trim(COALESCE(e.date_iso,'')), '') AS d_iso,
+               NULLIF(trim(COALESCE(e.date_raw,'')), '') AS d_raw
+        FROM emails e
+        WHERE {sender_sql}
+        """,
+        tuple(sender_params),
+    )
+    best: dict[str, str] = {}
+    for sender_hdr, recips, d_iso, d_raw in cur.fetchall():
+        if not sender_domain_matches_voice_domains(str(sender_hdr or ""), doms):
+            continue
+        ts = ((d_iso or "").strip() or (d_raw or "").strip())
+        if not ts:
+            continue
+        for addr in _recipient_emails_from_recipients_field(recips):
+            if addr not in needles:
+                continue
+            prev = best.get(addr, "")
+            if not prev or _sort_epoch_from_lab_date(ts) >= _sort_epoch_from_lab_date(prev):
+                best[addr] = ts
+    return best
+
+
+def archive_company_intro_sort_key_from_candidate(
+    c: ArchiveOutreachCandidate,
+    *,
+    commercial_contact_is_drop: bool = False,
+    prefer_newer_contact_last_seen: bool = False,
+) -> tuple[Any, ...]:
+    """Sort key: lower tuple orders earlier (higher business priority for company-intro outreach).
+
+    Order: commercial-drop → free-personal → generic-local → supplier-like → marketplace-like
+    → non-institutional → no labdelivery outbound history → older labdelivery touch
+    → procurement → warmth → volume → contact recency → email (stable).
+
+    When ``prefer_newer_contact_last_seen`` is true, ``contact_last_seen_at`` is ordered
+    newest-first (stronger archive activity recency) before the stable email tie-break.
+    """
+    procurement = (
+        c.contact_quote_email_count
+        + c.contact_invoice_email_count
+        + c.contact_purchase_email_count
+        + (c.org_quote_email_count + c.org_invoice_email_count + c.org_purchase_email_count) // 2
+    )
+    org_doc_signal = c.org_quote_email_count + c.org_invoice_email_count + c.org_purchase_email_count
+    lab_epoch = _sort_epoch_from_lab_date(c.labdelivery_last_contact_at)
+    has_lab = bool(c.last_contacted_by_labdelivery)
+    last_seen_key: Any
+    if prefer_newer_contact_last_seen:
+        last_seen_key = -_sort_epoch_from_lab_date(c.contact_last_seen_at)
+    else:
+        last_seen_key = c.contact_last_seen_at
+    return (
+        1 if commercial_contact_is_drop else 0,
+        1 if c.is_free_personal_domain else 0,
+        1 if c.is_generic_mailbox_localpart else 0,
+        1 if c.is_supplier_like else 0,
+        1 if c.is_marketplace_like else 0,
+        0 if c.is_institutional_domain else 1,
+        0 if org_doc_signal > 0 else 1,
+        0 if has_lab else 1,
+        -(lab_epoch if has_lab else 0.0),
+        -procurement,
+        -c.warmth_score,
+        -c.contact_total_emails,
+        last_seen_key,
+        c.contact_email,
+    )
+
+
+def _truthy_mapping_cell(v: Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    return str(v or "").strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _int_mapping_cell(v: Any) -> int:
+    try:
+        return int(float(v or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def archive_company_intro_sort_key_from_row_dict(
+    row: Mapping[str, Any],
+    *,
+    commercial_contact_is_drop: bool = False,
+    prefer_newer_contact_last_seen: bool = False,
+) -> tuple[Any, ...]:
+    """Same ordering as ``archive_company_intro_sort_key_from_candidate`` for audit-row dicts."""
+    free = _truthy_mapping_cell(row.get("is_free_personal_domain"))
+    generic = _truthy_mapping_cell(row.get("is_generic_mailbox_localpart"))
+    inst = _truthy_mapping_cell(row.get("is_institutional_domain"))
+    supplier = _truthy_mapping_cell(row.get("is_supplier_like"))
+    market = _truthy_mapping_cell(row.get("is_marketplace_like"))
+    c_q = _int_mapping_cell(row.get("contact_quote_email_count"))
+    c_i = _int_mapping_cell(row.get("contact_invoice_email_count"))
+    c_p = _int_mapping_cell(row.get("contact_purchase_email_count"))
+    o_q = _int_mapping_cell(row.get("org_quote_email_count"))
+    o_i = _int_mapping_cell(row.get("org_invoice_email_count"))
+    o_p = _int_mapping_cell(row.get("org_purchase_email_count"))
+    procurement = c_q + c_i + c_p + (o_q + o_i + o_p) // 2
+    org_doc_signal = o_q + o_i + o_p
+    warmth = float(row.get("warmth_score") or 0.0)
+    total = _int_mapping_cell(row.get("contact_total_emails"))
+    last_seen = str(row.get("contact_last_seen_at") or "")
+    email = str(row.get("contact_email") or "").strip().lower()
+    lab_ts = str(row.get("labdelivery_last_contact_at") or "").strip()
+    lab_epoch = _sort_epoch_from_lab_date(lab_ts)
+    has_lab = _truthy_mapping_cell(row.get("last_contacted_by_labdelivery"))
+    last_seen_key: Any = -_sort_epoch_from_lab_date(last_seen) if prefer_newer_contact_last_seen else last_seen
+    return (
+        1 if commercial_contact_is_drop else 0,
+        1 if free else 0,
+        1 if generic else 0,
+        1 if supplier else 0,
+        1 if market else 0,
+        0 if inst else 1,
+        0 if org_doc_signal > 0 else 1,
+        0 if has_lab else 1,
+        -(lab_epoch if has_lab else 0.0),
+        -procurement,
+        -warmth,
+        -total,
+        last_seen_key,
+        email,
+    )
+
+
+def _legacy_archive_candidate_sort_key(c: ArchiveOutreachCandidate) -> tuple[Any, ...]:
+    return (-c.warmth_score, -c.contact_total_emails, c.contact_last_seen_at, c.contact_email)
+
+
+def _normalize_archive_candidate_sort(mode: str | None) -> ArchiveCandidateSortMode:
+    m = (mode or ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO).strip().lower()
+    allowed: tuple[str, ...] = (
+        ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
+        ARCHIVE_CANDIDATE_SORT_LEGACY,
+        ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO_FRESH_LAST_SEEN,
+    )
+    if m not in allowed:
+        raise ValueError(
+            "archive_candidate_sort must be one of "
+            f"{', '.join(repr(x) for x in allowed)}, "
+            f"got {mode!r}"
+        )
+    return cast(ArchiveCandidateSortMode, m)
+
+
 def _quality_flags(*, email: str, domain: str, supplier_like: bool, score: float) -> tuple[bool, bool, bool, bool, bool, bool, str, str]:
     local = _local_part(email)
     is_free = _domain_matches(domain, _FREE_PERSONAL_DOMAINS)
@@ -336,6 +626,7 @@ def fetch_archive_outreach_candidates(
     *,
     fetch_cap: int = 20000,
     limit: int = 500,
+    archive_candidate_sort: str = ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
 ) -> list[ArchiveOutreachCandidate]:
     """Read-only archive candidates (source pool only; no gate applied)."""
     if not _table_exists(conn, "contact_master"):
@@ -399,16 +690,43 @@ def fetch_archive_outreach_candidates(
                 is_marketplace_like=is_market,
                 is_admin_transactional_like=is_admin_tx,
                 quality_flags=quality_flags,
+                last_contacted_by_labdelivery=False,
+                labdelivery_last_contact_at="",
+                labdelivery_signal_provenance="",
             )
         )
-    out.sort(
-        key=lambda r: (
-            -r.warmth_score,
-            -r.contact_total_emails,
-            r.contact_last_seen_at,
-            r.contact_email,
+    lab_touch = labdelivery_contact_last_seen(conn, {c.contact_email for c in out})
+    enriched: list[ArchiveOutreachCandidate] = []
+    for c in out:
+        at = (lab_touch.get(c.contact_email) or "").strip()
+        flagged = bool(at)
+        prov = LABDELIVERY_SIGNAL_PROVENANCE if flagged else ""
+        qf = c.quality_flags
+        if flagged and "labdelivery_hist" not in qf:
+            qf = f"{qf},labdelivery_hist" if qf else "labdelivery_hist"
+        enriched.append(
+            replace(
+                c,
+                last_contacted_by_labdelivery=flagged,
+                labdelivery_last_contact_at=at,
+                labdelivery_signal_provenance=prov,
+                quality_flags=qf,
+            )
         )
-    )
+    out = enriched
+    sort_mode = _normalize_archive_candidate_sort(archive_candidate_sort)
+    if sort_mode == ARCHIVE_CANDIDATE_SORT_LEGACY:
+        out.sort(key=_legacy_archive_candidate_sort_key)
+    else:
+        penalties = commercial_contact_drop_penalties(conn, {c.contact_email for c in out})
+        prefer_fresh = sort_mode == ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO_FRESH_LAST_SEEN
+        out.sort(
+            key=lambda c: archive_company_intro_sort_key_from_candidate(
+                c,
+                commercial_contact_is_drop=bool(penalties.get(c.contact_email)),
+                prefer_newer_contact_last_seen=prefer_fresh,
+            )
+        )
     return out[: max(1, min(int(limit), 50000))]
 
 
@@ -421,9 +739,15 @@ def audit_archive_outreach_candidates(
     fetch_cap: int = 20000,
     limit: int = 500,
     strict_contact_graph_noise: bool = True,
+    archive_candidate_sort: str = ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
 ) -> ArchiveOutreachAuditResult:
     """Run existing gate on archive candidates; returns eligible + blocked rows with reason."""
-    cands = fetch_archive_outreach_candidates(conn, fetch_cap=fetch_cap, limit=limit)
+    cands = fetch_archive_outreach_candidates(
+        conn,
+        fetch_cap=fetch_cap,
+        limit=limit,
+        archive_candidate_sort=archive_candidate_sort,
+    )
     gate_ctx = gate_context_for_archive_batch(
         conn,
         gmail_user=gmail_user,
@@ -461,10 +785,19 @@ def audit_archive_outreach_candidates(
 
 
 __all__ = [
+    "ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO",
+    "ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO_FRESH_LAST_SEEN",
+    "ARCHIVE_CANDIDATE_SORT_LEGACY",
     "ARCHIVE_OUTREACH_COLUMN_NAMES",
+    "LABDELIVERY_SIGNAL_PROVENANCE",
+    "ArchiveCandidateSortMode",
     "ArchiveOutreachCandidate",
     "ArchiveOutreachAuditRow",
     "ArchiveOutreachAuditResult",
+    "archive_company_intro_sort_key_from_candidate",
+    "archive_company_intro_sort_key_from_row_dict",
+    "commercial_contact_drop_penalties",
     "fetch_archive_outreach_candidates",
     "audit_archive_outreach_candidates",
+    "labdelivery_contact_last_seen",
 ]

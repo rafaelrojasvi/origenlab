@@ -16,6 +16,7 @@ REPO = Path(__file__).resolve().parents[1]
         "scripts/commercial/build_commercial_intel_v1.py",
         "scripts/qa/publish_gate.py",
         "scripts/qa/check_outbound_readiness.py",
+        "scripts/qa/print_outbound_run_summary.py",
         "scripts/leads/run_leads_operational_stack.sh",
         "scripts/_bootstrap.py",
         # Canonical outbound + commercial precheck (operator surface)
@@ -34,6 +35,8 @@ REPO = Path(__file__).resolve().parents[1]
         "scripts/leads/advanced/validate_lead_account_rollup.py",
         "scripts/leads/advanced/audit_lead_org_quality.py",
         "scripts/leads/mark_outreach_state.py",
+        "scripts/leads/import_operator_outreach_blocklist.py",
+        "scripts/leads/build_manual_html_outreach_batch.py",
         "scripts/leads/advanced/audit_emails_export_gate.py",
         "scripts/build_lead_account_rollup.py",
         "scripts/match_lead_accounts_to_existing_orgs.py",
