@@ -8,10 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from origenlab_email_pipeline.marketing_export_context import (
-    DEFAULT_SENT_FOLDERS,
-    load_sent_recipient_norms,
-)
+from origenlab_email_pipeline.marketing_export_context import DEFAULT_SENT_FOLDERS
+from origenlab_email_pipeline.outbound_sent_preflight import probe_sent_history
 
 
 def object_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -117,6 +115,7 @@ def assess_outbound_readiness(
         "sent_folders": list(sent_folders),
         "sent_email_rows": 0,
         "sent_recipient_norm_count": 0,
+        "distinct_folders_sample": [],
         "max_sent_message_at": None,
         "max_sent_message_age_days": None,
     }
@@ -126,39 +125,42 @@ def assess_outbound_readiness(
         folders = tuple(f.strip() for f in sent_folders if f.strip())
         like_pat = f"gmail:{user.lower()}/%"
         if folders:
-            ph = ",".join("?" * len(folders))
-            row = conn.execute(
-                f"""
-                SELECT COUNT(*), MAX(COALESCE(NULLIF(trim(date_iso), ''), date_raw))
-                FROM emails
-                WHERE lower(source_file) LIKE ?
-                  AND folder IN ({ph})
-                """,
-                (like_pat, *folders),
-            ).fetchone()
-            sent_info["sent_email_rows"] = int(row[0] or 0)
-            sent_info["max_sent_message_at"] = row[1]
-            max_dt = _parse_flexible_ts(row[1] if row else None)
-            age = _days_since(max_dt, now)
-            sent_info["max_sent_message_age_days"] = age
-            if sent_info["sent_email_rows"] == 0:
+            probe = probe_sent_history(conn, gmail_user=gmail_user, sent_folders=folders)
+            sent_info["sent_email_rows"] = probe.sent_row_count
+            sent_info["sent_recipient_norm_count"] = probe.parsed_recipient_count
+            sent_info["distinct_folders_sample"] = list(probe.distinct_folders_sample)
+
+            if probe.sent_row_count > 0:
+                ph = ",".join("?" * len(folders))
+                row = conn.execute(
+                    f"""
+                    SELECT MAX(COALESCE(NULLIF(trim(date_iso), ''), date_raw))
+                    FROM emails
+                    WHERE lower(source_file) LIKE ?
+                      AND folder IN ({ph})
+                    """,
+                    (like_pat, *folders),
+                ).fetchone()
+                sent_info["max_sent_message_at"] = row[0] if row else None
+                max_dt = _parse_flexible_ts(row[0] if row else None)
+                age = _days_since(max_dt, now)
+                sent_info["max_sent_message_age_days"] = age
+                if age is not None and age > max_staleness_days:
+                    warnings.append(
+                        f"Newest Sent message for this mailbox is ~{age:.1f} days old "
+                        f"(threshold {max_staleness_days}): refresh Gmail ingest if you expect recent sends."
+                    )
+            else:
                 warnings.append(
                     "No rows in `emails` for configured Gmail user + Sent folders — "
                     "Sent-history blocking in the export gate may be ineffective until ingest runs."
                 )
-            elif age is not None and age > max_staleness_days:
-                warnings.append(
-                    f"Newest Sent message for this mailbox is ~{age:.1f} days old "
-                    f"(threshold {max_staleness_days}): refresh Gmail ingest if you expect recent sends."
-                )
 
-        norms = load_sent_recipient_norms(conn, gmail_user=gmail_user, sent_folders=sent_folders)
-        sent_info["sent_recipient_norm_count"] = len(norms)
-        if req_status.get("emails") and sent_info["sent_email_rows"] > 0 and len(norms) == 0:
-            warnings.append(
-                "Sent folder rows exist but no normalized recipient addresses were parsed — "
-                "check `recipients` column / encoding."
-            )
+            if probe.sent_row_count > 0 and probe.parsed_recipient_count == 0:
+                warnings.append(
+                    "Sent folder rows exist but no normalized recipient addresses were parsed — "
+                    "check `recipients` column / encoding."
+                )
 
     side: dict[str, Any] = {
         "suppression_rows": 0,

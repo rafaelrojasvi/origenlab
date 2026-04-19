@@ -14,6 +14,10 @@ Uses ``compute_next_marketing_recipients`` → shared ``candidate_export_gate.ev
 - Supplier domains from SQLite + marketing noise heuristics (unless disabled in code paths that
   support it; this CLI keeps them **on**).
 
+**Preflight:** Fails closed (exit code 3) unless ``--allow-empty-sent-history`` if SQLite has no
+matching Gmail Sent rows or Sent rows have no parseable ``recipients`` — Sent-based blocking cannot
+be verified. See ``outbound_sent_preflight``.
+
 Output CSV columns work with ``prepare_origenlab_marketing_outreach_input.py --input`` and
 optional ``--pilot-csv`` for ``run_tatiana_pilot_batch.py``.
 """
@@ -41,6 +45,12 @@ from origenlab_email_pipeline.outbound_core import (
     resolve_outbound_gmail_user,
     resolve_outbound_sent_folders,
     sent_folder_defaults_were_used,
+)
+from origenlab_email_pipeline.outbound_sent_preflight import (
+    evaluate_sent_history_preflight,
+    print_sent_preflight_failure_to_stderr,
+    probe_sent_history,
+    sent_preflight_summary_dict,
 )
 from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
     MARKETING_VARIANT_GENERAL,
@@ -111,6 +121,14 @@ def main() -> int:
         action="store_true",
         help="Write <output_stem>_outbound_summary.json with shared outbound_run metadata (lane=lead).",
     )
+    ap.add_argument(
+        "--allow-empty-sent-history",
+        action="store_true",
+        help=(
+            "Allow export when no Gmail Sent rows match, or Sent rows have no parseable recipients. "
+            "Dangerous: Sent-based already-contacted blocking may be ineffective. Prefer ingesting Sent."
+        ),
+    )
     args = ap.parse_args()
 
     settings = load_settings()
@@ -124,6 +142,16 @@ def main() -> int:
 
     conn = connect(db_path)
     ensure_leads_tables(conn)
+
+    probe = probe_sent_history(conn, gmail_user=gmail_user, sent_folders=sent_folders)
+    preflight = evaluate_sent_history_preflight(probe, allow_empty=bool(args.allow_empty_sent_history))
+    if not preflight.ok:
+        print_sent_preflight_failure_to_stderr(preflight)
+        conn.close()
+        return 3
+    for w in preflight.warnings:
+        print(f"warning: {w}", file=sys.stderr)
+
     export_rows, stats = compute_next_marketing_recipients(
         conn,
         gmail_user=gmail_user,
@@ -159,6 +187,7 @@ def main() -> int:
                     "n_outreach_state": stats.n_outreach_state,
                 },
             ),
+            "sent_preflight": sent_preflight_summary_dict(preflight),
             "lead_queue": {
                 "limit_requested": int(args.limit),
                 "fetch_cap": int(args.fetch_cap),

@@ -27,7 +27,20 @@ From `apps/email-pipeline/`:
 
 ### Shared runtime defaults (`outbound_core`)
 
-[`outbound_core.py`](../src/origenlab_email_pipeline/outbound_core.py) centralizes **how** operators resolve mailbox identity, default Sent folders, and **which** `GateContext` constructor applies per lane (`gate_context_for_archive_batch` uses stricter contact-graph noise; `gate_context_for_lead_master_export` matches `lead_master` / Cola). Policy remains in [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py) and [`marketing_export_context.py`](../src/origenlab_email_pipeline/marketing_export_context.py). Summary JSON from archive runs includes a nested **`outbound_run`** block (schema version, lane, paths, counts) for drift-resistant auditing; the lead CLI can emit a sibling summary with `--write-outbound-summary`.
+[`outbound_core.py`](../src/origenlab_email_pipeline/outbound_core.py) centralizes **how** operators resolve mailbox identity, default Sent folders, and **which** `GateContext` constructor applies per lane (`gate_context_for_archive_batch` uses stricter contact-graph noise; `gate_context_for_lead_master_export` matches `lead_master` / Cola). Policy remains in [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py) and [`marketing_export_context.py`](../src/origenlab_email_pipeline/marketing_export_context.py).
+
+### Sent-history preflight (fail-closed)
+
+Both **lead** and **archive** canonical exports run [`outbound_sent_preflight.py`](../src/origenlab_email_pipeline/outbound_sent_preflight.py) **before** gate evaluation. They **fail closed** when Gmail Sent evidence in SQLite is **missing**, **folder-mismatched** (no rows under the resolved Sent folder labels for that mailbox), or **unparsable** (Sent rows exist but `recipients` parse to zero addresses).
+
+- **Exit code `3`:** outbound Sent-history preflight failed (hard stop; no batch CSVs written for that run).
+- **`--allow-empty-sent-history`:** explicit, **audited** CLI override on **either** canonical export script; use **rarely** and only when you accept weaker Sent-based already-contacted blocking. Successful override runs record this in **`sent_preflight.override_used`** (and warnings) in summary JSON where applicable.
+- **Discover the exact Gmail Sent label:**  
+  `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders`
+- **Ingest that folder** (example — use the label from your account):  
+  `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"`
+- **`sent_preflight` in JSON:** **Lead** — only when you pass **`--write-outbound-summary`** (writes `<stem>_outbound_summary.json` next to the CSV). **Archive** — always present in **`archive_outreach_build_summary.json`** on success (and in audit summaries where the builder writes them), alongside nested **`outbound_run`** for drift-resistant auditing.
+- **Streamlit Cola** (`compute_next_marketing_recipients` queue UI): uses the **same** shared preflight. The **only** bypass is environment-based: **`ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1`** (no equivalent to `--allow-empty-sent-history` inside the app).
 
 **Blocker-memory regression tests:** integration tests exercise the canonical **lead** queue (`tests/test_next_marketing_queue_outbound_integration.py`) and **archive** batch builder (`tests/test_archive_lane_outbound_integration.py`) against real SQLite fixtures — Sent-history norms (default Sent folders only), `outreach_contact_state`, and suppression — without changing gate policy.
 

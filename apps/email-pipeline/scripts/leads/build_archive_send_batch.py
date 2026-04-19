@@ -26,6 +26,10 @@ from origenlab_email_pipeline.outbound_core import (
     resolve_outbound_sent_folders,
     sent_folder_defaults_were_used,
 )
+from origenlab_email_pipeline.outbound_sent_preflight import (
+    SentHistoryPreflightFailed,
+    print_sent_preflight_failure_to_stderr,
+)
 
 
 def main() -> int:
@@ -150,6 +154,14 @@ def main() -> int:
             "(spread sends across organizations; still capped by --shortlist-limit)."
         ),
     )
+    ap.add_argument(
+        "--allow-empty-sent-history",
+        action="store_true",
+        help=(
+            "Allow batch build when no Gmail Sent rows match, or Sent rows have no parseable "
+            "recipients. Dangerous: Sent-based already-contacted blocking may be ineffective."
+        ),
+    )
     args = ap.parse_args()
 
     settings = load_settings()
@@ -171,32 +183,45 @@ def main() -> int:
 
     conn = connect(db_path)
     try:
-        result = build_archive_send_batch(
-            conn=conn,
-            db_path=db_path,
-            out_dir=args.out_dir,
-            gmail_user=gmail_user,
-            fetch_cap=int(args.fetch_cap),
-            audit_limit=int(args.audit_limit),
-            shortlist_limit=int(args.shortlist_limit),
-            sent_folders=sent_folders,
-            strict_contact_graph_noise=bool(args.strict_contact_graph_noise),
-            allow_weak_warmth=bool(args.allow_weak_warmth),
-            skip_commercial_precheck=bool(args.skip_commercial_precheck),
-            route_personal_domain_with_client_signals_to_review=bool(
-                args.route_personal_domain_with_client_signals_to_review
-            ),
-            audit_only=bool(args.audit_only),
-            strict_commercial_drop=bool(args.strict_commercial_drop),
-            extra_exclude_domains=extra_exclude_domains,
-            manual_suppress_emails=manual_suppress_emails,
-            manual_suppress_domains=manual_suppress_domains,
-            sent_folder_defaults_used=sent_folder_defaults_used,
-            archive_candidate_sort=str(args.archive_candidate_sort),
-            shortlist_one_per_domain=bool(args.shortlist_one_per_domain),
-        )
+        try:
+            result = build_archive_send_batch(
+                conn=conn,
+                db_path=db_path,
+                out_dir=args.out_dir,
+                gmail_user=gmail_user,
+                fetch_cap=int(args.fetch_cap),
+                audit_limit=int(args.audit_limit),
+                shortlist_limit=int(args.shortlist_limit),
+                sent_folders=sent_folders,
+                strict_contact_graph_noise=bool(args.strict_contact_graph_noise),
+                allow_weak_warmth=bool(args.allow_weak_warmth),
+                skip_commercial_precheck=bool(args.skip_commercial_precheck),
+                route_personal_domain_with_client_signals_to_review=bool(
+                    args.route_personal_domain_with_client_signals_to_review
+                ),
+                audit_only=bool(args.audit_only),
+                strict_commercial_drop=bool(args.strict_commercial_drop),
+                extra_exclude_domains=extra_exclude_domains,
+                manual_suppress_emails=manual_suppress_emails,
+                manual_suppress_domains=manual_suppress_domains,
+                sent_folder_defaults_used=sent_folder_defaults_used,
+                archive_candidate_sort=str(args.archive_candidate_sort),
+                shortlist_one_per_domain=bool(args.shortlist_one_per_domain),
+                allow_empty_sent_history=bool(args.allow_empty_sent_history),
+            )
+        except SentHistoryPreflightFailed as exc:
+            print_sent_preflight_failure_to_stderr(
+                exc.outcome,
+                headline="error: outbound Sent-history preflight failed — batch aborted.",
+            )
+            return 3
     finally:
         conn.close()
+
+    sp = result.summary.get("sent_preflight") or {}
+    if isinstance(sp, dict) and sp.get("override_used"):
+        for w in sp.get("warnings") or []:
+            print(f"warning: {w}", file=sys.stderr)
 
     if args.audit_only:
         print(f"Wrote archive audit-only artifacts to {result.out_dir}")

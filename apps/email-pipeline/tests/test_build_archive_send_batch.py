@@ -7,6 +7,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+_TDIR = Path(__file__).resolve().parent
+if str(_TDIR) not in sys.path:
+    sys.path.insert(0, str(_TDIR))
+
+from gmail_sent_history_seed import (
+    seed_minimal_sent_history_for_preflight,
+    seed_minimal_sent_history_for_preflight_extended_emails,
+)
+
 from origenlab_email_pipeline.archive_outreach_queue import (
     ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
     ARCHIVE_CANDIDATE_SORT_LEGACY,
@@ -28,7 +37,7 @@ SCRIPT = REPO / "scripts" / "leads" / "build_archive_send_batch.py"
 EXPORT_AUDIT_SCRIPT = REPO / "scripts" / "leads" / "advanced" / "export_archive_outreach_candidates.py"
 
 
-def _seed_db(path: Path) -> None:
+def _seed_db(path: Path, *, with_sent_preflight: bool = True) -> None:
     conn = sqlite3.connect(str(path))
     conn.executescript(
         """
@@ -154,6 +163,8 @@ def _seed_db(path: Path) -> None:
         ) VALUES ('suppressed@buyer.cl', 'buyer.cl', 'suppressed', 'MANUAL_SUPPRESS', 'blocked', 0.9, 0.9, 3, 't', 't')
         """
     )
+    if with_sent_preflight:
+        seed_minimal_sent_history_for_preflight(conn)
     conn.commit()
     conn.close()
 
@@ -260,6 +271,7 @@ def _seed_manual_domain_suppress_db(path: Path) -> None:
         ) VALUES ('x@blocked.com', 'blocked.com', 'approved', '', 'ok', 0.9, 0.9, 3, 't', 't')
         """
     )
+    seed_minimal_sent_history_for_preflight(conn)
     conn.commit()
     conn.close()
 
@@ -392,6 +404,7 @@ def _seed_volume_archive_contacts_only(path: Path, *, n: int) -> None:
         """,
         [(r[0], "buyer.cl", "approved") for r in cm_rows],
     )
+    seed_minimal_sent_history_for_preflight(conn)
     conn.commit()
     conn.close()
 
@@ -518,6 +531,7 @@ def _seed_company_intro_priority_db(path: Path) -> None:
         )
         """
     )
+    seed_minimal_sent_history_for_preflight_extended_emails(conn)
     conn.commit()
     conn.close()
 
@@ -624,6 +638,7 @@ def _seed_personal_domain_policy_db(path: Path) -> None:
         ) VALUES ('buyer.personal@gmail.com', 'gmail.com', 'approved', '', 'ok', 0.9, 0.9, 3, 't', 't')
         """
     )
+    seed_minimal_sent_history_for_preflight(conn)
     conn.commit()
     conn.close()
 
@@ -731,6 +746,13 @@ def test_build_archive_send_batch_happy_path_outputs_and_classification(tmp_path
     assert summary["outbound_run"]["strict_contact_graph_noise"] is True
     for k in ("schema_version", "gmail_user", "sqlite_path", "sent_folders_resolved", "counts"):
         assert k in summary["outbound_run"]
+    assert "sent_preflight" in summary
+    sp = summary["sent_preflight"]
+    assert sp["ok"] is True
+    assert sp["override_used"] is False
+    assert sp["sent_row_count"] >= 1
+    assert sp["parsed_recipient_count"] >= 1
+    assert sp["gmail_user"] == "contacto@origenlab.cl"
     assert all("decision_path" in row for row in precheck)
     assert all("final_decision_path" in row for row in send_ready + review_required)
 
@@ -1065,6 +1087,7 @@ def _seed_shortlist_one_per_domain_db(path: Path) -> None:
           ('only@other.cl', 'other.cl', 'approved', '', 'ok', 0.8, 0.8, 3, 't', 't');
         """
     )
+    seed_minimal_sent_history_for_preflight(conn)
     conn.commit()
     conn.close()
 

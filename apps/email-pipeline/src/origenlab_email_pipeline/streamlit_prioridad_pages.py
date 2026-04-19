@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sqlite3
 from dataclasses import astuple
 from pathlib import Path
@@ -20,6 +21,12 @@ from origenlab_email_pipeline.cases_review_queue import (
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.contact_email_suppression import fetch_contact_email_suppression_map
 from origenlab_email_pipeline.next_marketing_queue import compute_next_marketing_recipients
+from origenlab_email_pipeline.outbound_core import resolve_outbound_sent_folders
+from origenlab_email_pipeline.outbound_sent_preflight import (
+    evaluate_sent_history_preflight,
+    probe_sent_history,
+    sent_preflight_failure_detail_lines,
+)
 from origenlab_email_pipeline.streamlit_borrador_support import (
     contact_suppression_reason_label,
     fmt_marketing_variant,
@@ -283,10 +290,36 @@ def render_next_marketing_queue_page(conn: sqlite3.Connection, db_path: Path) ->
             st.error("Mín. priority_score no es un número válido.")
             return
 
+    gu = (gmail_user or "").strip() or default_user
+    sent_folders_ui = resolve_outbound_sent_folders(None)
+    probe = probe_sent_history(conn, gmail_user=gu, sent_folders=sent_folders_ui)
+    allow_empty_sent = os.environ.get("ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY") == "1"
+    preflight_outcome = evaluate_sent_history_preflight(probe, allow_empty=allow_empty_sent)
+    if not preflight_outcome.ok:
+        st.error(
+            "No se puede mostrar la cola: falló la verificación de **Enviados (Sent)** en SQLite. "
+            "Sin correos de Sent importados para el buzón y carpetas configuradas, "
+            "el bloqueo de «ya contactados» no es confiable."
+        )
+        with st.expander("Detalle técnico (mismo criterio que el CLI de exportación)"):
+            st.code(
+                "error: outbound Sent-history preflight failed — export aborted.\n"
+                + "\n".join(sent_preflight_failure_detail_lines(preflight_outcome)),
+                language=None,
+            )
+        st.caption(
+            "Sug.: ingeste Sent con `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` "
+            "(use `--list-folders` para el nombre exacto de la carpeta). "
+            "Solo si acepta el riesgo: `ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1`."
+        )
+        return
+    for w in preflight_outcome.warnings:
+        st.warning(w)
+
     try:
         rows, stats = compute_next_marketing_recipients(
             conn,
-            gmail_user=gmail_user.strip(),
+            gmail_user=gu,
             limit=int(limit_n),
             fetch_cap=int(fetch_cap),
             include_low_fit=include_low,

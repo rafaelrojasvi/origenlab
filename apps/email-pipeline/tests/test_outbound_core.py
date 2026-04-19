@@ -165,6 +165,10 @@ def test_build_archive_cli_includes_outbound_run_in_summary(tmp_path: Path) -> N
     assert orun["sent_folder_defaults_used"] is True
     assert orun["sent_folders_resolved"] == list(DEFAULT_SENT_FOLDERS)
     assert orun["strict_contact_graph_noise"] is True
+    assert "sent_preflight" in summary
+    sp = summary["sent_preflight"]
+    assert sp["ok"] is True
+    assert sp["override_used"] is False
 
 
 def _minimal_db_for_lead_export(path: Path) -> None:
@@ -172,6 +176,29 @@ def _minimal_db_for_lead_export(path: Path) -> None:
 
     conn = sqlite3.connect(str(path))
     ensure_leads_tables(conn)
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS emails (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_file TEXT NOT NULL,
+            folder TEXT,
+            recipients TEXT,
+            date_iso TEXT,
+            date_raw TEXT
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO emails (source_file, folder, recipients, date_iso)
+        VALUES (
+            'gmail:contacto@origenlab.cl/sent1',
+            '[Gmail]/Enviados',
+            'prior@cliente.cl',
+            '2026-04-15T12:00:00+00:00'
+        )
+        """
+    )
     conn.execute(
         """
         INSERT INTO lead_master (
@@ -215,5 +242,11 @@ def test_export_next_marketing_cli_writes_outbound_summary(tmp_path: Path) -> No
     assert payload["outbound_run"]["strict_contact_graph_noise"] is False
     assert payload["outbound_run"]["sent_folders_resolved"] == list(DEFAULT_SENT_FOLDERS)
     assert "lead_queue" in payload
+    sp = payload["sent_preflight"]
+    assert sp["ok"] is True
+    assert sp["override_used"] is False
+    assert sp["sent_row_count"] >= 1
+    assert sp["parsed_recipient_count"] >= 1
+    assert sp["gmail_user"] == "contacto@origenlab.cl"
 
 

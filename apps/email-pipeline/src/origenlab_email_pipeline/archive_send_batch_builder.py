@@ -27,6 +27,12 @@ from origenlab_email_pipeline.outbound_core import (
     build_outbound_run_envelope,
     gate_context_for_archive_batch,
 )
+from origenlab_email_pipeline.outbound_sent_preflight import (
+    SentHistoryPreflightFailed,
+    evaluate_sent_history_preflight,
+    probe_sent_history,
+    sent_preflight_summary_dict,
+)
 
 AUDIT_CSV_NAME = "archive_outreach_audit.csv"
 AUDIT_SUMMARY_JSON_NAME = "archive_outreach_audit_summary.json"
@@ -232,6 +238,7 @@ def write_archive_audit_csv_and_summary(
     gmail_user: str,
     db_path: Path,
     outbound_run: dict[str, Any] | None = None,
+    sent_preflight: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     """Write audit CSV and optionally JSON summary (same shape as full batch first stage)."""
     audit_csv_path = Path(audit_csv_path)
@@ -254,6 +261,8 @@ def write_archive_audit_csv_and_summary(
     }
     if outbound_run is not None:
         summary["outbound_run"] = outbound_run
+    if sent_preflight is not None:
+        summary["sent_preflight"] = sent_preflight
     if audit_summary_json_path is not None:
         p = Path(audit_summary_json_path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -283,10 +292,19 @@ def build_archive_send_batch(
     sent_folder_defaults_used: bool = False,
     archive_candidate_sort: str = ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO,
     shortlist_one_per_domain: bool = False,
+    allow_empty_sent_history: bool = False,
 ) -> BuildResult:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     created_at_utc = datetime.now(timezone.utc).isoformat()
+
+    probe = probe_sent_history(conn, gmail_user=gmail_user, sent_folders=sent_folders)
+    preflight_outcome = evaluate_sent_history_preflight(
+        probe, allow_empty=bool(allow_empty_sent_history)
+    )
+    if not preflight_outcome.ok:
+        raise SentHistoryPreflightFailed(preflight_outcome)
+    sent_preflight_block = sent_preflight_summary_dict(preflight_outcome)
 
     audit = run_archive_outreach_audit(
         conn,
@@ -325,6 +343,7 @@ def build_archive_send_batch(
         gmail_user=gmail_user,
         db_path=db_path,
         outbound_run=audit_outbound_run,
+        sent_preflight=sent_preflight_block,
     )
 
     if audit_only:
@@ -344,6 +363,7 @@ def build_archive_send_batch(
                 "For a full batch (shortlist, precheck, send_ready), run without --audit-only."
             ),
             "outbound_run": audit_outbound_run,
+            "sent_preflight": sent_preflight_block,
         }
         (out_dir / BUILD_SUMMARY_JSON_NAME).write_text(
             json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -549,6 +569,7 @@ def build_archive_send_batch(
         "manual_suppress_emails": sorted(suppress_emails),
         "manual_suppress_domains": sorted(suppress_domains),
         "shortlist_one_per_domain": bool(shortlist_one_per_domain),
+        "sent_preflight": sent_preflight_block,
         "outbound_run": build_outbound_run_envelope(
             lane="archive",
             gmail_user=gmail_user,
