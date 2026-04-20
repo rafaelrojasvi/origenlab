@@ -2,19 +2,38 @@
 """Copy SQLite archive tables into Postgres archive.* (Alembic 20260419_0002).
 
 SQLite stays read-only; source must pass strict validation (see validate_sqlite_archive_for_postgres).
+
+Memory / large archives:
+    Use a small ``--batch-size`` (default 500). Each batch is converted, inserted, and committed;
+    only one batch of rows + TEXT bodies lives in Python at a time.
+
+Commits:
+    Loads use **per-batch commits** (not one giant transaction). If the process stops mid-run,
+    Postgres may contain **partial** archive rows. Rerun with ``--replace`` to truncate
+    archive tables child-first and reload from scratch.
+
+Dry-run:
+    Connects and validates only; does not write to Postgres.
 """
 
 from __future__ import annotations
 
 import argparse
+import gc
 import importlib.util
 import json
 import os
 import sqlite3
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+INTERRUPTED_LOAD_HINT = (
+    "Per-batch commits: an interrupted run may leave partial rows in archive.*. "
+    "Rerun with --replace to truncate child-first and reload."
+)
 
 REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
@@ -40,6 +59,8 @@ else:
     _PSYCOPG_IMPORT_ERROR = None
 
 GMAIL_SENT_FOLDERS = ("[Gmail]/Enviados", "[Gmail]/Sent Mail")
+# Bound as query parameters — never embed "gmail:%" in psycopg SQL literals (% is placeholder syntax).
+GMAIL_SOURCE_LIKE_PATTERN = "gmail:%"
 
 
 class ConversionError(Exception):
@@ -199,10 +220,10 @@ def sqlite_quality_metrics(conn: sqlite3.Connection) -> dict[str, int]:
             """
             SELECT COUNT(*)
             FROM emails
-            WHERE source_file LIKE 'gmail:%'
+            WHERE source_file LIKE ?
               AND folder IN (?, ?)
             """,
-            GMAIL_SENT_FOLDERS,
+            (GMAIL_SOURCE_LIKE_PATTERN, *GMAIL_SENT_FOLDERS),
         ).fetchone()[0]
     )
     return {"duplicate_non_null_message_id_extra_rows": dup_extra, "gmail_sent_rows": gmail_sent}
@@ -226,10 +247,10 @@ def pg_quality_metrics(cur: psycopg.Cursor) -> dict[str, int]:
         """
         SELECT COUNT(*)
         FROM archive.emails
-        WHERE source_file LIKE 'gmail:%'
+        WHERE source_file LIKE %s
           AND folder IN (%s, %s)
         """,
-        GMAIL_SENT_FOLDERS,
+        (GMAIL_SOURCE_LIKE_PATTERN, *GMAIL_SENT_FOLDERS),
     )
     gmail_sent = int(cur.fetchone()[0])
     return {"duplicate_non_null_message_id_extra_rows": dup_extra, "gmail_sent_rows": gmail_sent}
@@ -517,61 +538,162 @@ INSERT INTO archive.attachment_extracts (
 """
 
 
+def format_load_progress(
+    *,
+    pg_table: str,
+    loaded_so_far: int,
+    total: int,
+    elapsed_s: float,
+    batch_len: int,
+) -> str:
+    """Single-line progress for stderr (no row payloads)."""
+    pct = (100.0 * loaded_so_far / total) if total else 0.0
+    return (
+        f"loading {pg_table}: {loaded_so_far}/{total} ({pct:.1f}%) "
+        f"elapsed={elapsed_s:.1f}s batch={batch_len}"
+    )
+
+
 def migrate_table_emails(
-    sconn: sqlite3.Connection, pcur: psycopg.Cursor, *, batch_size: int
-) -> int:
-    n = 0
+    sconn: sqlite3.Connection,
+    pconn: psycopg.Connection,
+    loaded: dict[str, int],
+    *,
+    batch_size: int,
+    total_rows: int,
+    t_load_start: float,
+) -> None:
     last_id = 0
+    key = "emails"
+    pg_name = "archive.emails"
     while True:
         rows = load_emails_batch(sconn, last_id=last_id, batch_size=batch_size)
         if not rows:
             break
-        batch: list[tuple[Any, ...]] = []
-        for r in rows:
-            batch.append(row_to_email_tuple(r))
-        pcur.executemany(INSERT_EMAILS, batch)
-        n += len(batch)
-        last_id = int(rows[-1][0])
-    return n
+        batch_len = len(rows)
+        last_row_id = int(rows[-1][0])
+        try:
+            batch: list[tuple[Any, ...]] = []
+            for r in rows:
+                batch.append(row_to_email_tuple(r))
+            with pconn.cursor() as cur:
+                cur.executemany(INSERT_EMAILS, batch)
+            pconn.commit()
+        finally:
+            del rows
+            del batch
+            gc.collect()
+
+        loaded[key] = loaded.get(key, 0) + batch_len
+        elapsed = time.monotonic() - t_load_start
+        print(
+            format_load_progress(
+                pg_table=pg_name,
+                loaded_so_far=loaded[key],
+                total=total_rows,
+                elapsed_s=elapsed,
+                batch_len=batch_len,
+            ),
+            flush=True,
+        )
+        last_id = last_row_id
 
 
 def migrate_table_attachments(
-    sconn: sqlite3.Connection, pcur: psycopg.Cursor, *, batch_size: int
-) -> int:
-    n = 0
+    sconn: sqlite3.Connection,
+    pconn: psycopg.Connection,
+    loaded: dict[str, int],
+    *,
+    batch_size: int,
+    total_rows: int,
+    t_load_start: float,
+) -> None:
     last_id = 0
+    key = "attachments"
+    pg_name = "archive.attachments"
     while True:
         rows = load_attachments_batch(sconn, last_id=last_id, batch_size=batch_size)
         if not rows:
             break
-        batch = [row_to_attachment_tuple(r) for r in rows]
-        pcur.executemany(INSERT_ATTACHMENTS, batch)
-        n += len(batch)
-        last_id = int(rows[-1][0])
-    return n
+        batch_len = len(rows)
+        last_row_id = int(rows[-1][0])
+        try:
+            batch = [row_to_attachment_tuple(r) for r in rows]
+            with pconn.cursor() as cur:
+                cur.executemany(INSERT_ATTACHMENTS, batch)
+            pconn.commit()
+        finally:
+            del rows
+            del batch
+
+        loaded[key] = loaded.get(key, 0) + batch_len
+        elapsed = time.monotonic() - t_load_start
+        print(
+            format_load_progress(
+                pg_table=pg_name,
+                loaded_so_far=loaded[key],
+                total=total_rows,
+                elapsed_s=elapsed,
+                batch_len=batch_len,
+            ),
+            flush=True,
+        )
+        last_id = last_row_id
 
 
 def migrate_table_extracts(
-    sconn: sqlite3.Connection, pcur: psycopg.Cursor, *, batch_size: int
-) -> int:
-    n = 0
+    sconn: sqlite3.Connection,
+    pconn: psycopg.Connection,
+    loaded: dict[str, int],
+    *,
+    batch_size: int,
+    total_rows: int,
+    t_load_start: float,
+) -> None:
     last_id = 0
+    key = "attachment_extracts"
+    pg_name = "archive.attachment_extracts"
     while True:
         rows = load_extracts_batch(sconn, last_id=last_id, batch_size=batch_size)
         if not rows:
             break
-        batch = [row_to_extract_tuple(r) for r in rows]
-        pcur.executemany(INSERT_EXTRACTS, batch)
-        n += len(batch)
-        last_id = int(rows[-1][0])
-    return n
+        batch_len = len(rows)
+        last_row_id = int(rows[-1][0])
+        try:
+            batch = [row_to_extract_tuple(r) for r in rows]
+            with pconn.cursor() as cur:
+                cur.executemany(INSERT_EXTRACTS, batch)
+            pconn.commit()
+        finally:
+            del rows
+            del batch
+
+        loaded[key] = loaded.get(key, 0) + batch_len
+        elapsed = time.monotonic() - t_load_start
+        print(
+            format_load_progress(
+                pg_table=pg_name,
+                loaded_so_far=loaded[key],
+                total=total_rows,
+                elapsed_s=elapsed,
+                batch_len=batch_len,
+            ),
+            flush=True,
+        )
+        last_id = last_row_id
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--sqlite-db", type=Path, default=None, help="SQLite path (else env/settings)")
     p.add_argument("--postgres-url", default=None, help="Postgres URL (else ORIGENLAB_POSTGRES_URL / ALEMBIC_DATABASE_URL)")
-    p.add_argument("--batch-size", type=int, default=5000, metavar="N")
+    p.add_argument(
+        "--batch-size",
+        type=int,
+        default=500,
+        metavar="N",
+        help="Rows per batch (default 500; use smaller values for huge email bodies / low RAM)",
+    )
     p.add_argument("--replace", action="store_true", help="Truncate archive tables (child-first) before load")
     p.add_argument("--dry-run", action="store_true", help="Validate and inspect only; no writes")
     p.add_argument("--json-out", type=Path, default=None, help="Write JSON summary")
@@ -584,6 +706,8 @@ def _empty_result() -> dict[str, Any]:
         "ok": False,
         "dry_run": False,
         "replace": False,
+        "batch_size": None,
+        "elapsed_seconds": None,
         "sqlite_counts": {},
         "postgres_counts_before": {},
         "postgres_counts_after": {},
@@ -678,50 +802,80 @@ def main(argv: list[str] | None = None) -> int:
                 print(result["errors"][-1], file=sys.stderr)
                 return 2
             before = pg_archive_counts(cur)
-            result["postgres_counts_before"] = dict(before)
+        result["postgres_counts_before"] = dict(before)
 
-            nonempty = any(c > 0 for c in before.values())
-            if nonempty and not args.replace and not args.dry_run:
-                result["errors"].append(
-                    "Postgres archive tables are not empty. Use --replace to truncate and reload, or clear manually."
-                )
-                pconn.rollback()
-                sconn.close()
-                _write_json(args.json_out, result)
-                print(result["errors"][-1], file=sys.stderr)
-                return 1
+        nonempty = any(c > 0 for c in before.values())
+        if nonempty and not args.replace and not args.dry_run:
+            result["errors"].append(
+                "Postgres archive tables are not empty. Use --replace to truncate and reload, or clear manually."
+            )
+            pconn.rollback()
+            sconn.close()
+            _write_json(args.json_out, result)
+            print(result["errors"][-1], file=sys.stderr)
+            return 1
 
-            if args.dry_run:
-                pconn.rollback()
-                sconn.close()
-                result["ok"] = True
-                result["validation"] = {
-                    "note": "dry_run: no data written",
-                    "sqlite_strict_ok": True,
-                    "postgres_archive_empty_or_replace": not nonempty or args.replace,
-                }
-                _write_json(args.json_out, result)
-                print("dry-run ok: validation passed; no writes performed.")
-                return 0
+        result["batch_size"] = batch_size
 
-            if args.replace and nonempty:
+        if args.dry_run:
+            pconn.rollback()
+            sconn.close()
+            result["ok"] = True
+            result["validation"] = {
+                "note": "dry_run: no data written",
+                "sqlite_strict_ok": True,
+                "postgres_archive_empty_or_replace": not nonempty or args.replace,
+            }
+            _write_json(args.json_out, result)
+            print("dry-run ok: validation passed; no writes performed.")
+            return 0
+
+        if args.replace and nonempty:
+            with pconn.cursor() as cur:
                 truncate_archive_child_first(cur)
+            pconn.commit()
 
-            loaded = {"emails": 0, "attachments": 0, "attachment_extracts": 0}
-            try:
-                loaded["emails"] = migrate_table_emails(sconn, cur, batch_size=batch_size)
-                loaded["attachments"] = migrate_table_attachments(sconn, cur, batch_size=batch_size)
-                loaded["attachment_extracts"] = migrate_table_extracts(sconn, cur, batch_size=batch_size)
-            except ConversionError as exc:
-                pconn.rollback()
-                result["errors"].append(str(exc))
-                sconn.close()
-                _write_json(args.json_out, result)
-                print(str(exc), file=sys.stderr)
-                return 1
+        loaded: dict[str, int] = {"emails": 0, "attachments": 0, "attachment_extracts": 0}
+        t_load_start = time.monotonic()
+        try:
+            migrate_table_emails(
+                sconn,
+                pconn,
+                loaded,
+                batch_size=batch_size,
+                total_rows=int(vreport["counts"]["emails"] or 0),
+                t_load_start=t_load_start,
+            )
+            migrate_table_attachments(
+                sconn,
+                pconn,
+                loaded,
+                batch_size=batch_size,
+                total_rows=int(vreport["counts"]["attachments"] or 0),
+                t_load_start=t_load_start,
+            )
+            migrate_table_extracts(
+                sconn,
+                pconn,
+                loaded,
+                batch_size=batch_size,
+                total_rows=int(vreport["counts"]["attachment_extracts"] or 0),
+                t_load_start=t_load_start,
+            )
+        except ConversionError as exc:
+            result["loaded"] = dict(loaded)
+            result["elapsed_seconds"] = round(time.monotonic() - t_load_start, 3)
+            result["warnings"].append(INTERRUPTED_LOAD_HINT)
+            result["errors"].append(str(exc))
+            sconn.close()
+            _write_json(args.json_out, result)
+            print(str(exc), file=sys.stderr)
+            return 1
 
-            result["loaded"] = loaded
+        result["loaded"] = dict(loaded)
+        result["elapsed_seconds"] = round(time.monotonic() - t_load_start, 3)
 
+        with pconn.cursor() as cur:
             reset_sequence(cur, table_sql="archive.emails", id_column="id")
             reset_sequence(cur, table_sql="archive.attachments", id_column="id")
             reset_sequence(cur, table_sql="archive.attachment_extracts", id_column="id")
@@ -753,7 +907,10 @@ def main(argv: list[str] | None = None) -> int:
                     "attachment_extracts": after["attachment_extracts"] == vreport["counts"]["attachment_extracts"],
                 },
                 "min_max_ids_match": {k: {"sqlite": srange[k], "postgres": prange[k]} for k in srange},
-                "duplicate_message_id_extra_rows": {"sqlite": sq["duplicate_non_null_message_id_extra_rows"], "postgres": pq["duplicate_non_null_message_id_extra_rows"]},
+                "duplicate_message_id_extra_rows": {
+                    "sqlite": sq["duplicate_non_null_message_id_extra_rows"],
+                    "postgres": pq["duplicate_non_null_message_id_extra_rows"],
+                },
                 "gmail_sent_rows": {"sqlite": sq["gmail_sent_rows"], "postgres": pq["gmail_sent_rows"]},
                 "orphan_counts_postgres": orphans,
                 "all_passed": val_ok,
@@ -761,13 +918,16 @@ def main(argv: list[str] | None = None) -> int:
             result["ok"] = val_ok
             if not val_ok:
                 result["errors"].append("post-load validation failed (see validation details)")
-                pconn.rollback()
+                result["warnings"].append(
+                    "archive.* may not match SQLite; consider --replace and re-run the migration."
+                )
+                pconn.commit()
                 sconn.close()
                 _write_json(args.json_out, result)
                 print(result["errors"][-1], file=sys.stderr)
                 return 1
 
-            pconn.commit()
+        pconn.commit()
     finally:
         pconn.close()
 

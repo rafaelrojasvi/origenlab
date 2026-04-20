@@ -8,6 +8,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -26,6 +27,68 @@ def _load():
 
 
 m = _load()
+
+
+def test_default_batch_size_is_500() -> None:
+    args = m.build_parser().parse_args([])
+    assert args.batch_size == 500
+
+
+def test_format_load_progress_shape() -> None:
+    line = m.format_load_progress(
+        pg_table="archive.emails",
+        loaded_so_far=12500,
+        total=216352,
+        elapsed_s=42.1,
+        batch_len=500,
+    )
+    assert "archive.emails" in line
+    assert "12500/216352" in line
+    assert "5.8%" in line
+    assert "elapsed=42.1s" in line
+    assert "batch=500" in line
+
+
+def test_empty_result_has_batch_and_elapsed_keys() -> None:
+    doc = m._empty_result()
+    assert "batch_size" in doc
+    assert "elapsed_seconds" in doc
+    assert "loaded" in doc
+    assert not any(k in doc for k in ("rows", "samples", "row_ids"))
+
+
+def test_interrupted_load_hint_documents_replace() -> None:
+    assert "partial" in m.INTERRUPTED_LOAD_HINT.lower()
+    assert "--replace" in m.INTERRUPTED_LOAD_HINT
+
+
+def test_migration_script_no_embedded_psycopg_gmail_like_literal() -> None:
+    """psycopg treats % as placeholders; LIKE 'gmail:%' must not appear in SQL text."""
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "LIKE 'gmail:%'" not in text
+    assert 'LIKE "gmail:%"' not in text
+
+
+def test_pg_quality_metrics_passes_gmail_pattern_as_param() -> None:
+    calls: list[tuple[str, tuple[Any, ...] | None]] = []
+
+    class FakeCursor:
+        def execute(self, q: str, p: tuple[Any, ...] | None = None) -> None:
+            calls.append((q, p))
+
+        def fetchone(self) -> tuple[int]:
+            return (0,)
+
+    m.pg_quality_metrics(FakeCursor())  # type: ignore[arg-type]
+    assert len(calls) == 2
+    q2, params = calls[1]
+    assert "LIKE %s" in q2
+    assert "folder IN (%s, %s)" in q2
+    assert params == (
+        m.GMAIL_SOURCE_LIKE_PATTERN,
+        "[Gmail]/Enviados",
+        "[Gmail]/Sent Mail",
+    )
 
 
 def test_normalize_postgres_url_strips_sqlalchemy_driver() -> None:
