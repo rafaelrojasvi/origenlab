@@ -20,6 +20,12 @@ dependencies = [
 # ML stack: use `uv sync --group ml` so torch resolves from cu129 (CUDA), not PyPI CPU.
 [dependency-groups]
 dev = ["pytest>=8"]
+# PostgreSQL migrations (Alembic); optional — does not affect SQLite runtime.
+postgres = [
+    "alembic>=1.13",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+]
 ui = [
     "pandas<3",
     "streamlit>=1.36",
