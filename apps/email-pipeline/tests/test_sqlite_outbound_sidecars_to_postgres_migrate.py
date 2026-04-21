@@ -92,7 +92,9 @@ def _make_source_sidecar_db(path: Path) -> None:
     conn.close()
 
 
-def test_missing_postgres_url() -> None:
+def test_missing_postgres_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ORIGENLAB_POSTGRES_URL", raising=False)
+    monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
     with pytest.raises(ValueError, match="Postgres URL"):
         m.resolve_postgres_url(None)
 

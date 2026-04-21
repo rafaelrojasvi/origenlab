@@ -256,9 +256,29 @@ uv run python scripts/leads/build_archive_send_batch.py --audit-only --out-dir r
 
 # Lead lane — next recipients from lead_master (same gate as Streamlit Cola)
 uv run python scripts/leads/export_next_marketing_recipients.py -o reports/out/next_marketing.csv
+
+# Optional: write Postgres outbound audit rows (batch + recipients)
+uv run python scripts/leads/export_next_marketing_recipients.py \
+  -o reports/out/next_marketing.csv \
+  --write-postgres-audit \
+  --audit-created-by you@example.com
+
+# Optional on archive lane too
+uv run python scripts/leads/build_archive_send_batch.py \
+  --out-dir reports/out/active/archive_send_batch \
+  --write-postgres-audit \
+  --audit-created-by you@example.com
+
+# Post-send contacted-state update (SQLite sidecar)
+uv run python scripts/leads/mark_sent_batch_contacted.py \
+  --batch-file reports/out/active/<batch>/manual_html_outreach_mark_contacted.txt \
+  --source manual_html_batch_2026_04_21 \
+  --updated-by you@example.com
 ```
 
 **Shared outbound defaults:** canonical CLIs and preflight resolve the same Gmail user (CLI → `ORIGENLAB_GMAIL_WORKSPACE_USER` → `contacto@origenlab.cl`), the same default Sent folder pair (`[Gmail]/Enviados`, `[Gmail]/Sent Mail`), and the same `GateContext` builders via [`outbound_core.py`](../src/origenlab_email_pipeline/outbound_core.py). Archive builds write an `outbound_run` object (schema v1) into `archive_outreach_build_summary.json` and audit JSON summaries; the lead exporter can write `<stem>_outbound_summary.json` with `--write-outbound-summary` (that file includes **`sent_preflight`**; the lead CLI does **not** write **`sent_preflight`** to disk without **`--write-outbound-summary`**).
+
+**Optional Postgres outbound audit:** `--write-postgres-audit` records one row in `outbound.outbound_batch` plus recipient rows in `outbound.outbound_batch_recipient`. URL resolution is `--postgres-url` → `ORIGENLAB_POSTGRES_URL` → `ALEMBIC_DATABASE_URL`. If audit writing is requested and unavailable/failing, the command exits non-zero; CSV/JSON artifacts remain generated and unchanged.
 
 **Sent-history fail-closed preflight (both lanes):** before building a batch, [`outbound_sent_preflight.py`](../src/origenlab_email_pipeline/outbound_sent_preflight.py) checks that SQLite has **matching** Sent rows for that mailbox and folder set and that **`recipients`** parse to at least one address (same predicates as gate Sent blocking). Exports **fail closed** when Sent history is **missing**, **folder-mismatched**, or **unparsable**. **Exit code `3`** means outbound Sent-history preflight failed (stderr lists counts, optional distinct folder sample, and hints). **`--allow-empty-sent-history`** is an explicit, **audited** override on either CLI and should be **rare**. **Discover the exact Gmail Sent label:** `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders`. **Ingest that folder** (example): `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"`. On success, archive **`archive_outreach_build_summary.json`** includes a top-level **`sent_preflight`** object (`ok`, `override_used`, counts, folders, errors/warnings). Streamlit **Cola outreach marketing** applies the same shared preflight; the **only** override is **`ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1`** (use only if you accept weaker Sent blocking in the UI). Details: [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md#sent-history-preflight-fail-closed).
 
@@ -268,7 +288,40 @@ uv run python scripts/leads/export_next_marketing_recipients.py -o reports/out/n
 
 **Trust summary printer:** [`print_outbound_run_summary.py`](../scripts/qa/print_outbound_run_summary.py) prints lane, mailbox, sqlite path, Sent folders, counts, and artifact paths from `archive_outreach_build_summary.json` or a lead `*_outbound_summary.json` (`--write-outbound-summary`).
 
+**Gate audit CSV (read-only):** [`export_gate_audit_csv.py`](../scripts/qa/export_gate_audit_csv.py) exports operator-facing eligibility diagnostics with explicit blocker flags (`blocked_by_sent`, `blocked_by_outreach_state`, suppression flags, final eligibility, exclusion reason) without changing gate logic or DB state.
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/qa/export_gate_audit_csv.py --out /tmp/gate_audit_lead.csv --lane lead --limit 1000
+```
+
 **Streamlit** is for **review**, **read/write** on `contact_email_suppression` / `outreach_contact_state`, and **visibility**; it is **not** the final record of what was exported in a given run. **Canonical CLI CSV/JSON** (and optional readiness JSON) are the reproducible record; update **Sent ingest** and **outreach/suppression sidecars** after sends so the next run’s blocker memory stays accurate.
+
+**Recommended post-send sequence:**
+
+1. Send (manual process; this pipeline does not auto-send in canonical export CLIs).
+2. Verify send recipient file or manifest.
+3. Mark batch contacted in SQLite:
+
+   ```bash
+   uv run python scripts/leads/mark_sent_batch_contacted.py \
+     --batch-file reports/out/active/<batch>/manual_html_outreach_mark_contacted.txt \
+     --source manual_html_batch_2026_04_21 \
+     --notes "post-send contact memory update" \
+     --updated-by you@example.com
+   ```
+
+   Or from a JSON send manifest:
+
+   ```bash
+   uv run python scripts/leads/mark_sent_batch_contacted.py \
+     --send-manifest /path/to/send_manifest.json \
+     --source gmail_api_send_2026_04_21 \
+     --updated-by you@example.com
+   ```
+
+4. Optionally ingest Sent later as independent evidence (`05_workspace_gmail_imap_to_sqlite.py`).
+5. Run `scripts/qa/check_outbound_readiness.py` and/or your gate audit before next export.
 
 **Demoted / advanced:**
 
