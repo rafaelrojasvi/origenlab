@@ -52,6 +52,12 @@ from origenlab_email_pipeline.outbound_sent_preflight import (
     probe_sent_history,
     sent_preflight_summary_dict,
 )
+from origenlab_email_pipeline.postgres_outbound_audit import (
+    OutboundAuditError,
+    build_outbound_batch_payload,
+    build_outbound_recipient_payloads,
+    maybe_write_postgres_outbound_audit,
+)
 from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
     MARKETING_VARIANT_GENERAL,
     MARKETING_VARIANT_TYPES,
@@ -128,6 +134,23 @@ def main() -> int:
             "Allow export when no Gmail Sent rows match, or Sent rows have no parseable recipients. "
             "Dangerous: Sent-based already-contacted blocking may be ineffective. Prefer ingesting Sent."
         ),
+    )
+    ap.add_argument(
+        "--write-postgres-audit",
+        action="store_true",
+        help="Optionally write outbound batch + recipients into Postgres outbound audit tables.",
+    )
+    ap.add_argument(
+        "--postgres-url",
+        type=str,
+        default=None,
+        help="Optional Postgres URL override for outbound audit write.",
+    )
+    ap.add_argument(
+        "--audit-created-by",
+        type=str,
+        default=None,
+        help="Optional actor string written to outbound.outbound_batch.created_by.",
     )
     args = ap.parse_args()
 
@@ -280,8 +303,61 @@ def main() -> int:
             f"(raise --fetch-cap, relax filters, or refresh Sent ingest).",
             file=sys.stderr,
         )
-        return 2
-    return 0
+        rc = 2
+    else:
+        rc = 0
+
+    # Optional Postgres outbound audit writing; never required unless explicit flag.
+    if args.write_postgres_audit:
+        batch_payload = build_outbound_batch_payload(
+            lane="lead",
+            created_by=args.audit_created_by,
+            gmail_user=gmail_user,
+            sent_folders=list(sent_folders),
+            sent_preflight_json=sent_preflight_summary_dict(preflight),
+            gate_version="candidate_export_gate",
+            output_artifact_path=str(args.out.resolve()),
+            notes="lead export_next_marketing_recipients",
+        )
+        recipient_rows = []
+        for r in export_rows:
+            lead_id = r.get("id_lead")
+            source_key = str(lead_id) if lead_id not in (None, "") else None
+            recipient_rows.append(
+                {
+                    "email_norm": r.get("contact_email"),
+                    "lead_id": lead_id,
+                    "source_kind": "lead",
+                    "source_key": source_key,
+                    "organization_name": r.get("institution_name"),
+                    "organization_domain": r.get("domain"),
+                    "eligibility_result": "eligible",
+                    "exclusion_reason": None,
+                    "metadata_json": {
+                        "case_id": r.get("case_id"),
+                        "fit_bucket": r.get("fit_bucket"),
+                        "priority_score": r.get("priority_score"),
+                        "variant_type": r.get("variant_type"),
+                        "source_name": r.get("source_name"),
+                    },
+                }
+            )
+        recipients_payload = build_outbound_recipient_payloads(recipient_rows)
+        try:
+            batch_id = maybe_write_postgres_outbound_audit(
+                write_requested=True,
+                explicit_postgres_url=args.postgres_url,
+                batch=batch_payload,
+                recipients=recipients_payload,
+            )
+        except OutboundAuditError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"Postgres outbound audit written: batch_id={batch_id} recipients={len(recipients_payload)}"
+        )
+
+    return rc
 
 
 def _pilot_seed_body(vn: str, r: dict, inst: str) -> str:

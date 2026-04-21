@@ -6,6 +6,7 @@ Use ``--audit-only`` for audit CSV + JSON only (no shortlist/precheck). See RUNB
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ if str(_ROOT) not in sys.path:
 
 from origenlab_email_pipeline.archive_outreach_queue import ARCHIVE_CANDIDATE_SORT_COMPANY_INTRO
 from origenlab_email_pipeline.archive_send_batch_builder import (
+    SEND_READY_CSV_NAME,
     BUILD_SUMMARY_JSON_NAME,
     build_archive_send_batch,
     refresh_sent_mailbox,
@@ -29,6 +31,12 @@ from origenlab_email_pipeline.outbound_core import (
 from origenlab_email_pipeline.outbound_sent_preflight import (
     SentHistoryPreflightFailed,
     print_sent_preflight_failure_to_stderr,
+)
+from origenlab_email_pipeline.postgres_outbound_audit import (
+    OutboundAuditError,
+    build_outbound_batch_payload,
+    build_outbound_recipient_payloads,
+    maybe_write_postgres_outbound_audit,
 )
 
 
@@ -162,6 +170,23 @@ def main() -> int:
             "recipients. Dangerous: Sent-based already-contacted blocking may be ineffective."
         ),
     )
+    ap.add_argument(
+        "--write-postgres-audit",
+        action="store_true",
+        help="Optionally write outbound batch + recipients into Postgres outbound audit tables.",
+    )
+    ap.add_argument(
+        "--postgres-url",
+        type=str,
+        default=None,
+        help="Optional Postgres URL override for outbound audit write.",
+    )
+    ap.add_argument(
+        "--audit-created-by",
+        type=str,
+        default=None,
+        help="Optional actor string written to outbound.outbound_batch.created_by.",
+    )
     args = ap.parse_args()
 
     settings = load_settings()
@@ -228,6 +253,57 @@ def main() -> int:
     else:
         print(f"Wrote archive send batch to {result.out_dir}")
     print(f"Summary: {result.out_dir / BUILD_SUMMARY_JSON_NAME}")
+
+    if args.write_postgres_audit:
+        sent_preflight = result.summary.get("sent_preflight") or {}
+        batch_payload = build_outbound_batch_payload(
+            lane="archive",
+            created_by=args.audit_created_by,
+            gmail_user=gmail_user,
+            sent_folders=list(sent_folders),
+            sent_preflight_json=sent_preflight if isinstance(sent_preflight, dict) else {},
+            gate_version="candidate_export_gate",
+            output_artifact_path=str((result.out_dir / SEND_READY_CSV_NAME).resolve()),
+            notes="archive build_archive_send_batch",
+        )
+
+        recipient_rows: list[dict[str, object]] = []
+        send_ready_csv = result.out_dir / SEND_READY_CSV_NAME
+        if send_ready_csv.is_file():
+            with send_ready_csv.open("r", encoding="utf-8", newline="") as f:
+                for r in csv.DictReader(f):
+                    recipient_rows.append(
+                        {
+                            "email_norm": r.get("contact_email"),
+                            "lead_id": None,
+                            "source_kind": "archive",
+                            "source_key": r.get("contact_email"),
+                            "organization_name": r.get("organization_name"),
+                            "organization_domain": r.get("domain"),
+                            "eligibility_result": "eligible",
+                            "exclusion_reason": None,
+                            "metadata_json": {
+                                "decision_path": r.get("final_decision_path"),
+                                "candidate_tier": r.get("candidate_tier"),
+                                "contact_name": r.get("contact_name"),
+                            },
+                        }
+                    )
+
+        recipients_payload = build_outbound_recipient_payloads(recipient_rows)
+        try:
+            batch_id = maybe_write_postgres_outbound_audit(
+                write_requested=True,
+                explicit_postgres_url=args.postgres_url,
+                batch=batch_payload,
+                recipients=recipients_payload,
+            )
+        except OutboundAuditError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"Postgres outbound audit written: batch_id={batch_id} recipients={len(recipients_payload)}"
+        )
     return 0
 
 

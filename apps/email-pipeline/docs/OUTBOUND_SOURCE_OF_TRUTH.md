@@ -107,6 +107,23 @@ Recommended operating order:
 3. Apply the same shared gate for both lanes.
 4. Keep outbound human-reviewed and batch-controlled.
 
+### Optional Postgres outbound audit bridge
+
+Canonical outbound CLIs keep CSV/JSON artifacts as the operational source of truth. They now support an optional bridge to Postgres audit tables:
+
+- `outbound.outbound_batch`
+- `outbound.outbound_batch_recipient`
+
+Behavior contract:
+
+- Default behavior is unchanged: no Postgres write unless you pass `--write-postgres-audit`.
+- URL resolution order is: `--postgres-url` → `ORIGENLAB_POSTGRES_URL` → `ALEMBIC_DATABASE_URL`.
+- If `--write-postgres-audit` is set and no URL resolves, the command fails clearly.
+- If CSV/JSON generation succeeded but explicit audit write fails, the command fails (requested durability was not satisfied).
+- No email sending behavior, gate eligibility logic, or SQLite runtime behavior changes.
+
+This is a bridge toward future product/API workflows while preserving current operator artifacts.
+
 ### Shared gate responsibilities
 
 [`candidate_export_gate.py`](../src/origenlab_email_pipeline/candidate_export_gate.py) centralizes blockers, including:
@@ -142,6 +159,18 @@ Operator rule of thumb:
 - **Canonical CLIs** (`build_archive_send_batch.py`, `export_next_marketing_recipients.py`) produce the **record of what was run** for a batch; **Streamlit** is for ongoing **review and read/write sidecars**, not a substitute for those artifacts.
 - When mailbox or DB freshness is uncertain, run **`check_outbound_readiness.py`** before generating a batch.
 - **After sending**, refresh **Sent** ingest for `contacto@origenlab.cl` and update **`outreach_contact_state`** / **suppression** so the next export does not re-surface the same contacts.
+
+### Safer post-send contacted-state workflow
+
+Use a deterministic post-send step to mark the batch as contacted in SQLite sidecar state:
+
+1. send (manual Gmail, or your existing send tool)
+2. verify recipient list / manifest
+3. run `scripts/leads/mark_sent_batch_contacted.py`
+4. optionally ingest Sent later as independent mailbox evidence
+5. run readiness / gate audit before next export
+
+This command updates only `outreach_contact_state` (`state=contacted`) with provenance (`source`, `notes`, `updated_by`). It preserves `first_contacted_at` when present and updates `last_contacted_at`. It does not change gate policy, does not send email, and does not write suppressions.
 
 ## Commercial precheck vs shared export gate (archive batch)
 
