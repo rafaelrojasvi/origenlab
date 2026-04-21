@@ -323,6 +323,42 @@ uv run python scripts/qa/export_gate_audit_csv.py --out /tmp/gate_audit_lead.csv
 4. Optionally ingest Sent later as independent evidence (`05_workspace_gmail_imap_to_sqlite.py`).
 5. Run `scripts/qa/check_outbound_readiness.py` and/or your gate audit before next export.
 
+### Lead contact research queue (DeepSearch / ChatGPT)
+
+Use a deterministic, read-only queue export to target research where high/medium-fit leads still have no trustworthy contact email:
+
+1. **Export research queue**
+
+   ```bash
+   cd apps/email-pipeline
+   uv run python scripts/leads/export_lead_contact_research_queue.py \
+     --out reports/out/active/lead_contact_research_queue.csv \
+     --limit 1000
+   ```
+
+2. **Run DeepSearch/ChatGPT manually** using the suggested `research_query_*` fields in the CSV.
+3. **Import reviewed results** into `lead_contact_research` (dry-run first, then apply):
+
+   ```bash
+   uv run python scripts/leads/import_lead_contact_research_csv.py \
+     --input /path/to/reviewed_contacts.csv
+   uv run python scripts/leads/import_lead_contact_research_csv.py \
+     --input /path/to/reviewed_contacts.csv \
+     --apply \
+     --updated-by you@example.com
+   ```
+
+4. **Run gate audit** to verify blocker/eligibility impact:
+
+   ```bash
+   uv run python scripts/qa/export_gate_audit_csv.py \
+     --out /tmp/gate_audit_after_research.csv \
+     --lane lead \
+     --limit 5000
+   ```
+
+5. **Export/send** from canonical lane CLIs (`export_next_marketing_recipients.py` or archive batch path), keeping human review and post-send contacted-state updates.
+
 **Demoted / advanced:**
 
 - [`export_archive_outreach_candidates.py`](../scripts/leads/advanced/export_archive_outreach_candidates.py) — legacy **audit-only** wrapper (prints a note to stderr); prefer `--audit-only` on the builder.
