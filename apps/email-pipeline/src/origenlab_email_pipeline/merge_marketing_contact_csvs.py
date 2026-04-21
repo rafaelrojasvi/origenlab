@@ -108,6 +108,8 @@ def default_active_marketing_csv_paths(*, reports_active: Path) -> tuple[Path, .
     return (
         reports_active / "chile_institutional_marketing_contacts.csv",
         reports_active / "chile_institutional_contacts_research_supplement_20260418.csv",
+        reports_active / "chile_institutional_contacts_research_netnew_batch2.csv",
+        reports_active / "chile_institutional_contacts_research_netnew_batch3.csv",
         reports_active
         / "deepsearch_marketing_send_batch_20260417_130028"
         / "deepsearch_contacts_all.csv",

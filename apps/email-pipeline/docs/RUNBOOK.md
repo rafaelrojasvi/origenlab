@@ -295,6 +295,21 @@ cd apps/email-pipeline
 uv run python scripts/qa/export_gate_audit_csv.py --out /tmp/gate_audit_lead.csv --lane lead --limit 1000
 ```
 
+**Supplier-domain false-positive audit (read-only):** [`export_supplier_domain_false_positive_audit.py`](../scripts/qa/export_supplier_domain_false_positive_audit.py) lists `supplier_master.domain_norm` rows (the same identities used for outbound `supplier_domain` blocking) and matches them to **upstream-active** `lead_master` domains (`domain_norm` / `domain`). It **does not** change gate logic, `supplier_master`, or SQLite beyond writing the output CSV. Heuristics flag domains that look like government, academic, or institutional buyers when they also have matching high/medium-fit leads—use this to prioritize manual review of supplier exclusions (for example `.gob.cl` agencies that appear as buyers in `lead_master`).
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
+  --out reports/out/active/supplier_domain_false_positive_audit.csv
+# Include every supplier domain even when no lead shares that domain (noisy CSV):
+uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
+  --out reports/out/active/supplier_domain_false_positive_audit_all.csv \
+  --include-zero-lead-domains
+# Optional: --db /path/to/emails.sqlite --limit 5000
+```
+
+**How to review the CSV:** sort by `likely_false_positive_reason` (non-empty) and `matching_high_fit_count` / `matching_medium_fit_count`. `recommended_action` is advisory only (`review_supplier_exclusion`, `likely_true_supplier`, `no_matching_leads`, `needs_manual_review`). The script prints a short terminal summary (totals, likely false positives, high/medium impact sum, top 10 domains). **Do not treat output as permission to unblock**—decisions stay in supplier review workflows and data changes outside this export.
+
 **Streamlit** is for **review**, **read/write** on `contact_email_suppression` / `outreach_contact_state`, and **visibility**; it is **not** the final record of what was exported in a given run. **Canonical CLI CSV/JSON** (and optional readiness JSON) are the reproducible record; update **Sent ingest** and **outreach/suppression sidecars** after sends so the next run’s blocker memory stays accurate.
 
 **Recommended post-send sequence:**
@@ -322,6 +337,32 @@ uv run python scripts/qa/export_gate_audit_csv.py --out /tmp/gate_audit_lead.csv
 
 4. Optionally ingest Sent later as independent evidence (`05_workspace_gmail_imap_to_sqlite.py`).
 5. Run `scripts/qa/check_outbound_readiness.py` and/or your gate audit before next export.
+
+**Recommended before importing or sending DeepSearch contacts (read-only checks):**
+
+1. Ingest latest Sent so SQLite reflects what the mailbox actually sent (discover the label first if needed):
+
+   ```bash
+   cd apps/email-pipeline
+   uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders
+   uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"
+   ```
+
+2. Run the **contact overlap audit** (Sent + `outreach_contact_state` + suppressions + `lead_master` / `lead_contact_research`; optional `--input-research-csv` for rows not imported yet):
+
+   ```bash
+   uv run python scripts/qa/export_contacted_lead_overlap_audit.py \
+     --out reports/out/active/contacted_lead_overlap.csv
+   ```
+
+3. Run the **gate audit** on candidates after overlap review:
+
+   ```bash
+   uv run python scripts/qa/export_gate_audit_csv.py \
+     --out reports/out/active/gate_after_overlap.csv --lane lead
+   ```
+
+Interpretation: treat **exact email** hits as strong duplicates; **same-domain** and **organization-name** rows are hints only (`confidence` / `recommended_action` in the overlap CSV). This audit does not change SQLite or gate behavior.
 
 ### Lead contact research queue (DeepSearch / ChatGPT)
 
