@@ -1,4 +1,4 @@
-"""Smoke tests for ``origenlab_email_pipeline.core`` re-export import surface (Stage 2A).
+"""Smoke tests for ``origenlab_email_pipeline.core`` re-export import surface (Stage 2A / 2B).
 
 No DB mutations, no network, no email sending — attribute checks and imports only.
 """
@@ -75,6 +75,62 @@ def test_core_leads_package_importable() -> None:
     import origenlab_email_pipeline.core.leads as leads_core
 
     assert leads_core.__name__ == "origenlab_email_pipeline.core.leads"
+
+
+def test_core_leads_submodule_wrappers() -> None:
+    """Re-export modules under core.leads match top-level lead library names (Stage 2B)."""
+    from origenlab_email_pipeline.core.leads import lead_accounts_schema
+    from origenlab_email_pipeline.core.leads import lead_contact_research
+    from origenlab_email_pipeline.core.leads import lead_export_queries
+    from origenlab_email_pipeline.core.leads import lead_identity_norm
+    from origenlab_email_pipeline.core.leads import lead_master_audit
+    from origenlab_email_pipeline.core.leads import lead_master_dedupe
+    from origenlab_email_pipeline.core.leads import lead_master_keys
+    from origenlab_email_pipeline.core.leads import lead_normalize_upsert
+    from origenlab_email_pipeline.core.leads import lead_provenance
+    from origenlab_email_pipeline.core.leads import lead_upstream_reconcile
+    from origenlab_email_pipeline.core.leads import leads_enrich
+    from origenlab_email_pipeline.core.leads import leads_equipment
+    from origenlab_email_pipeline.core.leads import leads_ingest
+    from origenlab_email_pipeline.core.leads import leads_match
+    from origenlab_email_pipeline.core.leads import leads_normalize
+    from origenlab_email_pipeline.core.leads import leads_schema
+    from origenlab_email_pipeline.core.leads import leads_score
+
+    for mod in (
+        lead_accounts_schema,
+        lead_contact_research,
+        lead_export_queries,
+        lead_identity_norm,
+        lead_master_audit,
+        lead_master_dedupe,
+        lead_master_keys,
+        lead_normalize_upsert,
+        lead_provenance,
+        lead_upstream_reconcile,
+        leads_enrich,
+        leads_equipment,
+        leads_ingest,
+        leads_match,
+        leads_normalize,
+        leads_schema,
+        leads_score,
+    ):
+        assert mod.__name__.startswith("origenlab_email_pipeline.core.leads.")
+
+
+def test_core_leads_schema_reexports_ensure_leads_tables() -> None:
+    from origenlab_email_pipeline.core.leads import leads_schema
+
+    assert hasattr(leads_schema, "ensure_leads_tables")
+    assert callable(leads_schema.ensure_leads_tables)
+
+
+def test_core_lead_contact_research_reexports_validate_payload() -> None:
+    from origenlab_email_pipeline.core.leads import lead_contact_research
+
+    assert hasattr(lead_contact_research, "validate_contact_research_payload")
+    assert callable(lead_contact_research.validate_contact_research_payload)
 
 
 def test_core_candidate_export_gate_reexports_evaluate_export_eligibility() -> None:

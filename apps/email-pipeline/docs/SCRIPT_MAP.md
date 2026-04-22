@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-23
+Last reviewed: 2026-04-24
 
 **This document is the canonical operator map** for outbound and campaign work. It is **navigation and safety labeling only** — behavior lives in code and in [`RUNBOOK.md`](RUNBOOK.md).
 
@@ -20,7 +20,7 @@ Use this to separate *what you run daily* from *what can hurt you*:
 
 | Bucket | What it is | Where it lives |
 |--------|------------|----------------|
-| **Core** | Policy and business logic: gate, CSV contracts, outbound preflight, state, suppressions, Gmail helpers | `src/origenlab_email_pipeline/` (Python package) — **not** run directly; imported by scripts and tests. **Re-export import surface (Stage 2A):** [`src/origenlab_email_pipeline/core/`](../src/origenlab_email_pipeline/core/) mirrors many modules under `core.outbound`, `core.gmail`, etc., without moving implementation yet. |
+| **Core** | Policy and business logic: gate, CSV contracts, outbound preflight, state, suppressions, Gmail helpers | `src/origenlab_email_pipeline/` (Python package) — **not** run directly; imported by scripts and tests. **Re-export import surface (Stage 2A / 2B):** [`src/origenlab_email_pipeline/core/`](../src/origenlab_email_pipeline/core/) mirrors many modules under `core.outbound`, `core.gmail`, `core.leads` (``leads_schema``, ``lead_contact_research``, …), etc., without moving implementation yet. |
 | **Ops** | Thin operator entrypoints: ingest, validate CSVs, export send lists, mark contacted, campaign wrapper | `scripts/**/*.py` (and shell drivers) — **normal daily work** when labeled below |
 | **Lab** | Pilots, Tatiana drafting, ML exploration, niche campaign tooling — **not** the two daily lanes | `scripts/tatiana/`, `scripts/dataset/`, `scripts/ml/`, much of `scripts/leads/campaigns/`, some `leads/advanced/` |
 | **Break-glass** | Can **send mail**, **purge SQLite**, **rebuild** large derived tables, **`--apply`** side effects, or **truncate/load Postgres** — use only with intent | Called out in [Break-glass scripts](#break-glass-scripts) |
