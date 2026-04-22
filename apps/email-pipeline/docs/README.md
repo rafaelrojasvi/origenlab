@@ -13,7 +13,7 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
 ## Agent-first start
 
 - **[`SCRIPT_MAP.md`](SCRIPT_MAP.md)** — **canonical operator map** (daily outbound lanes, core / ops / lab / break-glass, workspace prep stories)
-- Reproducibility, CRUD policy, refactor strategy, and script groupings: [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) · [`CRUD_SAFETY.md`](CRUD_SAFETY.md) · [`QUALITY_AND_REFACTOR_STRATEGY.md`](QUALITY_AND_REFACTOR_STRATEGY.md) · [`SCRIPT_INVENTORY.md`](SCRIPT_INVENTORY.md) · read-only: [`check_reproducibility.py`](../scripts/qa/check_reproducibility.py) · [`plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) · [`plan_script_consolidation.py`](../scripts/qa/plan_script_consolidation.py) · [`plan_source_quality.py`](../scripts/qa/plan_source_quality.py) (heuristic source/scan, planning only)
+- Reproducibility, CRUD policy, refactor strategy, and script groupings: [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) · [`CRUD_SAFETY.md`](CRUD_SAFETY.md) · [`QUALITY_AND_REFACTOR_STRATEGY.md`](QUALITY_AND_REFACTOR_STRATEGY.md) · [`SCRIPT_INVENTORY.md`](SCRIPT_INVENTORY.md) · **Tatiana/lab (not daily outbound):** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) · read-only: [`check_reproducibility.py`](../scripts/qa/check_reproducibility.py) · [`plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) · [`plan_script_consolidation.py`](../scripts/qa/plan_script_consolidation.py) · [`plan_source_quality.py`](../scripts/qa/plan_source_quality.py) (heuristic source/scan, planning only; `tatiana_lab` bucket)
 - [`APP_CONTEXT.md`](APP_CONTEXT.md#m-epapp-start)
 - [`BUSINESS_CONTEXT.md`](BUSINESS_CONTEXT.md#m-epbiz-objective)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) · Python package domains / import rules: [`pipeline/PACKAGE_DOMAINS.md`](pipeline/PACKAGE_DOMAINS.md)
@@ -46,7 +46,7 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
   - [`leads/LEAD_ACCOUNT_LAYER.md`](leads/LEAD_ACCOUNT_LAYER.md)
   - [`leads/CHILE_LEAD_SOURCES.md`](leads/CHILE_LEAD_SOURCES.md)
 - ML: [`ml/AI_ML_IMPLEMENTED_SUMMARY.md`](ml/AI_ML_IMPLEMENTED_SUMMARY.md) (includes ML options reference + LLM prompt appendix)
-- **Tatiana commercial drafting (OrigenLab scope):** human-in-the-loop draft suggestions from archive-derived examples — not a sender, not CRM automation.
+- **Tatiana commercial drafting (OrigenLab scope):** human-in-the-loop draft suggestions from archive-derived examples — not a sender, not CRM automation. **Boundary (vs production outbound):** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md).
   - Overview + eval: [`dataset/TATIANA_DRAFTING_COPILOT.md`](dataset/TATIANA_DRAFTING_COPILOT.md)
   - **Pilot batches** (current operational path): [`dataset/TATIANA_PILOT_WORKFLOW.md`](dataset/TATIANA_PILOT_WORKFLOW.md)
   - **OrigenLab drafting context** (`--origenlab`, web data as facts): [`dataset/ORIGENLAB_COMMERCIAL_DRAFTING_CONTEXT.md`](dataset/ORIGENLAB_COMMERCIAL_DRAFTING_CONTEXT.md)

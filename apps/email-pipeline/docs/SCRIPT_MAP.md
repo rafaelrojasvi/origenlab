@@ -12,6 +12,8 @@ Last reviewed: 2026-04-24
 
 **Stage 6D1 (reports / `reports/out`):** path **classification** and planner aggregations are shared in [`core/reports_out.py`](../src/origenlab_email_pipeline/core/reports_out.py); [`plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) and [`archive_reports_out_generated.py`](../scripts/tools/archive_reports_out_generated.py) remain the **operator entrypoints**; archiver **dry-run** default and move-only semantics are unchanged in intent.
 
+**Stage 6E1 (Tatiana / lab):** **boundary doc only** — see [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md). Lab / Tatiana / `scripts/ml` are **not** the daily outbound lanes. Source-quality planner (`plan_source_quality.py`) labels the `tatiana_lab` bucket for the paths listed there. Future **6E2** may refactor large Tatiana modules; 6E1 does **not** move or change implementation.
+
 **Root `scripts/*.py` lead-account shims** (`build_lead_account_rollup.py`, `audit_lead_org_quality.py`, `match_lead_accounts_to_existing_orgs.py`, `validate_lead_account_rollup.py`) are **compatibility wrappers** to `scripts/leads/advanced/…`—**not** deletion targets until doc/test/operator paths are migrated; see file docstrings. Pure env redaction utilities: [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py).
 
 **Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints (including the reports-out archive tool), asserts top-of-file warnings on the break-glass set (aligned to tables below), and checks the four root compatibility wrappers. Regressions require updating that test for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
@@ -170,7 +172,7 @@ Legacy tags **KEEP_CORE** / **KEEP_AUDIT** in older prose map loosely to **OPS_C
 | ML / embeddings exploration | `scripts/ml/*` |
 | Niche campaign reconciliations | `scripts/leads/campaigns/*` (e.g. DR50 payload flows) |
 
-These are **not** the volume or precision daily lanes; see [`dataset/TATIANA_PILOT_WORKFLOW.md`](dataset/TATIANA_PILOT_WORKFLOW.md) and [`RUNBOOK.md`](RUNBOOK.md).
+These are **not** the volume or precision daily lanes; see [`dataset/TATIANA_PILOT_WORKFLOW.md`](dataset/TATIANA_PILOT_WORKFLOW.md) and [`RUNBOOK.md`](RUNBOOK.md). **Scope / safety:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) (Tatiana vs production outbound, OpenAI, `reports/out`).
 
 ---
 

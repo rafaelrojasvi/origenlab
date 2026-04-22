@@ -4,7 +4,7 @@ Status: canonical
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-04-25
 
-**Purpose:** High-level **grouping** of `scripts/` for operators and for **future cleanup planning**. It does **not** list every file. The canonical per-script map is [`SCRIPT_MAP.md`](SCRIPT_MAP.md). Full folder notes: [`../scripts/README.md`](../scripts/README.md).
+**Purpose:** High-level **grouping** of `scripts/` for operators and for **future cleanup planning**. It does **not** list every file. The canonical per-script map is [`SCRIPT_MAP.md`](SCRIPT_MAP.md). Full folder notes: [`../scripts/README.md`](../scripts/README.md). **Tatiana / lab vs daily outbound:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) (Stage 6E1 — not production lanes; future 6E2 may refactor large Tatiana modules).
 
 **Generated output layout:** before deleting or moving anything under [`../reports/out`](../reports/out), run the **planner** [`../scripts/qa/plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) to classify paths and list large files (buckets such as `active_current`, `active_workspace_misc` for other `active/…` paths, `client_pack_latest`, tmp/lab/archive); it does not modify the tree (see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) §7). Optional **move-only** archiver (dry-run default): [`../scripts/tools/archive_reports_out_generated.py`](../scripts/tools/archive_reports_out_generated.py) — same buckets, `--apply` to relocate into `archive/manual_cleanup/…` (no deletes; break-glass). The archiver does not select `client_pack_latest` or `active_workspace_misc` with default include flags; the whole `active/` tree remains protected without `--allow-active-current`.
 
@@ -87,6 +87,8 @@ Values are **representative**; some scripts in a group may differ. When in doubt
 
 ## Lab / archive (pilots, Tatiana, archive lane)
 
+Tatiana, `scripts/dataset/`, and `scripts/ml/` are **lab** scope; see [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md). They are **not** interchangeable with daily outbound ops in the tables above.
+
 | Representative | mutates DB | --apply | sends email | safe new machine | private DB | Gmail creds |
 |----------------|------------|---------|------------|------------------|------------|-------------|
 | `tatiana/run_tatiana_pilot_batch.py` | Varies | maybe | no | Varies | often | if API |
@@ -109,5 +111,6 @@ Values are **representative**; some scripts in a group may differ. When in doubt
 ## Related
 
 - [`SCRIPT_MAP.md`](SCRIPT_MAP.md) — daily commands, break-glass list, `reports/out` policy.  
+- [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) — Tatiana / lab vs production outbound (Stage 6E1).  
 - [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) — env and setup.  
 - [`CRUD_SAFETY.md`](CRUD_SAFETY.md) — mutation rules.

@@ -27,10 +27,25 @@ def test_classify_vertical_outbound_reports_tatiana_streamlit_migration() -> Non
     assert m.classify_vertical("src/origenlab_email_pipeline/operational_trust/x.py") == "outbound"
     assert m.classify_vertical("scripts/reports/generate_client_report.py") == "reports"
     assert m.classify_vertical("src/origenlab_email_pipeline/tatiana_copilot/x.py") == "tatiana_lab"
+    assert (
+        m.classify_vertical("src/origenlab_email_pipeline/tatiana_copilot/openai_chat_generator.py")
+        == "tatiana_lab"
+    )
+    assert m.classify_vertical("src/origenlab_email_pipeline/tatiana_review_cohort.py") == "tatiana_lab"
+    assert m.classify_vertical("src/origenlab_email_pipeline/tatiana_voice_cohort.py") == "tatiana_lab"
     assert m.classify_vertical("scripts/tatiana/run_x.py") == "tatiana_lab"
+    assert m.classify_vertical("scripts/tatiana/run_something.py") == "tatiana_lab"
+    assert m.classify_vertical("scripts/dataset/export_tatiana_candidate_cohort.py") == "tatiana_lab"
+    assert m.classify_vertical("scripts/ml/explore_email_clusters.py") == "tatiana_lab"
     assert m.classify_vertical("src/origenlab_email_pipeline/streamlit_foo.py") == "streamlit_ui"
     assert m.classify_vertical("scripts/migrate/sqlite_archive_to_postgres.py") == "migration"
     assert m.classify_vertical("src/origenlab_email_pipeline/postgres_outbound_audit.py") == "migration"
+
+
+def test_classify_vertical_production_outbound_not_tatiana_lab() -> None:
+    m = _load()
+    assert m.classify_vertical("src/origenlab_email_pipeline/candidate_export_gate.py") == "outbound"
+    assert m.classify_vertical("scripts/leads/process_broad_marketing_contacts.py") == "outbound"
 
 
 def test_classify_vertical_suppliers() -> None:
@@ -104,3 +119,40 @@ def test_toplevel_import_hint(tmp_path: Path) -> None:
     p.write_text("from origenlab_email_pipeline import outbound_core as oc\n", encoding="utf-8")
     sn = m._scan_text(p, "scripts/qa/imp.py")
     assert sn.has_toplevel_import_hint
+
+
+def test_scan_tree_tatiana_copilot_openai_chat_generator(tmp_path: Path) -> None:
+    m = _load()
+    pkg = tmp_path / "origenlab_email_pipeline"
+    (pkg / "tatiana_copilot").mkdir(parents=True)
+    (pkg / "tatiana_copilot" / "openai_chat_generator.py").write_text("# x\n" * 4, encoding="utf-8")
+    scans = m.scan_tree(pkg.resolve(), "src")
+    assert len(scans) == 1
+    assert scans[0].vertical == "tatiana_lab"
+    assert scans[0].path.endswith("tatiana_copilot/openai_chat_generator.py")
+
+
+def test_scan_tree_scripts_tatiana_dataset_ml(tmp_path: Path) -> None:
+    m = _load()
+    root = tmp_path / "scripts"
+    (root / "tatiana").mkdir(parents=True)
+    (root / "tatiana" / "run_something.py").write_text("def main():\n  pass\n", encoding="utf-8")
+    (root / "dataset").mkdir(parents=True)
+    (root / "dataset" / "export_tatiana_candidate_cohort.py").write_text("x=1\n", encoding="utf-8")
+    (root / "ml").mkdir(parents=True)
+    (root / "ml" / "explore_email_clusters.py").write_text("y=2\n", encoding="utf-8")
+    scans = m.scan_tree(root.resolve(), "scripts")
+    v_by_tail = {s.path.split("/")[-1]: s.vertical for s in scans}
+    assert v_by_tail["run_something.py"] == "tatiana_lab"
+    assert v_by_tail["export_tatiana_candidate_cohort.py"] == "tatiana_lab"
+    assert v_by_tail["explore_email_clusters.py"] == "tatiana_lab"
+
+
+def test_scan_tree_production_file_not_tatiana_lab(tmp_path: Path) -> None:
+    m = _load()
+    pkg = tmp_path / "origenlab_email_pipeline"
+    pkg.mkdir()
+    (pkg / "candidate_export_gate.py").write_text("# gate\n", encoding="utf-8")
+    scans = m.scan_tree(pkg.resolve(), "src")
+    assert len(scans) == 1
+    assert scans[0].vertical == "outbound"

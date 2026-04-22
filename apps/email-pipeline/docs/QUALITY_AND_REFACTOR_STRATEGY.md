@@ -72,16 +72,21 @@ Refactors are **staged**; the tables below are **not** a commitment to order. Us
 | | |
 |-|-|
 | **Current pain** | `tatiana_copilot/` and `scripts/tatiana/` are large; risk of entanglement with production outbound. |
-| **Candidate files** | `tatiana_copilot/`, `tatiana_review_cohort.py`, `scripts/tatiana/*`, `scripts/dataset/*`, `scripts/ml/*` (as lab) |
+| **Candidate files** | `tatiana_copilot/`, `tatiana_review_cohort.py`, `tatiana_voice_cohort.py`, `scripts/tatiana/*`, `scripts/dataset/*`, `scripts/ml/*` (as lab) |
 | **Risk** | **Medium** — model/API drift, optional deps. |
 | **Expected benefit** | Clearer boundaries; optional packaging or `extras` for lab-only code later. |
-| **First safe refactor** | **Documentation** and `SCRIPT_MAP` subsections only, or a **naming** clarification commit with no behavior change. |
+| **First safe refactor** | **Boundary doc** + planner bucket coverage only (Stage **6E1**). |
+| **Canonical boundary** | [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) — what Tatiana/lab is and is not, vs daily outbound. |
 
 **Stage 6C1 (outbound, narrow):** logic for ``scripts/leads/process_broad_marketing_contacts.py`` was **extracted** to ``origenlab_email_pipeline.core.outbound.broad_marketing_contacts`` (pure row processing, summaries). The **CLI** remains the operator entrypoint; **no** change to default paths, column contracts, or stdout shape intended—verify with tests. Further outbound refactors: one script at a time, same policy.
 
 **Stage 6C2 (outbound, narrow):** ``scripts/qa/export_do_not_repeat_master.py`` was **thinned**; merge, counting, and summary formatting live in ``origenlab_email_pipeline.core.outbound.do_not_repeat_master``. The **CLI** remains the daily entrypoint; **read-only** SQLite; **no** change to output filenames, CSV columns, or summary JSON fields intended (verify with tests).
 
 **Stage 6D1 (reports vertical, narrow):** shared ``reports/out`` **classification** and planning helpers (buckets, ``FileEntry`` aggregation, archiver eligibility) live in ``origenlab_email_pipeline.core.reports_out``. ``plan_reports_out_cleanup.py`` and ``archive_reports_out_generated.py`` remain **operator entrypoints**; JSON/stdout and **dry-run default** for the archiver are unchanged in intent (verify with tests).
+
+**Stage 6E1 (Tatiana / lab, narrow):** **documentation and classification only** — no runtime change to Tatiana or OpenAI call sites. See [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md). `plan_source_quality.py` heuristics include ``tatiana_copilot/``, ``scripts/tatiana/``, ``scripts/dataset/``, ``scripts/ml/``, root ``tatiana_*.py`` modules, and ``openai_chat_generator`` in the path. **Tatiana/lab is not** daily production outbound.
+
+**Stage 6E2 (future):** optional refactors of large Tatiana modules (e.g. split or isolate optional deps) with **tests** — **not** the same change set as 6E1.
 
 **Future Stage 6C+ (preview):** pick the **next** vertical or script, apply a **small** internal-only refactor, then re-run the full test suite and readiness scripts.
 

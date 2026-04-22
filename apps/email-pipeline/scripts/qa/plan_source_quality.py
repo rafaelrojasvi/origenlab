@@ -2,7 +2,7 @@
 """Read-only **source quality** plan: scan library + scripts (text only; no imports, no execution).
 
 Heuristic vertical buckets, line counts, and import-hint flags. **Not** authoritative for refactors;
-use with [`docs/QUALITY_AND_REFACTOR_STRATEGY.md`](../../docs/QUALITY_AND_REFACTOR_STRATEGY.md) and code review.
+use with [`docs/QUALITY_AND_REFACTOR_STRATEGY.md`](../../docs/QUALITY_AND_REFACTOR_STRATEGY.md) and [`docs/TATIANA_LAB_BOUNDARY.md`](../../docs/TATIANA_LAB_BOUNDARY.md) for the ``tatiana_lab`` bucket.
 Does not read SQLite, Gmail, or secrets; does not write outside optional ``--json-out`` path.
 """
 
@@ -51,6 +51,27 @@ class FileScan:
     has_toplevel_import_hint: bool
 
 
+def _is_tatiana_lab_path(p: str) -> bool:
+    """Heuristic Tatiana / lab / ML exploration (matches Stage 6E1 boundary doc).
+
+    Includes ``tatiana_copilot/``, root ``tatiana_*.py``, ``scripts/tatiana|dataset|ml/``,
+    paths containing ``tatiana``, and the large OpenAI chat generator module name.
+    """
+    if "tatiana" in p or "tatiana_copilot" in p:
+        return True
+    if (
+        p.startswith("scripts/tatiana/")
+        or p.startswith("scripts/dataset/")
+        or p.startswith("scripts/ml/")
+    ):
+        return True
+    if "openai_chat_generator" in p:
+        return True
+    if "tatiana_review_cohort" in p or "tatiana_voice_cohort" in p:
+        return True
+    return False
+
+
 def classify_vertical(rel_posix: str) -> str:
     """Heuristic single bucket; first matching rule wins."""
     p = rel_posix.replace("\\", "/").lower()
@@ -67,9 +88,7 @@ def classify_vertical(rel_posix: str) -> str:
     if "streamlit" in p:
         return "streamlit_ui"
 
-    if "tatiana" in p or "tatiana_copilot" in p:
-        return "tatiana_lab"
-    if p.startswith("scripts/tatiana/") or p.startswith("scripts/dataset/") or p.startswith("scripts/ml/"):
+    if _is_tatiana_lab_path(p):
         return "tatiana_lab"
 
     if "commercial" in p and ("/commercial/" in f"/{p}/" or "commercial_intel" in p or "/commercial/" in p):
@@ -269,7 +288,10 @@ def run() -> int:
         file=sys.stdout,
     )
     print("  2) Improve reporting path docs; run plan_reports_out_cleanup (read-only).", file=sys.stdout)
-    print("  3) Tatiana: isolate optional deps; no behavior change; update SCRIPT_MAP subsection.", file=sys.stdout)
+    print(
+        "  3) Tatiana/lab: see docs/TATIANA_LAB_BOUNDARY.md; isolate optional deps in a later stage; no behavior change.",
+        file=sys.stdout,
+    )
     print(
         "  WARNING: this report is planning guidance only. Confirm with owners before moves.",
         file=sys.stdout,
