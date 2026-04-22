@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-15
+Last reviewed: 2026-04-22
 
 Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/docs/`](./).
 
@@ -12,6 +12,7 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
 
 ## Agent-first start
 
+- **[`SCRIPT_MAP.md`](SCRIPT_MAP.md)** — **canonical operator map** (daily outbound lanes, core / ops / lab / break-glass, workspace prep stories)
 - [`APP_CONTEXT.md`](APP_CONTEXT.md#m-epapp-start)
 - [`BUSINESS_CONTEXT.md`](BUSINESS_CONTEXT.md#m-epbiz-objective)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) · Python package domains / import rules: [`pipeline/PACKAGE_DOMAINS.md`](pipeline/PACKAGE_DOMAINS.md)
@@ -23,6 +24,7 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
 
 - Monorepo context: [`PROJECT_CONTEXT.md`](../../../docs/PROJECT_CONTEXT.md#m-proj-start) · map: [`DOCUMENTATION_MAP.md`](../../../docs/DOCUMENTATION_MAP.md#m-docmap-entry)
 - Project run/setup entrypoint: [`../README.md`](../README.md)
+- **Operator script map:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md)
 - Script folder index (thin): [`../scripts/README.md`](../scripts/README.md)
 - Reporting output paths: [`../reports/README.md`](../reports/README.md) and [`../reports/out/README.md`](../reports/out/README.md)
 

@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: project-maintainers  
-Last reviewed: 2026-04-07
+Last reviewed: 2026-04-22
 
 This file is the source of truth for documentation placement, intent, and lifecycle.
 
@@ -17,6 +17,7 @@ This file is the source of truth for documentation placement, intent, and lifecy
 - Email pipeline app: [apps/email-pipeline/README.md](../apps/email-pipeline/README.md)
 - Email pipeline agent context: [apps/email-pipeline/docs/APP_CONTEXT.md](../apps/email-pipeline/docs/APP_CONTEXT.md)
 - Email pipeline docs index: [apps/email-pipeline/docs/README.md](../apps/email-pipeline/docs/README.md)
+- Email pipeline operator script map: [apps/email-pipeline/docs/SCRIPT_MAP.md](../apps/email-pipeline/docs/SCRIPT_MAP.md)
 
 <a id="m-docmap-mapping"></a>
 ## Canonical vs Archive Mapping
@@ -43,6 +44,7 @@ This file is the source of truth for documentation placement, intent, and lifecy
 Paths below are under [`apps/email-pipeline/docs/`](../apps/email-pipeline/docs/).
 
 - Canonical operations:
+  - [SCRIPT_MAP.md](../apps/email-pipeline/docs/SCRIPT_MAP.md) (daily outbound lanes; core / ops / lab / break-glass)
   - [RUNBOOK.md](../apps/email-pipeline/docs/RUNBOOK.md#m-eprun-path) (incl. [cold outreach / shared export gate](../apps/email-pipeline/docs/RUNBOOK.md#m-eprun-cold-export-gate))
   - [REPORTING.md](../apps/email-pipeline/docs/REPORTING.md#m-eprep-mail) (informe correo + paquete leads)
   - [REPORT_SCOPE_CLIENT.md](../apps/email-pipeline/docs/REPORT_SCOPE_CLIENT.md) (alcance del informe de correo; copiado por [`generate_client_report.py`](../apps/email-pipeline/scripts/reports/generate_client_report.py) a `ALCANCE_INFORME.md`)

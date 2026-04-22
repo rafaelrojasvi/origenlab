@@ -414,4 +414,4 @@ origenlab-email-pipeline/
 └── tests/                        # pytest (test_parse_mbox_body, test_business_mart_app_ux, etc.)
 ```
 
-All one-off and pipeline commands live in `scripts/`; they are not installed as package entrypoints. See **scripts/README.md** for categories and main commands. **Lead/client pack publish-safe check:** `uv run python scripts/qa/publish_gate.py` — [docs/RUNBOOK.md](docs/RUNBOOK.md#m-eprun-publish-qa).
+All one-off and pipeline commands live in `scripts/`; they are not installed as package entrypoints. See **[docs/SCRIPT_MAP.md](docs/SCRIPT_MAP.md)** for daily outbound lanes and break-glass labeling, and **scripts/README.md** for categories and main commands. **Lead/client pack publish-safe check:** `uv run python scripts/qa/publish_gate.py` — [docs/RUNBOOK.md](docs/RUNBOOK.md#m-eprun-publish-qa).
