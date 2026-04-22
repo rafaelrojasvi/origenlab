@@ -25,6 +25,7 @@ _HELP_ENTRYPOINTS: tuple[str, ...] = (
     "scripts/qa/check_reproducibility.py",
     "scripts/qa/plan_reports_out_cleanup.py",
     "scripts/qa/plan_script_consolidation.py",
+    "scripts/qa/plan_source_quality.py",
     "scripts/tools/archive_reports_out_generated.py",
 )
 

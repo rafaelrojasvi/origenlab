@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+"""Read-only **source quality** plan: scan library + scripts (text only; no imports, no execution).
+
+Heuristic vertical buckets, line counts, and import-hint flags. **Not** authoritative for refactors;
+use with [`docs/QUALITY_AND_REFACTOR_STRATEGY.md`](../../docs/QUALITY_AND_REFACTOR_STRATEGY.md) and code review.
+Does not read SQLite, Gmail, or secrets; does not write outside optional ``--json-out`` path.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+APP_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_SRC = APP_ROOT / "src" / "origenlab_email_pipeline"
+_DEFAULT_SCRIPTS = APP_ROOT / "scripts"
+
+RE_SUBPROCESS = re.compile(r"\bsubprocess\.")
+RE_SQLITE_MUTATION = re.compile(
+    r"(\b(INSERT|UPDATE|DELETE|TRUNCATE)\b|\.execute\s*\(|\.executemany\s*\(|\.commit\s*\()",
+    re.IGNORECASE,
+)
+RE_IMPORT_CORE = re.compile(
+    r"^\s*(from\s+origenlab_email_pipeline\.core\b|import\s+origenlab_email_pipeline\.core\b)",
+    re.MULTILINE,
+)
+# Top-level package imports (not core.…)
+RE_IMPORT_TOPLEVEL = re.compile(
+    r"^\s*from\s+origenlab_email_pipeline\.(?!core\b)([a-zA-Z0-9_]+)",
+    re.MULTILINE,
+)
+RE_IMPORT_PKG = re.compile(r"^\s*import\s+origenlab_email_pipeline\s*(#|$)", re.MULTILINE)
+RE_IMPORT_FROM_PKG = re.compile(
+    r"^\s*from\s+origenlab_email_pipeline\s+import\b",
+    re.MULTILINE,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class FileScan:
+    path: str
+    line_count: int
+    vertical: str
+    has_subprocess: bool
+    has_sqlite_mutation_keywords: bool
+    has_core_import_hint: bool
+    has_toplevel_import_hint: bool
+
+
+def classify_vertical(rel_posix: str) -> str:
+    """Heuristic single bucket; first matching rule wins."""
+    p = rel_posix.replace("\\", "/").lower()
+
+    if (
+        "/scripts/migrate/" in f"/{p}/"
+        or p.startswith("scripts/migrate/")
+        or "_to_postgres" in p
+        or "validate_sqlite_archive_for_postgres" in p
+        or "postgres_outbound_audit" in p
+    ):
+        return "migration"
+
+    if "streamlit" in p:
+        return "streamlit_ui"
+
+    if "tatiana" in p or "tatiana_copilot" in p:
+        return "tatiana_lab"
+    if p.startswith("scripts/tatiana/") or p.startswith("scripts/dataset/") or p.startswith("scripts/ml/"):
+        return "tatiana_lab"
+
+    if "commercial" in p and ("/commercial/" in f"/{p}/" or "commercial_intel" in p or "/commercial/" in p):
+        return "commercial"
+
+    if (
+        "client_report" in p
+        or "/scripts/reports/" in f"/{p}/"
+        or p.startswith("scripts/reports/")
+    ):
+        return "reports"
+    if "build_leads_client" in p or "generate_client_report" in p or "open_client_report" in p:
+        return "reports"
+
+    if (
+        "archive_outreach" in p
+        or "archive_send_batch" in p
+        or "archive_shortlist" in p
+        or "build_archive" in p
+    ):
+        return "archive_lane"
+
+    if any(
+        x in p
+        for x in (
+            "outbound_",
+            "/outbound",
+            "operational_trust",
+            "candidate_export",
+            "csv_contracts",
+            "suppression",
+            "gmail_",
+            "ingest/05",
+            "mark_sent",
+            "process_broad",
+            "next_marketing",
+            "outreach_contact",
+            "outreach_ingest",
+        )
+    ):
+        return "outbound"
+
+    if "lead" in p or "leads_" in p or "/leads/" in f"/{p}/" or p.startswith("scripts/leads/"):
+        return "leads"
+
+    if "supplier" in p:
+        return "suppliers"
+
+    return "unknown"
+
+
+def _scan_text(path: Path, rel: str) -> FileScan:
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return FileScan(
+            path=rel,
+            line_count=0,
+            vertical="unknown",
+            has_subprocess=False,
+            has_sqlite_mutation_keywords=False,
+            has_core_import_hint=False,
+            has_toplevel_import_hint=False,
+        )
+    n = len(raw.splitlines())
+    v = classify_vertical(rel)
+    sub = bool(RE_SUBPROCESS.search(raw))
+    sql = bool(RE_SQLITE_MUTATION.search(raw))
+    core = bool(RE_IMPORT_CORE.search(raw))
+    top = (
+        bool(RE_IMPORT_TOPLEVEL.search(raw))
+        or bool(RE_IMPORT_PKG.search(raw))
+        or bool(RE_IMPORT_FROM_PKG.search(raw))
+    )
+    return FileScan(
+        path=rel,
+        line_count=n,
+        vertical=v,
+        has_subprocess=sub,
+        has_sqlite_mutation_keywords=sql,
+        has_core_import_hint=core,
+        has_toplevel_import_hint=top,
+    )
+
+
+def iter_py_files(root: Path) -> list[Path]:
+    if not root.is_dir():
+        return []
+    out: list[Path] = []
+    for p in root.rglob("*.py"):
+        if "__pycache__" in p.parts:
+            continue
+        out.append(p)
+    return sorted(out)
+
+
+def scan_tree(root: Path, label: str) -> list[FileScan]:
+    out: list[FileScan] = []
+    root = root.resolve()
+    for p in iter_py_files(root):
+        rel = p.relative_to(root)
+        if label == "src":
+            rprefix = f"src/origenlab_email_pipeline/{rel.as_posix()}"
+        else:
+            rprefix = f"scripts/{rel.as_posix()}"
+        out.append(_scan_text(p, rprefix))
+    return out
+
+
+def vertical_counts(scans: list[FileScan]) -> dict[str, int]:
+    d: dict[str, int] = {}
+    for s in scans:
+        d[s.vertical] = d.get(s.vertical, 0) + 1
+    return dict(sorted(d.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    p.add_argument(
+        "--src-dir",
+        type=Path,
+        default=None,
+        help="Root of origenlab_email_pipeline package (default: …/src/origenlab_email_pipeline)",
+    )
+    p.add_argument(
+        "--scripts-dir",
+        type=Path,
+        default=None,
+        help="Root of scripts/ (default: …/scripts)",
+    )
+    p.add_argument(
+        "--json-out",
+        type=Path,
+        default=None,
+        help="Write full JSON report (no changes under src/scripts).",
+    )
+    p.add_argument(
+        "--top",
+        type=int,
+        default=20,
+        help="How many largest files to list per category.",
+    )
+    return p
+
+
+def _print_section(title: str) -> None:
+    print(f"--- {title} ---")
+
+
+def run() -> int:
+    args = build_parser().parse_args()
+    src_root = (args.src_dir or _DEFAULT_SRC).resolve()
+    scripts_root = (args.scripts_dir or _DEFAULT_SCRIPTS).resolve()
+    top_n = max(1, int(args.top))
+
+    src_scans = scan_tree(src_root, "src")
+    script_scans = scan_tree(scripts_root, "scripts")
+    all_scans = src_scans + script_scans
+
+    print("plan_source_quality (read-only, heuristic — not authority)", file=sys.stdout)
+    print(f"src-dir: {src_root}", file=sys.stdout)
+    print(f"scripts-dir: {scripts_root}", file=sys.stdout)
+    print(f"python files: src={len(src_scans)} scripts={len(script_scans)} total={len(all_scans)}", file=sys.stdout)
+
+    v_all = vertical_counts(all_scans)
+    _print_section("vertical ownership (file count, heuristic)")
+    for k, c in v_all.items():
+        print(f"  {k}: {c}", file=sys.stdout)
+
+    sc_sub = sum(1 for s in all_scans if s.has_subprocess)
+    sc_sql = sum(1 for s in all_scans if s.has_sqlite_mutation_keywords)
+    sc_core = sum(1 for s in all_scans if s.has_core_import_hint)
+    sc_top = sum(1 for s in all_scans if s.has_toplevel_import_hint)
+    _print_section("import / keyword hints (text scan)")
+    print(
+        f"  files with core import hint: {sc_core} | with top-level pkg import hint: {sc_top}",
+        file=sys.stdout,
+    )
+    print(
+        f"  files with subprocess. usage: {sc_sub} | sqlite/mutation-like keywords: {sc_sql}",
+        file=sys.stdout,
+    )
+
+    for label, scans in (("source modules (src/)", src_scans), ("scripts (scripts/)", script_scans)):
+        _print_section(f"largest {label} by line count (top {top_n})")
+        for s in sorted(scans, key=lambda x: (-x.line_count, x.path))[:top_n]:
+            print(
+                f"  {s.line_count:5d}  {s.vertical:16s}  {s.path}",
+                file=sys.stdout,
+            )
+
+    _print_section("suggested first refactor candidates (low precision — triage in PR)")
+    print(
+        "  1) Thin one campaign/outbound script by delegating to existing library helpers; run pytest.",
+        file=sys.stdout,
+    )
+    print("  2) Improve reporting path docs; run plan_reports_out_cleanup (read-only).", file=sys.stdout)
+    print("  3) Tatiana: isolate optional deps; no behavior change; update SCRIPT_MAP subsection.", file=sys.stdout)
+    print(
+        "  WARNING: this report is planning guidance only. Confirm with owners before moves.",
+        file=sys.stdout,
+    )
+
+    if args.json_out is not None:
+        path = args.json_out.resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "src_dir": str(src_root),
+            "scripts_dir": str(scripts_root),
+            "file_counts": {
+                "src_py": len(src_scans),
+                "scripts_py": len(script_scans),
+                "total": len(all_scans),
+            },
+            "vertical_counts": v_all,
+            "import_keyword_hints": {
+                "with_core_import_hint": sc_core,
+                "with_toplevel_import_hint": sc_top,
+                "with_subprocess": sc_sub,
+                "with_sqlite_mutation_like_keywords": sc_sql,
+            },
+            "all_src_scans": [asdict(s) for s in sorted(src_scans, key=lambda x: (x.path,))],
+            "all_script_scans": [asdict(s) for s in sorted(script_scans, key=lambda x: (x.path,))],
+        }
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        print(f"wrote json report: {path}", file=sys.stdout)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(run())

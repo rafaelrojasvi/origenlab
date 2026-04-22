@@ -6,7 +6,7 @@ Last reviewed: 2026-04-25
 
 **Purpose:** Rules for **Create / Read / Update / Delete** style operations and anything that **mutates** data (SQLite, Postgres, Gmail, or filesystem outputs). This is **policy documentation**; behavior remains in code and in [`RUNBOOK.md`](RUNBOOK.md).
 
-**Companion:** [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md), [`SCRIPT_MAP.md`](SCRIPT_MAP.md) (break-glass and `--apply`), [`SCRIPT_INVENTORY.md`](SCRIPT_INVENTORY.md).
+**Companion:** [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md), [`SCRIPT_MAP.md`](SCRIPT_MAP.md) (break-glass and `--apply`), [`SCRIPT_INVENTORY.md`](SCRIPT_INVENTORY.md), [`QUALITY_AND_REFACTOR_STRATEGY.md`](QUALITY_AND_REFACTOR_STRATEGY.md) (import conventions: **new** code should prefer `core.*` re-exports; no mass rewrites).
 
 ---
 
