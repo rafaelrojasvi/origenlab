@@ -40,6 +40,15 @@ from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
 
 _LM_UPSTREAM_ACTIVE = sql_upstream_active_lead_master("lm")
 _JOIN_BEST_ORG = sql_left_join_best_org_match(variant="org_and_archive")
+_RESEARCH_CONTACTABLE_STATUSES = ("contacto_encontrado", "listo_para_contacto")
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+        (name,),
+    ).fetchone()
+    return bool(row)
 
 
 @dataclass(frozen=True)
@@ -89,6 +98,19 @@ def compute_next_marketing_recipients(
     if not include_low_fit:
         low_fit_sql = " AND COALESCE(lm.fit_bucket, 'low_fit') != 'low_fit' "
 
+    has_research = _table_exists(conn, "lead_contact_research")
+    research_join_sql = "LEFT JOIN lead_contact_research r ON r.lead_id = lm.id" if has_research else ""
+    research_email_sql = "r.resolved_contact_email" if has_research else "NULL"
+    research_status_sql = "r.contact_research_status" if has_research else "NULL"
+    research_filter_sql = (
+        "OR ("
+        "  lower(trim(COALESCE(r.contact_research_status, ''))) IN ('contacto_encontrado', 'listo_para_contacto')"
+        "  AND NULLIF(TRIM(COALESCE(r.resolved_contact_email, '')), '') IS NOT NULL"
+        ")"
+        if has_research
+        else ""
+    )
+
     cur = conn.execute(
         f"""
         SELECT
@@ -98,6 +120,8 @@ def compute_next_marketing_recipients(
           lm.contact_name,
           lm.email,
           lm.email_norm,
+          {research_email_sql} AS resolved_contact_email,
+          {research_status_sql} AS contact_research_status,
           lm.region,
           lm.city,
           lm.lead_type,
@@ -108,12 +132,16 @@ def compute_next_marketing_recipients(
           m.matched_org_name,
           COALESCE(m.already_in_archive_flag, 0) AS already_in_archive_flag
         FROM lead_master lm
+        {research_join_sql}
         {_JOIN_BEST_ORG}
         WHERE
           {_LM_UPSTREAM_ACTIVE}
           {low_fit_sql}
           {min_pri_sql}
-          AND NULLIF(TRIM(COALESCE(lm.email_norm, lm.email)), '') IS NOT NULL
+          AND (
+            NULLIF(TRIM(COALESCE(lm.email_norm, lm.email)), '') IS NOT NULL
+            {research_filter_sql}
+          )
         ORDER BY
           CASE COALESCE(lm.fit_bucket, 'low_fit')
             WHEN 'high_fit' THEN 0
@@ -137,10 +165,22 @@ def compute_next_marketing_recipients(
     for row in cur:
         n_scanned += 1
         d = dict(zip(cols, row))
-        em = norm_lead_email(
+        em_master = norm_lead_email(
             str(d["email_norm"]) if d["email_norm"] else None,
             str(d["email"]) if d["email"] else None,
         )
+        research_status = str(d.get("contact_research_status") or "").strip().lower()
+        em_research = norm_lead_email(
+            None,
+            str(d.get("resolved_contact_email") or "").strip(),
+        )
+        use_research = (
+            not em_master
+            and research_status in _RESEARCH_CONTACTABLE_STATUSES
+            and bool(em_research)
+        )
+        em = em_master or (em_research if use_research else None)
+        email_source = "lead_master" if em_master else ("lead_contact_research" if use_research else "")
         if not em or em in seen_email:
             continue
         inst_name = (str(d["org_name"] or "").strip() or str(d["matched_org_name"] or "").strip())
@@ -161,6 +201,7 @@ def compute_next_marketing_recipients(
                 "case_id": f"lead_{d['id_lead']}",
                 "id_lead": d["id_lead"],
                 "contact_email": em,
+                "email_source": email_source,
                 "recipient_name": (str(d["contact_name"] or "").strip()),
                 "institution_name": inst_name,
                 "sector": sector,

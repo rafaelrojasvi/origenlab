@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -38,9 +39,19 @@ from origenlab_email_pipeline.outbound_core import (  # noqa: E402
     resolve_outbound_sent_folders,
 )
 
+_RESEARCH_CONTACTABLE_STATUSES = ("contacto_encontrado", "listo_para_contacto")
+
 
 def _bool_hit(reason: str, code: str) -> int:
     return 1 if reason == code else 0
+
+
+def _table_exists(conn, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+        (name,),
+    ).fetchone()
+    return bool(row)
 
 
 def main() -> int:
@@ -84,32 +95,59 @@ def main() -> int:
                 conn, gmail_user=gmail_user, sent_folders=sent_folders
             )
             where = sql_upstream_active_lead_master("lm")
+            has_research = _table_exists(conn, "lead_contact_research")
+            join_research = "LEFT JOIN lead_contact_research r ON r.lead_id = lm.id" if has_research else ""
+            research_email_sql = "r.resolved_contact_email" if has_research else "NULL"
+            research_status_sql = "r.contact_research_status" if has_research else "NULL"
             cur = conn.execute(
                 f"""
                 SELECT
                   lm.id,
                   lm.email,
                   lm.email_norm,
+                  {research_email_sql},
+                  {research_status_sql},
                   lm.org_name,
                   lm.domain_norm,
                   lm.fit_bucket
                 FROM lead_master lm
+                {join_research}
                 WHERE {where}
                 ORDER BY lm.last_seen_at DESC
                 LIMIT ?
                 """,
                 (int(args.limit),),
             )
-            candidates = [
-                {
-                    "lead_id": r[0],
-                    "raw_email": str(r[2] or r[1] or "").strip(),
-                    "organization_name": str(r[3] or "").strip(),
-                    "organization_domain": str(r[4] or "").strip(),
-                    "fit_bucket": str(r[5] or ""),
-                }
-                for r in cur
-            ]
+            candidates = []
+            for r in cur:
+                lead_id = r[0]
+                email = str(r[1] or "").strip()
+                email_norm = str(r[2] or "").strip()
+                resolved_contact_email = str(r[3] or "").strip()
+                contact_research_status = str(r[4] or "").strip().lower()
+                org_name = str(r[5] or "").strip()
+                domain_norm = str(r[6] or "").strip()
+                fit_bucket = str(r[7] or "")
+                master_email = str(email_norm or email).strip()
+                if master_email:
+                    raw_email = master_email
+                    email_source = "lead_master"
+                elif contact_research_status in _RESEARCH_CONTACTABLE_STATUSES and resolved_contact_email:
+                    raw_email = resolved_contact_email
+                    email_source = "lead_contact_research"
+                else:
+                    raw_email = ""
+                    email_source = ""
+                candidates.append(
+                    {
+                        "lead_id": lead_id,
+                        "raw_email": raw_email,
+                        "email_source": email_source,
+                        "organization_name": org_name,
+                        "organization_domain": domain_norm,
+                        "fit_bucket": fit_bucket,
+                    }
+                )
         else:
             ctx = gate_context_for_archive_batch(
                 conn, gmail_user=gmail_user, sent_folders=sent_folders
@@ -138,6 +176,8 @@ def main() -> int:
                 for r in cur
             ]
 
+        row_email_keys: list[str] = []
+        pre_rows: list[dict[str, object]] = []
         for c in candidates:
             raw_email = str(c["raw_email"])
             normalized = normalize_export_email(raw_email)
@@ -152,8 +192,11 @@ def main() -> int:
             if normalized:
                 outreach_state = str(ctx.outreach_state_by_email.get(normalized, ""))
 
+            out_email = normalized or raw_email
+            email_key = out_email.strip().lower()
             row = {
-                "email": normalized or raw_email,
+                "email": out_email,
+                "email_source": str(c.get("email_source", "")),
                 "lead_id": c["lead_id"],
                 "organization_name": c["organization_name"],
                 "organization_domain": c["organization_domain"],
@@ -170,6 +213,19 @@ def main() -> int:
                 "final_eligible": int(gres.eligible),
                 "exclusion_reason": reason,
             }
+            row_email_keys.append(email_key)
+            pre_rows.append(row)
+
+        counts = Counter(k for k in row_email_keys if k)
+        rank_seen: dict[str, int] = defaultdict(int)
+        for key, row in zip(row_email_keys, pre_rows):
+            if key:
+                rank_seen[key] += 1
+                row["duplicate_email_count"] = int(counts[key])
+                row["duplicate_email_rank"] = int(rank_seen[key])
+            else:
+                row["duplicate_email_count"] = 0
+                row["duplicate_email_rank"] = 0
             if args.eligible_only and not bool(row["final_eligible"]):
                 continue
             rows_out.append(row)
@@ -178,10 +234,13 @@ def main() -> int:
 
     fieldnames = [
         "email",
+        "email_source",
         "lead_id",
         "organization_name",
         "organization_domain",
         "fit_bucket",
+        "duplicate_email_count",
+        "duplicate_email_rank",
         "blocked_by_sent",
         "blocked_by_outreach_state",
         "outreach_state",

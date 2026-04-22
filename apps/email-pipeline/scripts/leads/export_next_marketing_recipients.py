@@ -226,6 +226,7 @@ def main() -> int:
         "case_id",
         "id_lead",
         "contact_email",
+        "email_source",
         "recipient_name",
         "institution_name",
         "sector",

@@ -51,6 +51,17 @@ def _seed(db: Path) -> None:
         CREATE TABLE contact_email_suppression (email TEXT PRIMARY KEY, suppression_reason_code TEXT);
         CREATE TABLE contact_domain_suppression (domain_norm TEXT PRIMARY KEY, suppression_reason_text TEXT, updated_at TEXT, updated_by TEXT);
         CREATE TABLE outreach_contact_state (contact_email_norm TEXT PRIMARY KEY, state TEXT);
+        CREATE TABLE lead_contact_research (
+          lead_id INTEGER PRIMARY KEY,
+          contact_research_status TEXT NOT NULL DEFAULT 'nuevo',
+          resolved_domain TEXT,
+          resolved_contact_name TEXT,
+          resolved_contact_email TEXT,
+          contact_source TEXT,
+          contact_research_notes TEXT,
+          updated_at TEXT NOT NULL DEFAULT '2026-04-21T00:00:00Z',
+          updated_by TEXT
+        );
         """
     )
     conn.executemany(
@@ -63,7 +74,36 @@ def _seed(db: Path) -> None:
             ("state@example.com", "state@example.com", "State Org", "example.com", "high_fit"),
             ("supp@example.com", "supp@example.com", "Supp Org", "example.com", "high_fit"),
             ("ok@good.com", "ok@good.com", "Good Org", "good.com", "high_fit"),
+            ("", "", "Research Org", "research.com", "high_fit"),
+            ("", "", "Research Org Twin", "research.com", "high_fit"),
+            ("", "", "Discarded Research Org", "discarded.com", "high_fit"),
+            ("master@wins.com", "master@wins.com", "Master Wins Org", "wins.com", "high_fit"),
         ],
+    )
+    # lead ids are autoincrement from insert order above (1..8)
+    conn.execute(
+        """
+        INSERT INTO lead_contact_research (lead_id, contact_research_status, resolved_contact_email, resolved_domain)
+        VALUES (5, 'contacto_encontrado', 'research@example.com', 'research.com')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO lead_contact_research (lead_id, contact_research_status, resolved_contact_email, resolved_domain)
+        VALUES (6, 'contacto_encontrado', 'research@example.com', 'research.com')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO lead_contact_research (lead_id, contact_research_status, resolved_contact_email, resolved_domain)
+        VALUES (7, 'descartado', 'discarded@example.com', 'discarded.com')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO lead_contact_research (lead_id, contact_research_status, resolved_contact_email, resolved_domain)
+        VALUES (8, 'contacto_encontrado', 'research-ignored@wins.com', 'wins.com')
+        """
     )
     conn.execute(
         """
@@ -91,10 +131,13 @@ def test_export_gate_audit_csv_lead_flags_and_columns(tmp_path: Path) -> None:
     assert rows
     assert list(rows[0].keys()) == [
         "email",
+        "email_source",
         "lead_id",
         "organization_name",
         "organization_domain",
         "fit_bucket",
+        "duplicate_email_count",
+        "duplicate_email_rank",
         "blocked_by_sent",
         "blocked_by_outreach_state",
         "outreach_state",
@@ -111,6 +154,18 @@ def test_export_gate_audit_csv_lead_flags_and_columns(tmp_path: Path) -> None:
     assert by_email["state@example.com"]["outreach_state"] == "contacted"
     assert by_email["supp@example.com"]["blocked_by_email_suppression"] == "1"
     assert by_email["ok@good.com"]["final_eligible"] == "1"
+    dup_research = [r for r in rows if r["email"] == "research@example.com"]
+    assert len(dup_research) == 2
+    assert {r["email_source"] for r in dup_research} == {"lead_contact_research"}
+    assert {r["blocked_by_invalid_email"] for r in dup_research} == {"0"}
+    assert {r["duplicate_email_count"] for r in dup_research} == {"2"}
+    assert {r["duplicate_email_rank"] for r in dup_research} == {"1", "2"}
+    # discarded contact_research rows should not be used as fallback
+    discarded = next(r for r in rows if r["organization_name"] == "Discarded Research Org")
+    assert discarded["email"] == ""
+    assert discarded["blocked_by_invalid_email"] == "1"
+    # lead_master email wins when present
+    assert by_email["master@wins.com"]["email_source"] == "lead_master"
 
 
 def test_export_gate_audit_csv_eligible_only(tmp_path: Path) -> None:
