@@ -13,6 +13,7 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
 ## Agent-first start
 
 - **[`SCRIPT_MAP.md`](SCRIPT_MAP.md)** — **canonical operator map** (daily outbound lanes, core / ops / lab / break-glass, workspace prep stories)
+- Reproducibility, CRUD policy, and script groupings: [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) · [`CRUD_SAFETY.md`](CRUD_SAFETY.md) · [`SCRIPT_INVENTORY.md`](SCRIPT_INVENTORY.md) · read-only check: [`scripts/qa/check_reproducibility.py`](../scripts/qa/check_reproducibility.py)
 - [`APP_CONTEXT.md`](APP_CONTEXT.md#m-epapp-start)
 - [`BUSINESS_CONTEXT.md`](BUSINESS_CONTEXT.md#m-epbiz-objective)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) · Python package domains / import rules: [`pipeline/PACKAGE_DOMAINS.md`](pipeline/PACKAGE_DOMAINS.md)

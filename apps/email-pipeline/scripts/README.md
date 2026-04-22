@@ -2,6 +2,8 @@
 
 **Canonical map (daily lanes, core / ops / lab / break-glass):** [`docs/SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md).
 
+**Environment / safety docs:** [REPRODUCIBILITY.md](../docs/REPRODUCIBILITY.md) · [CRUD_SAFETY.md](../docs/CRUD_SAFETY.md) · [SCRIPT_INVENTORY.md](../docs/SCRIPT_INVENTORY.md) — read-only sanity check: [`qa/check_reproducibility.py`](qa/check_reproducibility.py).
+
 ## Quick navigation
 
 | Kind | What to use | Notes |
