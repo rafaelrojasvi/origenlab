@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-22
+Last reviewed: 2026-04-23
 
 Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/docs/`](./).
 
@@ -27,6 +27,8 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
 - **Operator script map:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md)
 - Script folder index (thin): [`../scripts/README.md`](../scripts/README.md)
 - Reporting output paths: [`../reports/README.md`](../reports/README.md) and [`../reports/out/README.md`](../reports/out/README.md)
+
+**Core import surface (library):** [`../src/origenlab_email_pipeline/core/`](../src/origenlab_email_pipeline/core/) is a **stable re-export layer** (Stage 2A+): `origenlab_email_pipeline.core.outbound`, `core.gmail`, `core.mart`, `core.suppliers`, and infrastructure (`core.config`, `core.db`, `core.sqlite_migrate`). It does **not** move implementation yet; existing imports such as `from origenlab_email_pipeline.candidate_export_gate import …` stay valid. **New** library code should prefer `origenlab_email_pipeline.core.*` over time; avoid mass import rewrites until a migration phase and tests cover it. Smoke tests: [`../tests/test_core_import_surface.py`](../tests/test_core_import_surface.py).
 
 ## Deep references by domain
 
