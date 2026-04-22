@@ -12,6 +12,8 @@ Last reviewed: 2026-04-24
 
 **Root `scripts/*.py` lead-account shims** (`build_lead_account_rollup.py`, `audit_lead_org_quality.py`, `match_lead_accounts_to_existing_orgs.py`, `validate_lead_account_rollup.py`) are **compatibility wrappers** to `scripts/leads/advanced/…`—**not** deletion targets until doc/test/operator paths are migrated; see file docstrings. Pure env redaction utilities: [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py).
 
+**Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints, asserts top-of-file warnings on the break-glass set (aligned to tables below), and checks the four root compatibility wrappers. Regressions require updating that test for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
+
 **Canonical campaign workspace:** fresh inputs and outputs for the two outbound lanes belong in **`reports/out/active/current/`**. Other paths under `reports/out/active/` (and most of `reports/out/archive/`) are **evidence, history, or ad-hoc exports** — not the default place to pick up “today’s” CSV for DeepSearch or send lists.
 
 **Rule:** Broad **volume marketing** rows must **not** go into **`lead_contact_research`** unless each row has a real **`lead_id`**. Use **`reviewed_marketing_contacts.csv`** → **`process_broad_marketing_contacts.py`** → **`send_ready_marketing.csv`**.

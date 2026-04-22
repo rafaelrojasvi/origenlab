@@ -351,6 +351,10 @@ def print_report(rows: list[Row]) -> None:
     unk = [r for r in rows if r.primary_bucket == "unknown"]
     bg = [r for r in rows if r.primary_bucket == "break_glass"]
     print("total .py under scripts/:", len(rows), file=sys.stdout)
+    print(
+        f"contract-style counts: compatibility_wrapper={len(comp)} | unknown={len(unk)} | break_glass={len(bg)}",
+        file=sys.stdout,
+    )
     print("--- by bucket ---", file=sys.stdout)
     for k, v in sorted(by.items(), key=lambda kv: (-kv[1], kv[0])):
         print(f"  {k}: {v}", file=sys.stdout)
