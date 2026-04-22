@@ -17,6 +17,7 @@ def test_core_infra_imports() -> None:
 
 
 def test_core_outbound_imports() -> None:
+    from origenlab_email_pipeline.core.outbound import broad_marketing_contacts
     from origenlab_email_pipeline.core.outbound import candidate_export_gate
     from origenlab_email_pipeline.core.outbound import contact_domain_suppression
     from origenlab_email_pipeline.core.outbound import contact_email_suppression
@@ -31,7 +32,13 @@ def test_core_outbound_imports() -> None:
     from origenlab_email_pipeline.core.outbound import outbound_sent_preflight
     from origenlab_email_pipeline.core.outbound import outreach_contact_state
 
+    assert (
+        broad_marketing_contacts.__name__
+        == "origenlab_email_pipeline.core.outbound.broad_marketing_contacts"
+    )
+
     for mod in (
+        broad_marketing_contacts,
         candidate_export_gate,
         csv_contracts,
         outbound_core,

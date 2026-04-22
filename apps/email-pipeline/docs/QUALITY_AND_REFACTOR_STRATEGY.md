@@ -77,7 +77,9 @@ Refactors are **staged**; the tables below are **not** a commitment to order. Us
 | **Expected benefit** | Clearer boundaries; optional packaging or `extras` for lab-only code later. |
 | **First safe refactor** | **Documentation** and `SCRIPT_MAP` subsections only, or a **naming** clarification commit with no behavior change. |
 
-**Future Stage 6C (preview):** pick **one** vertical, apply a **small** internal refactor (e.g. extract one helper, switch imports to `core.*` in one directory), then re-run the full test suite and readiness scripts.
+**Stage 6C1 (outbound, narrow):** logic for ``scripts/leads/process_broad_marketing_contacts.py`` was **extracted** to ``origenlab_email_pipeline.core.outbound.broad_marketing_contacts`` (pure row processing, summaries). The **CLI** remains the operator entrypoint; **no** change to default paths, column contracts, or stdout shape intended—verify with tests. Further outbound refactors: one script at a time, same policy.
+
+**Future Stage 6C+ (preview):** pick the **next** vertical or script, apply a **small** internal-only refactor, then re-run the full test suite and readiness scripts.
 
 ---
 
