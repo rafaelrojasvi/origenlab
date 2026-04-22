@@ -6,6 +6,8 @@ Last reviewed: 2026-04-25
 
 **Purpose:** High-level **grouping** of `scripts/` for operators and for **future cleanup planning**. It does **not** list every file. The canonical per-script map is [`SCRIPT_MAP.md`](SCRIPT_MAP.md). Full folder notes: [`../scripts/README.md`](../scripts/README.md).
 
+**Generated output layout (read-only):** before deleting or moving anything under [`../reports/out`](../reports/out), run the **planner** [`../scripts/qa/plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) to classify paths and list large files; it does not modify the tree (see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) §7).
+
 **Legend**
 
 - **mutates DB:** writes SQLite (or Postgres in migrate tools) in normal use  
@@ -29,8 +31,9 @@ Values are **representative**; some scripts in a group may differ. When in doubt
 | `leads/run_current_campaign_pipeline.py` | if apply | **yes** (import stage) | no | no | yes | no |
 | `leads/mark_sent_batch_contacted.py` | **yes** | no | no | no | yes | no |
 | `ingest/05_workspace_gmail_imap_to_sqlite.py` | **yes** (ingest) | no | no | no* | optional | **yes** (ingest) |
+| `qa/plan_reports_out_cleanup.py` | no | no | no | **yes** | no | no |
 
-*\*Ingest is safe mechanically on a new machine if DB path is writable, but you still need creds to use Gmail.*
+*\*Ingest is safe mechanically on a new machine if DB path is writable, but you still need creds to use Gmail. **`plan_reports_out_cleanup`** is read-only on `reports/out` (and optional JSON elsewhere).*
 
 ---
 

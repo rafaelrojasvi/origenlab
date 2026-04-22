@@ -24,6 +24,7 @@ Last reviewed: 2026-04-25
 - **Exports** of send lists, research queues, do-not-repeat lists (files under `reports/out/…`).
 - **Validation:** `validate_campaign_csvs.py`, contract tests, `--help` on any CLI.
 - **Readiness:** `check_outbound_readiness.py`, `check_reproducibility.py` (no DB write; may open SQLite **read-only** to inspect schema).
+- **Reports layout planning:** `plan_reports_out_cleanup.py` (read-only scan of `reports/out`; optional JSON report path; does not touch the tree).
 - **Ingest of documentation** (reading markdown, not mutating live mail).
 
 **Rule:** Prefer read-only paths when exploring a new issue.
@@ -83,8 +84,13 @@ Examples: `purge_*.py`, `build_business_mart` / `build_commercial_intel` **rebui
 - **`active/current/`** — the **current** campaign inputs/outputs for the two outbound lanes (see [SCRIPT_MAP](SCRIPT_MAP.md)).
 - **`active/`** (other than `current/`) — other batches, overlap exports, or evidence; not assumed “today’s” files.
 - **`archive/`** — **historical** campaign moves, dated slugs, old sends.
-- **`reference/`** — small, long-lived comparison or evidence CSVs (optional; team convention).
+- **`reference/`** — small, long-lived comparison or evidence CSVs (optional; team convention). **Only** put material here **intentionally** as long-lived evidence; it is not a general dump.
 - **`tmp/`** (if used) — **scratch**; safe to delete locally once not needed.
 - **Full `full_*` report runs** — timestamped HTML/JSON; keep or prune per disk and policy.
 
-**Rule:** For cleanup planning, never delete in git what was never committed; on disk, use archive/`tmp` conventions above before bulk removal (future automation).
+**Cleanup and deletion policy**
+
+- **Any** cleanup of `reports/out` (delete, move, or rename) must start with a **read-only** pass using [`plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) so you see bucket counts, largest files, and a proposed review map before doing anything.
+- **Deletion or moving** of paths in `reports/out` is a **separate explicit stage** (not this script); the planner only **inspects** and can write an optional **JSON** report to a path you choose — it does **not** change `reports/out`.
+- **Do not delete** `active/current` contents **during an active campaign** unless the runbook or operator explicitly retires that workspace (treat it as the canonical working set until archived).
+- For cleanup planning, never delete in git what was never committed; on disk, use `archive` / `tmp` / `reference` conventions above before bulk removal (any future automation should follow the same order: **plan first**, then an explicit **apply** step in a different tool or stage).
