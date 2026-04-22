@@ -21,6 +21,16 @@ _READ_ONLY_QA: frozenset[str] = frozenset(
     }
 )
 
+# Root-level ``scripts/<name>.py`` shims → ``scripts/leads/advanced/`` (planner label; SCRIPT_MAP is canonical)
+_ROOT_COMPATIBILITY_WRAPPERS: frozenset[str] = frozenset(
+    {
+        "audit_lead_org_quality.py",
+        "build_lead_account_rollup.py",
+        "match_lead_accounts_to_existing_orgs.py",
+        "validate_lead_account_rollup.py",
+    }
+)
+
 _TTABLE = re.compile(
     r"^\s*\|\s*`?(scripts/[\w./-]+\.py)`?\s*\|\s*([A-Z0-9_]+)\s*\|",
     re.IGNORECASE,
@@ -175,6 +185,14 @@ def classify(
         return "break_glass"
     if p0 in ("tatiana", "dataset", "ml") or rel.startswith("leads/campaigns/"):
         return "lab_archive"
+    if rel == "_bootstrap.py":
+        return "infrastructure_core"
+    if rel == "validate_supplier_workbook.py":
+        return "maintenance"
+    if rel == "qa/extract_chilecompra_lab_buyers_from_xlsx.py":
+        return "maintenance"
+    if "/" not in rel and rel in _ROOT_COMPATIBILITY_WRAPPERS:
+        return "compatibility_wrapper"
     if wsig:
         return "wrapper_or_duplicate_candidate"
     if rel in daily:
@@ -207,17 +225,30 @@ def classify(
     return "unknown"
 
 
-def action_for(bucket: str, in_docs: bool) -> str:
+def action_for(
+    bucket: str, in_docs: bool, relp: str,
+) -> str:
+    if relp in (
+        "validate_supplier_workbook.py",
+        "qa/extract_chilecompra_lab_buyers_from_xlsx.py",
+    ) and bucket == "maintenance":
+        return "keep_maintenance"
+    if relp == "_bootstrap.py" or bucket == "infrastructure_core":
+        return "keep"
+    if bucket == "compatibility_wrapper":
+        return "keep"
     if bucket == "unknown" and not in_docs:
         return "deprecate_in_docs_later"
     return {
         "daily": "keep_daily",
         "core_operator": "keep",
         "audit_readonly": "keep_audit",
+        "infrastructure_core": "keep",
         "maintenance": "keep",
         "migration": "keep",
         "lab_archive": "archive_later",
         "break_glass": "keep_break_glass",
+        "compatibility_wrapper": "keep",
         "wrapper_or_duplicate_candidate": "wrap_later",
         "unknown": "review_unknown",
     }.get(bucket, "review_unknown")
@@ -285,7 +316,9 @@ def scan(scripts_dir: Path, map_path: Path, app_root: Path | None = None) -> lis
         )
         in_doc = ref_in_corpus(relp, docs)
         in_tst = ref_in_corpus(relp, tests)
-        wflag = (bucket == "wrapper_or_duplicate_candidate" and is_wrapper(n_lines, btrim))
+        wflag = (bucket == "compatibility_wrapper") or (
+            bucket == "wrapper_or_duplicate_candidate" and is_wrapper(n_lines, btrim)
+        )
         row = Row(
             path="scripts/" + relp,
             rel_from_scripts=relp,
@@ -299,7 +332,7 @@ def scan(scripts_dir: Path, map_path: Path, app_root: Path | None = None) -> lis
             in_docs=bool(in_doc),
             in_tests=bool(in_tst),
             is_wrapper_signal=bool(wflag),
-            proposed_action=action_for(bucket, in_doc),
+            proposed_action=action_for(bucket, in_doc, relp),
         )
         out.append(row)
     return out
@@ -313,6 +346,7 @@ def print_report(rows: list[Row]) -> None:
     n_safety = sum(1 for r in rows if r.safety_header)
     n_docs = sum(1 for r in rows if r.in_docs)
     n_tests = sum(1 for r in rows if r.in_tests)
+    comp = [r for r in rows if r.primary_bucket == "compatibility_wrapper"]
     wrap = [r for r in rows if r.primary_bucket == "wrapper_or_duplicate_candidate"]
     unk = [r for r in rows if r.primary_bucket == "unknown"]
     bg = [r for r in rows if r.primary_bucket == "break_glass"]
@@ -326,7 +360,10 @@ def print_report(rows: list[Row]) -> None:
         f"referenced in docs: {n_docs}\n"
         f"referenced in tests: {n_tests}\n"
     )
-    print("--- wrapper/duplicate candidates ---", file=sys.stdout)
+    print("--- compatibility root wrappers (scripts/ → leads/advanced) ---", file=sys.stdout)
+    for r in comp[:200]:
+        print(f"  {r.path}", file=sys.stdout)
+    print("--- other wrapper/duplicate candidates ---", file=sys.stdout)
     for r in wrap[:200]:
         print(f"  {r.path}", file=sys.stdout)
     print("--- unknown scripts ---", file=sys.stdout)
@@ -338,6 +375,8 @@ def print_report(rows: list[Row]) -> None:
     print("--- suggested next actions (planning) ---", file=sys.stdout)
     print(
         "  - Triage 'unknown' with owners; add SCRIPT_MAP or RUNBOOK pointers before any move.\n"
+        "  - 'compatibility_wrapper' entries are documented root shims; do not remove until\n"
+        "    docs/tests/operator paths no longer reference the root path (see wrapper docstrings).\n"
         "  - Confirm 'wrapper_or_duplicate_candidate' with tests (test_critical_script_paths); "
         "wrap later, do not delete yet.\n"
         "  - break_glass: keep; never merge without --help parity + new tests + SCRIPT_MAP table.\n"

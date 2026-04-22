@@ -70,6 +70,49 @@ def test_classify_unknown() -> None:
     assert b == "unknown"
 
 
+def test_classify_bootstrap_infrastructure() -> None:
+    m = _load()
+    b = m.classify("_bootstrap.py", "_bootstrap.py", "_bootstrap.py", "x", 5, {}, set())
+    assert b == "infrastructure_core"
+    assert m.action_for("infrastructure_core", True, "_bootstrap.py") == "keep"
+
+
+def test_classify_chilecompra_and_supplier_workbook() -> None:
+    m = _load()
+    assert (
+        m.classify(
+            "qa/extract_chilecompra_lab_buyers_from_xlsx.py",
+            "extract_chilecompra_lab_buyers_from_xlsx.py",
+            "qa",
+            "x",
+            10,
+            {},
+            set(),
+        )
+        == "maintenance"
+    )
+    assert (
+        m.classify("validate_supplier_workbook.py", "validate_supplier_workbook.py", "validate_supplier_workbook.py", "x", 10, {}, set())
+        == "maintenance"
+    )
+    assert m.action_for("maintenance", False, "validate_supplier_workbook.py") == "keep_maintenance"
+
+
+def test_classify_compatibility_root_wrappers() -> None:
+    m = _load()
+    b = m.classify(
+        "build_lead_account_rollup.py",
+        "build_lead_account_rollup.py",
+        "build_lead_account_rollup.py",
+        "x",
+        20,
+        {},
+        set(),
+    )
+    assert b == "compatibility_wrapper"
+    assert m.action_for("compatibility_wrapper", True, "build_lead_account_rollup.py") == "keep"
+
+
 def test_subprocess_and_json(
     tmp_path: Path,
 ) -> None:

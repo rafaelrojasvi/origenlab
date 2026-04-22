@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper — implementation: ``scripts/leads/advanced/build_lead_account_rollup.py``."""
+"""Compatibility wrapper for the lead-account rollup CLI.
+
+- **Canonical implementation:** ``scripts/leads/advanced/build_lead_account_rollup.py`` (prefer for new docs).
+- This **root** path exists so older bookmarks, shell one-liners, and tests that invoke
+  ``scripts/build_lead_account_rollup.py`` keep working.
+- **Do not delete** this file until nothing in docs, tests, or operator flows references this path
+  (see also ``test_critical_script_paths`` and ``SCRIPT_MAP.md``).
+- **No behavior** beyond delegating to the file above; do not add logic here.
+"""
 
 from __future__ import annotations
 

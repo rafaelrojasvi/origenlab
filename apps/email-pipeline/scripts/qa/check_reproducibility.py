@@ -49,13 +49,6 @@ def _line(label: str, value: str) -> None:
     print(f"{label}: {value}")
 
 
-def _env_set(key: str) -> str:
-    v = os.environ.get(key)
-    if v is None or (isinstance(v, str) and not v.strip()):
-        return "unset"
-    return "set (value not shown)"
-
-
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     row = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name = ?",
@@ -92,10 +85,18 @@ def main() -> int:
 
     # Load settings only after we can import the package
     from origenlab_email_pipeline.config import load_settings  # noqa: PLC0415
+    from origenlab_email_pipeline.core.safety import env_presence  # noqa: PLC0415
+
+    def _line_env(name: str) -> None:
+        _st = env_presence(name, os.environ)[1]
+        _line(
+            f"env {name}",
+            "set (value not shown)" if _st == "<set>" else "unset",
+        )
 
     settings = load_settings()
     sqlite_path = settings.resolved_sqlite_path()
-    _line("ORIGENLAB_SQLITE_PATH env", _env_set("ORIGENLAB_SQLITE_PATH"))
+    _line_env("ORIGENLAB_SQLITE_PATH")
     _line("resolved SQLite path", str(sqlite_path))
     _line("SQLite file exists", "yes" if sqlite_path.is_file() else "no")
 
@@ -124,7 +125,7 @@ def main() -> int:
             _line(f"table {t}", "skipped (no db file)")
 
     for k in GMAIL_ENV:
-        _line(f"env {k}", _env_set(k))
+        _line_env(k)
 
     # Verdict
     if not sqlite_path.is_file():

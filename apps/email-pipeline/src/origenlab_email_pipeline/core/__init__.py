@@ -17,6 +17,7 @@ Submodules are exposed so ``import origenlab_email_pipeline.core.config`` resolv
 
 from . import config as config
 from . import db as db
+from . import safety as safety
 from . import sqlite_migrate as sqlite_migrate
 
-__all__ = ["config", "db", "sqlite_migrate"]
+__all__ = ["config", "db", "safety", "sqlite_migrate"]

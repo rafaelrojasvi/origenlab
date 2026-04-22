@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper — implementation: ``scripts/leads/advanced/validate_lead_account_rollup.py``."""
+"""Compatibility wrapper for the lead-account rollup validation CLI.
+
+- **Canonical implementation:** ``scripts/leads/advanced/validate_lead_account_rollup.py``.
+- This **root** path keeps ``scripts/validate_lead_account_rollup.py`` working for legacy tooling.
+- **Do not delete** until docs, tests, and operator references no longer need this path.
+- **No behavior** beyond delegation; do not add logic here.
+"""
 
 from __future__ import annotations
 
