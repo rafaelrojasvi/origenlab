@@ -157,8 +157,19 @@ def _validate_file(path: Path, kind: str) -> ValidationResult:
                 errors.append(f"line {i}: invalid contact_email")
                 row_err = True
             conf = normalize_confidence(r.get("confidence", ""))
-            if not validate_confidence(conf):
+            if not validate_confidence(conf) or conf not in {"high", "medium", "low"}:
                 errors.append(f"line {i}: invalid confidence")
+                row_err = True
+            src = str(r.get("source_url") or "").strip()
+            if not src:
+                errors.append(f"line {i}: missing source_url")
+                row_err = True
+            elif not validate_source_url(src):
+                errors.append(f"line {i}: invalid source_url")
+                row_err = True
+            fs = str(r.get("fit_signal") or "").strip()
+            if fs and len(fs) > 2000:
+                errors.append(f"line {i}: fit_signal too long")
                 row_err = True
         elif kind == "gate_audit":
             fe = str(r.get("final_eligible") or "")

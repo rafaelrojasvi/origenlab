@@ -2,9 +2,61 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-07
+Last reviewed: 2026-04-22
 
-Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.).
+Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.). **Outbound script index + classifications:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
+
+<a id="m-eprun-daily-outbound"></a>
+## Daily outbound — two lanes
+
+**Where to work:** put **current** campaign inputs and outputs in **`reports/out/active/current/`** only. Other paths under `reports/out/active/` are usually **older batches, overlap exports, or evidence** — treat them as **archive context**, not as the default source for a new DeepSearch round or send list.
+
+**Volume vs lead data:** do **not** import broad **volume marketing** CSV rows into **`lead_contact_research`** unless each row has a real **`lead_id`**. The volume lane uses **`reviewed_marketing_contacts.csv`** and **`send_ready_marketing.csv`** instead.
+
+### A) Volume marketing lane
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/qa/export_do_not_repeat_master.py
+# DeepSearch → reports/out/active/current/reviewed_marketing_contacts.csv
+uv run python scripts/qa/validate_campaign_csvs.py \
+  --file reports/out/active/current/reviewed_marketing_contacts.csv \
+  --kind marketing_contacts --strict
+uv run python scripts/leads/process_broad_marketing_contacts.py
+# Review send_ready_marketing.csv — send manually or via scripts/qa/send_inline_html_email_via_gmail_api.py
+uv run python scripts/leads/mark_sent_batch_contacted.py --batch-file ... --source ... --updated-by ...
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"  # Sent ingest
+```
+
+### B) Precision lead lane
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/leads/run_current_campaign_pipeline.py --stage prepare \
+  --campaign-slug YOUR_SLUG --queue-limit 50 --operator you@example.com
+# DeepSearch → reports/out/active/current/reviewed_deepsearch.csv (must include lead_id)
+uv run python scripts/leads/run_current_campaign_pipeline.py --stage process-reviewed --apply \
+  --operator you@example.com
+# Review send_ready.csv — send manually or via your usual path
+uv run python scripts/leads/run_current_campaign_pipeline.py --stage post-send \
+  --source YOUR_SLUG --operator you@example.com
+```
+
+### Daily scripts (KEEP_CORE)
+
+Scripts operators touch most often for outbound: **`export_do_not_repeat_master.py`**, **`validate_campaign_csvs.py`**, **`process_broad_marketing_contacts.py`**, **`run_current_campaign_pipeline.py`**, **`prepare_outbound_campaign_workspace.py`** (when resetting `active/current`), **`export_lead_contact_research_queue.py`**, **`import_lead_contact_research_csv.py`**, **`export_next_marketing_recipients.py`**, **`mark_sent_batch_contacted.py`**, **`05_workspace_gmail_imap_to_sqlite.py`**, optional **`send_inline_html_email_via_gmail_api.py`**. Core library modules: **`candidate_export_gate`**, **`marketing_export_context`**, **`outreach_contact_state`**, **`next_marketing_queue`**, **`csv_contracts`**, **`outbound_core`**, **`outbound_sent_preflight`**.
+
+### Debug / audit scripts (KEEP_AUDIT, KEEP_DEBUG)
+
+Read-only or hygiene tools: **`export_contacted_lead_overlap_audit.py`**, **`export_gate_audit_csv.py`**, **`export_outreach_volume_rollup.py`**, **`export_supplier_domain_false_positive_audit.py`**, **`check_outbound_readiness.py`**, **`approve_reviewed_deepsearch_rows.py`**, **`backfill_contacted_from_gmail_sent.py`**. Supporting / CI-style: **`print_outbound_run_summary.py`**, **`export_candidate_audit.py`**, **`publish_gate.py`**, etc. Full table: [`SCRIPT_MAP.md`](SCRIPT_MAP.md#debug--audit-scripts-keepaudit--keepdebug).
+
+### One-time maintenance & alternate lanes (CONSOLIDATE, ARCHIVE_CANDIDATE)
+
+Not part of the two daily workflows: archive batch builders (**`build_archive_send_batch.py`**, **`precheck_archive_shortlist_commercial.py`**), **`export_all_known_marketing_contacts.py`** (overlaps do-not-repeat master partially), **`advanced/prepare_active_workspace.py`** (easy to confuse with **`prepare_outbound_campaign_workspace.py`**), and various **`leads/advanced/*.py`** paths. See [`SCRIPT_MAP.md`](SCRIPT_MAP.md#one-time-maintenance--alternate-lanes).
+
+### Do not remove (safety-critical)
+
+**Gate:** `candidate_export_gate` / `GateContext` policy. **Memory:** `outreach_contact_state`. **Truth:** Gmail Sent rows in **`emails`**, suppression tables, **`validate_campaign_csvs` / `csv_contracts`**, **`export_do_not_repeat_master`**, **`import_lead_contact_research_csv`** (precision lane DB apply), **`mark_sent_batch_contacted`** / post-send. Detail: [`SCRIPT_MAP.md`](SCRIPT_MAP.md#do-not-remove-safety-critical).
 
 <a id="m-eprun-path"></a>
 ## Path and command policy
@@ -363,6 +415,16 @@ uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
    ```
 
 Interpretation: treat **exact email** hits as strong duplicates; **same-domain** and **organization-name** rows are hints only (`confidence` / `recommended_action` in the overlap CSV). This audit does not change SQLite or gate behavior.
+
+### Outbound lanes: volume marketing contacts vs precision `lead_id` research
+
+**Quick commands:** see [Daily outbound — two lanes](#m-eprun-daily-outbound) at the top of this runbook. **Script index:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
+
+SQLite remains the **runtime blocker truth** (Gmail Sent + `outreach_contact_state` + suppressions). Gate policy in code is unchanged; these workflows add files and CLIs only.
+
+**Volume lane (expanded):** Use when you want **many net-new institutional emails** without **`lead_id`**. Do **not** import broad rows into `lead_contact_research` unless each row has a real **`lead_id`**. Steps: export **`export_do_not_repeat_master.py`** → attach `do_not_repeat_master.txt` / CSV to DeepSearch → save **`reviewed_marketing_contacts.csv`** → **`validate_campaign_csvs.py --kind marketing_contacts`** → **`process_broad_marketing_contacts.py`** → **`send_ready_marketing.csv`** → send → **`mark_sent_batch_contacted.py`** + Sent ingest. Schema: `institution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal` (`fit_signal` optional). Outputs also include `marketing_safe_to_send.csv`, `marketing_blocked_already_known.csv`, `marketing_needs_manual_review.csv`, `marketing_contacts_summary.json`.
+
+**Precision lane (expanded):** One row per **`lead_id`**. [`export_lead_contact_research_queue.py`](../scripts/leads/export_lead_contact_research_queue.py) produces **`research_queue.csv`**; DeepSearch returns **`reviewed_deepsearch.csv`**; [`run_current_campaign_pipeline.py`](../scripts/leads/run_current_campaign_pipeline.py) runs overlap, import, gate, and **`export_next_marketing_recipients.py`** into **`send_ready.csv`** (see wrapper section below).
 
 **Campaign workspace convention (reduce CSV/report chaos):**
 
