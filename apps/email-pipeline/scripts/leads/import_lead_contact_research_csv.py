@@ -10,7 +10,6 @@ This importer is conservative by default:
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from pathlib import Path
@@ -31,6 +30,12 @@ from origenlab_email_pipeline.lead_contact_research import (
 )
 from origenlab_email_pipeline.lead_export_queries import sql_upstream_active_lead_master
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+from origenlab_email_pipeline.csv_contracts import (
+    has_required_columns,
+    normalize_header_name,
+    normalize_row_dict,
+    read_csv_normalized,
+)
 
 _REQUIRED_COLUMNS: tuple[str, ...] = (
     "lead_id",
@@ -62,7 +67,7 @@ _FREE_EMAIL_DOMAINS = {
 
 
 def _norm_row(row: dict[str, str]) -> dict[str, str]:
-    return {str(k or "").strip().lower(): str(v or "").strip() for k, v in row.items()}
+    return normalize_row_dict(row)
 
 
 def _email_domain(email: str) -> str:
@@ -111,10 +116,7 @@ def _is_generic_localpart(email: str) -> bool:
 
 
 def _load_rows(path: Path) -> tuple[list[dict[str, str]], list[str]]:
-    with path.open("r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        rows = [_norm_row(r) for r in reader]
-        headers = [str(h or "").strip().lower() for h in (reader.fieldnames or [])]
+    headers, rows = read_csv_normalized(path)
     return rows, headers
 
 
@@ -183,10 +185,32 @@ def main() -> int:
         help="Allow overwrite when lead already has a lead_contact_research row",
     )
     ap.add_argument("--updated-by", default="csv_import", help="updated_by value in lead_contact_research")
+    ap.add_argument(
+        "--allow-deepsearch-aliases",
+        action="store_true",
+        help=(
+            "Allow reviewed CSV aliases (institution_name->org_name, contact_email->resolved_contact_email). "
+            "Default keeps strict reviewed schema."
+        ),
+    )
     args = ap.parse_args()
 
     rows, headers = _load_rows(args.input)
-    missing = [c for c in _REQUIRED_COLUMNS if c not in headers]
+    if args.allow_deepsearch_aliases:
+        rows2: list[dict[str, str]] = []
+        for r in rows:
+            nr = dict(r)
+            if "org_name" not in nr and "institution_name" in nr:
+                nr["org_name"] = nr.get("institution_name", "")
+            if "resolved_contact_email" not in nr and "contact_email" in nr:
+                nr["resolved_contact_email"] = nr.get("contact_email", "")
+            rows2.append(nr)
+        rows = rows2
+        headers = sorted({normalize_header_name(k) for rr in rows for k in rr.keys()})
+
+    ok_required, missing = has_required_columns(headers, _REQUIRED_COLUMNS)
+    if not ok_required:
+        missing = list(missing)
     if missing:
         print(f"Missing required columns: {', '.join(missing)}", file=sys.stderr)
         return 1

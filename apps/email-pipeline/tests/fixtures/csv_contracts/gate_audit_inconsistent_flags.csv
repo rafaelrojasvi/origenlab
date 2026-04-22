@@ -1,0 +1,2 @@
+email,lead_id,final_eligible,exclusion_reason,blocked_by_sent,blocked_by_outreach_state,blocked_by_email_suppression,blocked_by_domain_suppression,blocked_by_invalid_email
+ok@example.com,1,1,invalid_email,0,0,0,0,0

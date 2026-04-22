@@ -388,6 +388,42 @@ Interpretation: treat **exact email** hits as strong duplicates; **same-domain**
 - Older campaign artifacts should be kept under `reports/out/archive/...`.
 - **Do not use old campaign CSVs as fresh DeepSearch input**; always start from a newly prepared `active/current/research_queue.csv`.
 
+**Recommended wrapper CLI (orchestration, no auto-send):**
+
+- Use [`run_current_campaign_pipeline.py`](../scripts/leads/run_current_campaign_pipeline.py) to orchestrate the existing scripts in the right order over `reports/out/active/current/`.
+- DeepSearch stays manual/reviewed (you upload `research_queue.csv` and save reviewed output to `reviewed_deepsearch.csv`).
+- Sending stays manual (wrapper does not send email).
+- Individual scripts remain available for debugging and advanced control.
+- Optional contract checker for campaign CSVs:
+
+  ```bash
+  uv run python scripts/qa/validate_campaign_csvs.py --workspace reports/out/active/current --strict
+  ```
+
+```bash
+cd apps/email-pipeline
+
+# 1) Prepare campaign workspace + export research queue
+uv run python scripts/leads/run_current_campaign_pipeline.py \
+  --stage prepare \
+  --campaign-slug q2_hospitales_labs_02 \
+  --operator you@example.com \
+  --queue-limit 50 \
+  --archive-existing
+
+# 2) After manual DeepSearch review saved to active/current/reviewed_deepsearch.csv
+uv run python scripts/leads/run_current_campaign_pipeline.py \
+  --stage process-reviewed \
+  --operator you@example.com \
+  --apply
+
+# 3) After manual send, mark contacted memory (optional Sent ingest)
+uv run python scripts/leads/run_current_campaign_pipeline.py \
+  --stage post-send \
+  --source q2_hospitales_labs_02 \
+  --operator you@example.com
+```
+
 ### Lead contact research queue (DeepSearch / ChatGPT)
 
 Use a deterministic, read-only queue export to target research where high/medium-fit leads still have no trustworthy contact email:

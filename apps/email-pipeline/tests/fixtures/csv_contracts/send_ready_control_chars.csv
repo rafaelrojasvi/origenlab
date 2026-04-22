@@ -1,0 +1,3 @@
+case_id,id_lead,contact_email,institution_name,email_source
+lead_1,1,ok@example.com,"Org X	with
+break",lead_master
