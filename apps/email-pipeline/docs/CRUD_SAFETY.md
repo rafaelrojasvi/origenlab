@@ -25,6 +25,7 @@ Last reviewed: 2026-04-25
 - **Validation:** `validate_campaign_csvs.py`, contract tests, `--help` on any CLI.
 - **Readiness:** `check_outbound_readiness.py`, `check_reproducibility.py` (no DB write; may open SQLite **read-only** to inspect schema).
 - **Reports layout planning:** `plan_reports_out_cleanup.py` (read-only scan of `reports/out`; optional JSON report path; does not touch the tree).
+- **Script sprawl planning:** `plan_script_consolidation.py` (read-only scan of `scripts/*.py` vs `SCRIPT_MAP.md`; optional JSON; does not edit scripts).
 - **Ingest of documentation** (reading markdown, not mutating live mail).
 
 **Rule:** Prefer read-only paths when exploring a new issue.
@@ -94,3 +95,10 @@ Examples: `purge_*.py`, `build_business_mart` / `build_commercial_intel` **rebui
 - **Deletion or moving** of paths in `reports/out` is a **separate explicit stage** (not this script); the planner only **inspects** and can write an optional **JSON** report to a path you choose — it does **not** change `reports/out`.
 - **Do not delete** `active/current` contents **during an active campaign** unless the runbook or operator explicitly retires that workspace (treat it as the canonical working set until archived).
 - For cleanup planning, never delete in git what was never committed; on disk, use `archive` / `tmp` / `reference` conventions above before bulk removal (any future automation should follow the same order: **plan first**, then an explicit **apply** step in a different tool or stage).
+
+**Script entrypoint and consolidation policy**
+
+- **Deletion, consolidation, or re-homing** of a script in `apps/email-pipeline/scripts/` must start with a **read-only** pass using [`plan_script_consolidation.py`](../scripts/qa/plan_script_consolidation.py) so you see primary bucket tags, doc/test references, and wrapper/duplicate *candidates* before any change.
+- **Wrappers and deprecation** (thin root scripts, alternate paths) should be **designed, documented, and sometimes dual-path tested** before **deleting** an entrypoint; see [`test_critical_script_paths.py`](../tests/test_critical_script_paths.py) and [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
+- **Break-glass** scripts (purge, send, large rebuilds, `migrate/`, `extract_attachment_text`, etc.) must **not** be deleted or “hidden” behind defaults without a **documented replacement**, operator guidance in `SCRIPT_MAP.md`, and **regression tests** for any behavior that remains.
+- **Daily lane** scripts and paths listed as **OPS_DAILY** in `SCRIPT_MAP.md` must **not** be **renamed** (or have their public path removed) until **`SCRIPT_MAP.md`**, [`RUNBOOK.md`](RUNBOOK.md) where needed, and **tests** that assert paths are all updated in the same change.

@@ -8,6 +8,8 @@ Last reviewed: 2026-04-25
 
 **Generated output layout (read-only):** before deleting or moving anything under [`../reports/out`](../reports/out), run the **planner** [`../scripts/qa/plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) to classify paths and list large files; it does not modify the tree (see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) §7).
 
+**Script sprawl (read-only):** before deprecating, re-homing, or deleting a script, run [`../scripts/qa/plan_script_consolidation.py`](../scripts/qa/plan_script_consolidation.py) to see buckets, doc/test references, and wrapper candidates (no file changes; see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) script consolidation policy).
+
 **Legend**
 
 - **mutates DB:** writes SQLite (or Postgres in migrate tools) in normal use  
@@ -32,8 +34,9 @@ Values are **representative**; some scripts in a group may differ. When in doubt
 | `leads/mark_sent_batch_contacted.py` | **yes** | no | no | no | yes | no |
 | `ingest/05_workspace_gmail_imap_to_sqlite.py` | **yes** (ingest) | no | no | no* | optional | **yes** (ingest) |
 | `qa/plan_reports_out_cleanup.py` | no | no | no | **yes** | no | no |
+| `qa/plan_script_consolidation.py` | no | no | no | **yes** | no | no |
 
-*\*Ingest is safe mechanically on a new machine if DB path is writable, but you still need creds to use Gmail. **`plan_reports_out_cleanup`** is read-only on `reports/out` (and optional JSON elsewhere).*
+*\*Ingest is safe mechanically on a new machine if DB path is writable, but you still need creds to use Gmail. **`plan_reports_out_cleanup` / `plan_script_consolidation`** are read-only planners (the latter scans `scripts/`; optional JSON elsewhere).*
 
 ---
 

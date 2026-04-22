@@ -16,6 +16,7 @@ Describe how to **reproduce the development and test environment** for `apps/ema
 - **Documentation** (including operator maps and safety notes)
 - A **read-only sanity check** of the environment: [`scripts/qa/check_reproducibility.py`](../scripts/qa/check_reproducibility.py)
 - A **read-only plan** of the local `reports/out` tree (sizes, folders, proposed review labels — no changes on disk): [`scripts/qa/plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) (use before any future delete/move of generated outputs; see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) §7)
+- A **read-only plan** of the `scripts/` tree against [`docs/SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md): [`scripts/qa/plan_script_consolidation.py`](../scripts/qa/plan_script_consolidation.py) (before deprecating, wrapping, or removing entrypoints; see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) script consolidation section)
 
 **A new machine can reproduce code and tests from git, but cannot reproduce production operations without the private DB and Gmail credentials.**
 
