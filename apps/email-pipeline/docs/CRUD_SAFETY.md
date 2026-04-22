@@ -24,7 +24,7 @@ Last reviewed: 2026-04-25
 - **Exports** of send lists, research queues, do-not-repeat lists (files under `reports/out/…`).
 - **Validation:** `validate_campaign_csvs.py`, contract tests, `--help` on any CLI.
 - **Readiness:** `check_outbound_readiness.py`, `check_reproducibility.py` (no DB write; may open SQLite **read-only** to inspect schema).
-- **Reports layout planning:** `plan_reports_out_cleanup.py` (read-only scan of `reports/out`; optional JSON report path; does not touch the tree).
+- **Reports layout planning:** `plan_reports_out_cleanup.py` (read-only scan of `reports/out`; optional JSON report path; does not touch the tree). Bucket rules are implemented in `origenlab_email_pipeline.core.reports_out` and imported by the planner and archiver; behavior is unchanged from pre–Stage 6D1 in intent.
 - **Script sprawl planning:** `plan_script_consolidation.py` (read-only scan of `scripts/*.py` vs `SCRIPT_MAP.md`; optional JSON; does not edit scripts).
 - **Ingest of documentation** (reading markdown, not mutating live mail).
 

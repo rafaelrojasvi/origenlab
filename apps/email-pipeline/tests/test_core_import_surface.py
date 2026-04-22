@@ -10,10 +10,12 @@ def test_core_infra_imports() -> None:
     from origenlab_email_pipeline.core import config
     from origenlab_email_pipeline.core import db
     from origenlab_email_pipeline.core import sqlite_migrate
+    from origenlab_email_pipeline.core import reports_out
 
     assert config.__name__ == "origenlab_email_pipeline.core.config"
     assert db.__name__ == "origenlab_email_pipeline.core.db"
     assert sqlite_migrate.__name__ == "origenlab_email_pipeline.core.sqlite_migrate"
+    assert reports_out.__name__ == "origenlab_email_pipeline.core.reports_out"
 
 
 def test_core_outbound_imports() -> None:

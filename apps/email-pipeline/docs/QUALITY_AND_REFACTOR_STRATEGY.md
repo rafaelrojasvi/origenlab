@@ -81,6 +81,8 @@ Refactors are **staged**; the tables below are **not** a commitment to order. Us
 
 **Stage 6C2 (outbound, narrow):** ``scripts/qa/export_do_not_repeat_master.py`` was **thinned**; merge, counting, and summary formatting live in ``origenlab_email_pipeline.core.outbound.do_not_repeat_master``. The **CLI** remains the daily entrypoint; **read-only** SQLite; **no** change to output filenames, CSV columns, or summary JSON fields intended (verify with tests).
 
+**Stage 6D1 (reports vertical, narrow):** shared ``reports/out`` **classification** and planning helpers (buckets, ``FileEntry`` aggregation, archiver eligibility) live in ``origenlab_email_pipeline.core.reports_out``. ``plan_reports_out_cleanup.py`` and ``archive_reports_out_generated.py`` remain **operator entrypoints**; JSON/stdout and **dry-run default** for the archiver are unchanged in intent (verify with tests).
+
 **Future Stage 6C+ (preview):** pick the **next** vertical or script, apply a **small** internal-only refactor, then re-run the full test suite and readiness scripts.
 
 ---
@@ -91,7 +93,7 @@ Refactors are **staged**; the tables below are **not** a commitment to order. Us
 |------|------|
 | `plan_source_quality.py` | Text-only scan: size, heuristics, import hints, vertical buckets — **guidance, not authority**. |
 | `plan_script_consolidation.py` | Script index vs `SCRIPT_MAP.md` — no file changes. |
-| `plan_reports_out_cleanup.py` | `reports/out` tree buckets — no file changes. |
+| `plan_reports_out_cleanup.py` | `reports/out` tree buckets — no file changes; bucket rules also in `core.reports_out`. |
 
 **Warning:** Planners can be wrong on edge cases. Operator truth remains **code** + **SCRIPT_MAP** + **tests**.
 
@@ -99,7 +101,7 @@ Refactors are **staged**; the tables below are **not** a commitment to order. Us
 
 ## 6. Import convention (Stage 6B)
 
-- **New** code should **prefer** `from origenlab_email_pipeline.core…` where a re-export exists (`core.outbound`, `core.gmail`, `core.mart`, `core.suppliers`, `core.leads`, plus `core.config`, `core.db`, `core.safety`, `core.sqlite_migrate`).
+- **New** code should **prefer** `from origenlab_email_pipeline.core…` where a re-export exists (`core.outbound`, `core.gmail`, `core.mart`, `core.suppliers`, `core.leads`, `core.reports_out` for `reports/out` rules, plus `core.config`, `core.db`, `core.safety`, `core.sqlite_migrate`).
 - **Existing** `from origenlab_email_pipeline.candidate_export_gate` (and similar) **remain valid** — do not mass-rewrite.
 - A **per-vertical** migration in **Stage 6C+** can switch one subtree at a time with tests, not a repo-wide sed.
 

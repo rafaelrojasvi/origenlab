@@ -11,12 +11,11 @@
 Moves selected files into ``reports/out/archive/manual_cleanup/YYYY-MM-DD_<slug>/`` preserving
 relative paths. **Never** deletes. Does not mutate paths outside the ``--reports-out-dir`` root.
 
-Bucket labels match ``scripts/qa/plan_reports_out_cleanup.py`` (imported).
+Bucket labels match ``scripts/qa/plan_reports_out_cleanup.py`` and ``core.reports_out``.
 """
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import re
 import shutil
@@ -26,31 +25,22 @@ from pathlib import Path
 
 _TOOLS = Path(__file__).resolve().parent
 _SCRIPTS = _TOOLS.parent
-_QA_PLAN = _SCRIPTS / "qa" / "plan_reports_out_cleanup.py"
-_plan_mod_name = "origenlab_embedded_plan_reports_out_cleanup"
-_spec = importlib.util.spec_from_file_location(_plan_mod_name, _QA_PLAN)
-if _spec is None or _spec.loader is None:
-    raise RuntimeError("cannot load plan_reports_out_cleanup")
-_planner = importlib.util.module_from_spec(_spec)
-sys.modules[_spec.name] = _planner
-_spec.loader.exec_module(_planner)  # type: ignore[union-attr]
-classify_path = _planner.classify_path
-has_active_current = _planner.has_active_current
-is_reference = _planner.is_reference
-APP_ROOT = _SCRIPTS.parent
+_APP = _SCRIPTS.parent
+if str(_APP / "src") not in sys.path:
+    sys.path.insert(0, str(_APP / "src"))
+
+from origenlab_email_pipeline.core.reports_out import (  # noqa: E402
+    bucket_eligible_for_move,
+    classify_path,
+    has_active_current,
+    is_reference,
+    is_under_manual_cleanup,
+    is_under_top_level_active,
+    path_has_protected_artifact_basename,
+)
+
+APP_ROOT = _APP
 _DEFAULT_ROOT = APP_ROOT / "reports" / "out"
-
-
-def _is_protected_name(name: str) -> bool:
-    n = name.casefold()
-    return n in (".gitkeep", "readme.md", ".gitignore")
-
-
-def _under_manual_cleanup(rel: Path) -> bool:
-    parts = [p.casefold() for p in rel.parts]
-    if len(parts) < 2:
-        return False
-    return parts[0] == "archive" and parts[1] == "manual_cleanup"
 
 
 def iter_report_files(root: Path) -> list[Path]:
@@ -65,38 +55,27 @@ def iter_report_files(root: Path) -> list[Path]:
         except OSError:
             continue
         rel = p.relative_to(root)
-        if _under_manual_cleanup(rel):
+        if is_under_manual_cleanup(rel):
             continue
         out.append(p)
     return sorted(out)
 
 
 def eligible_bucket(bucket: str, args: argparse.Namespace) -> bool:
-    if bucket in ("active_current", "reference"):
-        if bucket == "active_current" and args.allow_active_current:
-            return True
-        if bucket == "reference" and args.allow_reference:
-            return True
-        return False
-    m = {
-        "tmp_or_scratch": args.include_tmp,
-        "lab_or_tatiana": args.include_lab,
-        "loose_root_files": args.include_loose_root,
-        "unknown": args.include_unknown,
-    }
-    if bucket not in m:
-        return False
-    return bool(m[bucket])
-
-
-def _is_under_active_tree(rel: Path) -> bool:
-    """True if path is under top-level ``active/`` (campaign workspace root)."""
-    return len(rel.parts) >= 1 and rel.parts[0].casefold() == "active"
+    return bucket_eligible_for_move(
+        bucket,
+        include_tmp=args.include_tmp,
+        include_lab=args.include_lab,
+        include_loose_root=args.include_loose_root,
+        include_unknown=args.include_unknown,
+        allow_active_current=args.allow_active_current,
+        allow_reference=args.allow_reference,
+    )
 
 
 def should_skip_protection(rel: Path) -> str | None:
     """Path/name guard (README, .gitkeep) — independent of --allow flags."""
-    if any(_is_protected_name(n) for n in rel.parts):
+    if path_has_protected_artifact_basename(rel):
         return "protected (README / .gitkeep / .gitignore in path)"
     return None
 
@@ -152,7 +131,7 @@ def collect_selection(
             continue
         # Planner classifies non-``current`` ``active/`` as ``active_workspace_misc``; still treat
         # all of ``active/`` as campaign workspace unless ``--allow-active-current``.
-        if _is_under_active_tree(rel) and not args.allow_active_current:
+        if is_under_top_level_active(rel) and not args.allow_active_current:
             continue
         b = classify_path(rel)
         if b in ("archive", "repo_bootstrap"):
