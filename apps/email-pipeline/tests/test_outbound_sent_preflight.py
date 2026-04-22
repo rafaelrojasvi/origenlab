@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
 import subprocess
@@ -155,6 +156,69 @@ def _db_lead_only_no_sent(path: Path) -> None:
     conn.close()
 
 
+def _db_lead_export_text_hygiene(path: Path) -> None:
+    from origenlab_email_pipeline.leads_schema import ensure_leads_tables
+
+    conn = sqlite3.connect(str(path))
+    ensure_leads_tables(conn)
+    conn.execute(
+        """
+        CREATE TABLE emails (
+          recipients TEXT,
+          source_file TEXT NOT NULL,
+          folder TEXT
+        )
+        """
+    )
+    conn.executemany(
+        """
+        INSERT INTO lead_master (
+          source_name, source_record_id, org_name, contact_name, email, email_norm,
+          fit_bucket, priority_score, evidence_summary, status, last_seen_at, upstream_sync_state
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                "test",
+                "h1",
+                "Org Uno\nCon Salto",
+                "Alice\tA",
+                "one@safe.cl",
+                "one@safe.cl",
+                "high_fit",
+                9.5,
+                "BALANZA DIGITAL PEQUEÃâ\x80\x98A\n\tcontrol\x0bchars",
+                "nuevo",
+                "2026-04-21T10:00:00+00:00",
+                "active",
+            ),
+            (
+                "test",
+                "h2",
+                "Org Dos",
+                "Bob",
+                "two@safe.cl",
+                "two@safe.cl",
+                "high_fit",
+                9.0,
+                "Linea A\r\nLinea B",
+                "nuevo",
+                "2026-04-21T09:00:00+00:00",
+                "active",
+            ),
+        ],
+    )
+    # Healthy Sent-history preflight row (unrelated recipient).
+    conn.execute(
+        """
+        INSERT INTO emails (recipients, source_file, folder)
+        VALUES ('already@sent.cl', 'gmail:contacto@origenlab.cl/s1', '[Gmail]/Enviados')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
 def test_export_next_marketing_cli_fails_preflight_without_sent_rows(tmp_path: Path) -> None:
     db = tmp_path / "leads.sqlite"
     _db_lead_only_no_sent(db)
@@ -218,6 +282,49 @@ def test_export_next_marketing_cli_allow_empty_writes_sent_preflight_in_summary(
     assert sp["sent_row_count"] == 0
     assert sp["parsed_recipient_count"] == 0
     assert "contacto@origenlab.cl" in sp["gmail_user"]
+
+
+def test_export_next_marketing_cli_sanitizes_multiline_and_control_text(tmp_path: Path) -> None:
+    db = tmp_path / "hygiene.sqlite"
+    _db_lead_export_text_hygiene(db)
+    out_csv = tmp_path / "next_hygiene.csv"
+    script = REPO / "scripts" / "leads" / "export_next_marketing_recipients.py"
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--db",
+            str(db),
+            "-o",
+            str(out_csv),
+            "--limit",
+            "2",
+            "--fetch-cap",
+            "20",
+        ],
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert run.returncode == 0, run.stderr + run.stdout
+    raw = out_csv.read_text(encoding="utf-8")
+    assert "\x0b" not in raw
+    assert "\x80" not in raw
+    assert "\x98" not in raw
+    assert "\r\n" not in raw
+
+    with out_csv.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 2
+    by_email = {r["contact_email"]: r for r in rows}
+    assert set(by_email.keys()) == {"one@safe.cl", "two@safe.cl"}
+    ev1 = by_email["one@safe.cl"]["evidence_summary"]
+    assert ev1 == "BALANZA DIGITAL PEQUEÃâ A control chars"
+    assert "\n" not in by_email["one@safe.cl"]["evidence_summary"]
+    assert "\t" not in by_email["one@safe.cl"]["evidence_summary"]
+    assert "\r" not in by_email["two@safe.cl"]["evidence_summary"]
+    assert all((ord(ch) >= 32 and not (127 <= ord(ch) <= 159)) for ch in ev1)
 
 
 def test_build_archive_send_batch_cli_fails_preflight_without_sent_rows(tmp_path: Path) -> None:

@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -63,6 +64,37 @@ from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
     MARKETING_VARIANT_TYPES,
     build_marketing_outreach_seed_body,
 )
+
+_WS_RE = re.compile(r"\s+")
+_MAX_EVIDENCE_SUMMARY_CHARS = 4000
+
+
+def _sanitize_csv_text(value: object, *, max_len: int | None = None) -> str:
+    """Normalize CSV cell text for terminal/spreadsheet safety."""
+    s = str(value or "")
+    if not s:
+        return ""
+    s = s.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+    # Remove C0/C1 controls while keeping printable Unicode as-is.
+    s = "".join((" " if (ord(ch) < 32 or 127 <= ord(ch) <= 159) else ch) for ch in s)
+    s = _WS_RE.sub(" ", s).strip()
+    if max_len is not None and max_len > 0 and len(s) > max_len:
+        s = s[:max_len].rstrip()
+    return s
+
+
+def _sanitize_summary_row(row: dict[str, object], *, fieldnames: list[str]) -> dict[str, object]:
+    out: dict[str, object] = {}
+    for k in fieldnames:
+        v = row.get(k, "")
+        if isinstance(v, str) or v is None:
+            if k == "evidence_summary":
+                out[k] = _sanitize_csv_text(v, max_len=_MAX_EVIDENCE_SUMMARY_CHARS)
+            else:
+                out[k] = _sanitize_csv_text(v)
+        else:
+            out[k] = v
+    return out
 
 
 def main() -> int:
@@ -240,10 +272,10 @@ def main() -> int:
     ]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=summary_fields, extrasaction="ignore")
+        w = csv.DictWriter(f, fieldnames=summary_fields, extrasaction="ignore", lineterminator="\n")
         w.writeheader()
         for r in export_rows:
-            w.writerow({k: r.get(k, "") for k in summary_fields})
+            w.writerow(_sanitize_summary_row(r, fieldnames=summary_fields))
 
     print(
         f"Wrote {len(export_rows)} rows to {args.out} "
@@ -270,7 +302,7 @@ def main() -> int:
         ]
         args.pilot_csv.parent.mkdir(parents=True, exist_ok=True)
         with args.pilot_csv.open("w", encoding="utf-8", newline="") as pf:
-            pw = csv.DictWriter(pf, fieldnames=inst_col)
+            pw = csv.DictWriter(pf, fieldnames=inst_col, lineterminator="\n")
             pw.writeheader()
             for r in export_rows:
                 inst = str(r["institution_name"] or "").strip()
@@ -281,19 +313,19 @@ def main() -> int:
                 note = f"id_lead={r['id_lead']} fit={r['fit_bucket']}"
                 pw.writerow(
                     {
-                        "case_id": r["case_id"],
-                        "subject": subj,
-                        "body_text": _pilot_seed_body(vn, r, inst),
+                        "case_id": _sanitize_csv_text(r["case_id"]),
+                        "subject": _sanitize_csv_text(subj),
+                        "body_text": _sanitize_csv_text(_pilot_seed_body(vn, r, inst)),
                         "case_type": "marketing_outreach",
-                        "recipient_name": r["recipient_name"],
-                        "institution_name": inst,
-                        "sector": r["sector"],
+                        "recipient_name": _sanitize_csv_text(r["recipient_name"]),
+                        "institution_name": _sanitize_csv_text(inst),
+                        "sector": _sanitize_csv_text(r["sector"]),
                         "product_focus": "",
                         "use_case": "",
-                        "variant_type": vn,
-                        "contact_email": r["contact_email"],
+                        "variant_type": _sanitize_csv_text(vn),
+                        "contact_email": _sanitize_csv_text(r["contact_email"]),
                         "custom_note": "",
-                        "notes_for_reviewer": note,
+                        "notes_for_reviewer": _sanitize_csv_text(note),
                     }
                 )
         print(f"Pilot CSV: {args.pilot_csv}")
