@@ -84,3 +84,6 @@ id_rsa.pub
 # Web deploy zips (generated)
 **/origenlab-deploy.zip
 **/origenlab-dist.zip
+
+# Local virtualenvs
+.venv-email/
