@@ -150,8 +150,8 @@ def collect_selection(
         rsn = should_skip_protection(rel)
         if rsn is not None:
             continue
-        # ``classify_path`` can label e.g. ``active/my_batch/...`` as tmp (``my_`` rule) without
-        # ``active_current``; still treat all of ``active/`` as campaign workspace unless allow.
+        # Planner classifies non-``current`` ``active/`` as ``active_workspace_misc``; still treat
+        # all of ``active/`` as campaign workspace unless ``--allow-active-current``.
         if _is_under_active_tree(rel) and not args.allow_active_current:
             continue
         b = classify_path(rel)

@@ -2,6 +2,8 @@
 """Read-only plan for `reports/out` tree (no delete/move; optional JSON report file).
 
 Scans a directory, classifies paths into planning buckets, prints sizes and proposed actions.
+Buckets include ``active_current``, ``active_workspace_misc`` (``active/`` but not
+``active/current/``), ``client_pack_latest``, ``reference``, ``archive``, tmp/lab, etc.
 Default root: apps/email-pipeline/reports/out (or pass --reports-out-dir).
 Does not read SQLite, does not use Gmail, does not require secrets.
 """
@@ -43,6 +45,17 @@ def has_active_current(rel: Path) -> bool:
 
 def is_reference(rel: Path) -> bool:
     return len(rel.parts) >= 1 and rel.parts[0].casefold() == "reference"
+
+
+def is_client_pack_latest(rel: Path) -> bool:
+    return len(rel.parts) >= 1 and rel.parts[0].casefold() == "client_pack_latest"
+
+
+def is_active_workspace_misc(rel: Path) -> bool:
+    """``active/`` paths that are not under ``active/current/`` (see ``has_active_current``)."""
+    if not rel.parts or rel.parts[0].casefold() != "active":
+        return False
+    return not has_active_current(rel)
 
 
 def is_archive_path(rel: Path) -> bool:
@@ -104,6 +117,12 @@ def classify_path(rel: Path) -> str:
     if has_active_current(rel):
         return "active_current"
 
+    if is_active_workspace_misc(rel):
+        return "active_workspace_misc"
+
+    if is_client_pack_latest(rel):
+        return "client_pack_latest"
+
     if is_reference(rel):
         return "reference"
 
@@ -162,6 +181,8 @@ def scan_reports_out(
 
 PROPOSED_ACTION: dict[str, str] = {
     "active_current": "keep active/current (canonical current campaign workspace)",
+    "active_workspace_misc": "active/ but not current — batch exports, compare folders, ad-hoc workspace; not unknown",
+    "client_pack_latest": "client pack snapshot; keep for handoff/evidence; do not auto-archive in daily lane",
     "archive": "archive / retain as historical; review before delete or move",
     "reference": "keep reference (intentional long-lived small evidence only)",
     "tmp_or_scratch": "review; candidate to clear after explicit operator confirmation (not in daily lane)",
@@ -232,6 +253,8 @@ def print_report(
     lines.append("--- proposed action (per bucket) ---")
     action_order = (
         "active_current",
+        "active_workspace_misc",
+        "client_pack_latest",
         "reference",
         "archive",
         "tmp_or_scratch",
