@@ -19,6 +19,7 @@ def test_core_infra_imports() -> None:
 def test_core_outbound_imports() -> None:
     from origenlab_email_pipeline.core.outbound import broad_marketing_contacts
     from origenlab_email_pipeline.core.outbound import candidate_export_gate
+    from origenlab_email_pipeline.core.outbound import do_not_repeat_master
     from origenlab_email_pipeline.core.outbound import contact_domain_suppression
     from origenlab_email_pipeline.core.outbound import contact_email_suppression
     from origenlab_email_pipeline.core.outbound import csv_contracts
@@ -36,9 +37,11 @@ def test_core_outbound_imports() -> None:
         broad_marketing_contacts.__name__
         == "origenlab_email_pipeline.core.outbound.broad_marketing_contacts"
     )
+    assert do_not_repeat_master.__name__ == "origenlab_email_pipeline.core.outbound.do_not_repeat_master"
 
     for mod in (
         broad_marketing_contacts,
+        do_not_repeat_master,
         candidate_export_gate,
         csv_contracts,
         outbound_core,

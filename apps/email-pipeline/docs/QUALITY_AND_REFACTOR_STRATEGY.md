@@ -79,6 +79,8 @@ Refactors are **staged**; the tables below are **not** a commitment to order. Us
 
 **Stage 6C1 (outbound, narrow):** logic for ``scripts/leads/process_broad_marketing_contacts.py`` was **extracted** to ``origenlab_email_pipeline.core.outbound.broad_marketing_contacts`` (pure row processing, summaries). The **CLI** remains the operator entrypoint; **no** change to default paths, column contracts, or stdout shape intended—verify with tests. Further outbound refactors: one script at a time, same policy.
 
+**Stage 6C2 (outbound, narrow):** ``scripts/qa/export_do_not_repeat_master.py`` was **thinned**; merge, counting, and summary formatting live in ``origenlab_email_pipeline.core.outbound.do_not_repeat_master``. The **CLI** remains the daily entrypoint; **read-only** SQLite; **no** change to output filenames, CSV columns, or summary JSON fields intended (verify with tests).
+
 **Future Stage 6C+ (preview):** pick the **next** vertical or script, apply a **small** internal-only refactor, then re-run the full test suite and readiness scripts.
 
 ---

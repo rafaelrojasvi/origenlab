@@ -36,6 +36,8 @@ From **`apps/email-pipeline/`** (monorepo: `cd apps/email-pipeline`):
 
 **Volume marketing (broad contacts):** [`leads/process_broad_marketing_contacts.py`](leads/process_broad_marketing_contacts.py) is the **volume marketing** contact processor (DeepSearch volume lane). The **CLI** remains the operator entrypoint; core processing lives in `origenlab_email_pipeline.core.outbound.broad_marketing_contacts`. The script **writes generated CSV outputs only** and does **not** mutate SQLite; it still loads a **read-only** gate context and DNR sidecar inputs for safety.
 
+**Do-not-repeat master (read-only):** [`qa/export_do_not_repeat_master.py`](qa/export_do_not_repeat_master.py) builds `do_not_repeat_master.{csv,txt}` and `do_not_repeat_summary.json` under `active/current/`. The **CLI** is the entrypoint; merge/summary logic lives in `origenlab_email_pipeline.core.outbound.do_not_repeat_master`. **Read-only** on SQLite; no schema writes.
+
 ## Where to read
 
 | Need | Doc |
