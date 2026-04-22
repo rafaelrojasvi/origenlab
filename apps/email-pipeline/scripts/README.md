@@ -34,6 +34,8 @@ From **`apps/email-pipeline/`** (monorepo: `cd apps/email-pipeline`):
 
 **Thin compatibility wrappers** at the repo’s `scripts/` root ([`build_lead_account_rollup.py`](build_lead_account_rollup.py), etc.) delegate to the `leads/` copies so older commands and bookmarks keep working. Prefer documenting `scripts/leads/…` for new material.  
 
+**Volume marketing (broad contacts):** [`leads/process_broad_marketing_contacts.py`](leads/process_broad_marketing_contacts.py) is the **volume marketing** contact processor (DeepSearch volume lane). The **CLI** remains the operator entrypoint; core processing lives in `origenlab_email_pipeline.core.outbound.broad_marketing_contacts`. The script **writes generated CSV outputs only** and does **not** mutate SQLite; it still loads a **read-only** gate context and DNR sidecar inputs for safety.
+
 ## Where to read
 
 | Need | Doc |
