@@ -364,6 +364,30 @@ uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
 
 Interpretation: treat **exact email** hits as strong duplicates; **same-domain** and **organization-name** rows are hints only (`confidence` / `recommended_action` in the overlap CSV). This audit does not change SQLite or gate behavior.
 
+**Campaign workspace convention (reduce CSV/report chaos):**
+
+- Active campaign working set should live in **`reports/out/active/current/`** only.
+- Prepare/reset this canonical workspace before each campaign:
+
+  ```bash
+  cd apps/email-pipeline
+  uv run python scripts/qa/prepare_outbound_campaign_workspace.py \
+    --campaign-slug q2_hospitals --operator you@example.com
+  ```
+
+- If a previous `active/current` run exists, archive it first:
+
+  ```bash
+  uv run python scripts/qa/prepare_outbound_campaign_workspace.py \
+    --campaign-slug q2_hospitals --operator you@example.com --archive-existing
+  ```
+
+- Canonical files created/cleaned in `active/current`:
+  `research_queue.csv`, `reviewed_deepsearch.csv`, `overlap_audit.csv`, `gate_audit.csv`, `send_ready.csv`,
+  `outbound_summary.json`, `send_manifest.json`, `mark_contacted_result.json`, `campaign_manifest.json`.
+- Older campaign artifacts should be kept under `reports/out/archive/...`.
+- **Do not use old campaign CSVs as fresh DeepSearch input**; always start from a newly prepared `active/current/research_queue.csv`.
+
 ### Lead contact research queue (DeepSearch / ChatGPT)
 
 Use a deterministic, read-only queue export to target research where high/medium-fit leads still have no trustworthy contact email:
