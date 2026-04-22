@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Deletes SQLite rows across many tables (emails, sidecars,
+# commercial keys, etc.). Dry-run by default; --apply is irreversible. Does not
+# delete from Gmail. See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Remove archived mail and related SQLite rows for specific contact email addresses.
 
 For each address, finds ``emails`` rows whose ``sender`` or ``recipients`` header fields

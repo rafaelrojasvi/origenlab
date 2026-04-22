@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Deletes all SQLite rows for one mailbox (emails + sidecars).
+# Dry-run by default; --apply is irreversible. Does not delete from Gmail.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Remove one mailbox everywhere in the SQLite archive + operator sidecars.
 
 Deletes ``emails`` rows whose From/Cc/To headers mention the address (angle-bracket safe),

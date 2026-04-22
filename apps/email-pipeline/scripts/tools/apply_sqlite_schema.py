@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY: Mutates SQLite schema (DDL / additive migrations) on the target DB file.
+# Run against the correct ORIGENLAB_SQLITE_PATH; keep backups before first use on prod.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts" for other high-impact tools.
+# -----------------------------------------------------------------------------
 """Apply orchestrated SQLite DDL (additive migrations) and run PRAGMA checks.
 
 This does **not** rebuild ``contact_master`` / marts (use ``scripts/mart/build_business_mart.py`` for that).

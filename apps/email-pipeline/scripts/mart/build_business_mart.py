@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Rebuild path deletes mart tables (contact_master, etc.)
+# before repopulating. Run only when you intend a full mart refresh.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Build the client-facing business mart tables (reproducible).
 
 This script materializes:

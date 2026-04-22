@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Writes to Postgres; --replace TRUNCATEs archive.* target
+# tables before reload. Wrong target URL causes data loss on the wrong database.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Copy SQLite archive tables into Postgres archive.* (Alembic 20260419_0002).
 
 SQLite stays read-only; source must pass strict validation (see validate_sqlite_archive_for_postgres).

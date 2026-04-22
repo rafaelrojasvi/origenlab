@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Domain-level purge deletes emails and related derived rows
+# in SQLite. Dry-run by default; --apply is irreversible. Does not delete from Gmail.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Remove archived mail and derived rows tied to an email domain (e.g. proveedor Ohaus).
 
 Deletes from ``emails`` (and, with foreign keys on, cascades attachments /

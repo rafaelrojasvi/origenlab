@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Rebuild / incremental paths DELETE and rewrite commercial_*
+# and related rollup tables. Can remove large amounts of derived data before rebuild.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Build v1 commercial-intelligence layer (signals + candidates).
 
 Design:

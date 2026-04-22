@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): --apply writes contact_email_suppression. Default is print-only.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Scan contacto@origenlab.cl Gmail-ingested mail for "never got your email" style replies.
 
 **Inbound only** (excludes Sent/Enviados): uses ``sender`` as the contact to flag.

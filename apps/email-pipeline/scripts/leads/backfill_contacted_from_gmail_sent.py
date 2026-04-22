@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY: --apply writes outreach_contact_state. Default is dry-run (no DB writes).
+# See docs/SCRIPT_MAP.md — "Break-glass scripts" for other --apply tools.
+# -----------------------------------------------------------------------------
 """Backfill outreach_contact_state=contacted from Gmail Sent history.
 
 Safe defaults:

@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Writes to Postgres outbound.*; --replace DELETEs target
+# sidecar tables before reload. Verify --postgres-url before running.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Copy SQLite outbound sidecar tables into Postgres outbound schema.
 
 Scope:

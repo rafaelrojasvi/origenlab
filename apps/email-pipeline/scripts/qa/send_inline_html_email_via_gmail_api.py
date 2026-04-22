@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Can send real email to real recipients via Gmail API when
+# not using dry-run / message-build-only modes. Operator-invoked only.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
+
 import argparse
 import csv
 import os

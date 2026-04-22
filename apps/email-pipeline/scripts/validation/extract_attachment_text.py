@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Can DELETE FROM attachment_extracts (e.g. force / redo paths).
+# Mutates SQLite extract tables; review flags before running on production DB copies.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Phase 2.4: post-pass attachment text extraction into SQLite.
 
 Workflow:

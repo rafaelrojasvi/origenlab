@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): DELETEs duplicate emails rows and cascades attachment cleanup.
+# Irreversible without restoring DB from backup. See docs/SCRIPT_MAP.md.
+# -----------------------------------------------------------------------------
 """Remove duplicate rows in emails table, keeping one per message_id (exact match).
 
 Enables SQLite foreign key enforcement so ON DELETE CASCADE removes attachment rows

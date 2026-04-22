@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): --apply writes contact_email_suppression and optionally
+# outreach_contact_state. Review JSON evidence before --apply.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Classify a manual outreach batch using **ingested** NDR/bounce mail in SQLite.
 
 Workflow::

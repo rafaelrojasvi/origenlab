@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): --apply writes contact_email_suppression. Default is print-only.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Scan contacto@origenlab Gmail-ingested mail for NDR / Mailer-Daemon bounces.
 
 Reads ``emails`` rows whose ``source_file`` is the workspace ingest prefix, keeps rows

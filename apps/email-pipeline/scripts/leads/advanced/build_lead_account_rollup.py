@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): DELETEs all lead_account_* rollup rows then rebuilds from
+# lead_master. Does not modify lead_master itself but clears derived account tables.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Rebuild lead account rollup from lead_master (idempotent full rebuild).
 
 Does not modify external_leads_raw or lead_master. Clears and repopulates:

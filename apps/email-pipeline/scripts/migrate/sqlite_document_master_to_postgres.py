@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): Writes to Postgres mart.document_master; --replace DELETEs
+# the target table before reload. Verify --postgres-url before running.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Copy SQLite document_master into Postgres mart.document_master.
 
 Scope:

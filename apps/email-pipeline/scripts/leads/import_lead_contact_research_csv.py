@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY: --apply writes lead_contact_research (precision lane). Default is dry-run.
+# See docs/SCRIPT_MAP.md — daily lanes and break-glass sections.
+# -----------------------------------------------------------------------------
 """Import reviewed DeepSearch/ChatGPT contact findings into lead_contact_research.
 
 This importer is conservative by default:
