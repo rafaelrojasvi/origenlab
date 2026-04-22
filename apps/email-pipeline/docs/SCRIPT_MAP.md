@@ -8,11 +8,11 @@ Last reviewed: 2026-04-24
 
 **Canonical working directory:** `apps/email-pipeline/` (`cd apps/email-pipeline`).
 
-**Reproducibility, safety, inventory:** [REPRODUCIBILITY.md](REPRODUCIBILITY.md) (machine setup) · [CRUD_SAFETY.md](CRUD_SAFETY.md) (read/create/update/delete rules) · [SCRIPT_INVENTORY.md](SCRIPT_INVENTORY.md) (group-level script classification) · read-only [check_reproducibility.py](../scripts/qa/check_reproducibility.py) · read-only [plan_reports_out_cleanup.py](../scripts/qa/plan_reports_out_cleanup.py) (scan `reports/out` before any cleanup; does not change files) · read-only [plan_script_consolidation.py](../scripts/qa/plan_script_consolidation.py) (classify `scripts/` sprawl before deprecating, wrapping, or deleting entrypoints; does not change files).
+**Reproducibility, safety, inventory:** [REPRODUCIBILITY.md](REPRODUCIBILITY.md) (machine setup) · [CRUD_SAFETY.md](CRUD_SAFETY.md) (read/create/update/delete rules) · [SCRIPT_INVENTORY.md](SCRIPT_INVENTORY.md) (group-level script classification) · read-only [check_reproducibility.py](../scripts/qa/check_reproducibility.py) · read-only [plan_reports_out_cleanup.py](../scripts/qa/plan_reports_out_cleanup.py) (scan `reports/out` before any cleanup; does not change files) · [archive_reports_out_generated.py](../scripts/tools/archive_reports_out_generated.py) (optional **move** of selected generated files into `archive/manual_cleanup/…`; **dry-run** default, `--apply` + `--archive-slug` to execute; no deletes) · read-only [plan_script_consolidation.py](../scripts/qa/plan_script_consolidation.py) (classify `scripts/` sprawl before deprecating, wrapping, or deleting entrypoints; does not change files).
 
 **Root `scripts/*.py` lead-account shims** (`build_lead_account_rollup.py`, `audit_lead_org_quality.py`, `match_lead_accounts_to_existing_orgs.py`, `validate_lead_account_rollup.py`) are **compatibility wrappers** to `scripts/leads/advanced/…`—**not** deletion targets until doc/test/operator paths are migrated; see file docstrings. Pure env redaction utilities: [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py).
 
-**Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints, asserts top-of-file warnings on the break-glass set (aligned to tables below), and checks the four root compatibility wrappers. Regressions require updating that test for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
+**Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints (including the reports-out archive tool), asserts top-of-file warnings on the break-glass set (aligned to tables below), and checks the four root compatibility wrappers. Regressions require updating that test for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
 
 **Canonical campaign workspace:** fresh inputs and outputs for the two outbound lanes belong in **`reports/out/active/current/`**. Other paths under `reports/out/active/` (and most of `reports/out/archive/`) are **evidence, history, or ad-hoc exports** — not the default place to pick up “today’s” CSV for DeepSearch or send lists.
 
@@ -215,6 +215,7 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | `scripts/tools/flag_ndr_bounces_from_contacto.py` | **`--apply`** writes suppressions |
 | `scripts/tools/flag_reported_non_delivery_from_contacto.py` | **`--apply`** writes suppressions |
 | `scripts/validation/extract_attachment_text.py` | May **delete** `attachment_extracts` during rebuild patterns |
+| `scripts/tools/archive_reports_out_generated.py` | **`--apply`** **moves** files under `reports/out` to `archive/manual_cleanup/…` (no deletes) |
 
 ---
 

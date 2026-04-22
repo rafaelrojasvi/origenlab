@@ -2,7 +2,7 @@
 
 **Canonical map (daily lanes, core / ops / lab / break-glass):** [`docs/SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md).
 
-**Environment / safety docs:** [REPRODUCIBILITY.md](../docs/REPRODUCIBILITY.md) · [CRUD_SAFETY.md](../docs/CRUD_SAFETY.md) · [SCRIPT_INVENTORY.md](../docs/SCRIPT_INVENTORY.md) — read-only: [`qa/check_reproducibility.py`](qa/check_reproducibility.py), [`qa/plan_reports_out_cleanup.py`](qa/plan_reports_out_cleanup.py) (inspect `reports/out` layout), [`qa/plan_script_consolidation.py`](qa/plan_script_consolidation.py) (inspect `scripts/` sprawl before delete/wrap/deprecate).
+**Environment / safety docs:** [REPRODUCIBILITY.md](../docs/REPRODUCIBILITY.md) · [CRUD_SAFETY.md](../docs/CRUD_SAFETY.md) · [SCRIPT_INVENTORY.md](../docs/SCRIPT_INVENTORY.md) — read-only: [`qa/check_reproducibility.py`](qa/check_reproducibility.py), [`qa/plan_reports_out_cleanup.py`](qa/plan_reports_out_cleanup.py) (inspect `reports/out` layout), [`qa/plan_script_consolidation.py`](qa/plan_script_consolidation.py) (inspect `scripts/` sprawl before delete/wrap/deprecate). **Move-only `reports/out` archiver (dry-run default, break-glass):** [`tools/archive_reports_out_generated.py`](tools/archive_reports_out_generated.py) — use after the planner; `--apply` + `--archive-slug` to execute.
 
 ## Quick navigation
 
@@ -72,5 +72,11 @@ Run from **`apps/email-pipeline/`**. Exit code **`0`** = no **critical** check f
 | [`print_outbound_run_summary.py`](qa/print_outbound_run_summary.py) | Human-readable **`outbound_run`** (lane, gmail, sqlite, Sent folders, counts, artifact paths) from `archive_outreach_build_summary.json` or lead `*_outbound_summary.json` | `--json` path | stdout | After canonical archive/lead runs; operator trust / handoff | **No** |
 | [`plan_reports_out_cleanup.py`](qa/plan_reports_out_cleanup.py) | **Read-only** plan for `reports/out`: bucket labels, file counts, sizes, largest files; optional `--json-out` to a file **outside** the tree | `--reports-out-dir` (default `reports/out`) | stdout (+ optional JSON path) | Before any future cleanup of generated outputs; never part of the daily send lane | **No** (informational) |
 | [`plan_script_consolidation.py`](qa/plan_script_consolidation.py) | **Read-only** classifies each `scripts/**/*.py` vs [`SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md), lists wrapper candidates, `unknown`, break-glass hits, doc/test refs; optional JSON | `--scripts-dir`, `--map` | stdout (+ optional JSON) | Before deprecating, re-homing, or deleting scripts; never part of the daily send lane | **No** (informational) |
+
+`tools/` — not part of the publication gate; listed here for operator adjacency to planners above.
+
+| Script | Purpose | Main inputs | Main outputs | When to run | Blocking? |
+|--------|---------|-------------|--------------|-------------|-----------|
+| [`archive_reports_out_generated.py`](tools/archive_reports_out_generated.py) | **Move** selected files under `reports/out` to `archive/manual_cleanup/…` (same bucket labels as `plan_reports_out_cleanup`); **default dry-run** | `--reports-out-dir`, include flags, optional `--json-out` | stdout (+ optional JSON); **`--apply`** + **`--archive-slug`** to move (no deletes) | After a read-only `plan_reports_out_cleanup` pass when you want to relocate generated clutter | n/a (filesystem side effects only) |
 
 **Docs:** [RUNBOOK §4](../docs/RUNBOOK.md#m-eprun-publish-qa), [RUNBOOK — cold export gate](../docs/RUNBOOK.md#m-eprun-cold-export-gate), [REPORTING — QA leads](../docs/REPORTING.md#m-eprep-leads-qa), [ARCHITECTURE — trust layer](../docs/ARCHITECTURE.md#m-eparch-qa-trust), [ARCHITECTURE — export eligibility](../docs/ARCHITECTURE.md#m-eparch-export-gate).

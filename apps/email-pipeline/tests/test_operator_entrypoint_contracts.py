@@ -25,6 +25,7 @@ _HELP_ENTRYPOINTS: tuple[str, ...] = (
     "scripts/qa/check_reproducibility.py",
     "scripts/qa/plan_reports_out_cleanup.py",
     "scripts/qa/plan_script_consolidation.py",
+    "scripts/tools/archive_reports_out_generated.py",
 )
 
 # Break-glass: file header / top-of-file must warn (do not execute).
@@ -39,6 +40,7 @@ _BREAK_GLASS_PATHS: tuple[str, ...] = (
     "scripts/commercial/build_commercial_intel_v1.py",
     "scripts/leads/advanced/build_lead_account_rollup.py",
     "scripts/validation/extract_attachment_text.py",
+    "scripts/tools/archive_reports_out_generated.py",
     "scripts/migrate/sqlite_archive_to_postgres.py",
     "scripts/migrate/sqlite_document_master_to_postgres.py",
     "scripts/migrate/sqlite_outbound_sidecars_to_postgres.py",

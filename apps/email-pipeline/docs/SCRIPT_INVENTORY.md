@@ -6,7 +6,7 @@ Last reviewed: 2026-04-25
 
 **Purpose:** High-level **grouping** of `scripts/` for operators and for **future cleanup planning**. It does **not** list every file. The canonical per-script map is [`SCRIPT_MAP.md`](SCRIPT_MAP.md). Full folder notes: [`../scripts/README.md`](../scripts/README.md).
 
-**Generated output layout (read-only):** before deleting or moving anything under [`../reports/out`](../reports/out), run the **planner** [`../scripts/qa/plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) to classify paths and list large files; it does not modify the tree (see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) §7).
+**Generated output layout:** before deleting or moving anything under [`../reports/out`](../reports/out), run the **planner** [`../scripts/qa/plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) to classify paths and list large files; it does not modify the tree (see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) §7). Optional **move-only** archiver (dry-run default): [`../scripts/tools/archive_reports_out_generated.py`](../scripts/tools/archive_reports_out_generated.py) — same buckets, `--apply` to relocate into `archive/manual_cleanup/…` (no deletes; break-glass).
 
 **Script sprawl (read-only):** before deprecating, re-homing, or deleting a script, run [`../scripts/qa/plan_script_consolidation.py`](../scripts/qa/plan_script_consolidation.py) to see buckets, doc/test references, and wrapper candidates (no file changes; see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) script consolidation policy). The planner labels **compatibility root wrappers** (thin `scripts/<name>.py` → `scripts/leads/advanced/…`) and other buckets; it is **guidance only**—[`SCRIPT_MAP.md`](SCRIPT_MAP.md) stays the operator source of truth. **Shared redaction helpers** (env presence without leaking values) live in [`../src/origenlab_email_pipeline/core/safety.py`](../src/origenlab_email_pipeline/core/safety.py) for scripts and future CRUD checks; **removing or merging scripts** still needs a **later explicit stage** with tests and doc updates. **Entrypoint contracts** are covered by [`../tests/test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) (``--help`` for daily + planner CLIs, safety headers for the break-glass set, and text checks on compatibility wrappers; **removal** of a script path remains a follow-on change, not implied by the test alone).
 
@@ -35,6 +35,7 @@ Values are **representative**; some scripts in a group may differ. When in doubt
 | `ingest/05_workspace_gmail_imap_to_sqlite.py` | **yes** (ingest) | no | no | no* | optional | **yes** (ingest) |
 | `qa/plan_reports_out_cleanup.py` | no | no | no | **yes** | no | no |
 | `qa/plan_script_consolidation.py` | no | no | no | **yes** | no | no |
+| `tools/archive_reports_out_generated.py` | no | **yes** (to move) | no | **yes** | no | no |
 
 *\*Ingest is safe mechanically on a new machine if DB path is writable, but you still need creds to use Gmail. **`plan_reports_out_cleanup` / `plan_script_consolidation`** are read-only planners (the latter scans `scripts/`; optional JSON elsewhere).*
 
