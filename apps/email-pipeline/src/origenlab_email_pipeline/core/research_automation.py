@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -83,7 +84,16 @@ class RunArtifacts:
     prompt_preview_txt: Path
     api_error_json: Path
     api_error_txt: Path
+    retry_attempts_json: Path
     process_workspace: Path
+
+
+class DeepResearchApiError(RuntimeError):
+    def __init__(self, *, message: str, code: str, status: str, retryable: bool):
+        super().__init__(message)
+        self.code = code
+        self.status = status
+        self.retryable = retryable
 
 
 def _utc_now() -> datetime:
@@ -157,6 +167,31 @@ def _response_to_json(resp: Any) -> str:
     return json.dumps({"repr": repr(resp)}, ensure_ascii=False, indent=2)
 
 
+def _extract_response_error(resp: Any) -> tuple[str, str]:
+    payload: dict[str, Any] = {}
+    if hasattr(resp, "model_dump"):
+        payload = resp.model_dump()
+    elif hasattr(resp, "to_dict"):
+        payload = resp.to_dict()
+    err = payload.get("error") or {}
+    code = str(err.get("code") or "").strip().lower()
+    msg = str(err.get("message") or "").strip()
+    return code, msg
+
+
+def _is_retryable_error(*, code: str, status: str) -> bool:
+    if status in {"cancelled"}:
+        return False
+    retryable_codes = {
+        "rate_limit_exceeded",
+        "server_error",
+        "temporarily_unavailable",
+        "service_unavailable",
+        "timeout",
+    }
+    return code in retryable_codes
+
+
 def run_deep_research_response(
     *,
     client: OpenAI,
@@ -199,7 +234,17 @@ def run_deep_research_response(
             resp = client.responses.retrieve(rid)
         final_status = str(getattr(resp, "status", "") or "")
         if final_status != "completed":
-            raise RuntimeError(f"Deep research response did not complete successfully: status={final_status}")
+            code, msg = _extract_response_error(resp)
+            retryable = _is_retryable_error(code=code, status=final_status)
+            raise DeepResearchApiError(
+                message=(
+                    f"Deep research response did not complete successfully: "
+                    f"status={final_status}, code={code or 'unknown'}, message={msg or 'n/a'}"
+                ),
+                code=code or "unknown",
+                status=final_status,
+                retryable=retryable,
+            )
 
     return _response_to_json(resp), _response_output_text(resp), uploaded
 
@@ -468,6 +513,12 @@ def resolve_sector_for_day_rotation(*, weekday: int) -> str:
     return mapping[int(weekday) % 7]
 
 
+def _backoff_seconds(*, attempt: int, initial: float, cap: float) -> float:
+    base = min(float(cap), float(initial) * (2 ** max(0, attempt - 1)))
+    jitter = random.uniform(0.0, min(1.0, base * 0.2))
+    return base + jitter
+
+
 def _read_csv_dicts(path: Path) -> list[dict[str, str]]:
     if not path.is_file():
         return []
@@ -595,6 +646,11 @@ def run_research_automation(
     max_seed_institutions: int = 500,
     max_seed_domains: int = 500,
     use_file_search: bool = False,
+    max_retries: int = 4,
+    initial_backoff_seconds: float = 5.0,
+    max_backoff_seconds: float = 120.0,
+    fallback_sector: str | None = None,
+    daily_mode: bool = False,
 ) -> RunArtifacts:
     out_dir.mkdir(parents=True, exist_ok=True)
     artifacts = RunArtifacts(
@@ -610,6 +666,7 @@ def run_research_automation(
         prompt_preview_txt=out_dir / "prompt_preview.txt",
         api_error_json=out_dir / "api_error.json",
         api_error_txt=out_dir / "api_error.txt",
+        retry_attempts_json=out_dir / "retry_attempts.json",
         process_workspace=out_dir / "process_workspace",
     )
     artifacts.process_workspace.mkdir(parents=True, exist_ok=True)
@@ -622,20 +679,28 @@ def run_research_automation(
         max_seed_institutions=max_seed_institutions,
         max_seed_domains=max_seed_domains,
     )
-    prompt_text = render_prompt(
-        template_text=load_prompt_template(prompt_file),
-        sector=sector,
-        limit_hint=limit_hint,
-        compact_seed_files={
-            "canonical_dnr_path": Path(compact["canonical_dnr_path"]),
-            "seed_known_institutions": Path(compact["seed_known_institutions"]),
-            "seed_known_domains": Path(compact["seed_known_domains"]),
-            "seed_recent_contacted_emails_sample": Path(compact["seed_recent_contacted_emails_sample"]),
-            "seed_exclusion_summary": Path(compact["seed_exclusion_summary"]),
-        },
-    )
+    prompt_template = load_prompt_template(prompt_file)
+    compact_prompt_paths = {
+        "canonical_dnr_path": Path(compact["canonical_dnr_path"]),
+        "seed_known_institutions": Path(compact["seed_known_institutions"]),
+        "seed_known_domains": Path(compact["seed_known_domains"]),
+        "seed_recent_contacted_emails_sample": Path(compact["seed_recent_contacted_emails_sample"]),
+        "seed_exclusion_summary": Path(compact["seed_exclusion_summary"]),
+    }
+
+    def _render_for_sector(s: str) -> str:
+        return render_prompt(
+            template_text=prompt_template,
+            sector=s,
+            limit_hint=limit_hint,
+            compact_seed_files=compact_prompt_paths,
+        )
+
+    prompt_text = _render_for_sector(sector)
     artifacts.prompt_preview_txt.write_text(prompt_text, encoding="utf-8")
     uploaded_file_ids: dict[str, str] = {}
+    retry_attempts: list[dict[str, Any]] = []
+    selected_sector = sector
     try:
         if dry_run:
             if sample_response is None or not sample_response.is_file():
@@ -651,18 +716,91 @@ def run_research_automation(
             if not api_key:
                 raise RuntimeError("Missing OPENAI_API_KEY (or ORIGENLAB_TATIANA_OPENAI_API_KEY) for live research.")
             client = OpenAI(api_key=api_key)
-            raw_json, raw_text, uploaded_file_ids = run_deep_research_response(
-                client=client,
-                model=model,
-                prompt_text=prompt_text,
-                seed_input_files={
-                    "seed_known_institutions": Path(compact["seed_known_institutions"]),
-                    "seed_known_domains": Path(compact["seed_known_domains"]),
-                    "seed_recent_contacted_emails_sample": Path(compact["seed_recent_contacted_emails_sample"]),
-                    "seed_exclusion_summary": Path(compact["seed_exclusion_summary"]),
-                },
-                use_background=use_background,
-            )
+            sector_plan = [sector]
+            if fallback_sector and fallback_sector != sector:
+                sector_plan.append(fallback_sector)
+            last_err: Exception | None = None
+            for idx, sector_candidate in enumerate(sector_plan):
+                selected_sector = sector_candidate
+                prompt_text = _render_for_sector(selected_sector)
+                artifacts.prompt_preview_txt.write_text(prompt_text, encoding="utf-8")
+                for attempt in range(1, max(1, int(max_retries)) + 1):
+                    try:
+                        raw_json, raw_text, uploaded_file_ids = run_deep_research_response(
+                            client=client,
+                            model=model,
+                            prompt_text=prompt_text,
+                            seed_input_files={
+                                "seed_known_institutions": Path(compact["seed_known_institutions"]),
+                                "seed_known_domains": Path(compact["seed_known_domains"]),
+                                "seed_recent_contacted_emails_sample": Path(compact["seed_recent_contacted_emails_sample"]),
+                                "seed_exclusion_summary": Path(compact["seed_exclusion_summary"]),
+                            },
+                            use_background=use_background,
+                        )
+                        retry_attempts.append(
+                            {
+                                "at": _utc_now().isoformat().replace("+00:00", "Z"),
+                                "sector": selected_sector,
+                                "attempt": attempt,
+                                "result": "success",
+                            }
+                        )
+                        break
+                    except DeepResearchApiError as exc:
+                        last_err = exc
+                        retry_attempts.append(
+                            {
+                                "at": _utc_now().isoformat().replace("+00:00", "Z"),
+                                "sector": selected_sector,
+                                "attempt": attempt,
+                                "result": "error",
+                                "error_code": exc.code,
+                                "retryable": exc.retryable,
+                                "message": str(exc),
+                            }
+                        )
+                        if not exc.retryable or attempt >= max(1, int(max_retries)):
+                            break
+                        delay = _backoff_seconds(
+                            attempt=attempt,
+                            initial=float(initial_backoff_seconds),
+                            cap=float(max_backoff_seconds),
+                        )
+                        retry_attempts[-1]["delay_seconds"] = delay
+                        time.sleep(delay)
+                    except Exception as exc:
+                        last_err = exc
+                        retry_attempts.append(
+                            {
+                                "at": _utc_now().isoformat().replace("+00:00", "Z"),
+                                "sector": selected_sector,
+                                "attempt": attempt,
+                                "result": "error",
+                                "error_code": "non_retryable",
+                                "retryable": False,
+                                "message": str(exc),
+                            }
+                        )
+                        break
+                else:
+                    pass
+                if retry_attempts and retry_attempts[-1].get("result") == "success":
+                    break
+                # Only rotate to fallback if broad failed with retryable API errors.
+                if idx == 0 and sector_candidate == sector and fallback_sector and fallback_sector != sector:
+                    continue
+                if last_err is not None:
+                    raise last_err
+            if not retry_attempts or retry_attempts[-1].get("result") != "success":
+                if last_err is not None:
+                    raise last_err
+                raise RuntimeError("Deep research run failed without detailed retry records.")
+
+        artifacts.retry_attempts_json.write_text(
+            json.dumps({"attempts": retry_attempts}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
         artifacts.raw_response_json.write_text(raw_json, encoding="utf-8")
         artifacts.raw_response_txt.write_text(raw_text, encoding="utf-8")
@@ -796,7 +934,12 @@ def run_research_automation(
         metadata = {
             "generated_at": _utc_now().isoformat().replace("+00:00", "Z"),
             "mode": "dry_run" if dry_run else "live_research_no_send",
-            "sector": sector,
+            "sector": selected_sector,
+            "requested_sector": sector,
+            "fallback_sector": fallback_sector,
+            "fallback_used": bool(selected_sector != sector),
+            "daily_mode": bool(daily_mode),
+            "daily_mode_broad_warning": bool(daily_mode and sector == "broad"),
             "limit_hint": limit_hint,
             "model": model,
             "prompt_file": str(prompt_file.resolve()),
@@ -828,6 +971,12 @@ def run_research_automation(
             "contacted_coverage_check": coverage_payload,
             "use_file_search_requested": bool(use_file_search),
             "structured_output_mode": "csv_parser_v1",
+            "retry_policy": {
+                "max_retries": int(max_retries),
+                "initial_backoff_seconds": float(initial_backoff_seconds),
+                "max_backoff_seconds": float(max_backoff_seconds),
+            },
+            "retry_attempt_count": len(retry_attempts),
             "status": "completed",
             "stop_message": "Ready for review; no live send performed.",
             "safety": {
@@ -842,12 +991,20 @@ def run_research_automation(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        artifacts.retry_attempts_json.write_text(
+            json.dumps({"attempts": retry_attempts}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
         return artifacts
     except Exception as exc:
         err_payload = {
             "error_type": type(exc).__name__,
             "message": str(exc),
         }
+        if isinstance(exc, DeepResearchApiError):
+            err_payload["error_code"] = exc.code
+            err_payload["api_status"] = exc.status
+            err_payload["retryable"] = exc.retryable
         artifacts.api_error_json.write_text(json.dumps(err_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         artifacts.api_error_txt.write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
         fail_meta = {
@@ -855,7 +1012,11 @@ def run_research_automation(
             "status": "failed",
             "mode": "dry_run" if dry_run else "live_research_no_send",
             "model": model,
-            "sector": sector,
+            "sector": selected_sector,
+            "requested_sector": sector,
+            "fallback_sector": fallback_sector,
+            "fallback_used": bool(selected_sector != sector),
+            "daily_mode": bool(daily_mode),
             "prompt_file": str(prompt_file.resolve()),
             "output_directory": str(out_dir.resolve()),
             "seed_paths": {k: str(v) for k, v in asdict(seed_paths).items()},
@@ -867,6 +1028,12 @@ def run_research_automation(
                 "counts": compact["counts"],
             },
             "uploaded_file_ids": uploaded_file_ids,
+            "retry_policy": {
+                "max_retries": int(max_retries),
+                "initial_backoff_seconds": float(initial_backoff_seconds),
+                "max_backoff_seconds": float(max_backoff_seconds),
+            },
+            "retry_attempt_count": len(retry_attempts),
             "error": err_payload,
             "safety": {
                 "gmail_send_called": False,
@@ -877,6 +1044,10 @@ def run_research_automation(
             },
             "stop_message": "Ready for review; no live send performed.",
         }
+        artifacts.retry_attempts_json.write_text(
+            json.dumps({"attempts": retry_attempts}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
         artifacts.run_metadata_json.write_text(json.dumps(fail_meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         raise
 

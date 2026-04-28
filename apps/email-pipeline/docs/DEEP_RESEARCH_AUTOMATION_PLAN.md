@@ -12,7 +12,7 @@ This plan defines a recurring automation that creates **review-ready** prospecti
 
 1. Render a configurable Deep Research prompt from a template file.
 2. Run OpenAI Responses API Deep Research with `web_search`.
-3. Pass current seed CSVs as model file inputs.
+3. Build compact seed artifacts from current exclusion CSVs and pass those as model file inputs.
 4. Save raw model outputs to timestamped run folders.
 5. Extract candidate CSV rows from model output.
 6. Perform local exclusion re-check against DNR/contacted/known files.
@@ -78,6 +78,26 @@ Failure diagnostics (always written on failure):
 - `api_error.txt`
 - `prompt_preview.txt`
 - compact seed artifact paths and counts
+
+## Stage 1.3.2 rate-limit hardening
+
+Rate-limit resilience for real API runs:
+
+- Retry only retryable API failures (`rate_limit_exceeded`, temporary/service failures).
+- Exponential backoff with jitter and caps:
+  - `--max-retries` (default `4`)
+  - `--initial-backoff-seconds` (default `5`)
+  - `--max-backoff-seconds` (default `120`)
+- Optional conservative fallback scope:
+  - `--fallback-sector thin_regions` (example)
+  - Fallback is optional and intended for daily resilience.
+- Daily guidance flag:
+  - `--daily-mode` adds operator warnings/metadata for daily cadence.
+  - Broad remains available, but weekday rotation is preferred to reduce rate-limit pressure.
+
+Additional diagnostics written on failures:
+
+- `retry_attempts.json` (timestamps, sector, attempt number, retryability, delay)
 
 ## What is NOT automated
 
@@ -145,6 +165,7 @@ Artifacts:
 - `process_workspace/marketing_contacts_summary.json`
 - `review_summary.md`
 - `run_metadata.json`
+- `retry_attempts.json`
 
 ## Safety stop before send
 

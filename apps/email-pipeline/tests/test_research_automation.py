@@ -135,6 +135,7 @@ def test_review_summary_generation(tmp_path: Path) -> None:
         prompt_preview_txt=tmp_path / "prompt_preview.txt",
         api_error_json=tmp_path / "api_error.json",
         api_error_txt=tmp_path / "api_error.txt",
+        retry_attempts_json=tmp_path / "retry_attempts.json",
         process_workspace=tmp_path / "ws",
     )
     text = ra.build_review_summary_markdown(
@@ -390,6 +391,11 @@ def test_cli_help() -> None:
     assert "dry-run" in cp.stdout
     assert "--max-candidates" in cp.stdout
     assert "--day-rotation" in cp.stdout
+    assert "--daily-mode" in cp.stdout
+    assert "--max-retries" in cp.stdout
+    assert "--initial-backoff-seconds" in cp.stdout
+    assert "--max-backoff-seconds" in cp.stdout
+    assert "--fallback-sector" in cp.stdout
     assert "--run-contacted-coverage-check" in cp.stdout
 
 
@@ -505,4 +511,134 @@ def test_compact_seed_generation_caps(tmp_path: Path) -> None:
     assert len(sample_rows) == 5
     assert len(inst_rows) <= 4
     assert len(dom_rows) <= 3
+
+
+def test_backoff_seconds_monotonic() -> None:
+    a = ra._backoff_seconds(attempt=1, initial=5.0, cap=120.0)
+    b = ra._backoff_seconds(attempt=2, initial=5.0, cap=120.0)
+    c = ra._backoff_seconds(attempt=3, initial=5.0, cap=120.0)
+    assert a >= 5.0
+    assert b >= 10.0
+    assert c >= 20.0
+
+
+def test_retry_attempts_written_on_retryable_failure(tmp_path: Path, monkeypatch) -> None:
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(contacted, ["contact_email"], [])
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(known, ["contact_email"], [])
+    seeds = ra.SeedPaths(dnr, contacted, known)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(ra, "OpenAI", lambda api_key: object())
+    state = {"n": 0}
+
+    def _fake_research(**kwargs):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise ra.DeepResearchApiError(
+                message="rate limited",
+                code="rate_limit_exceeded",
+                status="failed",
+                retryable=True,
+            )
+        return "{}", "```csv\ninstitution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal\nA,RM,Santiago,universidad,a@x.cl,lab,https://x.cl,high,fit\n```", {}
+
+    def _fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        if "process_broad_marketing_contacts.py" in " ".join(args):
+            ws = Path(args[args.index("--workspace") + 1])
+            _write_csv(
+                ws / "send_ready_marketing.csv",
+                ["case_id", "contact_email", "email_source", "institution_name", "region", "city", "type", "contact_label", "source_url", "confidence", "fit_signal", "variant_type"],
+                [["MKT-1", "a@x.cl", "marketing_contacts", "A", "RM", "Santiago", "universidad", "lab", "https://x.cl", "high", "fit", "broad_marketing"]],
+            )
+            _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
+            _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
+            _write_csv(ws / "marketing_safe_to_send.csv", ["contact_email"], [["a@x.cl"]])
+            (ws / "marketing_contacts_summary.json").write_text(json.dumps({"counts": {"send_ready_marketing": 1, "blocked": 0, "needs_manual_review": 0}}), encoding="utf-8")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(ra, "run_deep_research_response", _fake_research)
+    monkeypatch.setattr(ra, "_run_subprocess", _fake_run)
+    monkeypatch.setattr(ra.time, "sleep", lambda _: None)
+    artifacts = ra.run_research_automation(
+        model="o4-mini-deep-research",
+        prompt_file=prompt,
+        out_dir=tmp_path / "out",
+        sector="broad",
+        limit_hint=5,
+        dry_run=False,
+        sample_response=None,
+        seed_paths=seeds,
+        use_background=False,
+        app_root=Path(__file__).resolve().parents[1],
+        max_candidates=200,
+        max_send_ready=50,
+        fail_on_over_limit=False,
+        run_contacted_coverage_check=False,
+        strict_contacted_coverage=False,
+        max_retries=3,
+        initial_backoff_seconds=0.1,
+        max_backoff_seconds=0.2,
+    )
+    attempts = json.loads(artifacts.retry_attempts_json.read_text(encoding="utf-8"))["attempts"]
+    assert len(attempts) == 2
+    assert attempts[0]["retryable"] is True
+    assert attempts[0]["result"] == "error"
+    assert attempts[1]["result"] == "success"
+
+
+def test_non_retryable_error_no_retry(tmp_path: Path, monkeypatch) -> None:
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(contacted, ["contact_email"], [])
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(known, ["contact_email"], [])
+    seeds = ra.SeedPaths(dnr, contacted, known)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(ra, "OpenAI", lambda api_key: object())
+    calls = {"n": 0}
+
+    def _fake_research(**kwargs):
+        calls["n"] += 1
+        raise ra.DeepResearchApiError(
+            message="bad request",
+            code="invalid_prompt",
+            status="failed",
+            retryable=False,
+        )
+
+    monkeypatch.setattr(ra, "run_deep_research_response", _fake_research)
+    monkeypatch.setattr(ra.time, "sleep", lambda _: None)
+    try:
+        ra.run_research_automation(
+            model="o4-mini-deep-research",
+            prompt_file=prompt,
+            out_dir=tmp_path / "out",
+            sector="broad",
+            limit_hint=5,
+            dry_run=False,
+            sample_response=None,
+            seed_paths=seeds,
+            use_background=False,
+            app_root=Path(__file__).resolve().parents[1],
+            max_candidates=200,
+            max_send_ready=50,
+            fail_on_over_limit=False,
+            run_contacted_coverage_check=False,
+            strict_contacted_coverage=False,
+            max_retries=4,
+            initial_backoff_seconds=0.1,
+            max_backoff_seconds=0.2,
+        )
+        assert False, "Expected non-retryable failure"
+    except ra.DeepResearchApiError:
+        pass
+    assert calls["n"] == 1
 

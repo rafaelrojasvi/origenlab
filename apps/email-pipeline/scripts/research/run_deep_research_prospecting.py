@@ -57,6 +57,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Override --sector with a day-of-week rotation (Mon..Sun).",
     )
     ap.add_argument(
+        "--daily-mode",
+        action="store_true",
+        help="Apply daily-run guidance metadata and warnings (review-only; no send).",
+    )
+    ap.add_argument(
         "--dry-run",
         action="store_true",
         help="Skip API call and parse --sample-response through local screening pipeline.",
@@ -142,6 +147,30 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Future-ready flag: note intent to use vector-store file search (not enabled by default).",
     )
+    ap.add_argument(
+        "--max-retries",
+        type=int,
+        default=4,
+        help="Max retry attempts for retryable Deep Research API failures (default: 4).",
+    )
+    ap.add_argument(
+        "--initial-backoff-seconds",
+        type=float,
+        default=5.0,
+        help="Initial backoff seconds before retrying retryable API failures (default: 5.0).",
+    )
+    ap.add_argument(
+        "--max-backoff-seconds",
+        type=float,
+        default=120.0,
+        help="Max backoff cap in seconds for retries (default: 120.0).",
+    )
+    ap.add_argument(
+        "--fallback-sector",
+        choices=SECTOR_CHOICES,
+        default=None,
+        help="Optional narrow fallback sector if primary sector keeps failing with retryable API errors.",
+    )
     args = ap.parse_args(argv)
 
     seeds = default_seed_paths()
@@ -168,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
     selected_sector = str(args.sector)
     if args.day_rotation:
         selected_sector = resolve_sector_for_day_rotation(weekday=datetime.now().weekday())
+    if args.daily_mode and selected_sector == "broad":
+        print("Warning: daily broad runs may hit rate limits; prefer weekday sector rotation.")
     artifacts = run_research_automation(
         model=str(args.model),
         prompt_file=Path(args.prompt_file),
@@ -188,6 +219,11 @@ def main(argv: list[str] | None = None) -> int:
         max_seed_institutions=max(1, int(args.max_seed_institutions)),
         max_seed_domains=max(1, int(args.max_seed_domains)),
         use_file_search=bool(args.use_file_search),
+        max_retries=max(1, int(args.max_retries)),
+        initial_backoff_seconds=max(0.1, float(args.initial_backoff_seconds)),
+        max_backoff_seconds=max(1.0, float(args.max_backoff_seconds)),
+        fallback_sector=str(args.fallback_sector) if args.fallback_sector else None,
+        daily_mode=bool(args.daily_mode),
     )
     print(f"Wrote: {artifacts.out_dir}")
     print(f"Review summary: {artifacts.review_summary_md}")
