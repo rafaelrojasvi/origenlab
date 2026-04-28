@@ -44,6 +44,41 @@ CSV hardening:
 - Normalizes harmless header variants.
 - Requires expected marketing schema; invalid schema fails clearly.
 
+## Stage 1.3.1 context-size fix
+
+Problem observed in first real API run:
+
+- `context_length_exceeded` when attaching full raw seed CSVs directly as model files.
+
+Fix applied:
+
+- Stop uploading full seed CSVs per run.
+- Build compact seed artifacts first and attach only those:
+  - `seed_known_institutions.csv`
+  - `seed_known_domains.csv`
+  - `seed_recent_contacted_emails_sample.csv`
+  - `seed_exclusion_summary.json`
+
+New compact-seed controls:
+
+- `--max-seed-email-sample` (default `300`)
+- `--max-seed-institutions` (default `500`)
+- `--max-seed-domains` (default `500`)
+
+Canonical truth note:
+
+- `do_not_repeat_master.csv` remains canonical for exact exclusion.
+- Model-attached seeds are summaries/samples to guide net-new discovery.
+- Exact exclusion still happens locally after model output.
+
+Failure diagnostics (always written on failure):
+
+- `run_metadata.json`
+- `api_error.json`
+- `api_error.txt`
+- `prompt_preview.txt`
+- compact seed artifact paths and counts
+
 ## What is NOT automated
 
 - Live Gmail API send.
@@ -150,6 +185,11 @@ Optional read-only coverage drift check during run:
 
 - `--run-contacted-coverage-check`
 - add `--strict-contacted-coverage` only if you want the run to fail on validator non-zero status
+
+Future enhancement path:
+
+- `--use-file-search` is a future-ready flag. Current implementation keeps compact direct file inputs.
+- Structured JSON output mode is documented as next-step improvement; current parser remains CSV-based.
 
 ## Local scheduling handoff
 

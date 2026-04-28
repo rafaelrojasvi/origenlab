@@ -17,10 +17,16 @@ Rules:
 - Keep fit_signal concise (<200 chars), factual, and commercially useful.
 - Do not include commentary outside the CSV block.
 
-Seed files included in this request:
-- do_not_repeat_master: {dnr_path}
-- outreach_contacted_all: {contacted_path}
-- all_known_marketing_contacts_dedup: {known_marketing_path}
+Compact seed files included in this request:
+- canonical do-not-repeat source path reference: {canonical_dnr_path}
+- known institutions summary: {seed_known_institutions_path}
+- known domains summary: {seed_known_domains_path}
+- contacted email sample (capped): {seed_recent_contacted_emails_sample_path}
+- exclusion summary metadata: {seed_exclusion_summary_path}
 
-Use these seeds as exclusion context during research, but local exclusion will still be enforced after this step.
+Important:
+- These attached seed files are compact summaries/samples, not the full exclusion universe.
+- Avoid institutions and domains that are already heavily represented.
+- Prefer net-new institutions and net-new domains where plausible.
+- Final exact exclusion is enforced locally after research output is returned.
 

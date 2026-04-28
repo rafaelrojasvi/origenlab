@@ -80,6 +80,9 @@ class RunArtifacts:
     validation_json: Path
     review_summary_md: Path
     run_metadata_json: Path
+    prompt_preview_txt: Path
+    api_error_json: Path
+    api_error_txt: Path
     process_workspace: Path
 
 
@@ -116,15 +119,17 @@ def render_prompt(
     template_text: str,
     sector: str,
     limit_hint: int | None,
-    seed_paths: SeedPaths,
+    compact_seed_files: dict[str, Path],
 ) -> str:
     lim = str(limit_hint) if limit_hint is not None else "40"
     return template_text.format(
         sector=sector,
         limit_hint=lim,
-        dnr_path=str(seed_paths.do_not_repeat_master),
-        contacted_path=str(seed_paths.outreach_contacted_all),
-        known_marketing_path=str(seed_paths.all_known_marketing_contacts_dedup),
+        canonical_dnr_path=str(compact_seed_files["canonical_dnr_path"]),
+        seed_known_institutions_path=str(compact_seed_files["seed_known_institutions"]),
+        seed_known_domains_path=str(compact_seed_files["seed_known_domains"]),
+        seed_recent_contacted_emails_sample_path=str(compact_seed_files["seed_recent_contacted_emails_sample"]),
+        seed_exclusion_summary_path=str(compact_seed_files["seed_exclusion_summary"]),
     )
 
 
@@ -157,16 +162,16 @@ def run_deep_research_response(
     client: OpenAI,
     model: str,
     prompt_text: str,
-    seed_paths: SeedPaths,
+    seed_input_files: dict[str, Path],
     use_background: bool,
     poll_seconds: float = 3.0,
 ) -> tuple[str, str, dict[str, str]]:
-    missing = [str(p) for p in seed_paths.__dict__.values() if not Path(p).is_file()]
+    missing = [str(p) for p in seed_input_files.values() if not Path(p).is_file()]
     if missing:
         raise FileNotFoundError(f"Missing seed files for model input: {', '.join(missing)}")
 
     uploaded: dict[str, str] = {}
-    for key, path in seed_paths.__dict__.items():
+    for key, path in seed_input_files.items():
         with Path(path).open("rb") as f:
             up = client.files.create(file=f, purpose="user_data")
         uploaded[key] = str(up.id)
@@ -197,6 +202,106 @@ def run_deep_research_response(
             raise RuntimeError(f"Deep research response did not complete successfully: status={final_status}")
 
     return _response_to_json(resp), _response_output_text(resp), uploaded
+
+
+def _extract_email_and_institution(path: Path) -> tuple[list[tuple[str, str]], set[str]]:
+    pairs: list[tuple[str, str]] = []
+    emails: set[str] = set()
+    if not path.is_file():
+        return pairs, emails
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            em = str(row.get("email_norm") or row.get("contact_email") or "").strip().lower()
+            if not em:
+                continue
+            emails.add(em)
+            inst = str(row.get("institution_name") or "").strip()
+            if inst:
+                pairs.append((em, inst))
+    return pairs, emails
+
+
+def _domain(email: str) -> str:
+    em = str(email or "").strip().lower()
+    return em.split("@", 1)[1] if "@" in em else ""
+
+
+def build_compact_seed_artifacts(
+    *,
+    out_dir: Path,
+    seed_paths: SeedPaths,
+    max_seed_email_sample: int,
+    max_seed_institutions: int,
+    max_seed_domains: int,
+) -> dict[str, Any]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    seed_known_institutions = out_dir / "seed_known_institutions.csv"
+    seed_known_domains = out_dir / "seed_known_domains.csv"
+    seed_recent_contacted_emails_sample = out_dir / "seed_recent_contacted_emails_sample.csv"
+    seed_exclusion_summary = out_dir / "seed_exclusion_summary.json"
+
+    dnr_pairs, dnr_emails = _extract_email_and_institution(seed_paths.do_not_repeat_master)
+    contacted_pairs, contacted_emails = _extract_email_and_institution(seed_paths.outreach_contacted_all)
+    known_pairs, known_emails = _extract_email_and_institution(seed_paths.all_known_marketing_contacts_dedup)
+    all_emails = sorted(dnr_emails | contacted_emails | known_emails)
+
+    inst_counts: dict[str, int] = {}
+    for _, inst in [*dnr_pairs, *contacted_pairs, *known_pairs]:
+        if inst:
+            inst_counts[inst] = inst_counts.get(inst, 0) + 1
+    top_institutions = sorted(inst_counts.items(), key=lambda kv: kv[1], reverse=True)[: max(1, max_seed_institutions)]
+
+    dom_counts: dict[str, int] = {}
+    for em in all_emails:
+        dom = _domain(em)
+        if dom:
+            dom_counts[dom] = dom_counts.get(dom, 0) + 1
+    top_domains = sorted(dom_counts.items(), key=lambda kv: kv[1], reverse=True)[: max(1, max_seed_domains)]
+
+    sample_emails = all_emails[: max(1, max_seed_email_sample)]
+
+    write_csv(
+        seed_known_institutions,
+        fieldnames=["institution_name", "frequency"],
+        rows=[{"institution_name": name, "frequency": str(freq)} for name, freq in top_institutions],
+    )
+    write_csv(
+        seed_known_domains,
+        fieldnames=["domain", "frequency"],
+        rows=[{"domain": dom, "frequency": str(freq)} for dom, freq in top_domains],
+    )
+    write_csv(
+        seed_recent_contacted_emails_sample,
+        fieldnames=["contact_email"],
+        rows=[{"contact_email": em} for em in sample_emails],
+    )
+    summary_payload = {
+        "canonical_dnr_path": str(seed_paths.do_not_repeat_master.resolve()),
+        "total_do_not_repeat_size": len(dnr_emails),
+        "total_contacted_size": len(contacted_emails),
+        "total_known_marketing_size": len(known_emails),
+        "sampled_contacted_emails_count": len(sample_emails),
+        "top_repeated_institutions": [{"institution_name": k, "frequency": v} for k, v in top_institutions[:20]],
+        "top_repeated_domains": [{"domain": k, "frequency": v} for k, v in top_domains[:20]],
+        "note": "These are compact summaries/samples. Final exact exclusion runs locally after research.",
+    }
+    seed_exclusion_summary.write_text(json.dumps(summary_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "canonical_dnr_path": seed_paths.do_not_repeat_master.resolve(),
+        "seed_known_institutions": seed_known_institutions.resolve(),
+        "seed_known_domains": seed_known_domains.resolve(),
+        "seed_recent_contacted_emails_sample": seed_recent_contacted_emails_sample.resolve(),
+        "seed_exclusion_summary": seed_exclusion_summary.resolve(),
+        "counts": {
+            "dnr_total": len(dnr_emails),
+            "contacted_total": len(contacted_emails),
+            "known_total": len(known_emails),
+            "sample_email_count": len(sample_emails),
+            "institution_rows": len(top_institutions),
+            "domain_rows": len(top_domains),
+        },
+    }
 
 
 def extract_csv_text_from_model_output(text: str) -> str:
@@ -486,6 +591,10 @@ def run_research_automation(
     fail_on_over_limit: bool,
     run_contacted_coverage_check: bool,
     strict_contacted_coverage: bool,
+    max_seed_email_sample: int = 300,
+    max_seed_institutions: int = 500,
+    max_seed_domains: int = 500,
+    use_file_search: bool = False,
 ) -> RunArtifacts:
     out_dir.mkdir(parents=True, exist_ok=True)
     artifacts = RunArtifacts(
@@ -498,209 +607,278 @@ def run_research_automation(
         validation_json=out_dir / "validation_result.json",
         review_summary_md=out_dir / "review_summary.md",
         run_metadata_json=out_dir / "run_metadata.json",
+        prompt_preview_txt=out_dir / "prompt_preview.txt",
+        api_error_json=out_dir / "api_error.json",
+        api_error_txt=out_dir / "api_error.txt",
         process_workspace=out_dir / "process_workspace",
     )
     artifacts.process_workspace.mkdir(parents=True, exist_ok=True)
     coverage_report_json = out_dir / "contacted_coverage_report.json"
 
+    compact = build_compact_seed_artifacts(
+        out_dir=out_dir,
+        seed_paths=seed_paths,
+        max_seed_email_sample=max_seed_email_sample,
+        max_seed_institutions=max_seed_institutions,
+        max_seed_domains=max_seed_domains,
+    )
     prompt_text = render_prompt(
         template_text=load_prompt_template(prompt_file),
         sector=sector,
         limit_hint=limit_hint,
-        seed_paths=seed_paths,
+        compact_seed_files={
+            "canonical_dnr_path": Path(compact["canonical_dnr_path"]),
+            "seed_known_institutions": Path(compact["seed_known_institutions"]),
+            "seed_known_domains": Path(compact["seed_known_domains"]),
+            "seed_recent_contacted_emails_sample": Path(compact["seed_recent_contacted_emails_sample"]),
+            "seed_exclusion_summary": Path(compact["seed_exclusion_summary"]),
+        },
     )
+    artifacts.prompt_preview_txt.write_text(prompt_text, encoding="utf-8")
     uploaded_file_ids: dict[str, str] = {}
-    if dry_run:
-        if sample_response is None or not sample_response.is_file():
-            raise ValueError("--dry-run requires --sample-response PATH to an existing file.")
-        raw_text = sample_response.read_text(encoding="utf-8")
-        raw_json = json.dumps({"mode": "dry_run_sample", "sample_response_path": str(sample_response)}, indent=2)
-    else:
-        settings = load_settings()
-        api_key = (
-            (settings.resolved_tatiana_openai_api_key() or "").strip()
-            or (os.environ.get("OPENAI_API_KEY") or "").strip()
-        )
-        if not api_key:
-            raise RuntimeError("Missing OPENAI_API_KEY (or ORIGENLAB_TATIANA_OPENAI_API_KEY) for live research.")
-        client = OpenAI(api_key=api_key)
-        raw_json, raw_text, uploaded_file_ids = run_deep_research_response(
-            client=client,
-            model=model,
-            prompt_text=prompt_text,
+    try:
+        if dry_run:
+            if sample_response is None or not sample_response.is_file():
+                raise ValueError("--dry-run requires --sample-response PATH to an existing file.")
+            raw_text = sample_response.read_text(encoding="utf-8")
+            raw_json = json.dumps({"mode": "dry_run_sample", "sample_response_path": str(sample_response)}, indent=2)
+        else:
+            settings = load_settings()
+            api_key = (
+                (settings.resolved_tatiana_openai_api_key() or "").strip()
+                or (os.environ.get("OPENAI_API_KEY") or "").strip()
+            )
+            if not api_key:
+                raise RuntimeError("Missing OPENAI_API_KEY (or ORIGENLAB_TATIANA_OPENAI_API_KEY) for live research.")
+            client = OpenAI(api_key=api_key)
+            raw_json, raw_text, uploaded_file_ids = run_deep_research_response(
+                client=client,
+                model=model,
+                prompt_text=prompt_text,
+                seed_input_files={
+                    "seed_known_institutions": Path(compact["seed_known_institutions"]),
+                    "seed_known_domains": Path(compact["seed_known_domains"]),
+                    "seed_recent_contacted_emails_sample": Path(compact["seed_recent_contacted_emails_sample"]),
+                    "seed_exclusion_summary": Path(compact["seed_exclusion_summary"]),
+                },
+                use_background=use_background,
+            )
+
+        artifacts.raw_response_json.write_text(raw_json, encoding="utf-8")
+        artifacts.raw_response_txt.write_text(raw_text, encoding="utf-8")
+
+        csv_text = extract_csv_text_from_model_output(raw_text)
+        fieldnames, rows = parse_csv_rows(csv_text)
+        candidate_count = len(rows)
+        truncation_applied = False
+        candidate_limit_triggered = candidate_count > max_candidates
+        if candidate_limit_triggered and fail_on_over_limit:
+            raise RuntimeError(
+                f"Extracted candidate rows ({candidate_count}) exceed --max-candidates={max_candidates}."
+            )
+        if candidate_limit_triggered:
+            rows = rows[:max_candidates]
+            truncation_applied = True
+        write_csv(artifacts.candidates_raw_csv, fieldnames=fieldnames, rows=rows)
+
+        exclusion = run_local_exclusion(
+            candidates_csv=artifacts.candidates_raw_csv,
             seed_paths=seed_paths,
-            use_background=use_background,
+            out_netnew_csv=artifacts.candidates_netnew_csv,
+            out_excluded_csv=artifacts.candidates_excluded_csv,
         )
 
-    artifacts.raw_response_json.write_text(raw_json, encoding="utf-8")
-    artifacts.raw_response_txt.write_text(raw_text, encoding="utf-8")
-
-    csv_text = extract_csv_text_from_model_output(raw_text)
-    fieldnames, rows = parse_csv_rows(csv_text)
-    candidate_count = len(rows)
-    truncation_applied = False
-    candidate_limit_triggered = candidate_count > max_candidates
-    if candidate_limit_triggered and fail_on_over_limit:
-        raise RuntimeError(
-            f"Extracted candidate rows ({candidate_count}) exceed --max-candidates={max_candidates}."
-        )
-    if candidate_limit_triggered:
-        rows = rows[:max_candidates]
-        truncation_applied = True
-    write_csv(artifacts.candidates_raw_csv, fieldnames=fieldnames, rows=rows)
-
-    exclusion = run_local_exclusion(
-        candidates_csv=artifacts.candidates_raw_csv,
-        seed_paths=seed_paths,
-        out_netnew_csv=artifacts.candidates_netnew_csv,
-        out_excluded_csv=artifacts.candidates_excluded_csv,
-    )
-
-    validate_cp = _run_subprocess(
-        [
-            "scripts/qa/validate_campaign_csvs.py",
-            "--file",
-            str(artifacts.candidates_netnew_csv),
-            "--kind",
-            "marketing_contacts",
-            "--strict",
-        ],
-        cwd=app_root,
-    )
-    validation_payload = {
-        "returncode": validate_cp.returncode,
-        "stdout": validate_cp.stdout,
-        "stderr": validate_cp.stderr,
-    }
-    artifacts.validation_json.write_text(
-        json.dumps(validation_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    if validate_cp.returncode != 0:
-        raise RuntimeError(
-            "Validation failed for candidates_netnew.csv. See validation_result.json for exact errors."
-        )
-
-    process_cp = _run_subprocess(
-        [
-            "scripts/leads/process_broad_marketing_contacts.py",
-            "--workspace",
-            str(artifacts.process_workspace),
-            "--master",
-            str(seed_paths.do_not_repeat_master),
-            "--input",
-            str(artifacts.candidates_netnew_csv),
-        ],
-        cwd=app_root,
-    )
-    if process_cp.returncode != 0:
-        raise RuntimeError(
-            "Processing failed for net-new candidates. "
-            f"stdout={process_cp.stdout}\nstderr={process_cp.stderr}"
-        )
-
-    coverage_payload: dict[str, Any] = {
-        "enabled": bool(run_contacted_coverage_check),
-        "strict": bool(strict_contacted_coverage),
-        "returncode": None,
-        "json_report": str(coverage_report_json),
-    }
-    if run_contacted_coverage_check:
-        coverage_cp = _run_subprocess(
+        validate_cp = _run_subprocess(
             [
-                "scripts/qa/validate_contacted_csv_coverage.py",
-                "--json-out",
-                str(coverage_report_json),
-                *(["--strict"] if strict_contacted_coverage else []),
+                "scripts/qa/validate_campaign_csvs.py",
+                "--file",
+                str(artifacts.candidates_netnew_csv),
+                "--kind",
+                "marketing_contacts",
+                "--strict",
             ],
             cwd=app_root,
         )
-        coverage_payload["returncode"] = int(coverage_cp.returncode)
-        coverage_payload["stdout"] = coverage_cp.stdout
-        coverage_payload["stderr"] = coverage_cp.stderr
-        if strict_contacted_coverage and coverage_cp.returncode != 0:
+        validation_payload = {
+            "returncode": validate_cp.returncode,
+            "stdout": validate_cp.stdout,
+            "stderr": validate_cp.stderr,
+        }
+        artifacts.validation_json.write_text(
+            json.dumps(validation_payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        if validate_cp.returncode != 0:
             raise RuntimeError(
-                "Contacted coverage validation failed in strict mode. "
-                f"stdout={coverage_cp.stdout}\nstderr={coverage_cp.stderr}"
+                "Validation failed for candidates_netnew.csv. See validation_result.json for exact errors."
             )
 
-    send_ready = artifacts.process_workspace / "send_ready_marketing.csv"
-    blocked = artifacts.process_workspace / "marketing_blocked_already_known.csv"
-    summary = artifacts.process_workspace / "marketing_contacts_summary.json"
-    summary_json: dict[str, Any] = {}
-    if summary.is_file():
-        summary_json = json.loads(summary.read_text(encoding="utf-8"))
-    counts = summary_json.get("counts", {})
-    send_ready_count = int(counts.get("send_ready_marketing", len(_read_csv_dicts(send_ready))))
-    blocked_count = int(counts.get("blocked", len(_read_csv_dicts(blocked))))
-    review_count = int(
-        counts.get(
-            "needs_manual_review",
-            len(_read_csv_dicts(artifacts.process_workspace / "marketing_needs_manual_review.csv")),
+        process_cp = _run_subprocess(
+            [
+                "scripts/leads/process_broad_marketing_contacts.py",
+                "--workspace",
+                str(artifacts.process_workspace),
+                "--master",
+                str(seed_paths.do_not_repeat_master),
+                "--input",
+                str(artifacts.candidates_netnew_csv),
+            ],
+            cwd=app_root,
         )
-    )
-    send_ready_over_limit = send_ready_count > max_send_ready
-    limits = {
-        "max_candidates": max_candidates,
-        "max_send_ready": max_send_ready,
-        "truncation_applied": truncation_applied,
-        "candidate_limit_triggered": candidate_limit_triggered,
-        "send_ready_over_limit": send_ready_over_limit,
-        "limits_triggered": bool(truncation_applied or send_ready_over_limit),
-    }
-    review_md = build_review_summary_markdown(
-        exclusion_summary=exclusion,
-        send_ready_csv=send_ready,
-        blocked_csv=blocked,
-        summary_json_path=summary,
-        netnew_csv=artifacts.candidates_netnew_csv,
-        output_paths=artifacts,
-        prompt_file=prompt_file,
-        sector=sector,
-        limits=limits,
-    )
-    artifacts.review_summary_md.write_text(review_md, encoding="utf-8")
+        if process_cp.returncode != 0:
+            raise RuntimeError(
+                "Processing failed for net-new candidates. "
+                f"stdout={process_cp.stdout}\nstderr={process_cp.stderr}"
+            )
 
-    metadata = {
-        "generated_at": _utc_now().isoformat().replace("+00:00", "Z"),
-        "mode": "dry_run" if dry_run else "live_research_no_send",
-        "sector": sector,
-        "limit_hint": limit_hint,
-        "model": model,
-        "prompt_file": str(prompt_file.resolve()),
-        "seed_paths": {k: str(v) for k, v in asdict(seed_paths).items()},
-        "uploaded_file_paths": {k: str(v) for k, v in asdict(seed_paths).items()},
-        "uploaded_file_ids": uploaded_file_ids,
-        "output_directory": str(out_dir.resolve()),
-        "artifacts": {k: str(v) for k, v in asdict(artifacts).items()},
-        "exclusion_summary": exclusion,
-        "candidate_count": len(rows),
-        "excluded_count": int(exclusion.get("excluded_count", 0)),
-        "send_ready_count": send_ready_count,
-        "blocked_count": blocked_count,
-        "review_count": review_count,
-        "max_candidates": max_candidates,
-        "max_send_ready": max_send_ready,
-        "truncation_applied": truncation_applied,
-        "dry_run": bool(dry_run),
-        "background_mode": bool(use_background),
-        "candidate_limit_triggered": candidate_limit_triggered,
-        "send_ready_over_limit": send_ready_over_limit,
-        "contacted_coverage_check": coverage_payload,
-        "stop_message": "Ready for review; no live send performed.",
-        "safety": {
-            "gmail_send_called": False,
-            "mark_contacted_called": False,
-            "sent_ingest_called": False,
-            "dnr_refresh_after_send_called": False,
-            "sqlite_mutation_intended": False,
-        },
-    }
-    artifacts.run_metadata_json.write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    return artifacts
+        coverage_payload: dict[str, Any] = {
+            "enabled": bool(run_contacted_coverage_check),
+            "strict": bool(strict_contacted_coverage),
+            "returncode": None,
+            "json_report": str(coverage_report_json),
+        }
+        if run_contacted_coverage_check:
+            coverage_cp = _run_subprocess(
+                [
+                    "scripts/qa/validate_contacted_csv_coverage.py",
+                    "--json-out",
+                    str(coverage_report_json),
+                    *(["--strict"] if strict_contacted_coverage else []),
+                ],
+                cwd=app_root,
+            )
+            coverage_payload["returncode"] = int(coverage_cp.returncode)
+            coverage_payload["stdout"] = coverage_cp.stdout
+            coverage_payload["stderr"] = coverage_cp.stderr
+            if strict_contacted_coverage and coverage_cp.returncode != 0:
+                raise RuntimeError(
+                    "Contacted coverage validation failed in strict mode. "
+                    f"stdout={coverage_cp.stdout}\nstderr={coverage_cp.stderr}"
+                )
+
+        send_ready = artifacts.process_workspace / "send_ready_marketing.csv"
+        blocked = artifacts.process_workspace / "marketing_blocked_already_known.csv"
+        summary = artifacts.process_workspace / "marketing_contacts_summary.json"
+        summary_json: dict[str, Any] = {}
+        if summary.is_file():
+            summary_json = json.loads(summary.read_text(encoding="utf-8"))
+        counts = summary_json.get("counts", {})
+        send_ready_count = int(counts.get("send_ready_marketing", len(_read_csv_dicts(send_ready))))
+        blocked_count = int(counts.get("blocked", len(_read_csv_dicts(blocked))))
+        review_count = int(
+            counts.get(
+                "needs_manual_review",
+                len(_read_csv_dicts(artifacts.process_workspace / "marketing_needs_manual_review.csv")),
+            )
+        )
+        send_ready_over_limit = send_ready_count > max_send_ready
+        limits = {
+            "max_candidates": max_candidates,
+            "max_send_ready": max_send_ready,
+            "truncation_applied": truncation_applied,
+            "candidate_limit_triggered": candidate_limit_triggered,
+            "send_ready_over_limit": send_ready_over_limit,
+            "limits_triggered": bool(truncation_applied or send_ready_over_limit),
+        }
+        review_md = build_review_summary_markdown(
+            exclusion_summary=exclusion,
+            send_ready_csv=send_ready,
+            blocked_csv=blocked,
+            summary_json_path=summary,
+            netnew_csv=artifacts.candidates_netnew_csv,
+            output_paths=artifacts,
+            prompt_file=prompt_file,
+            sector=sector,
+            limits=limits,
+        )
+        artifacts.review_summary_md.write_text(review_md, encoding="utf-8")
+
+        metadata = {
+            "generated_at": _utc_now().isoformat().replace("+00:00", "Z"),
+            "mode": "dry_run" if dry_run else "live_research_no_send",
+            "sector": sector,
+            "limit_hint": limit_hint,
+            "model": model,
+            "prompt_file": str(prompt_file.resolve()),
+            "seed_paths": {k: str(v) for k, v in asdict(seed_paths).items()},
+            "compact_seed_artifacts": {
+                "seed_known_institutions": str(compact["seed_known_institutions"]),
+                "seed_known_domains": str(compact["seed_known_domains"]),
+                "seed_recent_contacted_emails_sample": str(compact["seed_recent_contacted_emails_sample"]),
+                "seed_exclusion_summary": str(compact["seed_exclusion_summary"]),
+                "counts": compact["counts"],
+            },
+            "uploaded_file_paths": {k: str(v) for k, v in asdict(seed_paths).items()},
+            "uploaded_file_ids": uploaded_file_ids,
+            "output_directory": str(out_dir.resolve()),
+            "artifacts": {k: str(v) for k, v in asdict(artifacts).items()},
+            "exclusion_summary": exclusion,
+            "candidate_count": len(rows),
+            "excluded_count": int(exclusion.get("excluded_count", 0)),
+            "send_ready_count": send_ready_count,
+            "blocked_count": blocked_count,
+            "review_count": review_count,
+            "max_candidates": max_candidates,
+            "max_send_ready": max_send_ready,
+            "truncation_applied": truncation_applied,
+            "dry_run": bool(dry_run),
+            "background_mode": bool(use_background),
+            "candidate_limit_triggered": candidate_limit_triggered,
+            "send_ready_over_limit": send_ready_over_limit,
+            "contacted_coverage_check": coverage_payload,
+            "use_file_search_requested": bool(use_file_search),
+            "structured_output_mode": "csv_parser_v1",
+            "status": "completed",
+            "stop_message": "Ready for review; no live send performed.",
+            "safety": {
+                "gmail_send_called": False,
+                "mark_contacted_called": False,
+                "sent_ingest_called": False,
+                "dnr_refresh_after_send_called": False,
+                "sqlite_mutation_intended": False,
+            },
+        }
+        artifacts.run_metadata_json.write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return artifacts
+    except Exception as exc:
+        err_payload = {
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+        }
+        artifacts.api_error_json.write_text(json.dumps(err_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        artifacts.api_error_txt.write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
+        fail_meta = {
+            "generated_at": _utc_now().isoformat().replace("+00:00", "Z"),
+            "status": "failed",
+            "mode": "dry_run" if dry_run else "live_research_no_send",
+            "model": model,
+            "sector": sector,
+            "prompt_file": str(prompt_file.resolve()),
+            "output_directory": str(out_dir.resolve()),
+            "seed_paths": {k: str(v) for k, v in asdict(seed_paths).items()},
+            "compact_seed_artifacts": {
+                "seed_known_institutions": str(compact["seed_known_institutions"]),
+                "seed_known_domains": str(compact["seed_known_domains"]),
+                "seed_recent_contacted_emails_sample": str(compact["seed_recent_contacted_emails_sample"]),
+                "seed_exclusion_summary": str(compact["seed_exclusion_summary"]),
+                "counts": compact["counts"],
+            },
+            "uploaded_file_ids": uploaded_file_ids,
+            "error": err_payload,
+            "safety": {
+                "gmail_send_called": False,
+                "mark_contacted_called": False,
+                "sent_ingest_called": False,
+                "dnr_refresh_after_send_called": False,
+                "sqlite_mutation_intended": False,
+            },
+            "stop_message": "Ready for review; no live send performed.",
+        }
+        artifacts.run_metadata_json.write_text(json.dumps(fail_meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        raise
 
 
 __all__ = [
@@ -713,6 +891,7 @@ __all__ = [
     "load_prompt_template",
     "normalize_and_validate_headers",
     "parse_csv_rows",
+    "build_compact_seed_artifacts",
     "render_prompt",
     "resolve_out_dir",
     "resolve_sector_for_day_rotation",

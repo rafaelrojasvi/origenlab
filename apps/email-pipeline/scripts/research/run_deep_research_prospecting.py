@@ -119,6 +119,29 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Only meaningful with --run-contacted-coverage-check; fail run on validator non-zero exit.",
     )
+    ap.add_argument(
+        "--max-seed-email-sample",
+        type=int,
+        default=300,
+        help="Max emails kept in compact seed sample file (default: 300).",
+    )
+    ap.add_argument(
+        "--max-seed-institutions",
+        type=int,
+        default=500,
+        help="Max institution rows kept in compact seed file (default: 500).",
+    )
+    ap.add_argument(
+        "--max-seed-domains",
+        type=int,
+        default=500,
+        help="Max domain rows kept in compact seed file (default: 500).",
+    )
+    ap.add_argument(
+        "--use-file-search",
+        action="store_true",
+        help="Future-ready flag: note intent to use vector-store file search (not enabled by default).",
+    )
     args = ap.parse_args(argv)
 
     seeds = default_seed_paths()
@@ -161,6 +184,10 @@ def main(argv: list[str] | None = None) -> int:
         fail_on_over_limit=bool(args.fail_on_over_limit),
         run_contacted_coverage_check=bool(args.run_contacted_coverage_check),
         strict_contacted_coverage=bool(args.strict_contacted_coverage),
+        max_seed_email_sample=max(1, int(args.max_seed_email_sample)),
+        max_seed_institutions=max(1, int(args.max_seed_institutions)),
+        max_seed_domains=max(1, int(args.max_seed_domains)),
+        use_file_search=bool(args.use_file_search),
     )
     print(f"Wrote: {artifacts.out_dir}")
     print(f"Review summary: {artifacts.review_summary_md}")

@@ -18,16 +18,17 @@ def _write_csv(path: Path, headers: list[str], rows: list[list[str]]) -> None:
 
 
 def test_prompt_rendering() -> None:
-    seeds = ra.SeedPaths(
-        do_not_repeat_master=Path("/tmp/dnr.csv"),
-        outreach_contacted_all=Path("/tmp/contacted.csv"),
-        all_known_marketing_contacts_dedup=Path("/tmp/known.csv"),
-    )
     text = ra.render_prompt(
-        template_text="sector={sector} limit={limit_hint} dnr={dnr_path}",
+        template_text="sector={sector} limit={limit_hint} dnr={canonical_dnr_path}",
         sector="broad",
         limit_hint=25,
-        seed_paths=seeds,
+        compact_seed_files={
+            "canonical_dnr_path": Path("/tmp/dnr.csv"),
+            "seed_known_institutions": Path("/tmp/i.csv"),
+            "seed_known_domains": Path("/tmp/d.csv"),
+            "seed_recent_contacted_emails_sample": Path("/tmp/e.csv"),
+            "seed_exclusion_summary": Path("/tmp/s.json"),
+        },
     )
     assert "sector=broad" in text
     assert "limit=25" in text
@@ -131,6 +132,9 @@ def test_review_summary_generation(tmp_path: Path) -> None:
         validation_json=tmp_path / "validation_result.json",
         review_summary_md=tmp_path / "review_summary.md",
         run_metadata_json=tmp_path / "run_metadata.json",
+        prompt_preview_txt=tmp_path / "prompt_preview.txt",
+        api_error_json=tmp_path / "api_error.json",
+        api_error_txt=tmp_path / "api_error.txt",
         process_workspace=tmp_path / "ws",
     )
     text = ra.build_review_summary_markdown(
@@ -250,6 +254,7 @@ def test_dry_run_no_send_safety(tmp_path: Path, monkeypatch) -> None:
     assert meta["max_candidates"] == 200
     assert meta["max_send_ready"] == 50
     assert "output_directory" in meta
+    assert "compact_seed_artifacts" in meta
     assert "Ready for review; no live send performed." in artifacts.review_summary_md.read_text(encoding="utf-8")
 
 
@@ -363,6 +368,12 @@ def test_fail_on_over_limit_behavior(tmp_path: Path) -> None:
         assert False, "Expected over-limit failure"
     except RuntimeError as exc:
         assert "max-candidates" in str(exc)
+    # Failure artifacts should still be generated.
+    out = tmp_path / "out"
+    assert (out / "run_metadata.json").is_file()
+    assert (out / "api_error.json").is_file()
+    assert (out / "api_error.txt").is_file()
+    assert (out / "prompt_preview.txt").is_file()
 
 
 def test_cli_help() -> None:
@@ -464,4 +475,34 @@ def test_contacted_coverage_hook_non_strict(tmp_path: Path, monkeypatch) -> None
     meta = json.loads(artifacts.run_metadata_json.read_text(encoding="utf-8"))
     assert meta["contacted_coverage_check"]["enabled"] is True
     assert meta["contacted_coverage_check"]["returncode"] == 3
+
+
+def test_compact_seed_generation_caps(tmp_path: Path) -> None:
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [[f"user{i}@a.cl"] for i in range(10)])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(
+        contacted,
+        ["contact_email", "institution_name"],
+        [[f"c{i}@b.cl", f"Inst {i%4}"] for i in range(20)],
+    )
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(
+        known,
+        ["contact_email", "institution_name"],
+        [[f"k{i}@c.cl", f"Known {i%3}"] for i in range(20)],
+    )
+    compact = ra.build_compact_seed_artifacts(
+        out_dir=tmp_path / "out",
+        seed_paths=ra.SeedPaths(dnr, contacted, known),
+        max_seed_email_sample=5,
+        max_seed_institutions=4,
+        max_seed_domains=3,
+    )
+    sample_rows = list(csv.DictReader(Path(compact["seed_recent_contacted_emails_sample"]).open(encoding="utf-8")))
+    inst_rows = list(csv.DictReader(Path(compact["seed_known_institutions"]).open(encoding="utf-8")))
+    dom_rows = list(csv.DictReader(Path(compact["seed_known_domains"]).open(encoding="utf-8")))
+    assert len(sample_rows) == 5
+    assert len(inst_rows) <= 4
+    assert len(dom_rows) <= 3
 
