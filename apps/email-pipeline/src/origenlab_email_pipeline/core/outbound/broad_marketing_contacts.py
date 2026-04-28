@@ -9,10 +9,12 @@ For operator entrypoint and I/O, see :mod:`scripts.leads.process_broad_marketing
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .candidate_export_gate import GateContext, evaluate_export_eligibility
 from .csv_contracts import (
@@ -21,6 +23,7 @@ from .csv_contracts import (
     sanitize_csv_text,
     source_is_official_registry_exception,
     source_looks_third_party,
+    source_host_matches_domain,
     validate_confidence,
     validate_email_syntax,
     validate_source_url,
@@ -69,6 +72,39 @@ _GENERIC_LABELS: frozenset[str] = frozenset(
         "admin",
     }
 )
+_WEAK_LABEL_TOKENS: tuple[str, ...] = (
+    "office",
+    "oficina",
+    "routing",
+    "mesa",
+    "recepcion",
+    "recepción",
+    "oirs",
+)
+_INSTITUTION_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "de",
+        "del",
+        "la",
+        "el",
+        "los",
+        "las",
+        "y",
+        "en",
+        "para",
+        "hospital",
+        "universidad",
+        "instituto",
+        "centro",
+        "laboratorio",
+        "regional",
+        "clinica",
+        "clínica",
+        "servicio",
+        "salud",
+    }
+)
+_WEAK_SOURCE_PATHS: frozenset[str] = frozenset({"", "/", "/index", "/home", "/inicio"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,11 +151,56 @@ def row_schema_errors(row: dict[str, str]) -> list[str]:
 
 
 def is_generic_label(label: str) -> bool:
-    return str(label or "").strip().lower() in _GENERIC_LABELS
+    s = str(label or "").strip().lower()
+    if s in _GENERIC_LABELS:
+        return True
+    return any(tok in s for tok in _WEAK_LABEL_TOKENS)
 
 
 def is_weak_fit(fit_signal: str) -> bool:
     return len(str(fit_signal or "").strip()) < 4
+
+
+def _email_domain(email: str) -> str:
+    e = str(email or "").strip().lower()
+    if "@" not in e:
+        return ""
+    return e.rsplit("@", 1)[1]
+
+
+def _source_host(source_url: str) -> str:
+    if not validate_source_url(source_url):
+        return ""
+    return (urlparse(source_url).hostname or "").strip().lower()
+
+
+def _source_path_is_weak(source_url: str) -> bool:
+    if not validate_source_url(source_url):
+        return True
+    p = (urlparse(source_url).path or "").strip().lower()
+    if p in _WEAK_SOURCE_PATHS:
+        return True
+    if len(p) <= 1:
+        return True
+    return False
+
+
+def _domain_tokens(value: str) -> set[str]:
+    parts = [p.strip().lower() for p in str(value or "").split(".") if p.strip()]
+    return {p for p in parts if len(p) >= 4}
+
+
+def _institution_tokens(inst: str) -> set[str]:
+    txt = str(inst or "").strip().lower()
+    words = re.findall(r"[a-z0-9áéíóúñ]+", txt)
+    out: set[str] = set()
+    for w in words:
+        if len(w) < 5:
+            continue
+        if w in _INSTITUTION_STOPWORDS:
+            continue
+        out.add(w)
+    return out
 
 
 def augment_row(base: dict[str, str], **extra: str) -> dict[str, str]:
@@ -127,6 +208,43 @@ def augment_row(base: dict[str, str], **extra: str) -> dict[str, str]:
     for k, v in extra.items():
         o[k] = v
     return o
+
+
+def quality_review_reasons(*, email: str, institution_name: str, source_url: str, fit_signal: str, contact_label: str) -> list[str]:
+    reasons: list[str] = []
+    em_domain = _email_domain(email)
+    src_host = _source_host(source_url)
+    weak_source = _source_path_is_weak(source_url)
+    weak_fit = is_weak_fit(fit_signal)
+    generic = is_generic_label(contact_label)
+
+    if src_host and em_domain and not source_host_matches_domain(source_url, em_domain):
+        # institutional mismatch signal: source host and email domain diverge.
+        # Keep this conservative: only flag when domains have no meaningful token overlap.
+        if not (_domain_tokens(src_host) & _domain_tokens(em_domain)):
+            reasons.append("domain_mismatch")
+
+    inst_tokens = _institution_tokens(institution_name)
+    if inst_tokens and em_domain:
+        token_hit = any(t in em_domain or (src_host and t in src_host) for t in inst_tokens)
+        if not token_hit and (weak_source or "domain_mismatch" in reasons):
+            reasons.append("institution_email_mismatch")
+
+    if generic and (weak_fit or weak_source):
+        reasons.append("generic_contact_weak_evidence")
+
+    if weak_source and (generic or weak_fit or "domain_mismatch" in reasons or "institution_email_mismatch" in reasons):
+        reasons.append("weak_source_match")
+
+    # de-dup while preserving order
+    seen: set[str] = set()
+    out: list[str] = []
+    for r in reasons:
+        if r in seen:
+            continue
+        seen.add(r)
+        out.append(r)
+    return out
 
 
 def process_reviewed_marketing_rows(
@@ -191,6 +309,15 @@ def process_reviewed_marketing_rows(
             str(raw.get("fit_signal") or "")
         ):
             review_reasons.append("generic_label_weak_fit")
+        review_reasons.extend(
+            quality_review_reasons(
+                email=em,
+                institution_name=inst,
+                source_url=src,
+                fit_signal=str(raw.get("fit_signal") or ""),
+                contact_label=str(raw.get("contact_label") or ""),
+            )
+        )
 
         extra: dict[str, str] = {"source_line": str(i)}
         if review_reasons:
@@ -266,6 +393,14 @@ def build_marketing_contacts_summary(
     out_summary: Path,
 ) -> dict[str, Any]:
     """Build the marketing_contacts_summary.json object (keys stable; sort_keys in caller)."""
+    review_reason_counts: dict[str, int] = {}
+    for row in result.review_rows:
+        reasons = str(row.get("review_reason") or "").split(";")
+        for reason in reasons:
+            rk = reason.strip()
+            if not rk:
+                continue
+            review_reason_counts[rk] = review_reason_counts.get(rk, 0) + 1
     return {
         "schema_version": "1",
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -282,6 +417,7 @@ def build_marketing_contacts_summary(
             "needs_manual_review": len(result.review_rows),
             "send_ready_marketing": len(result.send_ready_rows),
         },
+        "quality_review_reason_counts": review_reason_counts,
         "outputs": {
             "marketing_safe_to_send": str(out_safe.resolve()),
             "marketing_blocked_already_known": str(out_blocked.resolve()),

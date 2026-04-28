@@ -142,6 +142,7 @@ Hosp Low,RM,Santiago,hospital,low@gate-test.example,Compras,https://low-gate.exa
 Hosp NoUrl,RM,Santiago,hospital,nourl@gate-test.example,Compras,,high,ok
 Hosp Li,RM,Santiago,hospital,li@gate-test.example,Compras,https://www.linkedin.com/in/foo,medium,ok
 Hosp Gen,RM,Santiago,hospital,gen@gate-test.example,contact,https://gen-gate.example/,high,
+Hosp Mismatch,RM,Santiago,hospital,buyer@other-example.net,Compras,https://hospital-zeta.cl/lab,high,licitaciones
 Hosp Dom,RM,Santiago,hospital,user@sub.blocked-domain.example,IT,https://dom-gate.example/,high,servers
 """
     (workspace / "reviewed_marketing_contacts.csv").write_text(text, encoding="utf-8")
@@ -192,6 +193,13 @@ def test_processor_splits_and_send_ready(tmp_path: Path) -> None:
     assert "low@gate-test.example" in review
     assert "li@gate-test.example" in review
     assert "gen@gate-test.example" in review
+    assert "buyer@other-example.net" in review
+    assert "domain_mismatch" in review["buyer@other-example.net"]
+    assert "weak_source_match" in review["gen@gate-test.example"]
+
+    quality_counts = summary.get("quality_review_reason_counts", {})
+    assert int(quality_counts.get("domain_mismatch", 0)) >= 1
+    assert int(quality_counts.get("weak_source_match", 0)) >= 1
 
 
 def test_no_db_writes(tmp_path: Path) -> None:

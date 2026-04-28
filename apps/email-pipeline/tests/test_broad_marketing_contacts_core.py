@@ -8,6 +8,7 @@ from origenlab_email_pipeline.core.outbound.broad_marketing_contacts import (
     SEND_READY_FIELDS,
     load_master_norms_from_csv,
     process_reviewed_marketing_rows,
+    quality_review_reasons,
     review_output_fieldnames,
     row_schema_errors,
     safe_output_fieldnames,
@@ -121,6 +122,29 @@ def test_process_master_block() -> None:
 def test_output_fieldname_lists_include_expected() -> None:
     assert "case_id" in safe_output_fieldnames()
     assert "review_reason" in review_output_fieldnames()
+
+
+def test_quality_review_reasons_detect_domain_mismatch() -> None:
+    reasons = quality_review_reasons(
+        email="buyer@foo-labs.cl",
+        institution_name="Hospital Regional Sur",
+        source_url="https://hospital-sur.cl/laboratorio/compra",
+        fit_signal="licitaciones de laboratorio",
+        contact_label="Compras",
+    )
+    assert "domain_mismatch" in reasons
+
+
+def test_quality_review_reasons_generic_weak_source() -> None:
+    reasons = quality_review_reasons(
+        email="info@institution.cl",
+        institution_name="Instituto Demo",
+        source_url="https://institution.cl/",
+        fit_signal="ok",
+        contact_label="general",
+    )
+    assert "weak_source_match" in reasons
+    assert "generic_contact_weak_evidence" in reasons
 
 
 def test_write_safe_csv_shape(tmp_path: Path) -> None:
