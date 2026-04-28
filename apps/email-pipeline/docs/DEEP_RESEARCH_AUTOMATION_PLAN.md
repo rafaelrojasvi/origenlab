@@ -6,7 +6,10 @@ Last reviewed: 2026-04-29
 
 ## Scope
 
-This plan defines a recurring automation that creates **review-ready** prospecting batches for OrigenLab using OpenAI Deep Research and the existing volume marketing lane safeguards.
+This plan defines a recurring automation that creates **review-ready** prospecting batches for OrigenLab using two modes:
+
+- **heavy**: Deep Research path for weekly/manual/off-peak runs
+- **light**: smaller daily path using regular Responses API + `web_search`
 
 ## What is automated
 
@@ -20,6 +23,16 @@ This plan defines a recurring automation that creates **review-ready** prospecti
 8. Process net-new candidates with `process_broad_marketing_contacts.py` (read-only gate context).
 9. Generate a compact markdown `review_summary.md`.
 10. Stop with: `Ready for review; no live send performed.`
+
+Mode details:
+
+- `--research-mode heavy` (default for backward compatibility)
+  - default model: `o4-mini-deep-research`
+  - default prompt: `prompts/deep_research_netnew_chile_marketing.txt`
+- `--research-mode light`
+  - default model: `gpt-4o-mini` (non deep-research model)
+  - default prompt: `prompts/light_research_netnew_chile_marketing.txt`
+  - still uses compact seeds, local exclusion, strict validation, and review-only stop
 
 ## Guardrails (Stage 1.1)
 
@@ -94,10 +107,67 @@ Rate-limit resilience for real API runs:
 - Daily guidance flag:
   - `--daily-mode` adds operator warnings/metadata for daily cadence.
   - Broad remains available, but weekday rotation is preferred to reduce rate-limit pressure.
+- TPM-safe preset for smaller runs:
+  - `--tpm-safe` applies conservative defaults unless explicitly overridden:
+    - `--max-candidates=40`
+    - `--max-send-ready=15`
+    - `--max-seed-email-sample=100`
+    - `--max-seed-institutions=150`
+    - `--max-seed-domains=150`
+  - This keeps broad available while reducing TPM pressure for real runs.
+
+## Stage 1.3.3 TPM preflight hardening
+
+- New smallest-run preset:
+  - `--tiny-run` (recommended for first successful real executions)
+  - unless explicitly overridden:
+    - `--max-candidates=20`
+    - `--max-send-ready=10`
+    - `--max-seed-email-sample=50`
+    - `--max-seed-institutions=80`
+    - `--max-seed-domains=80`
+    - `--max-retries=2`
+- Preflight size summary now prints before API submission:
+  - rendered prompt size in chars
+  - compact seed artifact row counts
+  - compact seed artifact file sizes
+  - selected sector
+  - guardrail values in effect
+- Additional large-run warning:
+  - for `broad` / `water_env` with larger seed caps, CLI warns that current settings may exceed TPM on lower tiers.
+
+## Stage 1.3.4 Light Research daily mode
+
+- New mode flag:
+  - `--research-mode heavy|light` (default `heavy`)
+- Light mode behavior:
+  - uses Responses API with `web_search`
+  - uses non deep-research model defaults
+  - keeps compact-seed strategy
+  - writes the same run artifacts and stops before send
+- Light mode defaults (unless overridden):
+  - `--max-candidates=20`
+  - `--max-send-ready=10`
+  - `--max-seed-email-sample=50`
+  - `--max-seed-institutions=80`
+  - `--max-seed-domains=80`
+  - `--max-retries=2`
+- Metadata and review summary include:
+  - `research_mode`
+  - model used
+  - prompt file used
 
 Additional diagnostics written on failures:
 
 - `retry_attempts.json` (timestamps, sector, attempt number, retryability, delay)
+
+Operator progress UX:
+
+- CLI reports real phase/status updates during long runs (no fake percentages).
+- Responses API background statuses are surfaced as they are returned (for example `queued`, `in_progress`, terminal status).
+- Progress lines include elapsed time, retry count, current sector, and run output directory.
+- `--verbose-progress` prints every event; default prints key transitions.
+- Non-TTY output falls back to plain log lines.
 
 ## What is NOT automated
 
@@ -127,6 +197,11 @@ CLI supports overrides with:
 - Daily morning run in Chile business hours (for example 08:00 America/Santiago).
 - Keep this review-first: generate prospects daily, but send only after human approval.
 - Run early enough to allow same-day review and curation.
+- Recommended cadence:
+  - **Monday:** heavy broad run, manual/off-peak
+  - **Tuesday-Saturday:** light daily rotation (`water_env`, `universities_regional`, `hospitals_clinical`, `industry_qc`, `thin_regions`)
+  - **Sunday:** optional dry-run smoke check
+- Prefer `--tiny-run` for first successful real executions.
 
 Recommended weekday sector rotation (scheduler-driven):
 

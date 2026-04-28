@@ -147,6 +147,8 @@ def test_review_summary_generation(tmp_path: Path) -> None:
         output_paths=artifacts,
         prompt_file=tmp_path / "prompt.txt",
         sector="broad",
+        research_mode="heavy",
+        model_used=ra.DEFAULT_HEAVY_MODEL,
         limits={
             "limits_triggered": True,
             "truncation_applied": True,
@@ -157,6 +159,8 @@ def test_review_summary_generation(tmp_path: Path) -> None:
     )
     assert "Ready for review; no live send performed." in text
     assert "Top institutions" in text
+    assert "Research mode" in text
+    assert "Model" in text
     assert "Prompt file" in text
     assert "Truncation applied" in text
 
@@ -391,11 +395,15 @@ def test_cli_help() -> None:
     assert "dry-run" in cp.stdout
     assert "--max-candidates" in cp.stdout
     assert "--day-rotation" in cp.stdout
+    assert "--research-mode" in cp.stdout
     assert "--daily-mode" in cp.stdout
     assert "--max-retries" in cp.stdout
     assert "--initial-backoff-seconds" in cp.stdout
     assert "--max-backoff-seconds" in cp.stdout
     assert "--fallback-sector" in cp.stdout
+    assert "--tpm-safe" in cp.stdout
+    assert "--tiny-run" in cp.stdout
+    assert "--verbose-progress" in cp.stdout
     assert "--run-contacted-coverage-check" in cp.stdout
 
 
@@ -591,6 +599,47 @@ def test_retry_attempts_written_on_retryable_failure(tmp_path: Path, monkeypatch
     assert attempts[1]["result"] == "success"
 
 
+def test_preflight_summary_prints_sizes_and_guardrails(tmp_path: Path, capsys) -> None:
+    inst = tmp_path / "seed_known_institutions.csv"
+    dom = tmp_path / "seed_known_domains.csv"
+    ems = tmp_path / "seed_recent_contacted_emails_sample.csv"
+    summ = tmp_path / "seed_exclusion_summary.json"
+    for p in (inst, dom, ems, summ):
+        p.write_text("x\n", encoding="utf-8")
+
+    compact = {
+        "seed_known_institutions": str(inst),
+        "seed_known_domains": str(dom),
+        "seed_recent_contacted_emails_sample": str(ems),
+        "seed_exclusion_summary": str(summ),
+        "counts": {
+            "dnr_total": 100,
+            "contacted_total": 90,
+            "known_total": 80,
+            "sample_email_count": 50,
+            "institution_rows": 20,
+            "domain_rows": 20,
+        },
+    }
+    ra._print_preflight_summary(
+        selected_sector="water_env",
+        prompt_text="hello world",
+        compact=compact,
+        max_candidates=20,
+        max_send_ready=10,
+        max_seed_email_sample=50,
+        max_seed_institutions=80,
+        max_seed_domains=80,
+        max_retries=2,
+    )
+    out = capsys.readouterr().out
+    assert "Preflight size summary (before API submission)" in out
+    assert "sector: water_env" in out
+    assert "rendered_prompt_chars: 11" in out
+    assert "compact_seed_file_sizes_bytes" in out
+    assert "max_retries: 2" in out
+
+
 def test_non_retryable_error_no_retry(tmp_path: Path, monkeypatch) -> None:
     prompt = tmp_path / "prompt.txt"
     prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
@@ -641,4 +690,96 @@ def test_non_retryable_error_no_retry(tmp_path: Path, monkeypatch) -> None:
     except ra.DeepResearchApiError:
         pass
     assert calls["n"] == 1
+
+
+def test_light_prompt_template_loads() -> None:
+    text = ra.load_prompt_template(ra.DEFAULT_LIGHT_PROMPT_PATH)
+    assert "{sector}" in text
+    assert "{limit_hint}" in text
+    assert "local exact exclusion" in text.lower()
+
+
+def test_light_mode_uses_light_executor_and_sets_metadata(tmp_path: Path, monkeypatch) -> None:
+    prompt = tmp_path / "light_prompt.txt"
+    prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(contacted, ["contact_email"], [])
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(known, ["contact_email"], [])
+    seeds = ra.SeedPaths(dnr, contacted, known)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(ra, "OpenAI", lambda api_key: object())
+
+    called = {"light": 0}
+
+    def _fake_light(**kwargs):
+        called["light"] += 1
+        return (
+            "{}",
+            "```csv\ninstitution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal\n"
+            "A,RM,Santiago,universidad,a@x.cl,lab,https://x.cl,high,fit\n```",
+            {},
+        )
+
+    def _fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        if "process_broad_marketing_contacts.py" in " ".join(args):
+            ws = Path(args[args.index("--workspace") + 1])
+            _write_csv(
+                ws / "send_ready_marketing.csv",
+                [
+                    "case_id",
+                    "contact_email",
+                    "email_source",
+                    "institution_name",
+                    "region",
+                    "city",
+                    "type",
+                    "contact_label",
+                    "source_url",
+                    "confidence",
+                    "fit_signal",
+                    "variant_type",
+                ],
+                [["MKT-1", "a@x.cl", "marketing_contacts", "A", "RM", "Santiago", "universidad", "lab", "https://x.cl", "high", "fit", "broad_marketing"]],
+            )
+            _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
+            _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
+            _write_csv(ws / "marketing_safe_to_send.csv", ["contact_email"], [["a@x.cl"]])
+            (ws / "marketing_contacts_summary.json").write_text(
+                json.dumps({"counts": {"send_ready_marketing": 1, "blocked": 0, "needs_manual_review": 0}}),
+                encoding="utf-8",
+            )
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(ra, "run_light_research_response", _fake_light)
+    monkeypatch.setattr(ra, "_run_subprocess", _fake_run)
+    artifacts = ra.run_research_automation(
+        model=ra.DEFAULT_LIGHT_MODEL,
+        prompt_file=prompt,
+        out_dir=tmp_path / "out",
+        sector="water_env",
+        limit_hint=10,
+        dry_run=False,
+        sample_response=None,
+        seed_paths=seeds,
+        use_background=False,
+        app_root=Path(__file__).resolve().parents[1],
+        max_candidates=20,
+        max_send_ready=10,
+        fail_on_over_limit=False,
+        run_contacted_coverage_check=False,
+        strict_contacted_coverage=False,
+        max_retries=2,
+        initial_backoff_seconds=0.1,
+        max_backoff_seconds=0.2,
+        research_mode="light",
+    )
+    meta = json.loads(artifacts.run_metadata_json.read_text(encoding="utf-8"))
+    assert called["light"] == 1
+    assert meta["research_mode"] == "light"
+    assert meta["model"] == ra.DEFAULT_LIGHT_MODEL
+    assert meta["safety"]["gmail_send_called"] is False
+    assert meta["safety"]["sqlite_mutation_intended"] is False
 

@@ -125,7 +125,7 @@ Legacy tags **KEEP_CORE** / **KEEP_AUDIT** in older prose map loosely to **OPS_C
 | Path | Tag | Role | Typical outputs / notes |
 |------|-----|------|-------------------------|
 | `scripts/qa/export_do_not_repeat_master.py` | OPS_DAILY | Merge “do not repeat” emails for DeepSearch + volume processor | `reports/out/active/current/do_not_repeat_master.{csv,txt}`, `do_not_repeat_summary.json` |
-| `scripts/research/run_deep_research_prospecting.py` | OPS_DAILY | Automated **daily** Deep Research → review-ready volume batch (no send) | Writes timestamped `research_automation/<ts>/` artifacts, validates/processes, **stops before send**; supports `--sector`, `--day-rotation`, `--daily-mode`; optional read-only `--run-contacted-coverage-check`; guardrails: `--max-candidates`, `--max-send-ready`, `--fail-on-over-limit`; compact-seed caps: `--max-seed-email-sample`, `--max-seed-institutions`, `--max-seed-domains`; rate-limit controls: `--max-retries`, `--initial-backoff-seconds`, `--max-backoff-seconds`, optional `--fallback-sector` |
+| `scripts/research/run_deep_research_prospecting.py` | OPS_DAILY | Automated research automation (heavy weekly/off-peak, light daily) → review-ready volume batch (no send) | Writes timestamped `research_automation/<ts>/` artifacts, validates/processes, **stops before send**; `--research-mode heavy|light`; supports `--sector`, `--day-rotation`, `--daily-mode`; optional read-only `--run-contacted-coverage-check`; guardrails: `--max-candidates`, `--max-send-ready`, `--fail-on-over-limit`; compact-seed caps: `--max-seed-email-sample`, `--max-seed-institutions`, `--max-seed-domains`; presets: `--tpm-safe`, `--tiny-run`; rate-limit controls: `--max-retries`, `--initial-backoff-seconds`, `--max-backoff-seconds`, optional `--fallback-sector` |
 | `scripts/qa/validate_campaign_csvs.py` | OPS_DAILY | CSV contracts (`marketing_contacts`, `reviewed_deepsearch`, `send_ready`, etc.) | stdout / exit code; optional `--json-out` |
 | `scripts/leads/process_broad_marketing_contacts.py` | OPS_DAILY | Validate, gate, split volume contacts | `marketing_*.csv`, `send_ready_marketing.csv`, `marketing_contacts_summary.json` |
 | `scripts/leads/run_current_campaign_pipeline.py` | OPS_DAILY | Orchestrates precision lane (prepare / process-reviewed / post-send) | Files under `active/current/` |
@@ -138,7 +138,7 @@ Legacy tags **KEEP_CORE** / **KEEP_AUDIT** in older prose map loosely to **OPS_C
 
 **Optional send (BREAK_GLASS):** `scripts/qa/send_inline_html_email_via_gmail_api.py` — can send real mail; not auto-run. See below.
 
-Research automation prompt template: `prompts/deep_research_netnew_chile_marketing.txt`. Planning + scheduling handoff: `docs/DEEP_RESEARCH_AUTOMATION_PLAN.md`, `scripts/research/cron_example.txt`.
+Research automation prompt templates: `prompts/deep_research_netnew_chile_marketing.txt` (heavy) and `prompts/light_research_netnew_chile_marketing.txt` (light). Planning + scheduling handoff: `docs/DEEP_RESEARCH_AUTOMATION_PLAN.md`, `scripts/research/cron_example.txt`.
 
 **Core modules (not scripts):** `candidate_export_gate.py`, `marketing_export_context.py`, `outbound_core.py`, `outreach_contact_state.py`, `next_marketing_queue.py`, `csv_contracts.py`, `outbound_sent_preflight.py` — package **Core** infrastructure.
 

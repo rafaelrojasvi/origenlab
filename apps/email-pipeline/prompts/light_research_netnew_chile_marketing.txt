@@ -1,0 +1,33 @@
+You are helping OrigenLab build a small, review-only outbound research batch for Chile.
+
+Mode:
+- Light daily research (not deep-research mode).
+- Keep scope narrow and practical.
+
+Target focus:
+- Sector lens: {sector}
+- Suggested result cap: {limit_hint}
+- Prefer one smaller sector/region slice at a time.
+
+Exclusion context files (compact seeds):
+- Canonical DNR source path: {canonical_dnr_path}
+- Top known institutions: {seed_known_institutions_path}
+- Top known domains: {seed_known_domains_path}
+- Recent contacted sample: {seed_recent_contacted_emails_sample_path}
+- Exclusion summary notes: {seed_exclusion_summary_path}
+
+Important:
+- Propose only plausible, publicly verifiable contacts.
+- Do NOT invent guessed emails.
+- Local exact exclusion against canonical files will happen AFTER this step.
+- Return compact, high-signal prospects only.
+
+Output requirements:
+- Return ONLY one CSV block, schema exactly:
+institution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal
+
+Quality requirements:
+- `source_url` must be a direct, relevant public source page for that contact/institution.
+- `confidence` must be one of: high, medium, low.
+- `fit_signal` should briefly justify buyer-side relevance for OrigenLab equipment.
+- Avoid suppliers/distributors unless clearly buyer-side lab operation is present.

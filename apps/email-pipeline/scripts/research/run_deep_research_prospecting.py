@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from datetime import datetime
+from itertools import cycle
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -16,7 +18,11 @@ if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
 from origenlab_email_pipeline.core.research_automation import (
+    DEFAULT_HEAVY_MODEL,
+    DEFAULT_LIGHT_MODEL,
+    DEFAULT_LIGHT_PROMPT_PATH,
     DEFAULT_PROMPT_PATH,
+    RESEARCH_MODE_CHOICES,
     SECTOR_CHOICES,
     default_seed_paths,
     resolve_out_dir,
@@ -25,18 +31,73 @@ from origenlab_email_pipeline.core.research_automation import (
 )
 
 
+def _flag_present(argv: list[str], flag: str) -> bool:
+    return any(tok == flag or tok.startswith(f"{flag}=") for tok in argv)
+
+
+class ProgressReporter:
+    def __init__(self, *, out_dir: Path, verbose: bool) -> None:
+        self._start = time.monotonic()
+        self._out_dir = str(out_dir)
+        self._verbose = bool(verbose)
+        self._isatty = bool(sys.stdout.isatty())
+        self._spinner = cycle(["|", "/", "-", "\\"])
+        self._last_phase = ""
+        self._last_line_len = 0
+
+    def _line(self, *, phase: str, detail: str, elapsed: float, retries: int, sector: str) -> str:
+        spin = next(self._spinner) if self._isatty else "*"
+        return (
+            f"{spin} [{elapsed:6.1f}s] phase={phase} retries={retries} "
+            f"sector={sector} out_dir={self._out_dir} {detail}".strip()
+        )
+
+    def emit(self, event: dict[str, object]) -> None:
+        phase = str(event.get("phase", "unknown"))
+        detail = str(event.get("detail", "") or "")
+        elapsed = float(event.get("elapsed_seconds", time.monotonic() - self._start))
+        retries = int(event.get("retry_count", 0))
+        sector = str(event.get("sector", "n/a"))
+        line = self._line(phase=phase, detail=detail, elapsed=elapsed, retries=retries, sector=sector)
+        should_print = self._verbose or phase != self._last_phase or phase in {
+            "queued",
+            "in_progress",
+            "retrying_after_rate_limit",
+            "ready_for_review",
+        }
+        if not should_print:
+            return
+        if self._isatty:
+            sys.stdout.write("\r" + line + " " * max(0, self._last_line_len - len(line)))
+            sys.stdout.flush()
+            self._last_line_len = len(line)
+            if phase in {"ready_for_review", "failed"}:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+        else:
+            print(line)
+        self._last_phase = phase
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = list(argv) if argv is not None else sys.argv[1:]
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
+        "--research-mode",
+        choices=RESEARCH_MODE_CHOICES,
+        default="heavy",
+        help="Research execution mode: heavy (weekly/off-peak) or light (daily).",
+    )
+    ap.add_argument(
         "--model",
-        default="o4-mini-deep-research",
-        help="Deep research model id (Responses API), default: o4-mini-deep-research",
+        default=None,
+        help="Responses model id override. Defaults by --research-mode.",
     )
     ap.add_argument(
         "--prompt-file",
         type=Path,
-        default=DEFAULT_PROMPT_PATH,
-        help="Prompt template path (format placeholders supported).",
+        default=None,
+        help="Prompt template path override (format placeholders supported).",
     )
     ap.add_argument(
         "--out-dir",
@@ -98,13 +159,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--max-candidates",
         type=int,
-        default=200,
+        default=None,
         help="Maximum extracted candidate rows allowed before truncation/fail (default: 200).",
     )
     ap.add_argument(
         "--max-send-ready",
         type=int,
-        default=50,
+        default=None,
         help="Review warning threshold for send_ready rows after processing (default: 50).",
     )
     ap.add_argument(
@@ -127,20 +188,36 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--max-seed-email-sample",
         type=int,
-        default=300,
+        default=None,
         help="Max emails kept in compact seed sample file (default: 300).",
     )
     ap.add_argument(
         "--max-seed-institutions",
         type=int,
-        default=500,
+        default=None,
         help="Max institution rows kept in compact seed file (default: 500).",
     )
     ap.add_argument(
         "--max-seed-domains",
         type=int,
-        default=500,
+        default=None,
         help="Max domain rows kept in compact seed file (default: 500).",
+    )
+    ap.add_argument(
+        "--tpm-safe",
+        action="store_true",
+        help=(
+            "Apply conservative TPM-safe defaults for smaller real runs unless those flags "
+            "are explicitly overridden."
+        ),
+    )
+    ap.add_argument(
+        "--tiny-run",
+        action="store_true",
+        help=(
+            "Apply extra-small defaults for first successful real runs unless those flags "
+            "are explicitly overridden."
+        ),
     )
     ap.add_argument(
         "--use-file-search",
@@ -171,7 +248,84 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional narrow fallback sector if primary sector keeps failing with retryable API errors.",
     )
+    ap.add_argument(
+        "--verbose-progress",
+        action="store_true",
+        help="Print every progress status event during long-running jobs.",
+    )
     args = ap.parse_args(argv)
+    research_mode = str(args.research_mode)
+    prompt_explicit = _flag_present(argv, "--prompt-file")
+    resolved_model = (
+        str(args.model)
+        if args.model
+        else (DEFAULT_HEAVY_MODEL if research_mode == "heavy" else DEFAULT_LIGHT_MODEL)
+    )
+    if research_mode == "light" and "deep-research" in resolved_model.lower():
+        print(
+            "Warning: light mode requires a non deep-research model; "
+            f"switching to {DEFAULT_LIGHT_MODEL}."
+        )
+        resolved_model = DEFAULT_LIGHT_MODEL
+    if prompt_explicit and args.prompt_file is not None:
+        resolved_prompt_file = Path(args.prompt_file)
+    else:
+        resolved_prompt_file = (
+            DEFAULT_PROMPT_PATH if research_mode == "heavy" else DEFAULT_LIGHT_PROMPT_PATH
+        )
+
+    base_defaults = {
+        "max_candidates": 200,
+        "max_send_ready": 50,
+        "max_seed_email_sample": 300,
+        "max_seed_institutions": 500,
+        "max_seed_domains": 500,
+        "max_retries": 4,
+    }
+    tpm_safe_defaults = {
+        "max_candidates": 40,
+        "max_send_ready": 15,
+        "max_seed_email_sample": 100,
+        "max_seed_institutions": 150,
+        "max_seed_domains": 150,
+        "max_retries": 4,
+    }
+    tiny_run_defaults = {
+        "max_candidates": 20,
+        "max_send_ready": 10,
+        "max_seed_email_sample": 50,
+        "max_seed_institutions": 80,
+        "max_seed_domains": 80,
+        "max_retries": 2,
+    }
+
+    resolved = {}
+    for key, cli_flag in (
+        ("max_candidates", "--max-candidates"),
+        ("max_send_ready", "--max-send-ready"),
+        ("max_seed_email_sample", "--max-seed-email-sample"),
+        ("max_seed_institutions", "--max-seed-institutions"),
+        ("max_seed_domains", "--max-seed-domains"),
+    ):
+        explicit = _flag_present(argv, cli_flag)
+        raw_value = getattr(args, key)
+        if raw_value is not None:
+            resolved[key] = int(raw_value)
+        elif bool(args.tiny_run) and not explicit:
+            resolved[key] = tiny_run_defaults[key]
+        elif bool(args.tpm_safe) and not explicit:
+            resolved[key] = tpm_safe_defaults[key]
+        else:
+            resolved[key] = base_defaults[key]
+    max_retries_resolved = (
+        int(args.max_retries)
+        if _flag_present(argv, "--max-retries")
+        else (
+            tiny_run_defaults["max_retries"]
+            if bool(args.tiny_run)
+            else base_defaults["max_retries"]
+        )
+    )
 
     seeds = default_seed_paths()
     if args.seed_dnr is not None:
@@ -198,10 +352,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.day_rotation:
         selected_sector = resolve_sector_for_day_rotation(weekday=datetime.now().weekday())
     if args.daily_mode and selected_sector == "broad":
-        print("Warning: daily broad runs may hit rate limits; prefer weekday sector rotation.")
+        print(
+            "Warning: --daily-mode with --sector broad can hit TPM limits; "
+            "prefer broad weekly/off-peak and smaller daily sectors."
+        )
+    if selected_sector in {"broad", "water_env"} and (
+        int(resolved["max_candidates"]) > tiny_run_defaults["max_candidates"]
+        or int(resolved["max_seed_email_sample"]) > tiny_run_defaults["max_seed_email_sample"]
+        or int(resolved["max_seed_institutions"]) > tiny_run_defaults["max_seed_institutions"]
+        or int(resolved["max_seed_domains"]) > tiny_run_defaults["max_seed_domains"]
+    ):
+        print(
+            "Warning: selected sector plus current guardrails may exceed TPM on lower tiers. "
+            "Use --tiny-run for first successful real executions."
+        )
+    progress = ProgressReporter(out_dir=out_dir, verbose=bool(args.verbose_progress))
     artifacts = run_research_automation(
-        model=str(args.model),
-        prompt_file=Path(args.prompt_file),
+        model=resolved_model,
+        prompt_file=resolved_prompt_file,
         out_dir=out_dir,
         sector=selected_sector,
         limit_hint=int(args.limit_hint) if args.limit_hint and args.limit_hint > 0 else None,
@@ -210,20 +378,22 @@ def main(argv: list[str] | None = None) -> int:
         seed_paths=seeds,
         use_background=not bool(args.no_background),
         app_root=_ROOT,
-        max_candidates=max(1, int(args.max_candidates)),
-        max_send_ready=max(1, int(args.max_send_ready)),
+        max_candidates=max(1, int(resolved["max_candidates"])),
+        max_send_ready=max(1, int(resolved["max_send_ready"])),
         fail_on_over_limit=bool(args.fail_on_over_limit),
         run_contacted_coverage_check=bool(args.run_contacted_coverage_check),
         strict_contacted_coverage=bool(args.strict_contacted_coverage),
-        max_seed_email_sample=max(1, int(args.max_seed_email_sample)),
-        max_seed_institutions=max(1, int(args.max_seed_institutions)),
-        max_seed_domains=max(1, int(args.max_seed_domains)),
+        max_seed_email_sample=max(1, int(resolved["max_seed_email_sample"])),
+        max_seed_institutions=max(1, int(resolved["max_seed_institutions"])),
+        max_seed_domains=max(1, int(resolved["max_seed_domains"])),
         use_file_search=bool(args.use_file_search),
-        max_retries=max(1, int(args.max_retries)),
+        max_retries=max(1, int(max_retries_resolved)),
         initial_backoff_seconds=max(0.1, float(args.initial_backoff_seconds)),
         max_backoff_seconds=max(1.0, float(args.max_backoff_seconds)),
         fallback_sector=str(args.fallback_sector) if args.fallback_sector else None,
         daily_mode=bool(args.daily_mode),
+        progress_callback=progress.emit,
+        research_mode=research_mode,
     )
     print(f"Wrote: {artifacts.out_dir}")
     print(f"Review summary: {artifacts.review_summary_md}")

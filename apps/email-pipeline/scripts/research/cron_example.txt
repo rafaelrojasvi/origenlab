@@ -7,16 +7,19 @@
 # - Verify host timezone before using these examples.
 
 # Example 1: Host already on America/Santiago timezone
-# Run DAILY at 08:00 local host time (daily-mode + retry hardening)
-0 8 * * * cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --daily-mode --sector broad --max-retries 4 --initial-backoff-seconds 5 --max-backoff-seconds 120 --fallback-sector thin_regions >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_daily.log 2>&1
+# Run Tue-Sat DAILY at 08:00 local host time (light daily mode)
+0 8 * * 2-6 cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --research-mode light --daily-mode --day-rotation --tiny-run --max-retries 2 --initial-backoff-seconds 5 --max-backoff-seconds 60 --fallback-sector thin_regions >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_daily_light.log 2>&1
 
 # Example 2: Force TZ for the command if cron host supports per-line TZ
 # (preferred when host timezone differs from Chile time)
 TZ=America/Santiago
-0 8 * * * cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --daily-mode --sector broad --max-retries 4 --initial-backoff-seconds 5 --max-backoff-seconds 120 --fallback-sector thin_regions >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_daily.log 2>&1
+0 8 * * 2-6 cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --research-mode light --daily-mode --day-rotation --tiny-run --max-retries 2 --initial-backoff-seconds 5 --max-backoff-seconds 60 --fallback-sector thin_regions >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_daily_light.log 2>&1
 
-# Example 3: Daily day-of-week sector rotation (preferred to avoid broad every day)
-5 8 * * * cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --daily-mode --day-rotation --max-retries 4 --initial-backoff-seconds 5 --max-backoff-seconds 120 --run-contacted-coverage-check >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_daily_rotation.log 2>&1
+# Example 3: Light daily day-of-week sector rotation (preferred)
+5 8 * * 2-6 cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --research-mode light --daily-mode --day-rotation --tiny-run --max-retries 2 --initial-backoff-seconds 5 --max-backoff-seconds 60 --run-contacted-coverage-check >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_daily_rotation.log 2>&1
+
+# Example 3b: Monday heavy broad run off-peak (weekly/manual lane)
+30 6 * * 1 cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --research-mode heavy --sector broad --tpm-safe --max-retries 4 --initial-backoff-seconds 5 --max-backoff-seconds 120 --fallback-sector thin_regions >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_weekly_broad.log 2>&1
 
 # Example 4: Dry-run daily scheduled smoke test
 15 8 * * * cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --dry-run --sample-response tests/fixtures/research_automation/sample_response.txt --sector broad >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_dry_run.log 2>&1

@@ -17,7 +17,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from openai import OpenAI
 
@@ -26,7 +26,13 @@ from origenlab_email_pipeline.config import load_settings
 DEFAULT_PROMPT_PATH = (
     Path(__file__).resolve().parents[3] / "prompts" / "deep_research_netnew_chile_marketing.txt"
 )
+DEFAULT_LIGHT_PROMPT_PATH = (
+    Path(__file__).resolve().parents[3] / "prompts" / "light_research_netnew_chile_marketing.txt"
+)
 DEFAULT_REPORTS_ACTIVE = Path(__file__).resolve().parents[3] / "reports" / "out" / "active"
+RESEARCH_MODE_CHOICES = ("heavy", "light")
+DEFAULT_HEAVY_MODEL = "o4-mini-deep-research"
+DEFAULT_LIGHT_MODEL = "gpt-4o-mini"
 SECTOR_CHOICES = (
     "broad",
     "water_env",
@@ -94,6 +100,15 @@ class DeepResearchApiError(RuntimeError):
         self.code = code
         self.status = status
         self.retryable = retryable
+
+
+ProgressCallback = Callable[[dict[str, Any]], None]
+
+
+def _emit_progress(cb: ProgressCallback | None, **payload: Any) -> None:
+    if cb is None:
+        return
+    cb(payload)
 
 
 def _utc_now() -> datetime:
@@ -200,6 +215,7 @@ def run_deep_research_response(
     seed_input_files: dict[str, Path],
     use_background: bool,
     poll_seconds: float = 3.0,
+    progress_callback: ProgressCallback | None = None,
 ) -> tuple[str, str, dict[str, str]]:
     missing = [str(p) for p in seed_input_files.values() if not Path(p).is_file()]
     if missing:
@@ -207,6 +223,7 @@ def run_deep_research_response(
 
     uploaded: dict[str, str] = {}
     for key, path in seed_input_files.items():
+        _emit_progress(progress_callback, phase="uploading_files", detail=f"Uploading {key}")
         with Path(path).open("rb") as f:
             up = client.files.create(file=f, purpose="user_data")
         uploaded[key] = str(up.id)
@@ -215,6 +232,7 @@ def run_deep_research_response(
     for fid in uploaded.values():
         content.append({"type": "input_file", "file_id": fid})
 
+    _emit_progress(progress_callback, phase="submitting_request", detail="Submitting Responses API request")
     resp = client.responses.create(
         model=model,
         input=[{"role": "user", "content": content}],
@@ -226,8 +244,12 @@ def run_deep_research_response(
         rid = str(getattr(resp, "id", "") or "")
         if not rid:
             raise RuntimeError("Background response missing response id")
+        last_status = ""
         while True:
             status = str(getattr(resp, "status", "") or "")
+            if status != last_status:
+                _emit_progress(progress_callback, phase=status or "unknown", detail=f"Responses status: {status or 'unknown'}")
+                last_status = status
             if status in {"completed", "failed", "cancelled", "incomplete"}:
                 break
             time.sleep(max(0.5, poll_seconds))
@@ -247,6 +269,30 @@ def run_deep_research_response(
             )
 
     return _response_to_json(resp), _response_output_text(resp), uploaded
+
+
+def run_light_research_response(
+    *,
+    client: OpenAI,
+    model: str,
+    prompt_text: str,
+    seed_input_files: dict[str, Path],
+    use_background: bool,
+    poll_seconds: float = 3.0,
+    progress_callback: ProgressCallback | None = None,
+) -> tuple[str, str, dict[str, str]]:
+    """Light daily path: standard Responses API + web_search (non deep-research model)."""
+    if "deep-research" in str(model).lower():
+        raise ValueError("Light mode must use a non deep-research model.")
+    return run_deep_research_response(
+        client=client,
+        model=model,
+        prompt_text=prompt_text,
+        seed_input_files=seed_input_files,
+        use_background=use_background,
+        poll_seconds=poll_seconds,
+        progress_callback=progress_callback,
+    )
 
 
 def _extract_email_and_institution(path: Path) -> tuple[list[tuple[str, str]], set[str]]:
@@ -347,6 +393,49 @@ def build_compact_seed_artifacts(
             "domain_rows": len(top_domains),
         },
     }
+
+
+def _print_preflight_summary(
+    *,
+    selected_sector: str,
+    prompt_text: str,
+    compact: dict[str, Any],
+    max_candidates: int,
+    max_send_ready: int,
+    max_seed_email_sample: int,
+    max_seed_institutions: int,
+    max_seed_domains: int,
+    max_retries: int,
+) -> None:
+    files = [
+        "seed_known_institutions",
+        "seed_known_domains",
+        "seed_recent_contacted_emails_sample",
+        "seed_exclusion_summary",
+    ]
+    counts = dict(compact.get("counts") or {})
+    print("Preflight size summary (before API submission)")
+    print(f"  sector: {selected_sector}")
+    print(f"  rendered_prompt_chars: {len(prompt_text)}")
+    print("  compact_seed_counts:")
+    print(f"    - dnr_total: {int(counts.get('dnr_total', 0))}")
+    print(f"    - contacted_total: {int(counts.get('contacted_total', 0))}")
+    print(f"    - known_total: {int(counts.get('known_total', 0))}")
+    print(f"    - sample_email_count: {int(counts.get('sample_email_count', 0))}")
+    print(f"    - institution_rows: {int(counts.get('institution_rows', 0))}")
+    print(f"    - domain_rows: {int(counts.get('domain_rows', 0))}")
+    print("  compact_seed_file_sizes_bytes:")
+    for key in files:
+        p = Path(compact[key])
+        size = p.stat().st_size if p.is_file() else 0
+        print(f"    - {key}: {size}")
+    print("  guardrails_in_effect:")
+    print(f"    - max_candidates: {int(max_candidates)}")
+    print(f"    - max_send_ready: {int(max_send_ready)}")
+    print(f"    - max_seed_email_sample: {int(max_seed_email_sample)}")
+    print(f"    - max_seed_institutions: {int(max_seed_institutions)}")
+    print(f"    - max_seed_domains: {int(max_seed_domains)}")
+    print(f"    - max_retries: {int(max_retries)}")
 
 
 def extract_csv_text_from_model_output(text: str) -> str:
@@ -536,6 +625,8 @@ def build_review_summary_markdown(
     output_paths: RunArtifacts,
     prompt_file: Path,
     sector: str,
+    research_mode: str,
+    model_used: str,
     limits: dict[str, Any],
 ) -> str:
     send_rows = _read_csv_dicts(send_ready_csv)
@@ -576,6 +667,8 @@ def build_review_summary_markdown(
     lines = [
         "# Deep Research automation review summary",
         "",
+        f"- Research mode: **{research_mode}**",
+        f"- Model: **{model_used}**",
         f"- Prompt file: `{prompt_file.resolve()}`",
         f"- Sector: **{sector}**",
         f"- Total candidates: **{int(exclusion_summary.get('total_candidates', 0))}**",
@@ -651,7 +744,11 @@ def run_research_automation(
     max_backoff_seconds: float = 120.0,
     fallback_sector: str | None = None,
     daily_mode: bool = False,
+    progress_callback: ProgressCallback | None = None,
+    research_mode: str = "heavy",
 ) -> RunArtifacts:
+    run_started = time.monotonic()
+    _emit_progress(progress_callback, phase="starting", out_dir=str(out_dir), sector=sector, elapsed_seconds=0.0, retry_count=0)
     out_dir.mkdir(parents=True, exist_ok=True)
     artifacts = RunArtifacts(
         out_dir=out_dir,
@@ -678,6 +775,15 @@ def run_research_automation(
         max_seed_email_sample=max_seed_email_sample,
         max_seed_institutions=max_seed_institutions,
         max_seed_domains=max_seed_domains,
+    )
+    _emit_progress(
+        progress_callback,
+        phase="preparing_seed_artifacts",
+        detail="Compact seed artifacts ready",
+        out_dir=str(out_dir),
+        sector=sector,
+        elapsed_seconds=round(time.monotonic() - run_started, 2),
+        retry_count=0,
     )
     prompt_template = load_prompt_template(prompt_file)
     compact_prompt_paths = {
@@ -722,22 +828,62 @@ def run_research_automation(
             last_err: Exception | None = None
             for idx, sector_candidate in enumerate(sector_plan):
                 selected_sector = sector_candidate
+                _emit_progress(
+                    progress_callback,
+                    phase="submitting_request",
+                    detail="Preparing request for selected sector",
+                    out_dir=str(out_dir),
+                    sector=selected_sector,
+                    elapsed_seconds=round(time.monotonic() - run_started, 2),
+                    retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
+                )
                 prompt_text = _render_for_sector(selected_sector)
                 artifacts.prompt_preview_txt.write_text(prompt_text, encoding="utf-8")
+                _print_preflight_summary(
+                    selected_sector=selected_sector,
+                    prompt_text=prompt_text,
+                    compact=compact,
+                    max_candidates=max_candidates,
+                    max_send_ready=max_send_ready,
+                    max_seed_email_sample=max_seed_email_sample,
+                    max_seed_institutions=max_seed_institutions,
+                    max_seed_domains=max_seed_domains,
+                    max_retries=max_retries,
+                )
                 for attempt in range(1, max(1, int(max_retries)) + 1):
                     try:
-                        raw_json, raw_text, uploaded_file_ids = run_deep_research_response(
-                            client=client,
-                            model=model,
-                            prompt_text=prompt_text,
-                            seed_input_files={
-                                "seed_known_institutions": Path(compact["seed_known_institutions"]),
-                                "seed_known_domains": Path(compact["seed_known_domains"]),
-                                "seed_recent_contacted_emails_sample": Path(compact["seed_recent_contacted_emails_sample"]),
-                                "seed_exclusion_summary": Path(compact["seed_exclusion_summary"]),
-                            },
-                            use_background=use_background,
+                        seed_input_files = {
+                            "seed_known_institutions": Path(compact["seed_known_institutions"]),
+                            "seed_known_domains": Path(compact["seed_known_domains"]),
+                            "seed_recent_contacted_emails_sample": Path(compact["seed_recent_contacted_emails_sample"]),
+                            "seed_exclusion_summary": Path(compact["seed_exclusion_summary"]),
+                        }
+                        progress_cb = lambda e: _emit_progress(
+                            progress_callback,
+                            **e,
+                            out_dir=str(out_dir),
+                            sector=selected_sector,
+                            elapsed_seconds=round(time.monotonic() - run_started, 2),
+                            retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
                         )
+                        if str(research_mode).strip().lower() == "light":
+                            raw_json, raw_text, uploaded_file_ids = run_light_research_response(
+                                client=client,
+                                model=model,
+                                prompt_text=prompt_text,
+                                seed_input_files=seed_input_files,
+                                use_background=use_background,
+                                progress_callback=progress_cb,
+                            )
+                        else:
+                            raw_json, raw_text, uploaded_file_ids = run_deep_research_response(
+                                client=client,
+                                model=model,
+                                prompt_text=prompt_text,
+                                seed_input_files=seed_input_files,
+                                use_background=use_background,
+                                progress_callback=progress_cb,
+                            )
                         retry_attempts.append(
                             {
                                 "at": _utc_now().isoformat().replace("+00:00", "Z"),
@@ -768,6 +914,15 @@ def run_research_automation(
                             cap=float(max_backoff_seconds),
                         )
                         retry_attempts[-1]["delay_seconds"] = delay
+                        _emit_progress(
+                            progress_callback,
+                            phase="retrying_after_rate_limit",
+                            detail=f"Retryable API error ({exc.code}); sleeping {delay:.1f}s before retry",
+                            out_dir=str(out_dir),
+                            sector=selected_sector,
+                            elapsed_seconds=round(time.monotonic() - run_started, 2),
+                            retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
+                        )
                         time.sleep(delay)
                     except Exception as exc:
                         last_err = exc
@@ -805,6 +960,14 @@ def run_research_automation(
         artifacts.raw_response_json.write_text(raw_json, encoding="utf-8")
         artifacts.raw_response_txt.write_text(raw_text, encoding="utf-8")
 
+        _emit_progress(
+            progress_callback,
+            phase="parsing_response",
+            out_dir=str(out_dir),
+            sector=selected_sector,
+            elapsed_seconds=round(time.monotonic() - run_started, 2),
+            retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
+        )
         csv_text = extract_csv_text_from_model_output(raw_text)
         fieldnames, rows = parse_csv_rows(csv_text)
         candidate_count = len(rows)
@@ -819,6 +982,14 @@ def run_research_automation(
             truncation_applied = True
         write_csv(artifacts.candidates_raw_csv, fieldnames=fieldnames, rows=rows)
 
+        _emit_progress(
+            progress_callback,
+            phase="local_exclusion",
+            out_dir=str(out_dir),
+            sector=selected_sector,
+            elapsed_seconds=round(time.monotonic() - run_started, 2),
+            retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
+        )
         exclusion = run_local_exclusion(
             candidates_csv=artifacts.candidates_raw_csv,
             seed_paths=seed_paths,
@@ -826,6 +997,14 @@ def run_research_automation(
             out_excluded_csv=artifacts.candidates_excluded_csv,
         )
 
+        _emit_progress(
+            progress_callback,
+            phase="validation",
+            out_dir=str(out_dir),
+            sector=selected_sector,
+            elapsed_seconds=round(time.monotonic() - run_started, 2),
+            retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
+        )
         validate_cp = _run_subprocess(
             [
                 "scripts/qa/validate_campaign_csvs.py",
@@ -851,6 +1030,14 @@ def run_research_automation(
                 "Validation failed for candidates_netnew.csv. See validation_result.json for exact errors."
             )
 
+        _emit_progress(
+            progress_callback,
+            phase="processing",
+            out_dir=str(out_dir),
+            sector=selected_sector,
+            elapsed_seconds=round(time.monotonic() - run_started, 2),
+            retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
+        )
         process_cp = _run_subprocess(
             [
                 "scripts/leads/process_broad_marketing_contacts.py",
@@ -927,6 +1114,8 @@ def run_research_automation(
             output_paths=artifacts,
             prompt_file=prompt_file,
             sector=sector,
+            research_mode=research_mode,
+            model_used=model,
             limits=limits,
         )
         artifacts.review_summary_md.write_text(review_md, encoding="utf-8")
@@ -934,6 +1123,7 @@ def run_research_automation(
         metadata = {
             "generated_at": _utc_now().isoformat().replace("+00:00", "Z"),
             "mode": "dry_run" if dry_run else "live_research_no_send",
+            "research_mode": research_mode,
             "sector": selected_sector,
             "requested_sector": sector,
             "fallback_sector": fallback_sector,
@@ -995,6 +1185,15 @@ def run_research_automation(
             json.dumps({"attempts": retry_attempts}, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        _emit_progress(
+            progress_callback,
+            phase="ready_for_review",
+            detail="Ready for review; no live send performed.",
+            out_dir=str(out_dir),
+            sector=selected_sector,
+            elapsed_seconds=round(time.monotonic() - run_started, 2),
+            retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
+        )
         return artifacts
     except Exception as exc:
         err_payload = {
@@ -1011,6 +1210,7 @@ def run_research_automation(
             "generated_at": _utc_now().isoformat().replace("+00:00", "Z"),
             "status": "failed",
             "mode": "dry_run" if dry_run else "live_research_no_send",
+            "research_mode": research_mode,
             "model": model,
             "sector": selected_sector,
             "requested_sector": sector,
@@ -1053,8 +1253,13 @@ def run_research_automation(
 
 
 __all__ = [
+    "DEFAULT_HEAVY_MODEL",
+    "DEFAULT_LIGHT_MODEL",
+    "DEFAULT_LIGHT_PROMPT_PATH",
     "DEFAULT_PROMPT_PATH",
+    "RESEARCH_MODE_CHOICES",
     "RunArtifacts",
+    "run_light_research_response",
     "SeedPaths",
     "build_review_summary_markdown",
     "default_seed_paths",
