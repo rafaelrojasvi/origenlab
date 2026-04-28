@@ -187,7 +187,10 @@ def main() -> int:
 
     sender_email = args.from_email.strip()
     if not sender_email:
-        raise SystemExit("Missing sender email. Set ORIGENLAB_GMAIL_WORKSPACE_USER or pass --from-email.")
+        if args.dry_run:
+            sender_email = "noreply@example.com"
+        else:
+            raise SystemExit("Missing sender email. Set ORIGENLAB_GMAIL_WORKSPACE_USER or pass --from-email.")
 
     from_name = (args.from_name or "").strip()
     sender_header = f"{from_name} <{sender_email}>" if from_name else sender_email
