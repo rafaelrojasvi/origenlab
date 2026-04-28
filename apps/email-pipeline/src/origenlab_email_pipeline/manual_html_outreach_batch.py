@@ -21,7 +21,7 @@ SHARED_HTML_NAME = "shared_email.html"
 PREVIEW_MD_NAME = "manual_html_outreach_preview.md"
 
 SCHEMA_VERSION = "1"
-DEFAULT_SUBJECT = "Presentación de OrigenLab"
+DEFAULT_SUBJECT = "OrigenLab · Equipos para laboratorio en Chile"
 
 
 def _normalize_header_row(row: dict[str, Any]) -> dict[str, str]:

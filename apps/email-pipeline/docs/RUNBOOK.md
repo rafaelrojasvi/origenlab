@@ -537,7 +537,7 @@ From `apps/email-pipeline/`:
 uv run python scripts/leads/build_manual_html_outreach_batch.py \
   --input reports/out/active/<your_batch>/archive_manual_send_candidates_v3.csv \
   --html /path/to/origenlab_presentacion_comercial_email_combined.html \
-  --subject "Presentación de OrigenLab" \
+  --subject "OrigenLab · Equipos para laboratorio en Chile" \
   --out-dir reports/out/active/<your_batch>_manual_html_package \
   --batch-name my_run_20260416
 ```

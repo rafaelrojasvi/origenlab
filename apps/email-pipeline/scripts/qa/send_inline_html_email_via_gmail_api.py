@@ -111,7 +111,11 @@ def main() -> int:
         default=None,
         help="Optional newline or CSV file with recipients (contact_email/email/to column for CSV).",
     )
-    parser.add_argument("--subject", default="OrigenLab · Presentación de compañía", help="Email subject")
+    parser.add_argument(
+        "--subject",
+        default="OrigenLab · Equipos para laboratorio en Chile",
+        help="Email subject",
+    )
     parser.add_argument(
         "--html",
         required=True,
