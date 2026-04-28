@@ -36,7 +36,7 @@ def test_alembic_upgrade_fails_without_database_url() -> None:
 
     env = {k: v for k, v in os.environ.items() if k not in ("ALEMBIC_DATABASE_URL", "ORIGENLAB_POSTGRES_URL")}
     r = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        ["alembic", "upgrade", "head"],
         cwd=str(REPO),
         capture_output=True,
         text=True,
@@ -60,7 +60,7 @@ def test_alembic_upgrade_head_smoke() -> None:
     import sys
 
     r = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        ["alembic", "upgrade", "head"],
         cwd=str(REPO),
         capture_output=True,
         text=True,

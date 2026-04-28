@@ -767,6 +767,15 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
+        pg_url = resolve_postgres_url(args.postgres_url)
+    except ValueError as exc:
+        sconn.close()
+        result["errors"].append(f"error: {exc}")
+        _write_json(args.json_out, result)
+        print(result["errors"][-1], file=sys.stderr)
+        return 2
+
+    try:
         _require_psycopg()
     except RuntimeError as exc:
         sconn.close()
@@ -776,15 +785,6 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     assert psycopg is not None
-
-    try:
-        pg_url = resolve_postgres_url(args.postgres_url)
-    except ValueError as exc:
-        sconn.close()
-        result["errors"].append(f"error: {exc}")
-        _write_json(args.json_out, result)
-        print(result["errors"][-1], file=sys.stderr)
-        return 2
 
     try:
         pconn = psycopg.connect(pg_url, autocommit=False)

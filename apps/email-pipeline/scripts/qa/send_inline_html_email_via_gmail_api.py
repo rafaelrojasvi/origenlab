@@ -185,12 +185,6 @@ def main() -> int:
     if test_recipient and not _is_valid_email(test_recipient):
         raise SystemExit(f"Invalid --test-recipient email: {test_recipient}")
 
-    client_json = os.environ.get("ORIGENLAB_GMAIL_OAUTH_CLIENT_JSON")
-    if not client_json:
-        raise SystemExit("Missing ORIGENLAB_GMAIL_OAUTH_CLIENT_JSON env var (path to OAuth client JSON).")
-
-    token_json = Path(os.environ.get("ORIGENLAB_GMAIL_TOKEN_JSON", str(_default_token_path())))
-
     sender_email = args.from_email.strip()
     if not sender_email:
         raise SystemExit("Missing sender email. Set ORIGENLAB_GMAIL_WORKSPACE_USER or pass --from-email.")
@@ -203,6 +197,10 @@ def main() -> int:
 
     creds = None
     if not args.dry_run:
+        client_json = os.environ.get("ORIGENLAB_GMAIL_OAUTH_CLIENT_JSON")
+        if not client_json:
+            raise SystemExit("Missing ORIGENLAB_GMAIL_OAUTH_CLIENT_JSON env var (path to OAuth client JSON).")
+        token_json = Path(os.environ.get("ORIGENLAB_GMAIL_TOKEN_JSON", str(_default_token_path())))
         creds = load_credentials_for_gmail_imap(
             client_secrets_json=Path(client_json).expanduser().resolve(),
             token_json=token_json.expanduser().resolve(),
