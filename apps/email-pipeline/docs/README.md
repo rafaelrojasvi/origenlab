@@ -13,6 +13,7 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
 ## Agent-first start
 
 - **[`SCRIPT_MAP.md`](SCRIPT_MAP.md)** — **canonical operator map** (daily outbound lanes, core / ops / lab / break-glass, workspace prep stories)
+- Deep Research automation (review-ready only): [`DEEP_RESEARCH_AUTOMATION_PLAN.md`](DEEP_RESEARCH_AUTOMATION_PLAN.md) and [`../scripts/research/run_deep_research_prospecting.py`](../scripts/research/run_deep_research_prospecting.py)
 - Reproducibility, CRUD policy, refactor strategy, and script groupings: [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) · [`CRUD_SAFETY.md`](CRUD_SAFETY.md) · [`QUALITY_AND_REFACTOR_STRATEGY.md`](QUALITY_AND_REFACTOR_STRATEGY.md) · [`SCRIPT_INVENTORY.md`](SCRIPT_INVENTORY.md) · **Tatiana/lab (not daily outbound):** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) · read-only: [`check_reproducibility.py`](../scripts/qa/check_reproducibility.py) · [`plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) · [`plan_script_consolidation.py`](../scripts/qa/plan_script_consolidation.py) · [`plan_source_quality.py`](../scripts/qa/plan_source_quality.py) (heuristic source/scan, planning only; `tatiana_lab` bucket)
 - [`APP_CONTEXT.md`](APP_CONTEXT.md#m-epapp-start)
 - [`BUSINESS_CONTEXT.md`](BUSINESS_CONTEXT.md#m-epbiz-objective)

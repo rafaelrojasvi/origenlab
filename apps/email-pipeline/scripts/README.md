@@ -38,6 +38,8 @@ From **`apps/email-pipeline/`** (monorepo: `cd apps/email-pipeline`):
 
 **Do-not-repeat master (read-only):** [`qa/export_do_not_repeat_master.py`](qa/export_do_not_repeat_master.py) builds `do_not_repeat_master.{csv,txt}` and `do_not_repeat_summary.json` under `active/current/`. The **CLI** is the entrypoint; merge/summary logic lives in `origenlab_email_pipeline.core.outbound.do_not_repeat_master`. **Read-only** on SQLite; no schema writes.
 
+**Deep Research automation (review-ready only):** [`research/run_deep_research_prospecting.py`](research/run_deep_research_prospecting.py) runs Responses API deep research + local exclusion + strict validation + broad marketing processing into a timestamped `research_automation/` run folder, then stops before any live send/post-send actions.
+
 ## Where to read
 
 | Need | Doc |
@@ -59,6 +61,7 @@ From **`apps/email-pipeline/`** (monorepo: `cd apps/email-pipeline`):
 | `tools/` | Inspect DB, dedupe, env checks |
 | `pipeline/` | Cross-layer runs (e.g. aligned stack) |
 | `leads/` | Lead scoring, matching, audits; operator sidecars such as [`leads/mark_outreach_state.py`](leads/mark_outreach_state.py) (`outreach_contact_state`) |
+| `research/` | Deep Research automation entrypoints (review-ready only; no send) |
 | `qa/` | Operational trust / publication gate ([`publish_gate.py`](qa/publish_gate.py) y scripts relacionados; ver tabla abajo) |
 
 <a id="m-scripts-qa"></a>

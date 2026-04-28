@@ -28,6 +28,7 @@ Values are **representative**; some scripts in a group may differ. When in doubt
 | Representative | mutates DB | --apply | sends email | safe new machine | private DB | Gmail creds |
 |----------------|------------|---------|------------|------------------|------------|-------------|
 | `qa/export_do_not_repeat_master.py` | R mostly | no | no | no (needs DB) | yes | no |
+| `research/run_deep_research_prospecting.py` | R + files | no | no | yes* | no | live mode needs OpenAI key |
 | `qa/validate_campaign_csvs.py` | no | no | no | **yes** | no | no |
 | `leads/process_broad_marketing_contacts.py` | R | no | no | no | yes | no |
 | `leads/run_current_campaign_pipeline.py` | if apply | **yes** (import stage) | no | no | yes | no |
@@ -38,7 +39,7 @@ Values are **representative**; some scripts in a group may differ. When in doubt
 | `qa/plan_source_quality.py` | no | no | no | **yes** | no | no |
 | `tools/archive_reports_out_generated.py` | no | **yes** (to move) | no | **yes** | no | no |
 
-*\*Ingest is safe mechanically on a new machine if DB path is writable, but you still need creds to use Gmail. **`plan_reports_out_cleanup` / `plan_script_consolidation`** are read-only planners (the latter scans `scripts/`; optional JSON elsewhere).*
+*\*Ingest is safe mechanically on a new machine if DB path is writable, but you still need creds to use Gmail. `run_deep_research_prospecting.py` supports `--dry-run --sample-response` with no API call and stops before send. **`plan_reports_out_cleanup` / `plan_script_consolidation`** are read-only planners (the latter scans `scripts/`; optional JSON elsewhere).*
 
 ---
 

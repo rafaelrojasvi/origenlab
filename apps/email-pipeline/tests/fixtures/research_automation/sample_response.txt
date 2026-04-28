@@ -1,0 +1,9 @@
+Deep research completed.
+
+```csv
+institution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal
+Centro de Investigación de Aguas,Metropolitana,Santiago,centro,agua.lab@example.cl,lab,https://example.cl/lab,high,Water quality analytical lab
+Universidad Técnica del Norte,Valparaíso,Valparaíso,universidad,contacto.utn@example.cl,general,https://example.cl/contacto,medium,Technical university lab network
+Servicio Técnico Ambiental,Biobío,Concepción,instituto,oficinadepartes@ambiente.example.cl,oficina_partes,https://example.cl/oficina,high,Regional environmental technical office
+```
+

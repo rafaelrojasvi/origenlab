@@ -1,0 +1,26 @@
+You are running proactive prospect discovery for OrigenLab in Chile.
+
+Goal:
+- Find up to {limit_hint} net-new institutional contacts for sector "{sector}".
+- Prioritize laboratory, analytical, QA/QC, technical, and research relevance.
+- Return ONLY a CSV block in markdown fenced format (```csv ... ```).
+
+Required CSV columns (exact order):
+institution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal
+
+Rules:
+- Focus on institutional/public/professional entities in Chile with plausible lab/technical fit.
+- Use web research with source pages for each row.
+- Prefer specific departmental or lab contacts over generic admissions/secretariat.
+- confidence must be one of: high, medium, low.
+- Ensure contact_email is syntactically valid.
+- Keep fit_signal concise (<200 chars), factual, and commercially useful.
+- Do not include commentary outside the CSV block.
+
+Seed files included in this request:
+- do_not_repeat_master: {dnr_path}
+- outreach_contacted_all: {contacted_path}
+- all_known_marketing_contacts_dedup: {known_marketing_path}
+
+Use these seeds as exclusion context during research, but local exclusion will still be enforced after this step.
+
