@@ -30,6 +30,7 @@ def test_initial_migration_defines_schemas_and_ops_ddl() -> None:
 
 def test_alembic_upgrade_fails_without_database_url() -> None:
     """Migration commands must not fall back to SQLite or a default localhost URL."""
+    pytest.importorskip("alembic.config", reason="Alembic runtime not installed in this environment.")
     import os
     import subprocess
     import sys
