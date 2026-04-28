@@ -59,6 +59,23 @@ def test_extract_csv_with_prose_and_bom() -> None:
     assert len(rows) == 1
 
 
+def test_extract_csv_with_spaced_quoted_fields_normalizes_values() -> None:
+    txt = (
+        "```csv\n"
+        "institution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal\n"
+        "\"Hospital X\", \"Atacama\", \"Copiapó\", \"Hospital\", \"admin@redsalud.gob.cl\", \"Procurement\", \"https://redsalud.gob.cl\", \"high\", \"Need for lab equipment\"\n"
+        "```"
+    )
+    csv_text = ra.extract_csv_text_from_model_output(txt)
+    fields, rows = ra.parse_csv_rows(csv_text)
+    assert fields == ra.EXPECTED_COLUMNS
+    assert len(rows) == 1
+    assert rows[0]["region"] == "Atacama"
+    assert rows[0]["contact_email"] == "admin@redsalud.gob.cl"
+    assert rows[0]["source_url"] == "https://redsalud.gob.cl"
+    assert rows[0]["confidence"] == "high"
+
+
 def test_malformed_schema_failure() -> None:
     bad = (
         "institution_name,region,city,type,contact_email,contact_label,source_url,confidence\n"
@@ -119,7 +136,16 @@ def test_review_summary_generation(tmp_path: Path) -> None:
     _write_csv(blocked, ["contact_email"], [["x@y.cl"]])
     summary_json = tmp_path / "summary.json"
     summary_json.write_text(
-        json.dumps({"counts": {"blocked": 1, "needs_manual_review": 0, "send_ready_marketing": 2}}),
+        json.dumps(
+            {
+                "counts": {"blocked": 1, "needs_manual_review": 0, "send_ready_marketing": 2},
+                "quality_review_reason_counts": {
+                    "domain_mismatch": 1,
+                    "weak_source_match": 2,
+                    "generic_contact_weak_evidence": 1,
+                },
+            }
+        ),
         encoding="utf-8",
     )
     artifacts = ra.RunArtifacts(
@@ -162,6 +188,8 @@ def test_review_summary_generation(tmp_path: Path) -> None:
     assert "Research mode" in text
     assert "Model" in text
     assert "Prompt file" in text
+    assert "Quality hardening signals" in text
+    assert "Suspicious domain mismatches" in text
     assert "Truncation applied" in text
 
 

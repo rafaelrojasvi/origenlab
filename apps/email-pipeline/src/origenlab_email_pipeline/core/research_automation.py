@@ -475,12 +475,12 @@ def extract_csv_text_from_model_output(text: str) -> str:
 
 def parse_csv_rows(csv_text: str) -> tuple[list[str], list[dict[str, str]]]:
     clean = str(csv_text or "").lstrip("\ufeff")
-    reader = csv.DictReader(io.StringIO(clean))
+    reader = csv.DictReader(io.StringIO(clean), skipinitialspace=True)
     fields = [str(f or "") for f in (reader.fieldnames or [])]
     if not fields:
         raise ValueError("Extracted CSV has no header row.")
     normalized = normalize_and_validate_headers(fields)
-    rows = [{k: str(v or "") for k, v in row.items()} for row in reader]
+    rows = [{k: _normalize_cell(v) for k, v in row.items()} for row in reader]
     return normalized, rows
 
 
@@ -503,6 +503,24 @@ def normalize_and_validate_headers(headers: list[str]) -> list[str]:
             "Extracted CSV has unsupported columns after normalization: " + ", ".join(extra)
         )
     return EXPECTED_COLUMNS[:]
+
+
+def _normalize_cell(value: Any) -> str:
+    s = str(value or "").strip()
+    # Responses in light mode sometimes include CSV rows with `, "value"` style
+    # spacing and nested quotes; normalize those wrappers before downstream validation.
+    for _ in range(3):
+        if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+            s = s[1:-1].strip()
+        else:
+            break
+    s = s.replace('""', '"').strip()
+    # If a single unmatched quote survives at one edge, drop it conservatively.
+    if s.startswith('"') and not s.endswith('"'):
+        s = s[1:].strip()
+    if s.endswith('"') and not s.startswith('"'):
+        s = s[:-1].strip()
+    return s
 
 
 def write_csv(path: Path, *, fieldnames: list[str], rows: Iterable[dict[str, str]]) -> None:
@@ -661,6 +679,7 @@ def build_review_summary_markdown(
         return [k for k, _ in sorted(d.items(), key=lambda kv: kv[1], reverse=True)[:n]]
 
     counts = summary_json.get("counts", {})
+    quality_counts = summary_json.get("quality_review_reason_counts", {}) or {}
     blocked = int(counts.get("blocked", len(blocked_rows)))
     review = int(counts.get("needs_manual_review", 0))
     send_ready = int(counts.get("send_ready_marketing", len(send_rows)))
@@ -699,6 +718,12 @@ def build_review_summary_markdown(
         lines.append("- (none)")
     lines.extend(
         [
+            "",
+            "## Quality hardening signals",
+            f"- Suspicious domain mismatches: **{int(quality_counts.get('domain_mismatch', 0))}**",
+            f"- Generic-contact weak evidence: **{int(quality_counts.get('generic_contact_weak_evidence', 0))}**",
+            f"- Weak-source matches: **{int(quality_counts.get('weak_source_match', 0))}**",
+            f"- Forced manual review for quality reasons: **{sum(int(v) for v in quality_counts.values())}**",
             "",
             "## Flagged generic/public-sector contacts",
             *(f"- {em}" for em in sorted(set(generic_flags))[:30]),
