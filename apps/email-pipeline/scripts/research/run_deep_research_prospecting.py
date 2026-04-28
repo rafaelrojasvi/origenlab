@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -16,8 +17,10 @@ if str(_ROOT / "src") not in sys.path:
 
 from origenlab_email_pipeline.core.research_automation import (
     DEFAULT_PROMPT_PATH,
+    SECTOR_CHOICES,
     default_seed_paths,
     resolve_out_dir,
+    resolve_sector_for_day_rotation,
     run_research_automation,
 )
 
@@ -44,9 +47,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit-hint", type=int, default=40, help="Soft candidate count hint for the model.")
     ap.add_argument(
         "--sector",
-        choices=("broad", "food_qc", "water_env", "thin_regions", "custom"),
+        choices=SECTOR_CHOICES,
         default="broad",
         help="Research lens preset used in the prompt.",
+    )
+    ap.add_argument(
+        "--day-rotation",
+        action="store_true",
+        help="Override --sector with a day-of-week rotation (Mon..Sun).",
     )
     ap.add_argument(
         "--dry-run",
@@ -82,6 +90,35 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Disable Responses API background mode and wait on a single request.",
     )
+    ap.add_argument(
+        "--max-candidates",
+        type=int,
+        default=200,
+        help="Maximum extracted candidate rows allowed before truncation/fail (default: 200).",
+    )
+    ap.add_argument(
+        "--max-send-ready",
+        type=int,
+        default=50,
+        help="Review warning threshold for send_ready rows after processing (default: 50).",
+    )
+    ap.add_argument(
+        "--fail-on-over-limit",
+        action="store_true",
+        help="Fail instead of truncating when extracted candidates exceed --max-candidates.",
+    )
+    ap.add_argument(
+        "--run-contacted-coverage-check",
+        action="store_true",
+        help=(
+            "Run read-only scripts/qa/validate_contacted_csv_coverage.py and store JSON report in the run folder."
+        ),
+    )
+    ap.add_argument(
+        "--strict-contacted-coverage",
+        action="store_true",
+        help="Only meaningful with --run-contacted-coverage-check; fail run on validator non-zero exit.",
+    )
     args = ap.parse_args(argv)
 
     seeds = default_seed_paths()
@@ -105,17 +142,25 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     out_dir = resolve_out_dir(out_dir=args.out_dir)
+    selected_sector = str(args.sector)
+    if args.day_rotation:
+        selected_sector = resolve_sector_for_day_rotation(weekday=datetime.now().weekday())
     artifacts = run_research_automation(
         model=str(args.model),
         prompt_file=Path(args.prompt_file),
         out_dir=out_dir,
-        sector=str(args.sector),
+        sector=selected_sector,
         limit_hint=int(args.limit_hint) if args.limit_hint and args.limit_hint > 0 else None,
         dry_run=bool(args.dry_run),
         sample_response=Path(args.sample_response) if args.sample_response else None,
         seed_paths=seeds,
         use_background=not bool(args.no_background),
         app_root=_ROOT,
+        max_candidates=max(1, int(args.max_candidates)),
+        max_send_ready=max(1, int(args.max_send_ready)),
+        fail_on_over_limit=bool(args.fail_on_over_limit),
+        run_contacted_coverage_check=bool(args.run_contacted_coverage_check),
+        strict_contacted_coverage=bool(args.strict_contacted_coverage),
     )
     print(f"Wrote: {artifacts.out_dir}")
     print(f"Review summary: {artifacts.review_summary_md}")

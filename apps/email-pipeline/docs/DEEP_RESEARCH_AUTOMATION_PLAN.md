@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-28
+Last reviewed: 2026-04-29
 
 ## Scope
 
@@ -20,6 +20,29 @@ This plan defines a recurring automation that creates **review-ready** prospecti
 8. Process net-new candidates with `process_broad_marketing_contacts.py` (read-only gate context).
 9. Generate a compact markdown `review_summary.md`.
 10. Stop with: `Ready for review; no live send performed.`
+
+## Guardrails (Stage 1.1)
+
+New CLI safety limits:
+
+- `--max-candidates` (default `200`)
+- `--max-send-ready` (default `50`)
+- `--fail-on-over-limit`
+
+Behavior:
+
+- If extracted candidates exceed `--max-candidates`:
+  - default: truncate to max and record warning/flags in summary + metadata
+  - with `--fail-on-over-limit`: fail fast and stop run
+- If send-ready rows exceed `--max-send-ready`:
+  - run still stops before send (always)
+  - summary + metadata mark over-limit clearly for reviewer action
+
+CSV hardening:
+
+- Handles markdown ` ```csv ` fences, leading/trailing prose, and UTF-8 BOM.
+- Normalizes harmless header variants.
+- Requires expected marketing schema; invalid schema fails clearly.
 
 ## What is NOT automated
 
@@ -46,8 +69,27 @@ CLI supports overrides with:
 
 ## Recommended schedule
 
-- Weekly Monday morning in Chile business hours (for example 08:00 America/Santiago).
-- Run early enough to allow human review and curation before any manual send wave.
+- Daily morning run in Chile business hours (for example 08:00 America/Santiago).
+- Keep this review-first: generate prospects daily, but send only after human approval.
+- Run early enough to allow same-day review and curation.
+
+Recommended weekday sector rotation (scheduler-driven):
+
+- Monday: `broad`
+- Tuesday: `water_env`
+- Wednesday: `universities_regional`
+- Thursday: `hospitals_clinical`
+- Friday: `industry_qc`
+- Saturday: `thin_regions`
+- Sunday: `custom` (or dry-run smoke check)
+
+Use `--day-rotation` for simple day-of-week automatic sector mapping.
+
+## Canonical exclusion source
+
+- Treat `reports/out/active/current/do_not_repeat_master.csv` as the canonical outbound do-not-repeat seed.
+- Treat `outreach_contacted_all.csv` and `all_known_marketing_contacts_dedup.csv` as auxiliary artifacts for overlap visibility and additional exclusion context.
+- Use read-only `scripts/qa/validate_contacted_csv_coverage.py` to surface drift/coverage mismatches between these CSVs and Sent truth.
 
 ## Outputs produced
 
@@ -93,7 +135,9 @@ From `apps/email-pipeline`:
 uv run python scripts/research/run_deep_research_prospecting.py \
   --dry-run \
   --sample-response tests/fixtures/research_automation/sample_response.txt \
-  --sector broad
+  --sector broad \
+  --max-candidates 50 \
+  --max-send-ready 20
 ```
 
 Then inspect:
@@ -101,6 +145,11 @@ Then inspect:
 - `review_summary.md`
 - `candidates_excluded.csv`
 - `process_workspace/send_ready_marketing.csv`
+
+Optional read-only coverage drift check during run:
+
+- `--run-contacted-coverage-check`
+- add `--strict-contacted-coverage` only if you want the run to fail on validator non-zero status
 
 ## Local scheduling handoff
 

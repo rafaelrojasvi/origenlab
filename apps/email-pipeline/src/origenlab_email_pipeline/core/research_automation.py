@@ -26,6 +26,40 @@ DEFAULT_PROMPT_PATH = (
     Path(__file__).resolve().parents[3] / "prompts" / "deep_research_netnew_chile_marketing.txt"
 )
 DEFAULT_REPORTS_ACTIVE = Path(__file__).resolve().parents[3] / "reports" / "out" / "active"
+SECTOR_CHOICES = (
+    "broad",
+    "water_env",
+    "universities_regional",
+    "hospitals_clinical",
+    "industry_qc",
+    "thin_regions",
+    "custom",
+)
+EXPECTED_COLUMNS = [
+    "institution_name",
+    "region",
+    "city",
+    "type",
+    "contact_email",
+    "contact_label",
+    "source_url",
+    "confidence",
+    "fit_signal",
+]
+_HEADER_ALIASES = {
+    "institution": "institution_name",
+    "institutionname": "institution_name",
+    "institucion": "institution_name",
+    "contacto_email": "contact_email",
+    "email": "contact_email",
+    "correo": "contact_email",
+    "label": "contact_label",
+    "contact": "contact_label",
+    "source": "source_url",
+    "url": "source_url",
+    "fit": "fit_signal",
+    "fit_notes": "fit_signal",
+}
 
 
 @dataclass(frozen=True)
@@ -166,7 +200,7 @@ def run_deep_research_response(
 
 
 def extract_csv_text_from_model_output(text: str) -> str:
-    s = str(text or "")
+    s = str(text or "").lstrip("\ufeff")
     fenced = re.search(r"```csv\s*(.*?)```", s, flags=re.IGNORECASE | re.DOTALL)
     if fenced:
         body = fenced.group(1).strip()
@@ -201,12 +235,35 @@ def extract_csv_text_from_model_output(text: str) -> str:
 
 
 def parse_csv_rows(csv_text: str) -> tuple[list[str], list[dict[str, str]]]:
-    reader = csv.DictReader(io.StringIO(csv_text))
-    fields = [str(f) for f in (reader.fieldnames or [])]
+    clean = str(csv_text or "").lstrip("\ufeff")
+    reader = csv.DictReader(io.StringIO(clean))
+    fields = [str(f or "") for f in (reader.fieldnames or [])]
     if not fields:
         raise ValueError("Extracted CSV has no header row.")
+    normalized = normalize_and_validate_headers(fields)
     rows = [{k: str(v or "") for k, v in row.items()} for row in reader]
-    return fields, rows
+    return normalized, rows
+
+
+def normalize_and_validate_headers(headers: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in headers:
+        key = str(raw or "").strip().lower().replace("-", "_").replace(" ", "_")
+        key = _HEADER_ALIASES.get(key, key)
+        if key in seen:
+            raise ValueError(f"Duplicate normalized header detected: {key}")
+        seen.add(key)
+        out.append(key)
+    missing = [c for c in EXPECTED_COLUMNS if c not in out]
+    extra = [c for c in out if c not in EXPECTED_COLUMNS]
+    if missing:
+        raise ValueError(f"Extracted CSV missing required columns: {', '.join(missing)}")
+    if extra:
+        raise ValueError(
+            "Extracted CSV has unsupported columns after normalization: " + ", ".join(extra)
+        )
+    return EXPECTED_COLUMNS[:]
 
 
 def write_csv(path: Path, *, fieldnames: list[str], rows: Iterable[dict[str, str]]) -> None:
@@ -292,6 +349,20 @@ def _run_subprocess(args: list[str], *, cwd: Path) -> subprocess.CompletedProces
     )
 
 
+def resolve_sector_for_day_rotation(*, weekday: int) -> str:
+    """Map weekday (0=Mon..6=Sun) to a recommended daily sector."""
+    mapping = {
+        0: "broad",
+        1: "water_env",
+        2: "universities_regional",
+        3: "hospitals_clinical",
+        4: "industry_qc",
+        5: "thin_regions",
+        6: "custom",
+    }
+    return mapping[int(weekday) % 7]
+
+
 def _read_csv_dicts(path: Path) -> list[dict[str, str]]:
     if not path.is_file():
         return []
@@ -307,6 +378,9 @@ def build_review_summary_markdown(
     summary_json_path: Path,
     netnew_csv: Path,
     output_paths: RunArtifacts,
+    prompt_file: Path,
+    sector: str,
+    limits: dict[str, Any],
 ) -> str:
     send_rows = _read_csv_dicts(send_ready_csv)
     blocked_rows = _read_csv_dicts(blocked_csv)
@@ -318,6 +392,7 @@ def build_review_summary_markdown(
     domain_counts: dict[str, int] = {}
     inst_counts: dict[str, int] = {}
     generic_flags: list[str] = []
+    repeated_institutions: list[str] = []
     for row in send_rows:
         email = str(row.get("contact_email", "")).strip().lower()
         dom = email.split("@", 1)[1] if "@" in email else ""
@@ -333,8 +408,9 @@ def build_review_summary_markdown(
             "gobierno",
         }:
             generic_flags.append(email)
+    repeated_institutions = [k for k, v in inst_counts.items() if v > 1]
 
-    def _top_n(d: dict[str, int], n: int = 8) -> list[str]:
+    def _top_n(d: dict[str, int], n: int = 10) -> list[str]:
         return [k for k, _ in sorted(d.items(), key=lambda kv: kv[1], reverse=True)[:n]]
 
     counts = summary_json.get("counts", {})
@@ -344,12 +420,20 @@ def build_review_summary_markdown(
     lines = [
         "# Deep Research automation review summary",
         "",
+        f"- Prompt file: `{prompt_file.resolve()}`",
+        f"- Sector: **{sector}**",
         f"- Total candidates: **{int(exclusion_summary.get('total_candidates', 0))}**",
         f"- Excluded locally: **{int(exclusion_summary.get('excluded_count', 0))}**",
         f"- Net-new candidates: **{int(exclusion_summary.get('netnew_count', len(net_rows)))}**",
         f"- Send-ready count: **{send_ready}**",
         f"- Blocked count: **{blocked}**",
         f"- Review count: **{review}**",
+        f"- Limits triggered: **{bool(limits.get('limits_triggered', False))}**",
+        f"- Truncation applied: **{bool(limits.get('truncation_applied', False))}**",
+        f"- Candidate limit: **{int(limits.get('max_candidates', 0))}**",
+        f"- Send-ready limit: **{int(limits.get('max_send_ready', 0))}**",
+        f"- Send-ready over limit: **{bool(limits.get('send_ready_over_limit', False))}**",
+        f"- Generic label count: **{len(generic_flags)}**",
         "",
         "## Top institutions",
     ]
@@ -358,6 +442,12 @@ def build_review_summary_markdown(
     lines.extend(["", "## Top domains"])
     for dom in _top_n(domain_counts):
         lines.append(f"- {dom}")
+    lines.extend(["", "## Repeated institutions"])
+    if repeated_institutions:
+        for inst in sorted(repeated_institutions)[:10]:
+            lines.append(f"- {inst}")
+    else:
+        lines.append("- (none)")
     lines.extend(
         [
             "",
@@ -391,6 +481,11 @@ def run_research_automation(
     seed_paths: SeedPaths,
     use_background: bool,
     app_root: Path,
+    max_candidates: int,
+    max_send_ready: int,
+    fail_on_over_limit: bool,
+    run_contacted_coverage_check: bool,
+    strict_contacted_coverage: bool,
 ) -> RunArtifacts:
     out_dir.mkdir(parents=True, exist_ok=True)
     artifacts = RunArtifacts(
@@ -406,6 +501,7 @@ def run_research_automation(
         process_workspace=out_dir / "process_workspace",
     )
     artifacts.process_workspace.mkdir(parents=True, exist_ok=True)
+    coverage_report_json = out_dir / "contacted_coverage_report.json"
 
     prompt_text = render_prompt(
         template_text=load_prompt_template(prompt_file),
@@ -441,6 +537,16 @@ def run_research_automation(
 
     csv_text = extract_csv_text_from_model_output(raw_text)
     fieldnames, rows = parse_csv_rows(csv_text)
+    candidate_count = len(rows)
+    truncation_applied = False
+    candidate_limit_triggered = candidate_count > max_candidates
+    if candidate_limit_triggered and fail_on_over_limit:
+        raise RuntimeError(
+            f"Extracted candidate rows ({candidate_count}) exceed --max-candidates={max_candidates}."
+        )
+    if candidate_limit_triggered:
+        rows = rows[:max_candidates]
+        truncation_applied = True
     write_csv(artifacts.candidates_raw_csv, fieldnames=fieldnames, rows=rows)
 
     exclusion = run_local_exclusion(
@@ -493,9 +599,55 @@ def run_research_automation(
             f"stdout={process_cp.stdout}\nstderr={process_cp.stderr}"
         )
 
+    coverage_payload: dict[str, Any] = {
+        "enabled": bool(run_contacted_coverage_check),
+        "strict": bool(strict_contacted_coverage),
+        "returncode": None,
+        "json_report": str(coverage_report_json),
+    }
+    if run_contacted_coverage_check:
+        coverage_cp = _run_subprocess(
+            [
+                "scripts/qa/validate_contacted_csv_coverage.py",
+                "--json-out",
+                str(coverage_report_json),
+                *(["--strict"] if strict_contacted_coverage else []),
+            ],
+            cwd=app_root,
+        )
+        coverage_payload["returncode"] = int(coverage_cp.returncode)
+        coverage_payload["stdout"] = coverage_cp.stdout
+        coverage_payload["stderr"] = coverage_cp.stderr
+        if strict_contacted_coverage and coverage_cp.returncode != 0:
+            raise RuntimeError(
+                "Contacted coverage validation failed in strict mode. "
+                f"stdout={coverage_cp.stdout}\nstderr={coverage_cp.stderr}"
+            )
+
     send_ready = artifacts.process_workspace / "send_ready_marketing.csv"
     blocked = artifacts.process_workspace / "marketing_blocked_already_known.csv"
     summary = artifacts.process_workspace / "marketing_contacts_summary.json"
+    summary_json: dict[str, Any] = {}
+    if summary.is_file():
+        summary_json = json.loads(summary.read_text(encoding="utf-8"))
+    counts = summary_json.get("counts", {})
+    send_ready_count = int(counts.get("send_ready_marketing", len(_read_csv_dicts(send_ready))))
+    blocked_count = int(counts.get("blocked", len(_read_csv_dicts(blocked))))
+    review_count = int(
+        counts.get(
+            "needs_manual_review",
+            len(_read_csv_dicts(artifacts.process_workspace / "marketing_needs_manual_review.csv")),
+        )
+    )
+    send_ready_over_limit = send_ready_count > max_send_ready
+    limits = {
+        "max_candidates": max_candidates,
+        "max_send_ready": max_send_ready,
+        "truncation_applied": truncation_applied,
+        "candidate_limit_triggered": candidate_limit_triggered,
+        "send_ready_over_limit": send_ready_over_limit,
+        "limits_triggered": bool(truncation_applied or send_ready_over_limit),
+    }
     review_md = build_review_summary_markdown(
         exclusion_summary=exclusion,
         send_ready_csv=send_ready,
@@ -503,6 +655,9 @@ def run_research_automation(
         summary_json_path=summary,
         netnew_csv=artifacts.candidates_netnew_csv,
         output_paths=artifacts,
+        prompt_file=prompt_file,
+        sector=sector,
+        limits=limits,
     )
     artifacts.review_summary_md.write_text(review_md, encoding="utf-8")
 
@@ -514,9 +669,24 @@ def run_research_automation(
         "model": model,
         "prompt_file": str(prompt_file.resolve()),
         "seed_paths": {k: str(v) for k, v in asdict(seed_paths).items()},
+        "uploaded_file_paths": {k: str(v) for k, v in asdict(seed_paths).items()},
         "uploaded_file_ids": uploaded_file_ids,
+        "output_directory": str(out_dir.resolve()),
         "artifacts": {k: str(v) for k, v in asdict(artifacts).items()},
         "exclusion_summary": exclusion,
+        "candidate_count": len(rows),
+        "excluded_count": int(exclusion.get("excluded_count", 0)),
+        "send_ready_count": send_ready_count,
+        "blocked_count": blocked_count,
+        "review_count": review_count,
+        "max_candidates": max_candidates,
+        "max_send_ready": max_send_ready,
+        "truncation_applied": truncation_applied,
+        "dry_run": bool(dry_run),
+        "background_mode": bool(use_background),
+        "candidate_limit_triggered": candidate_limit_triggered,
+        "send_ready_over_limit": send_ready_over_limit,
+        "contacted_coverage_check": coverage_payload,
         "stop_message": "Ready for review; no live send performed.",
         "safety": {
             "gmail_send_called": False,
@@ -541,10 +711,13 @@ __all__ = [
     "default_seed_paths",
     "extract_csv_text_from_model_output",
     "load_prompt_template",
+    "normalize_and_validate_headers",
     "parse_csv_rows",
     "render_prompt",
     "resolve_out_dir",
+    "resolve_sector_for_day_rotation",
     "run_local_exclusion",
     "run_research_automation",
+    "SECTOR_CHOICES",
     "write_csv",
 ]

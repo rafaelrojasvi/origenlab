@@ -7,14 +7,20 @@
 # - Verify host timezone before using these examples.
 
 # Example 1: Host already on America/Santiago timezone
-# Run every Monday at 08:00 local host time
-0 8 * * 1 cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --sector broad >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron.log 2>&1
+# Run DAILY at 08:00 local host time
+0 8 * * * cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --sector broad >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_daily.log 2>&1
 
 # Example 2: Force TZ for the command if cron host supports per-line TZ
 # (preferred when host timezone differs from Chile time)
 TZ=America/Santiago
-0 8 * * 1 cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --sector broad >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron.log 2>&1
+0 8 * * * cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --sector broad >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_daily.log 2>&1
 
-# Example 3: Dry-run scheduled smoke test
-15 8 * * 1 cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --dry-run --sample-response tests/fixtures/research_automation/sample_response.txt --sector broad >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_dry_run.log 2>&1
+# Example 3: Daily day-of-week sector rotation (built into CLI)
+5 8 * * * cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --day-rotation --run-contacted-coverage-check >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_daily_rotation.log 2>&1
+
+# Example 4: Dry-run daily scheduled smoke test
+15 8 * * * cd /home/rafael/dev/freelance/origenlab/apps/email-pipeline && uv run python scripts/research/run_deep_research_prospecting.py --dry-run --sample-response tests/fixtures/research_automation/sample_response.txt --sector broad >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/research_automation/cron_dry_run.log 2>&1
+
+# NOTE:
+# If host timezone is not America/Santiago, convert the schedule manually or use cron/systemd TZ controls.
 
