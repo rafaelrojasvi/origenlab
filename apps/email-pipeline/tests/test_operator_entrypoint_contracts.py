@@ -17,6 +17,7 @@ _SRC = REPO / "src"
 # Daily / core / planner entrypoints: must respond to --help and exit 0 (argparse or equivalent).
 _HELP_ENTRYPOINTS: tuple[str, ...] = (
     "scripts/qa/export_outreach_contacted_all.py",
+    "scripts/qa/refresh_outbound_safety_memory.py",
     "scripts/qa/export_do_not_repeat_master.py",
     "scripts/qa/validate_campaign_csvs.py",
     "scripts/leads/process_broad_marketing_contacts.py",

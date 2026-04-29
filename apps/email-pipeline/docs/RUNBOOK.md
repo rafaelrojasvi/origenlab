@@ -61,6 +61,15 @@ uv run python scripts/qa/check_reports_out_active_hygiene.py
 uv run python scripts/qa/check_outbound_readiness.py
 ```
 
+One-command wrapper (same order, stops on first hard failure):
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/qa/refresh_outbound_safety_memory.py
+# Optional strict mode:
+# uv run python scripts/qa/refresh_outbound_safety_memory.py --fail-on-ready-with-warnings
+```
+
 ### Debug / audit scripts (KEEP_AUDIT, KEEP_DEBUG)
 
 Read-only or hygiene tools: **`export_contacted_lead_overlap_audit.py`**, **`export_gate_audit_csv.py`**, **`export_outreach_volume_rollup.py`**, **`export_supplier_domain_false_positive_audit.py`**, **`check_outbound_readiness.py`**, **`approve_reviewed_deepsearch_rows.py`**, **`backfill_contacted_from_gmail_sent.py`**. Supporting / CI-style: **`print_outbound_run_summary.py`**, **`export_candidate_audit.py`**, **`publish_gate.py`**, etc. Full table: [`SCRIPT_MAP.md`](SCRIPT_MAP.md#debug--audit-scripts-keepaudit--keepdebug).
