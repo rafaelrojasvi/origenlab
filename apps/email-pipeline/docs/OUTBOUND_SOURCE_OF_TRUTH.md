@@ -157,6 +157,7 @@ Operator rule of thumb:
 - Use `lead_master` queue for curated net-new prospecting.
 - Never bypass shared gate + human review before sending.
 - **Canonical CLIs** (`build_archive_send_batch.py`, `export_next_marketing_recipients.py`) produce the **record of what was run** for a batch; **Streamlit** is for ongoing **review and read/write sidecars**, not a substitute for those artifacts.
+- Use `reports/out/active/current/` as the only live send-review workspace; treat `reports/out/archive/` as historical evidence only.
 - When mailbox or DB freshness is uncertain, run **`check_outbound_readiness.py`** before generating a batch.
 - **After sending**, refresh **Sent** ingest for `contacto@origenlab.cl` and update **`outreach_contact_state`** / **suppression** so the next export does not re-surface the same contacts.
 

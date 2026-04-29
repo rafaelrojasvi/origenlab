@@ -18,7 +18,7 @@ Last reviewed: 2026-04-24
 
 **Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints (including the reports-out archive tool), asserts top-of-file warnings on the break-glass set (aligned to tables below), and checks the four root compatibility wrappers. Regressions require updating that test for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
 
-**Canonical campaign workspace:** fresh inputs and outputs for the two outbound lanes belong in **`reports/out/active/current/`**. Other paths under `reports/out/active/` (and most of `reports/out/archive/`) are **evidence, history, or ad-hoc exports** — not the default place to pick up “today’s” CSV for DeepSearch or send lists. (Stage 6C1) Volume marketing **processing** helpers for ``process_broad_marketing_contacts`` live in ``core.outbound.broad_marketing_contacts``; the **script** remains the supported entrypoint (CSV contracts unchanged). (Stage 6C2) **Do-not-repeat master** merge/summary formatting for ``export_do_not_repeat_master.py`` lives in ``core.outbound.do_not_repeat_master``; the **script** remains the daily entrypoint; **read-only** on SQLite; output filenames and JSON/CSV contract unchanged.
+**Canonical campaign workspace:** fresh inputs and outputs for the two outbound lanes belong in **`reports/out/active/current/`**. Other paths under `reports/out/active/` (and most of `reports/out/archive/`) are **evidence, history, or ad-hoc exports** — not the default place to pick up “today’s” CSV for DeepSearch or send lists. Keep only intentional root reference files in `active/` (`outreach_contacted_all.csv`, `all_known_marketing_contacts_dedup.csv`) because some scripts use them as default auxiliary inputs. (Stage 6C1) Volume marketing **processing** helpers for ``process_broad_marketing_contacts`` live in ``core.outbound.broad_marketing_contacts``; the **script** remains the supported entrypoint (CSV contracts unchanged). (Stage 6C2) **Do-not-repeat master** merge/summary formatting for ``export_do_not_repeat_master.py`` lives in ``core.outbound.do_not_repeat_master``; the **script** remains the daily entrypoint; **read-only** on SQLite; output filenames and JSON/CSV contract unchanged.
 
 **Rule:** Broad **volume marketing** rows must **not** go into **`lead_contact_research`** unless each row has a real **`lead_id`**. Use **`reviewed_marketing_contacts.csv`** → **`process_broad_marketing_contacts.py`** → **`send_ready_marketing.csv`**.
 
@@ -125,6 +125,7 @@ Legacy tags **KEEP_CORE** / **KEEP_AUDIT** in older prose map loosely to **OPS_C
 | Path | Tag | Role | Typical outputs / notes |
 |------|-----|------|-------------------------|
 | `scripts/qa/export_do_not_repeat_master.py` | OPS_DAILY | Merge “do not repeat” emails for DeepSearch + volume processor | `reports/out/active/current/do_not_repeat_master.{csv,txt}`, `do_not_repeat_summary.json` |
+| `scripts/qa/export_outreach_contacted_all.py` | OPS_DAILY | Export auxiliary contacted-all list (Sent + blocking outreach state) | `reports/out/active/outreach_contacted_all.csv` |
 | `scripts/research/run_deep_research_prospecting.py` | OPS_DAILY | Automated research automation (heavy weekly/off-peak, light daily) → review-ready volume batch (no send) | Writes timestamped `research_automation/<ts>/` artifacts, validates/processes, **stops before send**; `--research-mode heavy|light`; supports `--sector`, `--day-rotation`, `--daily-mode`; optional read-only `--run-contacted-coverage-check`; guardrails: `--max-candidates`, `--max-send-ready`, `--fail-on-over-limit`; compact-seed caps: `--max-seed-email-sample`, `--max-seed-institutions`, `--max-seed-domains`; presets: `--tpm-safe`, `--tiny-run`; rate-limit controls: `--max-retries`, `--initial-backoff-seconds`, `--max-backoff-seconds`, optional `--fallback-sector` |
 | `scripts/qa/validate_campaign_csvs.py` | OPS_DAILY | CSV contracts (`marketing_contacts`, `reviewed_deepsearch`, `send_ready`, etc.) | stdout / exit code; optional `--json-out` |
 | `scripts/leads/process_broad_marketing_contacts.py` | OPS_DAILY | Validate, gate, split volume contacts | `marketing_*.csv`, `send_ready_marketing.csv`, `marketing_contacts_summary.json` |
@@ -159,6 +160,7 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/leads/backfill_contacted_from_gmail_sent.py` | OPS_AUDIT | Backfill **`outreach_contact_state`** from Sent — **dry-run default; `--apply` writes** |
 | `scripts/qa/print_outbound_run_summary.py` | OPS_AUDIT | Pretty-print outbound summary JSON |
 | `scripts/qa/export_candidate_audit.py` | OPS_AUDIT | Sample rows through gate (informational) |
+| `scripts/qa/check_reports_out_active_hygiene.py` | OPS_AUDIT | Warn/fail when `reports/out/active/` contains unexpected generated artifacts outside `current/` |
 | `scripts/qa/validate_sqlite_archive_for_postgres.py` | OPS_MIGRATE | Read-only / pre-migrate validation |
 | `scripts/qa/publish_gate.py` | OPS_AUDIT | Publication / trust gate (broader than outbound) |
 
@@ -191,7 +193,7 @@ These are **not** the volume or precision daily lanes; see [`dataset/TATIANA_PIL
 | `scripts/leads/mark_outreach_state.py` | OPS_CORE | Manual single-row **`outreach_contact_state`** edits |
 | `scripts/leads/import_operator_outreach_blocklist.py` | OPS_CORE | Blocklist → suppressions |
 | `scripts/leads/add_manual_contact_suppressions.py` | OPS_CORE | Manual suppression adds |
-| `scripts/qa/export_all_known_marketing_contacts.py` | CONSOLIDATE | Known-marketing export; overlaps part of do-not-repeat master story |
+| `scripts/qa/export_all_known_marketing_contacts.py` | OPS_CORE | Known-marketing dedup export across active/archive/reference sources (includes contacted-all by default) |
 | `scripts/leads/advanced/prepare_active_workspace.py` | CONSOLIDATE | **Different** from `prepare_outbound_campaign_workspace.py` — see [Two workspace prep stories](#two-workspace-prep-stories-do-not-confuse) |
 | `scripts/leads/advanced/export_marketing_from_contact_master.py` | ARCHIVE_LANE | Exploratory `contact_master` export |
 | `scripts/qa/sync_outreach_batch_from_ingested_bounces.py` | BREAK_GLASS | Bounce-driven sync — review evidence; **`--apply`** mutates state |

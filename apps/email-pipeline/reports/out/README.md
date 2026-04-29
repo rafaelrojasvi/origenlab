@@ -6,6 +6,14 @@ This folder is the **default** destination for generated reports (HTML + JSON).
 
 **Command reference:** [docs/RUNBOOK.md](../../docs/RUNBOOK.md#m-eprun-path).
 
+## Workspace policy
+
+- Live outbound operations use only `reports/out/active/current/`.
+- `reports/out/archive/` is historical evidence only (never send from archive).
+- `reports/out/reference/` stores stable reference exports (not a send workspace).
+- `reports/out/client_pack_latest/` remains the latest client-pack snapshot output.
+- Canonical anti-repeat auxiliary refresh scripts: `scripts/qa/export_outreach_contacted_all.py`, `scripts/qa/export_all_known_marketing_contacts.py`, `scripts/qa/export_do_not_repeat_master.py`.
+
 <a id="m-repout-operational-trust"></a>
 ### Operational trust scorecard (`active/`)
 

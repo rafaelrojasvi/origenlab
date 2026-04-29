@@ -44,7 +44,22 @@ uv run python scripts/leads/run_current_campaign_pipeline.py --stage post-send \
 
 ### Daily scripts (KEEP_CORE)
 
-Scripts operators touch most often for outbound: **`export_do_not_repeat_master.py`**, **`validate_campaign_csvs.py`**, **`process_broad_marketing_contacts.py`**, **`run_current_campaign_pipeline.py`**, **`prepare_outbound_campaign_workspace.py`** (when resetting `active/current`), **`export_lead_contact_research_queue.py`**, **`import_lead_contact_research_csv.py`**, **`export_next_marketing_recipients.py`**, **`mark_sent_batch_contacted.py`**, **`05_workspace_gmail_imap_to_sqlite.py`**, optional **`send_inline_html_email_via_gmail_api.py`**. Core library modules: **`candidate_export_gate`**, **`marketing_export_context`**, **`outreach_contact_state`**, **`next_marketing_queue`**, **`csv_contracts`**, **`outbound_core`**, **`outbound_sent_preflight`**.
+Scripts operators touch most often for outbound: **`export_outreach_contacted_all.py`**, **`export_all_known_marketing_contacts.py`**, **`export_do_not_repeat_master.py`**, **`validate_contacted_csv_coverage.py`**, **`validate_campaign_csvs.py`**, **`process_broad_marketing_contacts.py`**, **`run_current_campaign_pipeline.py`**, **`prepare_outbound_campaign_workspace.py`** (when resetting `active/current`), **`export_lead_contact_research_queue.py`**, **`import_lead_contact_research_csv.py`**, **`export_next_marketing_recipients.py`**, **`mark_sent_batch_contacted.py`**, **`05_workspace_gmail_imap_to_sqlite.py`**, optional **`send_inline_html_email_via_gmail_api.py`**. Core library modules: **`candidate_export_gate`**, **`marketing_export_context`**, **`outreach_contact_state`**, **`next_marketing_queue`**, **`csv_contracts`**, **`outbound_core`**, **`outbound_sent_preflight`**.
+
+### Canonical anti-repeat auxiliary refresh sequence
+
+Run this sequence before a new send cycle to keep auxiliary anti-repeat artifacts aligned:
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"
+uv run python scripts/qa/export_outreach_contacted_all.py
+uv run python scripts/qa/export_all_known_marketing_contacts.py
+uv run python scripts/qa/export_do_not_repeat_master.py
+uv run python scripts/qa/validate_contacted_csv_coverage.py --strict
+uv run python scripts/qa/check_reports_out_active_hygiene.py
+uv run python scripts/qa/check_outbound_readiness.py
+```
 
 ### Debug / audit scripts (KEEP_AUDIT, KEEP_DEBUG)
 
@@ -298,13 +313,13 @@ From `apps/email-pipeline/`:
 
 ```bash
 # Archive lane — full batch (audit, shortlist, precheck, send_ready / review_required)
-uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/active/archive_send_batch
+uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/archive/campaigns/archive_send_batch
 
 # Same path, larger shortlist (e.g. 100–200 company-intro rows): tune --shortlist-limit (and --audit-limit if needed).
-uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/active/archive_send_batch --shortlist-limit 100 --audit-limit 800
+uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/archive/campaigns/archive_send_batch --shortlist-limit 100 --audit-limit 800
 
 # Archive lane — audit CSV + summary only (no shortlist / precheck)
-uv run python scripts/leads/build_archive_send_batch.py --audit-only --out-dir reports/out/active/archive_audit
+uv run python scripts/leads/build_archive_send_batch.py --audit-only --out-dir reports/out/archive/audits/archive_audit
 
 # Lead lane — next recipients from lead_master (same gate as Streamlit Cola)
 uv run python scripts/leads/export_next_marketing_recipients.py -o reports/out/next_marketing.csv
@@ -317,7 +332,7 @@ uv run python scripts/leads/export_next_marketing_recipients.py \
 
 # Optional on archive lane too
 uv run python scripts/leads/build_archive_send_batch.py \
-  --out-dir reports/out/active/archive_send_batch \
+  --out-dir reports/out/archive/campaigns/archive_send_batch \
   --write-postgres-audit \
   --audit-created-by you@example.com
 
@@ -352,10 +367,10 @@ uv run python scripts/qa/export_gate_audit_csv.py --out /tmp/gate_audit_lead.csv
 ```bash
 cd apps/email-pipeline
 uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
-  --out reports/out/active/supplier_domain_false_positive_audit.csv
+  --out reports/out/archive/audits/supplier_domain_false_positive_audit.csv
 # Include every supplier domain even when no lead shares that domain (noisy CSV):
 uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
-  --out reports/out/active/supplier_domain_false_positive_audit_all.csv \
+  --out reports/out/archive/audits/supplier_domain_false_positive_audit_all.csv \
   --include-zero-lead-domains
 # Optional: --db /path/to/emails.sqlite --limit 5000
 ```
@@ -404,14 +419,14 @@ uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
 
    ```bash
    uv run python scripts/qa/export_contacted_lead_overlap_audit.py \
-     --out reports/out/active/contacted_lead_overlap.csv
+     --out reports/out/archive/audits/contacted_lead_overlap.csv
    ```
 
 3. Run the **gate audit** on candidates after overlap review:
 
    ```bash
    uv run python scripts/qa/export_gate_audit_csv.py \
-     --out reports/out/active/gate_after_overlap.csv --lane lead
+     --out reports/out/archive/audits/gate_after_overlap.csv --lane lead
    ```
 
 Interpretation: treat **exact email** hits as strong duplicates; **same-domain** and **organization-name** rows are hints only (`confidence` / `recommended_action` in the overlap CSV). This audit does not change SQLite or gate behavior.
@@ -495,7 +510,7 @@ Use a deterministic, read-only queue export to target research where high/medium
    ```bash
    cd apps/email-pipeline
    uv run python scripts/leads/export_lead_contact_research_queue.py \
-     --out reports/out/active/lead_contact_research_queue.csv \
+     --out reports/out/active/current/research_queue.csv \
      --limit 1000
    ```
 

@@ -104,13 +104,52 @@ def write_merged_contacts_csv(rows: list[dict[str, str]], out_path: Path) -> Non
 
 
 def default_active_marketing_csv_paths(*, reports_active: Path) -> tuple[Path, ...]:
-    """Canonical inputs under ``reports/out/active`` for the unified seed export."""
-    return (
-        reports_active / "chile_institutional_marketing_contacts.csv",
-        reports_active / "chile_institutional_contacts_research_supplement_20260418.csv",
-        reports_active / "chile_institutional_contacts_research_netnew_batch2.csv",
-        reports_active / "chile_institutional_contacts_research_netnew_batch3.csv",
-        reports_active
-        / "deepsearch_marketing_send_batch_20260417_130028"
-        / "deepsearch_contacts_all.csv",
-    )
+    """Canonical defaults aligned with active/archive/reference workspace policy."""
+    reports_out = reports_active.parent
+    archive = reports_out / "archive"
+    reference = reports_out / "reference"
+
+    out: list[Path] = []
+
+    # Always include contacted-all when present (primary anti-repeat auxiliary seed).
+    out.append(reports_active / "outreach_contacted_all.csv")
+
+    # Include conservative reference contact exports only.
+    for p in sorted(reference.glob("*official*contacts*.csv")):
+        out.append(p)
+    for p in sorted(reference.glob("*marketing*contacts*.csv")):
+        out.append(p)
+
+    # Historical research contact CSVs now live under archive/research.
+    research = archive / "research"
+    if research.exists():
+        for pat in (
+            "chile_institutional*.csv",
+            "reviewed_marketing_contacts*.csv",
+            "deepsearch_marketing_send_batch_*/deepsearch_contacts_all.csv",
+            "supplement_research_send_batch_*/send_ready.csv",
+        ):
+            for p in sorted(research.glob(pat)):
+                out.append(p)
+
+    # Historical campaign contact exports under archive/campaigns.
+    campaigns = archive / "campaigns"
+    if campaigns.exists():
+        for pat in (
+            "next_marketing*.csv",
+            "*/send_ready.csv",
+            "*/archive_manual_send_candidates*.csv",
+        ):
+            for p in sorted(campaigns.glob(pat)):
+                out.append(p)
+
+    # De-duplicate while preserving order.
+    seen: set[str] = set()
+    ordered: list[Path] = []
+    for p in out:
+        key = str(p.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(p)
+    return tuple(ordered)
