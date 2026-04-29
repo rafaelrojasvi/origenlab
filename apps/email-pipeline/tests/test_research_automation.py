@@ -41,9 +41,10 @@ def test_extract_csv_parsing_from_model_output() -> None:
         "A,RM,Santiago,universidad,a@x.cl,lab,https://x.cl,high,fit\n```\nbar"
     )
     csv_text = ra.extract_csv_text_from_model_output(txt)
-    fields, rows = ra.parse_csv_rows(csv_text)
+    fields, rows, row_errors = ra.parse_csv_rows(csv_text)
     assert fields == ra.EXPECTED_COLUMNS
     assert rows[0]["contact_email"] == "a@x.cl"
+    assert row_errors == []
 
 
 def test_extract_csv_with_prose_and_bom() -> None:
@@ -54,9 +55,10 @@ def test_extract_csv_with_prose_and_bom() -> None:
         "Thanks."
     )
     csv_text = ra.extract_csv_text_from_model_output(txt)
-    fields, rows = ra.parse_csv_rows(csv_text)
+    fields, rows, row_errors = ra.parse_csv_rows(csv_text)
     assert fields == ra.EXPECTED_COLUMNS
     assert len(rows) == 1
+    assert row_errors == []
 
 
 def test_extract_csv_with_spaced_quoted_fields_normalizes_values() -> None:
@@ -67,13 +69,14 @@ def test_extract_csv_with_spaced_quoted_fields_normalizes_values() -> None:
         "```"
     )
     csv_text = ra.extract_csv_text_from_model_output(txt)
-    fields, rows = ra.parse_csv_rows(csv_text)
+    fields, rows, row_errors = ra.parse_csv_rows(csv_text)
     assert fields == ra.EXPECTED_COLUMNS
     assert len(rows) == 1
     assert rows[0]["region"] == "Atacama"
     assert rows[0]["contact_email"] == "admin@redsalud.gob.cl"
     assert rows[0]["source_url"] == "https://redsalud.gob.cl"
     assert rows[0]["confidence"] == "high"
+    assert row_errors == []
 
 
 def test_malformed_schema_failure() -> None:
@@ -86,6 +89,18 @@ def test_malformed_schema_failure() -> None:
         assert False, "Expected ValueError for missing fit_signal"
     except ValueError as exc:
         assert "missing required columns" in str(exc).lower()
+
+
+def test_malformed_row_rejected_with_row_details() -> None:
+    bad = (
+        "institution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal\n"
+        "A,RM,Santiago,universidad,a@x.cl,lab,https://x.cl,high\n"
+    )
+    fields, rows, row_errors = ra.parse_csv_rows(bad)
+    assert fields == ra.EXPECTED_COLUMNS
+    assert len(rows) == 1
+    assert row_errors
+    assert row_errors[0]["error"] == "wrong_column_count_missing_values"
 
 
 def test_path_resolution(tmp_path: Path) -> None:
@@ -820,4 +835,199 @@ def test_light_mode_uses_light_executor_and_sets_metadata(tmp_path: Path, monkey
     assert meta["model"] == ra.DEFAULT_LIGHT_MODEL
     assert meta["safety"]["gmail_send_called"] is False
     assert meta["safety"]["sqlite_mutation_intended"] is False
+
+
+def test_evidence_verification_warnings_flow_into_processing_input(tmp_path: Path, monkeypatch) -> None:
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
+    sample = tmp_path / "sample.txt"
+    sample.write_text(
+        "```csv\ninstitution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal\n"
+        "A,RM,Santiago,universidad,contacto@uchile.cl,Contacto,https://www.uchile.cl,high,laboratorio\n```",
+        encoding="utf-8",
+    )
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(contacted, ["contact_email"], [])
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(known, ["contact_email"], [])
+    seeds = ra.SeedPaths(dnr, contacted, known)
+    observed = {"processing_has_review_reason": False}
+
+    def _fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        cmd = " ".join(args)
+        if "verify_research_candidate_evidence.py" in cmd:
+            out_csv = Path(args[args.index("--out-csv") + 1])
+            _write_csv(
+                out_csv,
+                [
+                    "source_line",
+                    "institution_name",
+                    "contact_email",
+                    "source_url",
+                    "http_status",
+                    "email_visible_on_source",
+                    "relevance_keywords_present",
+                    "evidence_warning",
+                    "evidence_ok",
+                    "fetch_error",
+                ],
+                [["2", "A", "contacto@uchile.cl", "https://www.uchile.cl", "200", "0", "0", "email_not_visible_on_source", "0", ""]],
+            )
+            return subprocess.CompletedProcess(args=args, returncode=1, stdout="warn", stderr="")
+        if "process_broad_marketing_contacts.py" in cmd:
+            inp = Path(args[args.index("--input") + 1])
+            rows = list(csv.DictReader(inp.open(encoding="utf-8", newline="")))
+            observed["processing_has_review_reason"] = "review_reason" in rows[0] and (
+                "email_not_visible_on_source" in str(rows[0].get("review_reason") or "")
+            )
+            ws = Path(args[args.index("--workspace") + 1])
+            _write_csv(
+                ws / "send_ready_marketing.csv",
+                ["case_id", "contact_email", "email_source", "institution_name", "region", "city", "type", "contact_label", "source_url", "confidence", "fit_signal", "variant_type"],
+                [],
+            )
+            _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
+            _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [["contacto@uchile.cl"]])
+            _write_csv(ws / "marketing_safe_to_send.csv", ["contact_email"], [])
+            (ws / "marketing_contacts_summary.json").write_text(
+                json.dumps({"counts": {"send_ready_marketing": 0, "blocked": 0, "needs_manual_review": 1}}),
+                encoding="utf-8",
+            )
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(ra, "_run_subprocess", _fake_run)
+    artifacts = ra.run_research_automation(
+        model="o4-mini-deep-research",
+        prompt_file=prompt,
+        out_dir=tmp_path / "out",
+        sector="broad",
+        limit_hint=5,
+        dry_run=True,
+        sample_response=sample,
+        seed_paths=seeds,
+        use_background=False,
+        app_root=Path(__file__).resolve().parents[1],
+        max_candidates=200,
+        max_send_ready=50,
+        fail_on_over_limit=False,
+        run_contacted_coverage_check=False,
+        strict_contacted_coverage=False,
+    )
+    meta = json.loads(artifacts.run_metadata_json.read_text(encoding="utf-8"))
+    assert observed["processing_has_review_reason"] is True
+    assert int(meta["evidence_verification"]["warnings_row_count"]) == 1
+
+
+def test_evidence_first_mode_never_trusts_model_emails(tmp_path: Path, monkeypatch) -> None:
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
+    sample = tmp_path / "sample.txt"
+    sample.write_text(
+        "```csv\ninstitution_name,search_query,expected_unit_type,fit_rationale\n"
+        "USACH,site:usach.cl laboratorio microbiologia contacto email,laboratorio,match icp\n```",
+        encoding="utf-8",
+    )
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(contacted, ["contact_email"], [])
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(known, ["contact_email"], [])
+    seeds = ra.SeedPaths(dnr, contacted, known)
+
+    def _fail_if_called(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        if "process_broad_marketing_contacts.py" in " ".join(args):
+            raise AssertionError("processing should not run in evidence_first mode")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(ra, "_run_subprocess", _fail_if_called)
+    artifacts = ra.run_research_automation(
+        model=ra.DEFAULT_LIGHT_MODEL,
+        prompt_file=prompt,
+        out_dir=tmp_path / "out",
+        sector="universities_regional",
+        limit_hint=5,
+        dry_run=True,
+        sample_response=sample,
+        seed_paths=seeds,
+        use_background=False,
+        app_root=Path(__file__).resolve().parents[1],
+        max_candidates=200,
+        max_send_ready=50,
+        fail_on_over_limit=False,
+        run_contacted_coverage_check=False,
+        strict_contacted_coverage=False,
+        research_mode="light",
+        research_output_mode="evidence_first",
+    )
+    meta = json.loads(artifacts.run_metadata_json.read_text(encoding="utf-8"))
+    assert meta["research_output_mode"] == "evidence_first"
+    assert meta["send_ready_count"] == 0
+    assert (tmp_path / "out" / "evidence_plan.csv").is_file()
+
+
+def test_heavy_and_light_both_run_evidence_verification(tmp_path: Path, monkeypatch) -> None:
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
+    sample = tmp_path / "sample.txt"
+    sample.write_text(
+        "```csv\ninstitution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal\n"
+        "A,RM,Santiago,universidad,a@x.cl,lab,https://x.cl/lab,high,laboratorio\n```",
+        encoding="utf-8",
+    )
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(contacted, ["contact_email"], [])
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(known, ["contact_email"], [])
+    seeds = ra.SeedPaths(dnr, contacted, known)
+    seen = {"verify_calls": 0}
+
+    def _fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        cmd = " ".join(args)
+        if "verify_research_candidate_evidence.py" in cmd:
+            seen["verify_calls"] += 1
+            out_csv = Path(args[args.index("--out-csv") + 1])
+            _write_csv(
+                out_csv,
+                ["source_line", "institution_name", "contact_email", "source_url", "http_status", "email_visible_on_source", "relevance_keywords_present", "evidence_warning", "evidence_ok", "fetch_error"],
+                [["2", "A", "a@x.cl", "https://x.cl/lab", "200", "1", "1", "", "1", ""]],
+            )
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+        if "process_broad_marketing_contacts.py" in cmd:
+            ws = Path(args[args.index("--workspace") + 1])
+            _write_csv(ws / "send_ready_marketing.csv", ["case_id", "contact_email", "email_source", "institution_name", "region", "city", "type", "contact_label", "source_url", "confidence", "fit_signal", "variant_type"], [])
+            _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
+            _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
+            _write_csv(ws / "marketing_safe_to_send.csv", ["contact_email"], [])
+            (ws / "marketing_contacts_summary.json").write_text(
+                json.dumps({"counts": {"send_ready_marketing": 0, "blocked": 0, "needs_manual_review": 0}}),
+                encoding="utf-8",
+            )
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(ra, "_run_subprocess", _fake_run)
+    for mode in ("light", "heavy"):
+        ra.run_research_automation(
+            model=ra.DEFAULT_LIGHT_MODEL if mode == "light" else ra.DEFAULT_HEAVY_MODEL,
+            prompt_file=prompt,
+            out_dir=tmp_path / f"out-{mode}",
+            sector="broad",
+            limit_hint=5,
+            dry_run=True,
+            sample_response=sample,
+            seed_paths=seeds,
+            use_background=False,
+            app_root=Path(__file__).resolve().parents[1],
+            max_candidates=200,
+            max_send_ready=50,
+            fail_on_over_limit=False,
+            run_contacted_coverage_check=False,
+            strict_contacted_coverage=False,
+            research_mode=mode,
+        )
+    assert seen["verify_calls"] == 2
 

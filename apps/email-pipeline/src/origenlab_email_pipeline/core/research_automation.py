@@ -31,6 +31,7 @@ DEFAULT_LIGHT_PROMPT_PATH = (
 )
 DEFAULT_REPORTS_ACTIVE = Path(__file__).resolve().parents[3] / "reports" / "out" / "active"
 RESEARCH_MODE_CHOICES = ("heavy", "light")
+OUTPUT_MODE_CHOICES = ("direct_csv", "evidence_first")
 DEFAULT_HEAVY_MODEL = "o4-mini-deep-research"
 DEFAULT_LIGHT_MODEL = "gpt-4o-mini"
 SECTOR_CHOICES = (
@@ -52,6 +53,12 @@ EXPECTED_COLUMNS = [
     "source_url",
     "confidence",
     "fit_signal",
+]
+EVIDENCE_PLAN_COLUMNS = [
+    "institution_name",
+    "search_query",
+    "expected_unit_type",
+    "fit_rationale",
 ]
 _HEADER_ALIASES = {
     "institution": "institution_name",
@@ -473,15 +480,83 @@ def extract_csv_text_from_model_output(text: str) -> str:
     return "\n".join(block).strip() + "\n"
 
 
-def parse_csv_rows(csv_text: str) -> tuple[list[str], list[dict[str, str]]]:
+def _normalize_csv_rows_with_errors(
+    *,
+    reader: csv.DictReader,
+    required_columns: list[str],
+) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+    rows: list[dict[str, str]] = []
+    row_errors: list[dict[str, Any]] = []
+    for idx, row in enumerate(reader, start=2):
+        malformed = False
+        raw_extra = row.get(None)
+        if raw_extra:
+            malformed = True
+            row_errors.append(
+                {
+                    "row_number": idx,
+                    "error": "wrong_column_count_extra_values",
+                    "extra_values": [str(v) for v in (raw_extra or [])],
+                }
+            )
+        normalized_row = {k: _normalize_cell(v) for k, v in row.items() if k is not None}
+        missing_values = [c for c in required_columns if normalized_row.get(c, "") == ""]
+        if missing_values:
+            malformed = True
+            row_errors.append(
+                {
+                    "row_number": idx,
+                    "error": "wrong_column_count_missing_values",
+                    "missing_values": missing_values,
+                }
+            )
+        rows.append(normalized_row)
+        if malformed:
+            continue
+    return rows, row_errors
+
+
+def parse_csv_rows(csv_text: str) -> tuple[list[str], list[dict[str, str]], list[dict[str, Any]]]:
     clean = str(csv_text or "").lstrip("\ufeff")
     reader = csv.DictReader(io.StringIO(clean), skipinitialspace=True)
     fields = [str(f or "") for f in (reader.fieldnames or [])]
     if not fields:
         raise ValueError("Extracted CSV has no header row.")
     normalized = normalize_and_validate_headers(fields)
-    rows = [{k: _normalize_cell(v) for k, v in row.items()} for row in reader]
-    return normalized, rows
+    rows, row_errors = _normalize_csv_rows_with_errors(
+        reader=reader,
+        required_columns=EXPECTED_COLUMNS,
+    )
+    return normalized, rows, row_errors
+
+
+def parse_evidence_plan_rows(
+    csv_text: str,
+) -> tuple[list[str], list[dict[str, str]], list[dict[str, Any]]]:
+    clean = str(csv_text or "").lstrip("\ufeff")
+    reader = csv.DictReader(io.StringIO(clean), skipinitialspace=True)
+    fields = [str(f or "") for f in (reader.fieldnames or [])]
+    if not fields:
+        raise ValueError("Extracted evidence-plan CSV has no header row.")
+    normalized = normalize_and_validate_headers_for_plan(fields)
+    rows, row_errors = _normalize_csv_rows_with_errors(
+        reader=reader,
+        required_columns=EVIDENCE_PLAN_COLUMNS,
+    )
+    return normalized, rows, row_errors
+
+
+def normalize_and_validate_headers_for_plan(headers: list[str]) -> list[str]:
+    out = [str(h or "").strip().lower().replace("-", "_").replace(" ", "_") for h in headers]
+    missing = [c for c in EVIDENCE_PLAN_COLUMNS if c not in out]
+    extra = [c for c in out if c not in EVIDENCE_PLAN_COLUMNS]
+    if missing:
+        raise ValueError(f"Extracted plan CSV missing required columns: {', '.join(missing)}")
+    if extra:
+        raise ValueError(
+            "Extracted plan CSV has unsupported columns: " + ", ".join(extra)
+        )
+    return EVIDENCE_PLAN_COLUMNS[:]
 
 
 def normalize_and_validate_headers(headers: list[str]) -> list[str]:
@@ -604,6 +679,37 @@ def _run_subprocess(args: list[str], *, cwd: Path) -> subprocess.CompletedProces
         check=False,
         timeout=300,
     )
+
+
+def _merge_evidence_warnings_into_candidates(
+    *,
+    candidates_csv: Path,
+    evidence_csv: Path,
+    out_csv: Path,
+) -> int:
+    rows = _read_csv_dicts(candidates_csv)
+    warning_map: dict[str, str] = {}
+    if evidence_csv.is_file():
+        for w in _read_csv_dicts(evidence_csv):
+            em = str(w.get("contact_email") or "").strip().lower()
+            reasons = str(w.get("evidence_warning") or "").strip()
+            if em and reasons:
+                warning_map[em] = reasons
+    merged: list[dict[str, str]] = []
+    flagged = 0
+    for row in rows:
+        em = str(row.get("contact_email") or "").strip().lower()
+        reasons = warning_map.get(em, "")
+        if reasons:
+            flagged += 1
+            prior = str(row.get("review_reason") or "").strip()
+            row["review_reason"] = ";".join([p for p in [prior, reasons] if p]).strip(";")
+        merged.append(row)
+    fields = list(EXPECTED_COLUMNS)
+    if flagged:
+        fields.append("review_reason")
+    write_csv(out_csv, fieldnames=fields, rows=merged)
+    return flagged
 
 
 def resolve_sector_for_day_rotation(*, weekday: int) -> str:
@@ -771,6 +877,7 @@ def run_research_automation(
     daily_mode: bool = False,
     progress_callback: ProgressCallback | None = None,
     research_mode: str = "heavy",
+    research_output_mode: str = "direct_csv",
 ) -> RunArtifacts:
     run_started = time.monotonic()
     _emit_progress(progress_callback, phase="starting", out_dir=str(out_dir), sector=sector, elapsed_seconds=0.0, retry_count=0)
@@ -820,12 +927,21 @@ def run_research_automation(
     }
 
     def _render_for_sector(s: str) -> str:
-        return render_prompt(
+        rendered = render_prompt(
             template_text=prompt_template,
             sector=s,
             limit_hint=limit_hint,
             compact_seed_files=compact_prompt_paths,
         )
+        if str(research_output_mode).strip().lower() == "evidence_first":
+            rendered += (
+                "\n\nSTRICT OUTPUT MODE: evidence_first\n"
+                "Do NOT output candidate emails.\n"
+                "Return ONLY CSV with columns exactly:\n"
+                "institution_name,search_query,expected_unit_type,fit_rationale\n"
+                "search_query must be evidence-oriented (site:... + contacto/email keywords).\n"
+            )
+        return rendered
 
     prompt_text = _render_for_sector(sector)
     artifacts.prompt_preview_txt.write_text(prompt_text, encoding="utf-8")
@@ -994,7 +1110,101 @@ def run_research_automation(
             retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
         )
         csv_text = extract_csv_text_from_model_output(raw_text)
-        fieldnames, rows = parse_csv_rows(csv_text)
+        if str(research_output_mode).strip().lower() == "evidence_first":
+            fieldnames, plan_rows, plan_row_errors = parse_evidence_plan_rows(csv_text)
+            evidence_plan_csv = out_dir / "evidence_plan.csv"
+            write_csv(evidence_plan_csv, fieldnames=fieldnames, rows=plan_rows)
+            validation_payload = {
+                "mode": "evidence_first",
+                "returncode": 0 if not plan_row_errors else 2,
+                "plan_rows": len(plan_rows),
+                "malformed_rows": plan_row_errors,
+            }
+            artifacts.validation_json.write_text(
+                json.dumps(validation_payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            if plan_row_errors:
+                raise RuntimeError(
+                    "Malformed evidence-plan CSV rows detected. "
+                    "See validation_result.json for row-level details."
+                )
+            # Draft-only mode: never trust model-provided emails; stop before candidate processing.
+            write_csv(artifacts.candidates_raw_csv, fieldnames=EXPECTED_COLUMNS, rows=[])
+            write_csv(artifacts.candidates_netnew_csv, fieldnames=EXPECTED_COLUMNS, rows=[])
+            write_csv(
+                artifacts.candidates_excluded_csv,
+                fieldnames=[*EXPECTED_COLUMNS, "exclusion_reason"],
+                rows=[],
+            )
+            artifacts.review_summary_md.write_text(
+                "\n".join(
+                    [
+                        "# Deep Research automation review summary",
+                        "",
+                        "- Research output mode: **evidence_first**",
+                        "- Candidate generation skipped by design (draft-only).",
+                        f"- Evidence plan rows: **{len(plan_rows)}**",
+                        f"- Evidence plan file: `{evidence_plan_csv}`",
+                        "",
+                        "Ready for review; no live send performed.",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            metadata = {
+                "generated_at": _utc_now().isoformat().replace("+00:00", "Z"),
+                "mode": "dry_run" if dry_run else "live_research_no_send",
+                "research_mode": research_mode,
+                "research_output_mode": "evidence_first",
+                "status": "completed",
+                "evidence_plan_rows": len(plan_rows),
+                "evidence_plan_path": str(evidence_plan_csv),
+                "candidate_count": 0,
+                "excluded_count": 0,
+                "send_ready_count": 0,
+                "blocked_count": 0,
+                "review_count": 0,
+                "safety": {
+                    "gmail_send_called": False,
+                    "mark_contacted_called": False,
+                    "sent_ingest_called": False,
+                    "dnr_refresh_after_send_called": False,
+                    "sqlite_mutation_intended": False,
+                },
+                "stop_message": "Ready for review; no live send performed.",
+            }
+            artifacts.run_metadata_json.write_text(
+                json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            _emit_progress(
+                progress_callback,
+                phase="ready_for_review",
+                detail="Ready for review; no live send performed.",
+                out_dir=str(out_dir),
+                sector=selected_sector,
+                elapsed_seconds=round(time.monotonic() - run_started, 2),
+                retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
+            )
+            return artifacts
+
+        fieldnames, rows, row_errors = parse_csv_rows(csv_text)
+        if row_errors:
+            validation_payload = {
+                "returncode": 2,
+                "error": "malformed_candidate_csv_rows",
+                "malformed_rows": row_errors,
+            }
+            artifacts.validation_json.write_text(
+                json.dumps(validation_payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            raise RuntimeError(
+                "Malformed candidate CSV rows detected. "
+                "No candidates CSVs were generated. See validation_result.json."
+            )
         candidate_count = len(rows)
         truncation_applied = False
         candidate_limit_triggered = candidate_count > max_candidates
@@ -1057,6 +1267,43 @@ def run_research_automation(
 
         _emit_progress(
             progress_callback,
+            phase="evidence_verification",
+            out_dir=str(out_dir),
+            sector=selected_sector,
+            elapsed_seconds=round(time.monotonic() - run_started, 2),
+            retry_count=len([a for a in retry_attempts if a.get("result") == "error"]),
+        )
+        evidence_csv = out_dir / "evidence_warnings.csv"
+        evidence_json = out_dir / "evidence_warnings.json"
+        verify_cp = _run_subprocess(
+            [
+                "scripts/qa/verify_research_candidate_evidence.py",
+                "--input",
+                str(artifacts.candidates_netnew_csv),
+                "--out-csv",
+                str(evidence_csv),
+                "--out-json",
+                str(evidence_json),
+                "--require-email-visible",
+                "--require-source-200",
+                "--require-relevance-keywords",
+            ],
+            cwd=app_root,
+        )
+        if verify_cp.returncode not in {0, 1}:
+            raise RuntimeError(
+                "Evidence verification failed unexpectedly. "
+                f"stdout={verify_cp.stdout}\nstderr={verify_cp.stderr}"
+            )
+        candidates_for_processing = out_dir / "candidates_netnew_verified.csv"
+        evidence_flagged = _merge_evidence_warnings_into_candidates(
+            candidates_csv=artifacts.candidates_netnew_csv,
+            evidence_csv=evidence_csv,
+            out_csv=candidates_for_processing,
+        )
+
+        _emit_progress(
+            progress_callback,
             phase="processing",
             out_dir=str(out_dir),
             sector=selected_sector,
@@ -1071,7 +1318,7 @@ def run_research_automation(
                 "--master",
                 str(seed_paths.do_not_repeat_master),
                 "--input",
-                str(artifacts.candidates_netnew_csv),
+                str(candidates_for_processing),
             ],
             cwd=app_root,
         )
@@ -1149,6 +1396,7 @@ def run_research_automation(
             "generated_at": _utc_now().isoformat().replace("+00:00", "Z"),
             "mode": "dry_run" if dry_run else "live_research_no_send",
             "research_mode": research_mode,
+            "research_output_mode": str(research_output_mode),
             "sector": selected_sector,
             "requested_sector": sector,
             "fallback_sector": fallback_sector,
@@ -1184,6 +1432,14 @@ def run_research_automation(
             "candidate_limit_triggered": candidate_limit_triggered,
             "send_ready_over_limit": send_ready_over_limit,
             "contacted_coverage_check": coverage_payload,
+            "evidence_verification": {
+                "returncode": int(verify_cp.returncode),
+                "warnings_csv": str(evidence_csv),
+                "warnings_json": str(evidence_json),
+                "warnings_row_count": int(evidence_flagged),
+                "stdout": verify_cp.stdout,
+                "stderr": verify_cp.stderr,
+            },
             "use_file_search_requested": bool(use_file_search),
             "structured_output_mode": "csv_parser_v1",
             "retry_policy": {
@@ -1236,6 +1492,7 @@ def run_research_automation(
             "status": "failed",
             "mode": "dry_run" if dry_run else "live_research_no_send",
             "research_mode": research_mode,
+            "research_output_mode": str(research_output_mode),
             "model": model,
             "sector": selected_sector,
             "requested_sector": sector,
@@ -1283,6 +1540,7 @@ __all__ = [
     "DEFAULT_LIGHT_PROMPT_PATH",
     "DEFAULT_PROMPT_PATH",
     "RESEARCH_MODE_CHOICES",
+    "OUTPUT_MODE_CHOICES",
     "RunArtifacts",
     "run_light_research_response",
     "SeedPaths",
@@ -1292,6 +1550,7 @@ __all__ = [
     "load_prompt_template",
     "normalize_and_validate_headers",
     "parse_csv_rows",
+    "parse_evidence_plan_rows",
     "build_compact_seed_artifacts",
     "render_prompt",
     "resolve_out_dir",

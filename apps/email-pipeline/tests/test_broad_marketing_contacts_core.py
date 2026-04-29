@@ -231,3 +231,24 @@ def test_write_safe_csv_shape(tmp_path: Path) -> None:
         r = list(csv.DictReader(f))
     assert r[0]["case_id"] == "MKT-00001"
     assert r[0]["contact_email"] == "w@example.com"
+
+
+def test_preseeded_review_reason_forces_manual_review() -> None:
+    rows = [
+        {
+            "institution_name": "U",
+            "region": "RM",
+            "city": "Santiago",
+            "type": "universidad",
+            "contact_email": "contacto@u.cl",
+            "contact_label": "Contacto",
+            "source_url": "https://u.cl/contacto",
+            "confidence": "high",
+            "fit_signal": "laboratorio",
+            "review_reason": "email_not_visible_on_source",
+        }
+    ]
+    res = process_reviewed_marketing_rows(rows, master_email_norms=set(), ctx=_empty_ctx())
+    assert not res.safe_rows
+    assert res.review_rows
+    assert "email_not_visible_on_source" in res.review_rows[0]["review_reason"]

@@ -20,6 +20,8 @@ Important:
 - Propose only plausible, publicly verifiable contacts.
 - Do NOT invent guessed emails.
 - Do NOT guess firstname.lastname patterns.
+- Your output will be automatically verified for URL reachability, email visibility on source, and lab/procurement relevance.
+- If you cannot prove exact visible evidence on the cited source_url, omit the row.
 - Local exact exclusion against canonical files will happen AFTER this step.
 - Return compact, high-signal prospects only.
 

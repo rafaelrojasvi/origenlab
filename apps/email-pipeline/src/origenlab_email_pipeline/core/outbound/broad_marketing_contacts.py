@@ -436,6 +436,9 @@ def process_reviewed_marketing_rows(
         src = str(raw.get("source_url") or "").strip()
         conf = normalize_confidence(raw.get("confidence", ""))
         review_reasons: list[str] = []
+        preseeded_review = str(raw.get("review_reason") or "").strip()
+        if preseeded_review:
+            review_reasons.extend([r.strip() for r in preseeded_review.split(";") if r.strip()])
         if conf == "low":
             review_reasons.append("low_confidence")
         if source_looks_third_party(src) and not source_is_official_registry_exception(src):

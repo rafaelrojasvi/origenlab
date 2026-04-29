@@ -3,7 +3,6 @@ import '../styles/global.css';
 import { site } from '../config/site';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
-import FloatingChat from '../components/FloatingChat.astro';
 
 interface Props {
   title?: string;
@@ -54,6 +53,6 @@ const ogTitle = title.length > 70 ? site.name : title;
       <slot />
     </main>
     <Footer />
-    <FloatingChat />
+    <script is:inline src="//code.tidio.co/fhlfx2hwx24jm3sa2koagvs4vsn0jtbj.js" async></script>
   </body>
 </html>

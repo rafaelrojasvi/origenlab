@@ -21,6 +21,7 @@ from origenlab_email_pipeline.core.research_automation import (
     DEFAULT_HEAVY_MODEL,
     DEFAULT_LIGHT_MODEL,
     DEFAULT_LIGHT_PROMPT_PATH,
+    OUTPUT_MODE_CHOICES,
     DEFAULT_PROMPT_PATH,
     RESEARCH_MODE_CHOICES,
     SECTOR_CHOICES,
@@ -87,6 +88,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=RESEARCH_MODE_CHOICES,
         default="heavy",
         help="Research execution mode: heavy (weekly/off-peak) or light (daily).",
+    )
+    ap.add_argument(
+        "--research-output-mode",
+        choices=OUTPUT_MODE_CHOICES,
+        default="direct_csv",
+        help="direct_csv: model returns candidate CSV; evidence_first: model returns search plan only.",
     )
     ap.add_argument(
         "--model",
@@ -366,6 +373,11 @@ def main(argv: list[str] | None = None) -> int:
             "Warning: selected sector plus current guardrails may exceed TPM on lower tiers. "
             "Use --tiny-run for first successful real executions."
         )
+    if research_mode == "heavy":
+        print(
+            "Warning: heavy mode is higher cost; run it only after light/evidence pipeline is structurally stable. "
+            "Heavy mode still uses the same evidence verification rules."
+        )
     progress = ProgressReporter(out_dir=out_dir, verbose=bool(args.verbose_progress))
     artifacts = run_research_automation(
         model=resolved_model,
@@ -394,6 +406,7 @@ def main(argv: list[str] | None = None) -> int:
         daily_mode=bool(args.daily_mode),
         progress_callback=progress.emit,
         research_mode=research_mode,
+        research_output_mode=str(args.research_output_mode),
     )
     print(f"Wrote: {artifacts.out_dir}")
     print(f"Review summary: {artifacts.review_summary_md}")

@@ -34,6 +34,8 @@ Important:
 - Avoid institutions and domains that are already heavily represented.
 - Prefer net-new institutions and net-new domains where plausible.
 - Final exact exclusion is enforced locally after research output is returned.
+- Your output will be automatically verified for source_url reachability, email visibility on source, and ICP relevance keywords.
+- If exact visible evidence is not present on the cited source_url/PDF, omit the row.
 - Prioritize outreach-worthy contacts for: laboratorio de servicios, laboratorio de analisis, microbiologia, quimica analitica, alimentos/agua/ambiente, planta piloto, centros de investigacion, direccion de investigacion/transferencia tecnologica, compras/adquisiciones/proveedores.
 - Faculty/department contacts are acceptable only when clearly tied to lab services, research equipment, analytical services, or technical procurement.
 - Avoid generic university contact emails as send-ready recommendations (contacto/contact/info).
