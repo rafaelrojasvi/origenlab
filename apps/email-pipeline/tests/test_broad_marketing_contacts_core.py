@@ -57,10 +57,10 @@ def test_process_minimal_send_ready_and_columns(tmp_path: Path) -> None:
             "city": "C",
             "type": "hospital",
             "contact_email": "ok@example.com",
-            "contact_label": "Dir",
-            "source_url": "https://h.example/contact",
+            "contact_label": "Compras",
+            "source_url": "https://h.example/contacto-compras",
             "confidence": "high",
-            "fit_signal": "x" * 10,
+            "fit_signal": "laboratorio clinico y analisis",
         }
     ]
     res = process_reviewed_marketing_rows(
@@ -84,10 +84,10 @@ def test_process_duplicate_in_batch() -> None:
         "city": "C",
         "type": "hospital",
         "contact_email": "dup@example.com",
-        "contact_label": "Dir",
-        "source_url": "https://h.example/",
+        "contact_label": "Compras",
+        "source_url": "https://h.example/compras",
         "confidence": "high",
-        "fit_signal": "enough",
+        "fit_signal": "servicios de laboratorio",
     }
     res = process_reviewed_marketing_rows(
         [row, dict(row)],
@@ -128,9 +128,11 @@ def test_quality_review_reasons_detect_domain_mismatch() -> None:
     reasons = quality_review_reasons(
         email="buyer@foo-labs.cl",
         institution_name="Hospital Regional Sur",
+        institution_type="hospital",
         source_url="https://hospital-sur.cl/laboratorio/compra",
         fit_signal="licitaciones de laboratorio",
         contact_label="Compras",
+        confidence="high",
     )
     assert "domain_mismatch" in reasons
 
@@ -139,12 +141,68 @@ def test_quality_review_reasons_generic_weak_source() -> None:
     reasons = quality_review_reasons(
         email="info@institution.cl",
         institution_name="Instituto Demo",
+        institution_type="instituto",
         source_url="https://institution.cl/",
         fit_signal="ok",
         contact_label="general",
+        confidence="high",
     )
     assert "weak_source_match" in reasons
     assert "generic_contact_weak_evidence" in reasons
+
+
+def test_university_generic_contact_requires_review_when_not_lab_relevant() -> None:
+    reasons = quality_review_reasons(
+        email="contacto@uchile.cl",
+        institution_name="Universidad de Chile",
+        institution_type="universidad",
+        source_url="https://uchile.cl/contacto",
+        fit_signal="contacto institucional general",
+        contact_label="Contacto",
+        confidence="low",
+    )
+    assert "university_generic_contact_requires_review" in reasons
+
+
+def test_university_generic_contact_not_forced_when_lab_relevant_source() -> None:
+    reasons = quality_review_reasons(
+        email="doping@ciq.uchile.cl",
+        institution_name="Universidad de Chile",
+        institution_type="universidad",
+        source_url="https://ciq.uchile.cl/analisis/doping",
+        fit_signal="laboratorio de analisis para servicios especializados",
+        contact_label="Laboratorio de Analisis",
+        confidence="high",
+    )
+    assert "university_generic_contact_requires_review" not in reasons
+
+
+def test_homepage_generic_contact_adds_evidence_reasons() -> None:
+    reasons = quality_review_reasons(
+        email="contacto@uchile.cl",
+        institution_name="Universidad de Chile",
+        institution_type="universidad",
+        source_url="https://www.uchile.cl",
+        fit_signal="contacto general",
+        contact_label="Contacto",
+        confidence="low",
+    )
+    assert "homepage_source_weak_evidence" in reasons
+    assert "source_page_not_specific" in reasons
+    assert "exact_source_required_for_send_ready" in reasons
+
+
+def test_email_domain_institution_mismatch_reason() -> None:
+    reasons = quality_review_reasons(
+        email="centromedico@gestion.uta.cl",
+        institution_name="Universidad de Concepcion",
+        institution_type="universidad",
+        source_url="https://www.udec.cl",
+        fit_signal="contacto general",
+        contact_label="Contacto",
+        confidence="low",
+    )
+    assert "email_domain_institution_mismatch" in reasons
 
 
 def test_write_safe_csv_shape(tmp_path: Path) -> None:
@@ -156,10 +214,10 @@ def test_write_safe_csv_shape(tmp_path: Path) -> None:
             "city": "C",
             "type": "hospital",
             "contact_email": "w@example.com",
-            "contact_label": "Dir",
-            "source_url": "https://h.example/",
+            "contact_label": "Compras",
+            "source_url": "https://h.example/compras",
             "confidence": "high",
-            "fit_signal": "enough text",
+            "fit_signal": "servicios de laboratorio",
         }
     ]
     res = process_reviewed_marketing_rows(rows, master_email_norms=set(), ctx=_empty_ctx())

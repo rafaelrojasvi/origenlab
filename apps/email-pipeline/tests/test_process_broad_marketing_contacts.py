@@ -228,3 +228,51 @@ def test_summary_shape(tmp_path: Path) -> None:
     summary = json.loads((ws / "marketing_contacts_summary.json").read_text(encoding="utf-8"))
     for k in ("schema_version", "counts", "outputs", "gmail_user"):
         assert k in summary
+
+
+def test_university_generic_contacts_go_to_manual_review(tmp_path: Path) -> None:
+    db = tmp_path / "t.sqlite"
+    _seed_db(db)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "reviewed_marketing_contacts.csv").write_text(
+        """institution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal
+Universidad de Chile,RM,Santiago,universidad,contacto@uchile.cl,Contacto,https://uchile.cl/contacto,high,contacto general
+Universidad Catolica de la Santisima Concepcion,BioBio,Concepcion,universidad,contacto@ucsc.cl,Contacto,https://ucsc.cl/contacto,high,pagina de contacto general
+Universidad de Santiago de Chile,RM,Santiago,universidad,decytal@usach.cl,Laboratorio de alimentos,https://usach.cl/laboratorio-microbiologia-alimentos,high,laboratorio de servicios microbiologia alimentos
+Universidad de Chile,RM,Santiago,universidad,doping@ciq.uchile.cl,Laboratorio de Analisis,https://ciq.uchile.cl/analisis/doping,high,analisis quimico y servicios de laboratorio
+Universidad de Chile,RM,Santiago,universidad,lab.contact@gmail.com,Laboratorio de Servicios,https://ciq.uchile.cl/laboratorio/servicios-contacto,high,correo publicado oficialmente para servicios de analisis
+Universidad de Concepcion,BioBio,Concepcion,universidad,centromedico@gestion.uta.cl,Contacto,https://www.udec.cl,low,contacto general
+Universidad de Talca,Maule,Talca,universidad,adquisiciones@utalca.cl,Adquisiciones,https://www.utalca.cl,medium,adquisiciones institucionales
+Universidad de Talca,Maule,Talca,universidad,proveedores@utalca.cl,Adquisiciones,https://www.utalca.cl/universidad/administracion-y-finanzas/proveedores-y-adquisiciones,high,compras y adquisiciones para laboratorio de analisis
+""",
+        encoding="utf-8",
+    )
+    _write_master(ws)
+    r = _run(db, ws)
+    assert r.returncode == 0, r.stderr + r.stdout
+
+    with (ws / "marketing_needs_manual_review.csv").open(encoding="utf-8", newline="") as f:
+        review = {row["contact_email"]: row["review_reason"] for row in csv.DictReader(f)}
+    assert "contacto@uchile.cl" in review
+    assert "university_generic_contact_requires_review" in review["contacto@uchile.cl"]
+    assert "contacto@ucsc.cl" in review
+    assert "university_generic_contact_requires_review" in review["contacto@ucsc.cl"]
+    assert "centromedico@gestion.uta.cl" in review
+    assert "email_domain_institution_mismatch" in review["centromedico@gestion.uta.cl"]
+    assert "adquisiciones@utalca.cl" in review
+    assert "exact_source_required_for_send_ready" in review["adquisiciones@utalca.cl"]
+
+    with (ws / "send_ready_marketing.csv").open(encoding="utf-8", newline="") as f:
+        send = {row["contact_email"] for row in csv.DictReader(f)}
+    assert "decytal@usach.cl" in send
+    assert "doping@ciq.uchile.cl" in send
+    assert "proveedores@utalca.cl" in send
+    with (ws / "marketing_blocked_already_known.csv").open(encoding="utf-8", newline="") as f:
+        blocked = {row["contact_email"]: row["block_reason"] for row in csv.DictReader(f)}
+    # Officially published webmail should never be auto-blocked just for being webmail.
+    assert "lab.contact@gmail.com" not in blocked
+    assert (
+        "lab.contact@gmail.com" in send
+        or "lab.contact@gmail.com" in review
+    )

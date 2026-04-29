@@ -19,6 +19,7 @@ Exclusion context files (compact seeds):
 Important:
 - Propose only plausible, publicly verifiable contacts.
 - Do NOT invent guessed emails.
+- Do NOT guess firstname.lastname patterns.
 - Local exact exclusion against canonical files will happen AFTER this step.
 - Return compact, high-signal prospects only.
 
@@ -28,6 +29,20 @@ institution_name,region,city,type,contact_email,contact_label,source_url,confide
 
 Quality requirements:
 - `source_url` must be a direct, relevant public source page for that contact/institution.
+- `source_url` must be the exact official page/PDF where the email is visibly published.
+- Do not use only the institution homepage as evidence.
+- Do not cite a homepage unless the email is visibly present on that homepage.
 - `confidence` must be one of: high, medium, low.
 - `fit_signal` should briefly justify buyer-side relevance for OrigenLab equipment.
 - Avoid suppliers/distributors unless clearly buyer-side lab operation is present.
+- Prioritize contacts tied to: laboratorio de servicios, laboratorio de analisis, microbiologia, quimica analitica, alimentos/agua/ambiente, planta piloto, centros de investigacion, direccion de investigacion/transferencia tecnologica, compras/adquisiciones/proveedores.
+- Faculty/department contacts are acceptable only when clearly lab-relevant (equipment, analytical services, QA/QC, technical units).
+- Avoid generic university inboxes (e.g., contacto@, contact@, info@) as send-ready candidates; include them only when no better option exists and mark fit_signal as needing manual review.
+- Avoid admissions/pregrado/postgrado/student support contacts.
+- Avoid comunicaciones/prensa/extension contacts unless no better option exists; if included, make fit_signal explicit that manual review is required.
+- Gmail/Hotmail/etc. are allowed only if visibly published on an official institution/lab page and source_url points to that official page.
+- The email domain should match the institution/source domain (or official subdomain/alias visibly evidenced on source_url).
+- If an email belongs to another institution/domain than the cited institution/source, reject that row.
+- If source_url is only a generic homepage and not exact evidence, keep confidence low and treat it as review-only quality.
+- Prefer official evidence pages containing terms like: laboratorio, servicios, analisis, microbiologia, quimica, alimentos, agua, ambiente, compras, adquisiciones, proveedores, investigacion, transferencia tecnologica, planta piloto.
+- Use high/medium confidence only when the email is visible on the exact source page and page context clearly matches OrigenLab ICP.

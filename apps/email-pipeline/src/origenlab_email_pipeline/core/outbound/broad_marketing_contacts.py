@@ -105,6 +105,58 @@ _INSTITUTION_STOPWORDS: frozenset[str] = frozenset(
     }
 )
 _WEAK_SOURCE_PATHS: frozenset[str] = frozenset({"", "/", "/index", "/home", "/inicio"})
+_UNIVERSITY_TOKENS: tuple[str, ...] = (
+    "universidad",
+    "university",
+    "facultad",
+    "faculty",
+    "campus",
+)
+_UNIVERSITY_GENERIC_LOCAL_PARTS: frozenset[str] = frozenset(
+    {
+        "contacto",
+        "contact",
+        "info",
+        "admision",
+        "admisiones",
+        "comunicaciones",
+        "extension",
+        "prensa",
+    }
+)
+_LAB_RELEVANCE_TOKENS: tuple[str, ...] = (
+    "laboratorio",
+    "laboratory",
+    "analisis",
+    "análisis",
+    "analitica",
+    "analítica",
+    "microbiologia",
+    "microbiología",
+    "quimica",
+    "química",
+    "planta piloto",
+    "research",
+    "investigacion",
+    "investigación",
+    "centro de investigacion",
+    "centro de investigación",
+    "transferencia tecnologica",
+    "transferencia tecnológica",
+    "compras",
+    "adquisiciones",
+    "procurement",
+    "proveedores",
+    "food",
+    "alimentos",
+    "agua",
+    "ambiente",
+)
+_GENERIC_SOURCE_PATH_TOKENS: tuple[str, ...] = (
+    "inicio",
+    "home",
+    "index",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,6 +237,59 @@ def _source_path_is_weak(source_url: str) -> bool:
     return False
 
 
+def _source_path_is_homepage(source_url: str) -> bool:
+    if not validate_source_url(source_url):
+        return False
+    p = (urlparse(source_url).path or "").strip().lower().rstrip("/")
+    return p in {"", "/"}
+
+
+def _email_local_part(email: str) -> str:
+    e = str(email or "").strip().lower()
+    if "@" not in e:
+        return ""
+    return e.split("@", 1)[0]
+
+
+def _is_university_like(institution_type: str, institution_name: str, source_url: str) -> bool:
+    haystack = " ".join(
+        [
+            str(institution_type or "").strip().lower(),
+            str(institution_name or "").strip().lower(),
+            str(source_url or "").strip().lower(),
+        ]
+    )
+    return any(tok in haystack for tok in _UNIVERSITY_TOKENS)
+
+
+def _has_lab_relevance_signal(*, source_url: str, fit_signal: str, contact_label: str) -> bool:
+    haystack = " ".join(
+        [
+            str(source_url or "").strip().lower(),
+            str(fit_signal or "").strip().lower(),
+            str(contact_label or "").strip().lower(),
+        ]
+    )
+    return any(tok in haystack for tok in _LAB_RELEVANCE_TOKENS)
+
+
+def _source_page_is_specific(source_url: str) -> bool:
+    if not validate_source_url(source_url):
+        return False
+    parsed = urlparse(source_url)
+    path = (parsed.path or "").strip().lower()
+    if path in _WEAK_SOURCE_PATHS or len(path.strip("/")) <= 1:
+        return False
+    if path.endswith(".pdf"):
+        return True
+    segments = [s for s in path.strip("/").split("/") if s]
+    if not segments:
+        return False
+    if len(segments) == 1 and segments[0] in _GENERIC_SOURCE_PATH_TOKENS:
+        return False
+    return True
+
+
 def _domain_tokens(value: str) -> set[str]:
     parts = [p.strip().lower() for p in str(value or "").split(".") if p.strip()]
     return {p for p in parts if len(p) >= 4}
@@ -210,13 +315,30 @@ def augment_row(base: dict[str, str], **extra: str) -> dict[str, str]:
     return o
 
 
-def quality_review_reasons(*, email: str, institution_name: str, source_url: str, fit_signal: str, contact_label: str) -> list[str]:
+def quality_review_reasons(
+    *,
+    email: str,
+    institution_name: str,
+    institution_type: str,
+    source_url: str,
+    fit_signal: str,
+    contact_label: str,
+    confidence: str,
+) -> list[str]:
     reasons: list[str] = []
     em_domain = _email_domain(email)
     src_host = _source_host(source_url)
     weak_source = _source_path_is_weak(source_url)
     weak_fit = is_weak_fit(fit_signal)
     generic = is_generic_label(contact_label)
+    email_local = _email_local_part(email)
+    university_like = _is_university_like(institution_type, institution_name, source_url)
+    has_lab_relevance = _has_lab_relevance_signal(
+        source_url=source_url, fit_signal=fit_signal, contact_label=contact_label
+    )
+    source_is_homepage = _source_path_is_homepage(source_url)
+    source_is_specific = _source_page_is_specific(source_url)
+    conf = normalize_confidence(confidence)
 
     if src_host and em_domain and not source_host_matches_domain(source_url, em_domain):
         # institutional mismatch signal: source host and email domain diverge.
@@ -229,12 +351,25 @@ def quality_review_reasons(*, email: str, institution_name: str, source_url: str
         token_hit = any(t in em_domain or (src_host and t in src_host) for t in inst_tokens)
         if not token_hit and (weak_source or "domain_mismatch" in reasons):
             reasons.append("institution_email_mismatch")
+            reasons.append("email_domain_institution_mismatch")
 
     if generic and (weak_fit or weak_source):
         reasons.append("generic_contact_weak_evidence")
 
     if weak_source and (generic or weak_fit or "domain_mismatch" in reasons or "institution_email_mismatch" in reasons):
         reasons.append("weak_source_match")
+    if (
+        university_like
+        and email_local in _UNIVERSITY_GENERIC_LOCAL_PARTS
+        and not has_lab_relevance
+    ):
+        reasons.append("university_generic_contact_requires_review")
+    if source_is_homepage and (generic or conf == "low"):
+        reasons.append("homepage_source_weak_evidence")
+    if (not source_is_specific) and (not has_lab_relevance):
+        reasons.append("source_page_not_specific")
+    if (not source_is_specific) or (not has_lab_relevance):
+        reasons.append("exact_source_required_for_send_ready")
 
     # de-dup while preserving order
     seen: set[str] = set()
@@ -313,9 +448,11 @@ def process_reviewed_marketing_rows(
             quality_review_reasons(
                 email=em,
                 institution_name=inst,
+                institution_type=str(raw.get("type") or ""),
                 source_url=src,
                 fit_signal=str(raw.get("fit_signal") or ""),
                 contact_label=str(raw.get("contact_label") or ""),
+                confidence=str(raw.get("confidence") or ""),
             )
         )
 

@@ -725,6 +725,16 @@ def test_light_prompt_template_loads() -> None:
     assert "{sector}" in text
     assert "{limit_hint}" in text
     assert "local exact exclusion" in text.lower()
+    assert "do not guess firstname.lastname patterns" in text.lower()
+    assert "avoid generic university inboxes" in text.lower()
+
+
+def test_heavy_prompt_template_has_university_negative_guidance() -> None:
+    text = ra.load_prompt_template(ra.DEFAULT_PROMPT_PATH)
+    low = text.lower()
+    assert "do not guess firstname.lastname patterns" in low
+    assert "avoid generic university contact emails" in low
+    assert "gmail/hotmail/etc." in low
 
 
 def test_light_mode_uses_light_executor_and_sets_metadata(tmp_path: Path, monkeypatch) -> None:

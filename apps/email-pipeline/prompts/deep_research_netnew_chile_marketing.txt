@@ -12,9 +12,14 @@ Rules:
 - Focus on institutional/public/professional entities in Chile with plausible lab/technical fit.
 - Use web research with source pages for each row.
 - Prefer specific departmental or lab contacts over generic admissions/secretariat.
+- `source_url` must be the exact official page/PDF where the email is visibly published.
+- Do not use only institution homepages as evidence.
+- Do not cite a homepage unless the email is visibly present on that homepage.
 - confidence must be one of: high, medium, low.
 - Ensure contact_email is syntactically valid.
 - Keep fit_signal concise (<200 chars), factual, and commercially useful.
+- Do not invent emails.
+- Do not guess firstname.lastname patterns.
 - Do not include commentary outside the CSV block.
 
 Compact seed files included in this request:
@@ -29,4 +34,15 @@ Important:
 - Avoid institutions and domains that are already heavily represented.
 - Prefer net-new institutions and net-new domains where plausible.
 - Final exact exclusion is enforced locally after research output is returned.
+- Prioritize outreach-worthy contacts for: laboratorio de servicios, laboratorio de analisis, microbiologia, quimica analitica, alimentos/agua/ambiente, planta piloto, centros de investigacion, direccion de investigacion/transferencia tecnologica, compras/adquisiciones/proveedores.
+- Faculty/department contacts are acceptable only when clearly tied to lab services, research equipment, analytical services, or technical procurement.
+- Avoid generic university contact emails as send-ready recommendations (contacto/contact/info).
+- Avoid admissions/pregrado/postgrado/student support contacts.
+- Avoid comunicaciones/prensa/extension contacts unless no better option exists, and then include clear fit_signal wording that manual review is required.
+- Gmail/Hotmail/etc. are allowed only when visibly published on an official institution or lab page, with that page cited in source_url.
+- The email domain must match the institution/source domain, or an official subdomain/alias explicitly supported by source_url evidence.
+- If email domain belongs to another institution than the row institution/source evidence, reject the row.
+- Generic homepage-only evidence is review-only quality; keep confidence low in those cases.
+- Prioritize exact evidence pages with terms such as: laboratorio, servicios, analisis, microbiologia, quimica, alimentos, agua, ambiente, compras, adquisiciones, proveedores, investigacion, transferencia tecnologica, planta piloto.
+- Use high/medium confidence only when the email is visible on the exact source page and context clearly matches OrigenLab ICP.
 
