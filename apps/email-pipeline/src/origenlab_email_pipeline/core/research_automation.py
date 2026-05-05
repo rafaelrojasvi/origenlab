@@ -33,6 +33,7 @@ DEFAULT_REPORTS_ACTIVE = Path(__file__).resolve().parents[3] / "reports" / "out"
 RESEARCH_MODE_CHOICES = ("heavy", "light")
 OUTPUT_MODE_CHOICES = ("direct_csv", "evidence_first")
 DEFAULT_HEAVY_MODEL = "o4-mini-deep-research"
+DEFAULT_HEAVY_PRO_MODEL = "o3-deep-research"
 DEFAULT_LIGHT_MODEL = "gpt-4o-mini"
 SECTOR_CHOICES = (
     "broad",
@@ -97,6 +98,8 @@ class RunArtifacts:
     prompt_preview_txt: Path
     api_error_json: Path
     api_error_txt: Path
+    api_request_summary_json: Path
+    api_response_summary_json: Path
     retry_attempts_json: Path
     process_workspace: Path
 
@@ -214,6 +217,32 @@ def _is_retryable_error(*, code: str, status: str) -> bool:
     return code in retryable_codes
 
 
+def is_deep_research_model(model: str) -> bool:
+    m = str(model or "").strip().lower()
+    return m.startswith("o4-mini-deep-research") or m.startswith("o3-deep-research")
+
+
+def resolve_model_for_mode(*, research_mode: str, explicit_model: str | None) -> str:
+    if explicit_model and str(explicit_model).strip():
+        return str(explicit_model).strip()
+    if str(research_mode).strip().lower() == "heavy":
+        return (
+            os.environ.get("ORIGENLAB_RESEARCH_HEAVY_MODEL")
+            or DEFAULT_HEAVY_MODEL
+        ).strip()
+    return (
+        os.environ.get("ORIGENLAB_RESEARCH_LIGHT_MODEL")
+        or DEFAULT_LIGHT_MODEL
+    ).strip()
+
+
+def _research_tools_for_mode(*, research_mode: str) -> list[dict[str, str]]:
+    # Keep tools explicit and auditable. Heavy/deep-research must include web_search.
+    if str(research_mode).strip().lower() == "heavy":
+        return [{"type": "web_search"}]
+    return [{"type": "web_search"}]
+
+
 def run_deep_research_response(
     *,
     client: OpenAI,
@@ -221,6 +250,7 @@ def run_deep_research_response(
     prompt_text: str,
     seed_input_files: dict[str, Path],
     use_background: bool,
+    tools: list[dict[str, str]] | None = None,
     poll_seconds: float = 3.0,
     progress_callback: ProgressCallback | None = None,
 ) -> tuple[str, str, dict[str, str]]:
@@ -243,7 +273,7 @@ def run_deep_research_response(
     resp = client.responses.create(
         model=model,
         input=[{"role": "user", "content": content}],
-        tools=[{"type": "web_search"}],
+        tools=(tools or [{"type": "web_search"}]),
         background=bool(use_background),
     )
 
@@ -285,6 +315,7 @@ def run_light_research_response(
     prompt_text: str,
     seed_input_files: dict[str, Path],
     use_background: bool,
+    tools: list[dict[str, str]] | None = None,
     poll_seconds: float = 3.0,
     progress_callback: ProgressCallback | None = None,
 ) -> tuple[str, str, dict[str, str]]:
@@ -297,6 +328,7 @@ def run_light_research_response(
         prompt_text=prompt_text,
         seed_input_files=seed_input_files,
         use_background=use_background,
+        tools=tools,
         poll_seconds=poll_seconds,
         progress_callback=progress_callback,
     )
@@ -712,6 +744,19 @@ def _merge_evidence_warnings_into_candidates(
     return flagged
 
 
+def _payload_has_annotations(payload: Any) -> bool:
+    if isinstance(payload, dict):
+        for k, v in payload.items():
+            if k == "annotations" and isinstance(v, list) and len(v) > 0:
+                return True
+            if _payload_has_annotations(v):
+                return True
+        return False
+    if isinstance(payload, list):
+        return any(_payload_has_annotations(v) for v in payload)
+    return False
+
+
 def resolve_sector_for_day_rotation(*, weekday: int) -> str:
     """Map weekday (0=Mon..6=Sun) to a recommended daily sector."""
     mapping = {
@@ -878,6 +923,7 @@ def run_research_automation(
     progress_callback: ProgressCallback | None = None,
     research_mode: str = "heavy",
     research_output_mode: str = "direct_csv",
+    tpm_safe: bool = False,
 ) -> RunArtifacts:
     run_started = time.monotonic()
     _emit_progress(progress_callback, phase="starting", out_dir=str(out_dir), sector=sector, elapsed_seconds=0.0, retry_count=0)
@@ -895,6 +941,8 @@ def run_research_automation(
         prompt_preview_txt=out_dir / "prompt_preview.txt",
         api_error_json=out_dir / "api_error.json",
         api_error_txt=out_dir / "api_error.txt",
+        api_request_summary_json=out_dir / "api_request_summary.json",
+        api_response_summary_json=out_dir / "api_response_summary.json",
         retry_attempts_json=out_dir / "retry_attempts.json",
         process_workspace=out_dir / "process_workspace",
     )
@@ -945,6 +993,40 @@ def run_research_automation(
 
     prompt_text = _render_for_sector(sector)
     artifacts.prompt_preview_txt.write_text(prompt_text, encoding="utf-8")
+    selected_tools = _research_tools_for_mode(research_mode=research_mode)
+    expected_family = "deep_research" if str(research_mode).strip().lower() == "heavy" else "light"
+    precheck_ok = True
+    precheck_reason = ""
+    if str(research_mode).strip().lower() == "heavy" and not is_deep_research_model(model):
+        precheck_ok = False
+        precheck_reason = (
+            "Heavy research mode requires an OpenAI Deep Research model. "
+            f"Got {model}. Set ORIGENLAB_RESEARCH_HEAVY_MODEL=o4-mini-deep-research "
+            "or use --research-mode light."
+        )
+    artifacts.api_request_summary_json.write_text(
+        json.dumps(
+            {
+                "research_mode": str(research_mode),
+                "research_output_mode": str(research_output_mode),
+                "selected_model": str(model),
+                "expected_model_family": expected_family,
+                "tools_requested": selected_tools,
+                "background": bool(use_background),
+                "tpm_safe": bool(tpm_safe),
+                "prompt_file": str(prompt_file.resolve()),
+                "sector": str(sector),
+                "fail_closed_validation_passed": bool(precheck_ok),
+                "fail_closed_validation_reason": precheck_reason,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    if not precheck_ok:
+        raise RuntimeError(precheck_reason)
     uploaded_file_ids: dict[str, str] = {}
     retry_attempts: list[dict[str, Any]] = []
     selected_sector = sector
@@ -1014,6 +1096,7 @@ def run_research_automation(
                                 prompt_text=prompt_text,
                                 seed_input_files=seed_input_files,
                                 use_background=use_background,
+                                tools=selected_tools,
                                 progress_callback=progress_cb,
                             )
                         else:
@@ -1023,6 +1106,7 @@ def run_research_automation(
                                 prompt_text=prompt_text,
                                 seed_input_files=seed_input_files,
                                 use_background=use_background,
+                                tools=selected_tools,
                                 progress_callback=progress_cb,
                             )
                         retry_attempts.append(
@@ -1100,6 +1184,36 @@ def run_research_automation(
 
         artifacts.raw_response_json.write_text(raw_json, encoding="utf-8")
         artifacts.raw_response_txt.write_text(raw_text, encoding="utf-8")
+        response_payload: dict[str, Any] = {}
+        try:
+            response_payload = json.loads(raw_json)
+        except Exception:
+            response_payload = {}
+        actual_model = str(response_payload.get("model") or model)
+        response_summary = {
+            "response_id": str(response_payload.get("id") or ""),
+            "actual_model": actual_model,
+            "status": str(response_payload.get("status") or ""),
+            "created_at": response_payload.get("created_at"),
+            "completed_at": response_payload.get("completed_at"),
+            "usage": response_payload.get("usage"),
+            "tools_requested": selected_tools,
+            "output_has_annotations": bool(_payload_has_annotations(response_payload)),
+            "billing_payer": response_payload.get("billing", {}).get("payer")
+            if isinstance(response_payload.get("billing"), dict)
+            else None,
+            "model_mismatch_warning": bool(actual_model != str(model)),
+            "selected_model": str(model),
+        }
+        artifacts.api_response_summary_json.write_text(
+            json.dumps(response_summary, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        if str(research_mode).strip().lower() == "heavy" and not is_deep_research_model(actual_model):
+            raise RuntimeError(
+                "Heavy mode fail-closed: API returned non deep-research model "
+                f"'{actual_model}' (selected '{model}')."
+            )
 
         _emit_progress(
             progress_callback,
@@ -1397,6 +1511,8 @@ def run_research_automation(
             "mode": "dry_run" if dry_run else "live_research_no_send",
             "research_mode": research_mode,
             "research_output_mode": str(research_output_mode),
+            "api_request_summary": str(artifacts.api_request_summary_json),
+            "api_response_summary": str(artifacts.api_response_summary_json),
             "sector": selected_sector,
             "requested_sector": sector,
             "fallback_sector": fallback_sector,
@@ -1493,6 +1609,8 @@ def run_research_automation(
             "mode": "dry_run" if dry_run else "live_research_no_send",
             "research_mode": research_mode,
             "research_output_mode": str(research_output_mode),
+            "api_request_summary": str(artifacts.api_request_summary_json),
+            "api_response_summary": str(artifacts.api_response_summary_json),
             "model": model,
             "sector": selected_sector,
             "requested_sector": sector,
@@ -1536,6 +1654,7 @@ def run_research_automation(
 
 __all__ = [
     "DEFAULT_HEAVY_MODEL",
+    "DEFAULT_HEAVY_PRO_MODEL",
     "DEFAULT_LIGHT_MODEL",
     "DEFAULT_LIGHT_PROMPT_PATH",
     "DEFAULT_PROMPT_PATH",
@@ -1551,6 +1670,8 @@ __all__ = [
     "normalize_and_validate_headers",
     "parse_csv_rows",
     "parse_evidence_plan_rows",
+    "is_deep_research_model",
+    "resolve_model_for_mode",
     "build_compact_seed_artifacts",
     "render_prompt",
     "resolve_out_dir",

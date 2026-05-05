@@ -19,6 +19,10 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 cd apps/email-pipeline
 uv run python scripts/qa/export_do_not_repeat_master.py
 # DeepSearch → reports/out/active/current/reviewed_marketing_contacts.csv
+# Deep/Light research automation (review-only; no send):
+# - light: non-deep-research model (lower-cost draft discovery)
+# - heavy: MUST be true Deep Research model (o4-mini-deep-research or o3-deep-research)
+# - web_search + gpt-4o-mini is NOT Deep Research heavy mode
 uv run python scripts/qa/validate_campaign_csvs.py \
   --file reports/out/active/current/reviewed_marketing_contacts.csv \
   --kind marketing_contacts --strict
@@ -69,6 +73,11 @@ uv run python scripts/qa/refresh_outbound_safety_memory.py
 # Optional strict mode:
 # uv run python scripts/qa/refresh_outbound_safety_memory.py --fail-on-ready-with-warnings
 ```
+
+Research output modes:
+
+- `--research-output-mode evidence_first`: draft planning only (no model-generated contacts trusted).
+- `--research-output-mode direct_csv`: candidate CSV path, still mandatory evidence verification before processing.
 
 ### Debug / audit scripts (KEEP_AUDIT, KEEP_DEBUG)
 

@@ -176,6 +176,8 @@ def test_review_summary_generation(tmp_path: Path) -> None:
         prompt_preview_txt=tmp_path / "prompt_preview.txt",
         api_error_json=tmp_path / "api_error.json",
         api_error_txt=tmp_path / "api_error.txt",
+        api_request_summary_json=tmp_path / "api_request_summary.json",
+        api_response_summary_json=tmp_path / "api_response_summary.json",
         retry_attempts_json=tmp_path / "retry_attempts.json",
         process_workspace=tmp_path / "ws",
     )
@@ -448,6 +450,7 @@ def test_cli_help() -> None:
     assert "--tiny-run" in cp.stdout
     assert "--verbose-progress" in cp.stdout
     assert "--run-contacted-coverage-check" in cp.stdout
+    assert "--print-research-config" in cp.stdout
 
 
 def test_day_rotation_mapping() -> None:
@@ -1030,4 +1033,187 @@ def test_heavy_and_light_both_run_evidence_verification(tmp_path: Path, monkeypa
             research_mode=mode,
         )
     assert seen["verify_calls"] == 2
+
+
+def test_heavy_default_model_resolution() -> None:
+    model = ra.resolve_model_for_mode(research_mode="heavy", explicit_model=None)
+    assert model == ra.DEFAULT_HEAVY_MODEL
+    assert ra.is_deep_research_model(model) is True
+
+
+def test_heavy_invalid_env_model_fails_before_api_call(tmp_path: Path, monkeypatch) -> None:
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
+    sample = tmp_path / "sample.txt"
+    sample.write_text(
+        "```csv\ninstitution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal\n"
+        "A,RM,Santiago,universidad,a@x.cl,lab,https://x.cl,high,fit\n```",
+        encoding="utf-8",
+    )
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(contacted, ["contact_email"], [])
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(known, ["contact_email"], [])
+    seeds = ra.SeedPaths(dnr, contacted, known)
+    monkeypatch.setenv("ORIGENLAB_RESEARCH_HEAVY_MODEL", "gpt-4o-mini")
+    resolved = ra.resolve_model_for_mode(research_mode="heavy", explicit_model=None)
+    assert resolved == "gpt-4o-mini"
+    called = {"api": 0}
+
+    def _never_api(api_key):
+        called["api"] += 1
+        return object()
+
+    monkeypatch.setattr(ra, "OpenAI", _never_api)
+    try:
+        ra.run_research_automation(
+            model=resolved,
+            prompt_file=prompt,
+            out_dir=tmp_path / "out",
+            sector="broad",
+            limit_hint=5,
+            dry_run=True,
+            sample_response=sample,
+            seed_paths=seeds,
+            use_background=False,
+            app_root=Path(__file__).resolve().parents[1],
+            max_candidates=200,
+            max_send_ready=50,
+            fail_on_over_limit=False,
+            run_contacted_coverage_check=False,
+            strict_contacted_coverage=False,
+            research_mode="heavy",
+        )
+        assert False, "Expected fail-closed heavy model error"
+    except RuntimeError as exc:
+        assert "requires an OpenAI Deep Research model" in str(exc)
+    assert called["api"] == 0
+
+
+def test_heavy_post_response_model_mismatch_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(contacted, ["contact_email"], [])
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(known, ["contact_email"], [])
+    seeds = ra.SeedPaths(dnr, contacted, known)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(ra, "OpenAI", lambda api_key: object())
+    monkeypatch.setattr(
+        ra,
+        "run_deep_research_response",
+        lambda **kwargs: (
+            json.dumps({"id": "resp_1", "model": "gpt-4o-mini", "status": "completed"}),
+            "```csv\ninstitution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal\nA,RM,Santiago,universidad,a@x.cl,lab,https://x.cl,high,fit\n```",
+            {},
+        ),
+    )
+    try:
+        ra.run_research_automation(
+            model=ra.DEFAULT_HEAVY_MODEL,
+            prompt_file=prompt,
+            out_dir=tmp_path / "out",
+            sector="broad",
+            limit_hint=5,
+            dry_run=False,
+            sample_response=None,
+            seed_paths=seeds,
+            use_background=False,
+            app_root=Path(__file__).resolve().parents[1],
+            max_candidates=200,
+            max_send_ready=50,
+            fail_on_over_limit=False,
+            run_contacted_coverage_check=False,
+            strict_contacted_coverage=False,
+            research_mode="heavy",
+        )
+        assert False, "Expected heavy mismatch fail-closed"
+    except RuntimeError as exc:
+        assert "fail-closed" in str(exc)
+    assert not (tmp_path / "out" / "candidates_raw.csv").is_file()
+
+
+def test_api_request_and_response_summaries_written(tmp_path: Path, monkeypatch) -> None:
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("sector={sector} limit={limit_hint}", encoding="utf-8")
+    sample = tmp_path / "sample.txt"
+    sample.write_text(
+        "```csv\ninstitution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal\n"
+        "A,RM,Santiago,universidad,a@x.cl,lab,https://x.cl/lab,high,laboratorio\n```",
+        encoding="utf-8",
+    )
+    dnr = tmp_path / "do_not_repeat_master.csv"
+    _write_csv(dnr, ["email_norm"], [])
+    contacted = tmp_path / "outreach_contacted_all.csv"
+    _write_csv(contacted, ["contact_email"], [])
+    known = tmp_path / "all_known_marketing_contacts_dedup.csv"
+    _write_csv(known, ["contact_email"], [])
+    seeds = ra.SeedPaths(dnr, contacted, known)
+
+    def _fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        cmd = " ".join(args)
+        if "verify_research_candidate_evidence.py" in cmd:
+            out_csv = Path(args[args.index("--out-csv") + 1])
+            _write_csv(
+                out_csv,
+                ["source_line", "institution_name", "contact_email", "source_url", "http_status", "email_visible_on_source", "relevance_keywords_present", "evidence_warning", "evidence_ok", "fetch_error"],
+                [["2", "A", "a@x.cl", "https://x.cl/lab", "200", "1", "1", "", "1", ""]],
+            )
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+        if "process_broad_marketing_contacts.py" in cmd:
+            ws = Path(args[args.index("--workspace") + 1])
+            _write_csv(ws / "send_ready_marketing.csv", ["case_id", "contact_email", "email_source", "institution_name", "region", "city", "type", "contact_label", "source_url", "confidence", "fit_signal", "variant_type"], [])
+            _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
+            _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
+            _write_csv(ws / "marketing_safe_to_send.csv", ["contact_email"], [])
+            (ws / "marketing_contacts_summary.json").write_text(
+                json.dumps({"counts": {"send_ready_marketing": 0, "blocked": 0, "needs_manual_review": 0}}),
+                encoding="utf-8",
+            )
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(ra, "_run_subprocess", _fake_run)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(ra, "OpenAI", lambda api_key: object())
+    monkeypatch.setattr(
+        ra,
+        "run_deep_research_response",
+        lambda **kwargs: (
+            json.dumps({"id": "resp_1", "model": ra.DEFAULT_HEAVY_MODEL, "status": "completed", "usage": {"total_tokens": 12}}),
+            sample.read_text(encoding="utf-8"),
+            {},
+        ),
+    )
+    artifacts = ra.run_research_automation(
+        model=ra.DEFAULT_HEAVY_MODEL,
+        prompt_file=prompt,
+        out_dir=tmp_path / "out",
+        sector="broad",
+        limit_hint=5,
+        dry_run=False,
+        sample_response=None,
+        seed_paths=seeds,
+        use_background=False,
+        app_root=Path(__file__).resolve().parents[1],
+        max_candidates=200,
+        max_send_ready=50,
+        fail_on_over_limit=False,
+        run_contacted_coverage_check=False,
+        strict_contacted_coverage=False,
+        research_mode="heavy",
+        tpm_safe=True,
+    )
+    req = json.loads((tmp_path / "out" / "api_request_summary.json").read_text(encoding="utf-8"))
+    resp = json.loads((tmp_path / "out" / "api_response_summary.json").read_text(encoding="utf-8"))
+    assert req["selected_model"] == ra.DEFAULT_HEAVY_MODEL
+    assert req["expected_model_family"] == "deep_research"
+    assert req["fail_closed_validation_passed"] is True
+    assert req["tpm_safe"] is True
+    assert resp["actual_model"] == ra.DEFAULT_HEAVY_MODEL
+    assert resp["response_id"] == "resp_1"
 

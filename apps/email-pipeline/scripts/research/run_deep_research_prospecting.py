@@ -26,6 +26,8 @@ from origenlab_email_pipeline.core.research_automation import (
     RESEARCH_MODE_CHOICES,
     SECTOR_CHOICES,
     default_seed_paths,
+    is_deep_research_model,
+    resolve_model_for_mode,
     resolve_out_dir,
     resolve_sector_for_day_rotation,
     run_research_automation,
@@ -260,13 +262,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print every progress status event during long-running jobs.",
     )
+    ap.add_argument(
+        "--print-research-config",
+        action="store_true",
+        help="Print resolved research config before execution.",
+    )
     args = ap.parse_args(argv)
     research_mode = str(args.research_mode)
     prompt_explicit = _flag_present(argv, "--prompt-file")
-    resolved_model = (
-        str(args.model)
-        if args.model
-        else (DEFAULT_HEAVY_MODEL if research_mode == "heavy" else DEFAULT_LIGHT_MODEL)
+    resolved_model = resolve_model_for_mode(
+        research_mode=research_mode,
+        explicit_model=str(args.model) if args.model else None,
     )
     if research_mode == "light" and "deep-research" in resolved_model.lower():
         print(
@@ -378,6 +384,15 @@ def main(argv: list[str] | None = None) -> int:
             "Warning: heavy mode is higher cost; run it only after light/evidence pipeline is structurally stable. "
             "Heavy mode still uses the same evidence verification rules."
         )
+    if args.print_research_config:
+        print("Research config")
+        print(f"  research_mode: {research_mode}")
+        print(f"  research_output_mode: {args.research_output_mode}")
+        print(f"  selected_model: {resolved_model}")
+        print(f"  is_deep_research_model: {is_deep_research_model(resolved_model)}")
+        print("  tools_enabled: web_search")
+        print(f"  prompt_file: {resolved_prompt_file}")
+        print(f"  sector: {selected_sector}")
     progress = ProgressReporter(out_dir=out_dir, verbose=bool(args.verbose_progress))
     artifacts = run_research_automation(
         model=resolved_model,
@@ -407,6 +422,7 @@ def main(argv: list[str] | None = None) -> int:
         progress_callback=progress.emit,
         research_mode=research_mode,
         research_output_mode=str(args.research_output_mode),
+        tpm_safe=bool(args.tpm_safe),
     )
     print(f"Wrote: {artifacts.out_dir}")
     print(f"Review summary: {artifacts.review_summary_md}")
