@@ -136,7 +136,7 @@ The business mart Streamlit app ([`apps/business_mart_app.py`](../../apps/busine
 
 - **No sending** (no Gmail/Titan send, no CRM). Review fields and exports are for workflow only; `approved_for_send` in exported CSV is always **`n`** from this page.
 - **OrigenLab mode always** — same stack as the pilot (`build_draft_package` + `DRAFTING_PROFILE_ORIGENLAB` + `load_origenlab_drafting_context()`), cohort TF-IDF index from the usual `reports/out/tatiana_candidate_cohort_marketing_top200_*.csv` seeds.
-- **Intake for the exact customer message** is either typed manually or loaded from the raw **`emails`** table (`source_file` like `gmail:contacto@origenlab.cl%`). Business marts are **not** required for this page and are not the canonical source for verbatim message text.
+- **Intake for the exact customer message** is either typed manually or loaded from the raw **`emails`** table (`source_file` like `gmail:contacto@origenlab.cl/%`). Business marts are **not** required for this page and are not the canonical source for verbatim message text.
 - **Generator choice:** use **Mock explícito** for offline runs, or **OpenAI** when API keys are configured. There is **no silent fallback** to mock when OpenAI is selected but misconfigured — the UI shows a clear error.
 - **Optional export** writes `draft_package.json`, `pilot_review_row.csv`, and `origenlab_context_snapshot.json` under `reports/out/<timestamp>_streamlit_borrador_comercial/` (same column conventions as pilot review CSVs). SQLite remains read-only.
 

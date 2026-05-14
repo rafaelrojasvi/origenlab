@@ -51,7 +51,7 @@ No se infieren horas de ejecución de ingest: para eso hay que fiarse de procedi
 <a id="m-streamlit-contacto-activity"></a>
 ## Actividad contacto Gmail (página relacionada)
 
-La sección **Actividad contacto Gmail** en la misma app lista correos con `gmail:contacto@origenlab.cl%` y un resumen 7/30/90 días coherente con las mismas reglas de `date()` que la vigencia plausible. No reemplaza **Salud de datos** (sigue siendo la vista de todos los orígenes). Detalle: [`BUSINESS_MART.md`](BUSINESS_MART.md) (Streamlit UI).
+La sección **Actividad contacto Gmail** en la misma app lista correos con `gmail:contacto@origenlab.cl/%` (equivalente SQL: `lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'`) y un resumen 7/30/90 días coherente con las mismas reglas de `date()` que la vigencia plausible. No reemplaza **Salud de datos** (sigue siendo la vista de todos los orígenes). Detalle: [`BUSINESS_MART.md`](BUSINESS_MART.md) (Streamlit UI).
 
 <a id="m-streamlit-freshness-run"></a>
 ## Cómo abrir la app

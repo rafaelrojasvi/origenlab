@@ -5,7 +5,7 @@ Hard exclusions (bounces, do-not-contact) stay in ``contact_email_suppression``.
 
 Operational note: canonical **customer-facing contact / outreach** identity is **OrigenLab**
 (``contacto@origenlab.cl``, ``@origenlab.cl``), including Gmail rows with
-``source_file`` like ``gmail:contacto@origenlab.cl%``. **LabDelivery** (``labdelivery.cl``)
+``source_file`` like ``gmail:contacto@origenlab.cl/%``. **LabDelivery** (``labdelivery.cl``)
 is a distinct domain in this repo; do not treat LabDelivery senders as the same
 mailbox when inferring “we contacted them” from the archive—filter on OrigenLab
 when adding derived logic or exports.

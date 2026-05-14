@@ -10,6 +10,7 @@ from typing import Any
 
 from origenlab_email_pipeline.marketing_export_context import DEFAULT_SENT_FOLDERS
 from origenlab_email_pipeline.outbound_sent_preflight import probe_sent_history
+from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
 
 
 def object_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -118,9 +119,17 @@ def assess_outbound_readiness(
         "distinct_folders_sample": [],
         "max_sent_message_at": None,
         "max_sent_message_age_days": None,
+        "canonical_contacto_gmail_rows": 0,
     }
 
     if req_status.get("emails"):
+        pred_c = sql_predicate_contacto_gmail_source()
+        try:
+            sent_info["canonical_contacto_gmail_rows"] = int(
+                conn.execute(f"SELECT COUNT(*) FROM emails WHERE {pred_c}").fetchone()[0]
+            )
+        except sqlite3.Error:
+            sent_info["canonical_contacto_gmail_rows"] = -1
         user = gmail_user.strip()
         folders = tuple(f.strip() for f in sent_folders if f.strip())
         like_pat = f"gmail:{user.lower()}/%"
@@ -161,6 +170,17 @@ def assess_outbound_readiness(
                     "Sent folder rows exist but no normalized recipient addresses were parsed — "
                     "check `recipients` column / encoding."
                 )
+
+        try:
+            total_e = int(conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0])
+        except sqlite3.Error:
+            total_e = 0
+        if sent_info.get("canonical_contacto_gmail_rows") == 0 and total_e > 500:
+            warnings.append(
+                "Canonical operational Gmail rows (`gmail:contacto@origenlab.cl/…`) are **absent** "
+                f"while `emails` has **{total_e:,}** rows — refresh via `05_workspace_gmail_imap_to_sqlite.py` "
+                "if OrigenLab outbound truth depends on Workspace."
+            )
 
     side: dict[str, Any] = {
         "suppression_rows": 0,
@@ -330,6 +350,7 @@ def print_human_report(r: OutboundReadinessReport) -> None:
     print("Sent history (export gate conventions):")
     print(f"  gmail_user: {s.get('gmail_user')}")
     print(f"  folders: {s.get('sent_folders')}")
+    print(f"  canonical_contacto_gmail_rows: {s.get('canonical_contacto_gmail_rows')}")
     print(f"  matching Sent rows in `emails`: {s.get('sent_email_rows')}")
     print(f"  normalized recipient count: {s.get('sent_recipient_norm_count')}")
     print(f"  newest message timestamp: {s.get('max_sent_message_at')}")

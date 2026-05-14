@@ -22,6 +22,7 @@ if str(_ROOT / "src") not in sys.path:
 
 from origenlab_email_pipeline.business_mart import domain_of, emails_in
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
 
 NOISE_PATTERNS = [
     r"mailer-daemon",
@@ -120,6 +121,14 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--since-days", type=int, default=None)
     ap.add_argument("--include-noise", action="store_true")
+    ap.add_argument(
+        "--include-legacy-email-sources",
+        action="store_true",
+        help=(
+            "include all mbox/PST rows in `emails` (may mix contacto@labdelivery exports). "
+            "Default: restrict to canonical Workspace Gmail `gmail:contacto@origenlab.cl/` rows only."
+        ),
+    )
     ap.add_argument("--json-out", default=None)
     return ap.parse_args()
 
@@ -175,12 +184,21 @@ def is_noncommercial_contact(email: str, domain: str) -> bool:
     return False
 
 
-def fetch_rows(conn: sqlite3.Connection, since_days: int | None, gmail_user: str) -> list[sqlite3.Row]:
+def fetch_rows(
+    conn: sqlite3.Connection,
+    since_days: int | None,
+    gmail_user: str,
+    *,
+    include_legacy_email_sources: bool,
+) -> list[sqlite3.Row]:
     params: list[Any] = []
     where_parts = [
         "(lower(COALESCE(sender,'')) LIKE ? OR lower(COALESCE(recipients,'')) LIKE ? OR lower(COALESCE(folder,'')) LIKE ? OR lower(COALESCE(source_file,'')) LIKE ?)"
     ]
     params.extend([f"%{gmail_user.lower()}%", f"%{gmail_user.lower()}%", "%inbox%", "%enviados%"])
+    if not include_legacy_email_sources:
+        canon = sql_predicate_contacto_gmail_source()
+        where_parts.append(f"({canon})")
     if since_days is not None:
         where_parts.append("date_iso >= datetime('now', ?)")
         params.append(f"-{since_days} days")
@@ -394,7 +412,12 @@ def main() -> int:
 
     conn = sqlite3.connect(str(db_path))
     try:
-        rows = fetch_rows(conn, args.since_days, args.gmail_user)
+        rows = fetch_rows(
+            conn,
+            args.since_days,
+            args.gmail_user,
+            include_legacy_email_sources=args.include_legacy_email_sources,
+        )
         events, overall = build_events(rows, args.gmail_user.lower())
         c_map, o_map, l_map = load_lookup_maps(conn)
     finally:

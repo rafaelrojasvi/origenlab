@@ -13,7 +13,7 @@ Página en `apps/business_mart_app.py` que muestra una **cola operativa de mensa
 
 ## Alcance v1
 
-- Solo correos con `lower(source_file) LIKE 'gmail:contacto@origenlab.cl%'`.
+- Solo correos con `lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'`.
 - Sin agrupación por hilo.
 - Sin usar `v_commercial_candidate_queue` como fuente principal de filas (la cola es a nivel mensaje).
 

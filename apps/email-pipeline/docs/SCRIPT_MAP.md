@@ -163,6 +163,7 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/export_candidate_audit.py` | OPS_AUDIT | Sample rows through gate (informational) |
 | `scripts/qa/check_reports_out_active_hygiene.py` | OPS_AUDIT | Warn/fail when `reports/out/active/` contains unexpected generated artifacts outside `current/` |
 | `scripts/qa/validate_sqlite_archive_for_postgres.py` | OPS_MIGRATE | Read-only / pre-migrate validation |
+| `scripts/qa/audit_canonical_contacto_gmail.py` | OPS_AUDIT | Read-only: canonical Gmail vs legacy labdelivery vs other `emails` metrics |
 | `scripts/qa/publish_gate.py` | OPS_AUDIT | Publication / trust gate (broader than outbound) |
 
 **Overlap note:** **`export_do_not_repeat_master.py`** (operator *input list*) vs **`export_outreach_volume_rollup.py`** (*metrics*). Different jobs; do not delete one thinking it replaces the other.

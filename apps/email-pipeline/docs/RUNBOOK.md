@@ -105,11 +105,22 @@ Not part of the two daily workflows: archive batch builders (**`build_archive_se
 <a id="m-eprun-mailbox-primary"></a>
 ## Primary mailbox path (Google Workspace Gmail)
 
-For **live** mail for **contacto@origenlab.cl** on **Google Workspace**, the operational ingest path is **[`05_workspace_gmail_imap_to_sqlite.py`](../scripts/ingest/05_workspace_gmail_imap_to_sqlite.py)** with OAuth (see [`docs/ingest/WORKSPACE_GMAIL_IMAP.md`](ingest/WORKSPACE_GMAIL_IMAP.md)). Messages are stored in **`emails`** with **`source_file`** values like **`gmail:contacto@origenlab.cl/...`**.
+For **live** mail for **contacto@origenlab.cl** on **Google Workspace**, the operational ingest path is **[`05_workspace_gmail_imap_to_sqlite.py`](../scripts/ingest/05_workspace_gmail_imap_to_sqlite.py)** with OAuth (see [`docs/ingest/WORKSPACE_GMAIL_IMAP.md`](ingest/WORKSPACE_GMAIL_IMAP.md)). Messages are stored in **`emails`** with **`source_file`** values like **`gmail:contacto@origenlab.cl/...`** (see **Source-of-truth tiers** below).
 
 **Titan (password IMAP)** via **[`04_imap_to_sqlite.py`](../scripts/ingest/04_imap_to_sqlite.py)** ([`docs/ingest/IMAP_CONTACTO.md`](ingest/IMAP_CONTACTO.md)) remains supported for legacy or alternate hosts; those rows use **`imap:...`** prefixes.
 
-In **Streamlit** ([`apps/business_mart_app.py`](../apps/business_mart_app.py)), **Actividad contacto Gmail**, **Casos para revisar**, and **Borrador comercial** when loading from the Gmail inbox filter **`gmail:contacto@origenlab.cl%`**. They do **not** include Titan-ingested rows; use **Salud de datos** (or raw SQL) if you need a mixed view of sources.
+In **Streamlit** ([`apps/business_mart_app.py`](../apps/business_mart_app.py)), **Actividad contacto Gmail**, **Casos para revisar**, and **Borrador comercial** when loading from the Gmail inbox filter the same **`gmail:contacto@origenlab.cl/…`** prefix (SQL: `lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'`). They do **not** include Titan-ingested rows; use **Salud de datos** (or raw SQL) if you need a mixed view of sources.
+
+<a id="m-eprun-source-tiers"></a>
+### Source-of-truth tiers (Phase 1)
+
+| Tier | `source_file` pattern | Role |
+|------|------------------------|------|
+| **Canonical operational** | `gmail:contacto@origenlab.cl/%` | Live Google Workspace mailbox — Streamlit operational panels, outbound readiness hints, case queues, conversation export **default**. Refresh with **`05_workspace_gmail_imap_to_sqlite.py`**. |
+| **Legacy / reference** | mbox paths containing `contacto@labdelivery` (and other PST/mbox trees) | Historical archive in the same `emails` table — **not** equivalent to the live OrigenLab mailbox for operational metrics. Inspect via **Salud de datos** or pass **`--include-legacy-email-sources`** to `export_email_conversation_intelligence.py`. |
+| **Do not** | Full mbox reload via **`02_mbox_to_sqlite.py`** | **Deletes all `emails` rows** before reload — never run against production unless intentional and backed up. |
+
+Read-only segmentation audit: **[`scripts/qa/audit_canonical_contacto_gmail.py`](../scripts/qa/audit_canonical_contacto_gmail.py)**.
 
 ---
 

@@ -265,6 +265,7 @@ def load_email_date_health(
     conn: sqlite3.Connection,
     *,
     slack_days: int = MART_DATE_SLACK_DAYS_DEFAULT,
+    emails_extra_where: str | None = None,
 ) -> EmailDateHealthSnapshot:
     """Detect future-dated rows via SQLite date() and max plausible MAX(date_iso).
 
@@ -272,17 +273,24 @@ def load_email_date_health(
     not counted as future (may be malformed — see doc). Plausible max includes rows
     where date() IS NULL OR date() <= threshold (so unparseable strings can still
     affect MAX lexicographically — narrow edge case).
+
+    ``emails_extra_where`` must be a **trusted** SQL boolean fragment (typically from
+    :func:`origenlab_email_pipeline.contacto_gmail_source.sql_predicate_contacto_gmail_source`)
+    ANDed into each query; never pass user input.
     """
     n = slack_days
     if n < 0 or n > 3660:
         n = MART_DATE_SLACK_DAYS_DEFAULT
     now_delta = f"+{n} days"
+    ew = f" AND ({emails_extra_where})" if emails_extra_where else ""
 
     raw_min = _safe_scalar_sql(
-        conn, "SELECT MIN(date_iso) FROM emails WHERE date_iso IS NOT NULL AND trim(date_iso) != ''"
+        conn,
+        f"SELECT MIN(date_iso) FROM emails WHERE date_iso IS NOT NULL AND trim(date_iso) != ''{ew}",
     )
     raw_max = _safe_scalar_sql(
-        conn, "SELECT MAX(date_iso) FROM emails WHERE date_iso IS NOT NULL AND trim(date_iso) != ''"
+        conn,
+        f"SELECT MAX(date_iso) FROM emails WHERE date_iso IS NOT NULL AND trim(date_iso) != ''{ew}",
     )
 
     future_dated_count = 0
@@ -291,9 +299,10 @@ def load_email_date_health(
 
     try:
         row_fc = conn.execute(
-            """
+            f"""
             SELECT COUNT(*) FROM emails
             WHERE date_iso IS NOT NULL AND trim(date_iso) != ''
+              {ew}
               AND date(date_iso) > date('now', ?)
             """,
             (now_delta,),
@@ -305,9 +314,10 @@ def load_email_date_health(
 
     try:
         row_mf = conn.execute(
-            """
+            f"""
             SELECT MAX(date_iso) FROM emails
             WHERE date_iso IS NOT NULL AND trim(date_iso) != ''
+              {ew}
               AND date(date_iso) > date('now', ?)
             """,
             (now_delta,),
@@ -322,9 +332,10 @@ def load_email_date_health(
 
     try:
         row_pm = conn.execute(
-            """
+            f"""
             SELECT MAX(date_iso) FROM emails
             WHERE date_iso IS NOT NULL AND trim(date_iso) != ''
+              {ew}
               AND (
                 date(date_iso) IS NULL
                 OR date(date_iso) <= date('now', ?)
@@ -362,6 +373,13 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
         "No sustituye registros de ingest ni ejecuta reconstrucción del mart."
     )
     st.markdown(f"**Ruta SQLite:** `{db_path}`")
+    st.info(
+        "**Fuente operativa:** correo **Google Workspace** ingerido como "
+        "`gmail:contacto@origenlab.cl/...` (ver `docs/ingest/WORKSPACE_GMAIL_IMAP.md`).\n\n"
+        "**Histórico / referencia:** exportaciones **mbox** de `contacto@labdelivery.cl` y otros "
+        "PST/mbox viven en la misma tabla `emails`, pero **no** equivalen al buzón vivo de OrigenLab "
+        "para vigencia operativa, colas de casos ni memoria anti‑repetición basada en Gmail."
+    )
 
     if not _has_table(conn, "emails"):
         st.error("No existe la tabla `emails` en este archivo.")
@@ -380,34 +398,62 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
     st.markdown("#### Conteos principales")
     st.dataframe(pd.DataFrame(count_rows), use_container_width=True, hide_index=True)
 
-    edh = load_email_date_health(conn, slack_days=2)
-    st.markdown("#### Archivo crudo (`emails.date_iso`)")
+    _gmail_pred = sql_predicate_contacto_gmail_source()
+    n_labdelivery = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM emails WHERE lower(source_file) LIKE '%contacto@labdelivery%'"
+        ).fetchone()[0]
+    )
+    n_gmail_c_pre = int(
+        conn.execute(f"SELECT COUNT(*) FROM emails WHERE {_gmail_pred}").fetchone()[0]
+    )
+    st.caption(
+        f"Filas **legacy** `contacto@labdelivery` (mbox): **{n_labdelivery:,}**. "
+        f"Filas **Gmail Workspace operativo** (`{_gmail_pred}`): **{n_gmail_c_pre:,}**."
+    )
+
+    edh_full = load_email_date_health(conn, slack_days=2)
+    edh_canon = load_email_date_health(conn, slack_days=2, emails_extra_where=_gmail_pred)
+
+    st.markdown("#### Archivo crudo — **todos los orígenes** (`emails.date_iso`)")
     st.write(
         {
-            "min(date_iso)": edh.raw_min or "—",
-            "max(date_iso) (absoluto)": edh.raw_max or "—",
-            "max(date_iso) plausible": edh.plausible_max_date_iso or "—",
-            "filas con fecha futura sospechosa": edh.future_dated_count,
-            "umbral (días sobre hoy)": edh.slack_days,
+            "min(date_iso)": edh_full.raw_min or "—",
+            "max(date_iso) (absoluto)": edh_full.raw_max or "—",
+            "max(date_iso) plausible": edh_full.plausible_max_date_iso or "—",
+            "filas con fecha futura sospechosa": edh_full.future_dated_count,
+            "umbral (días sobre hoy)": edh_full.slack_days,
         }
     )
-    if edh.future_dated_count > 0:
+    st.markdown("#### Fuente operativa — **solo Gmail Workspace** (`gmail:contacto@origenlab.cl/…`)")
+    st.write(
+        {
+            "min(date_iso)": edh_canon.raw_min or "—",
+            "max(date_iso) (absoluto)": edh_canon.raw_max or "—",
+            "max(date_iso) plausible": edh_canon.plausible_max_date_iso or "—",
+            "filas con fecha futura sospechosa": edh_canon.future_dated_count,
+            "umbral (días sobre hoy)": edh_canon.slack_days,
+        }
+    )
+    if edh_full.future_dated_count > 0:
         st.warning(
-            f"Se detectaron **{edh.future_dated_count}** filas donde `date(date_iso)` supera "
-            f"hoy + **{edh.slack_days}** días (posible dato corrupto o cabecera incorrecta). "
-            f"Máximo entre ellas: `{edh.max_future_date_iso or '—'}`. "
-            "**La vigencia y la comparación con el mart usan el máximo plausible**, no el absoluto."
+            f"Se detectaron **{edh_full.future_dated_count}** filas (archivo completo) donde `date(date_iso)` supera "
+            f"hoy + **{edh_full.slack_days}** días (posible dato corrupto o cabecera incorrecta). "
+            f"Máximo entre ellas: `{edh_full.max_future_date_iso or '—'}`. "
+            "**La vigencia operativa** (abajo) usa el máximo plausible **del Gmail Workspace** cuando hay filas "
+            "`gmail:contacto@origenlab.cl/…`; si no hay, cae al archivo completo."
         )
     st.caption(
         "El máximo plausible excluye filas cuya fecha calendario (según SQLite `date(date_iso)`) "
         "está más de {n} días en el futuro; las filas con `date_iso` no parseable por SQLite "
-        "siguen pudiendo entrar en ese máximo. Ver documentación.".format(n=edh.slack_days)
+        "siguen pudiendo entrar en ese máximo. Ver documentación.".format(n=edh_full.slack_days)
     )
 
-    if edh.plausible_max_date_iso:
-        raw_prefix_for_vigencia = _date_prefix_for_compare(edh.plausible_max_date_iso)
-    elif edh.future_dated_count == 0:
-        raw_prefix_for_vigencia = _date_prefix_for_compare(edh.raw_max)
+    edh_for_vigencia = edh_canon if n_gmail_c_pre > 0 else edh_full
+    if edh_for_vigencia.plausible_max_date_iso:
+        raw_prefix_for_vigencia = _date_prefix_for_compare(edh_for_vigencia.plausible_max_date_iso)
+    elif edh_for_vigencia.future_dated_count == 0:
+        raw_prefix_for_vigencia = _date_prefix_for_compare(edh_for_vigencia.raw_max)
     else:
         raw_prefix_for_vigencia = None
         st.warning(
@@ -440,19 +486,7 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
     except Exception as exc:
         st.warning(f"No se pudo agrupar por source_file: {exc}")
 
-    _gmail_where = sql_predicate_contacto_gmail_source()
-    n_gmail_c = (
-        int(
-            conn.execute(
-                f"""
-                SELECT COUNT(*) FROM emails
-                WHERE {_gmail_where}
-                """
-            ).fetchone()[0]
-        )
-        if _has_table(conn, "emails")
-        else 0
-    )
+    n_gmail_c = n_gmail_c_pre
     n_imap_c = (
         int(
             conn.execute(
@@ -467,7 +501,7 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
     )
     st.write(
         {
-            "gmail:contacto@origenlab.cl*": n_gmail_c,
+            "gmail:contacto@origenlab.cl/… (operativo)": n_gmail_c,
             "imap:contacto@origenlab.cl*": n_imap_c,
         }
     )
@@ -479,7 +513,7 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
         )
 
     st.markdown("#### Mart vs archivo crudo (heurística)")
-    slack_mart = edh.slack_days
+    slack_mart = edh_for_vigencia.slack_days
     contact_mx = None
     contact_mx_plausible = None
     org_mx = None
@@ -511,6 +545,12 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
     mart_peak = max(mart_candidates) if mart_candidates else None
     raw_p = raw_prefix_for_vigencia
 
+    vigencia_basis = (
+        "Gmail Workspace `gmail:contacto@origenlab.cl/…`"
+        if n_gmail_c > 0
+        else "todos los orígenes (sin filas `gmail:contacto@origenlab.cl/…`)"
+    )
+
     verdict = "unknown"
     verdict_detail = ""
     if raw_p and mart_peak:
@@ -518,15 +558,15 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
             verdict = "stale"
             verdict_detail = (
                 f"El máximo **plausible** contact/org/document en mart ({mart_peak}) es **anterior** al último "
-                f"`date_iso` plausible del archivo ({raw_p}). Conviene `uv run python scripts/mart/build_business_mart.py "
-                f"--rebuild` tras ingest. (Los picos absolutos del mart pueden seguir mostrando fechas imposibles "
-                f"hasta reconstruir.)"
+                f"`date_iso` plausible comparado ({raw_p}; **{vigencia_basis}**). Conviene "
+                f"`uv run python scripts/mart/build_business_mart.py --rebuild` tras ingest. (Los picos absolutos del "
+                f"mart pueden seguir mostrando fechas imposibles hasta reconstruir.)"
             )
         else:
             verdict = "fresh"
             verdict_detail = (
                 f"Picos **plausibles** de contact/org/document en el mart ({mart_peak}) alcanzan o superan el último "
-                f"`date_iso` **plausible** del archivo ({raw_p}) (prefijo YYYY-MM-DD). "
+                f"`date_iso` **plausible** comparado ({raw_p}; **{vigencia_basis}**) (prefijo YYYY-MM-DD). "
                 f"No se usa `opportunity_signals.created_at` aquí: es **hora de regeneración del mart**, no del hecho."
             )
     elif not raw_p:
@@ -547,6 +587,7 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
             "opportunity_signals.max(created_at) (regeneración mart)": opp_mx or "—",
             "mart_peak para vigencia (solo contact/org/doc plausible)": mart_peak or "—",
             "prefijo fecha crudo usado en vigencia (plausible si existe)": raw_p or "—",
+            "base de comparación (operativa vs archivo completo)": vigencia_basis,
             "juicio_mart_vs_raw": verdict,
         }
     )
@@ -963,8 +1004,9 @@ def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path)
     st.subheader("Actividad reciente (contacto Gmail)")
     render_page_status("Actividad contacto Gmail")
     st.caption(
-        "Muestra correos con **`source_file` tipo Gmail Workspace** para `contacto@origenlab.cl`. "
-        "No incluye buzón Titan (`imap:contacto@...`); para mezcla de orígenes use **Salud de datos**."
+        "**Fuente operativa:** Google Workspace ingerido como `gmail:contacto@origenlab.cl/…` "
+        "(no equivale a exportaciones mbox de `contacto@labdelivery.cl`; esas siguen en **Salud de datos** "
+        "como histórico). No incluye buzón Titan (`imap:contacto@…`) salvo que comparta el mismo prefijo."
     )
     if not _has_table(conn, "emails"):
         st.error("No existe la tabla `emails` en este archivo.")
@@ -1863,7 +1905,14 @@ def main() -> None:
             st.caption(
                 "Panorama del archivo importado y del mart de negocio. Las tareas sugeridas del día están en **Qué hacer hoy**."
             )
+            st.info(
+                "**Fuente operativa OrigenLab:** correo **Google Workspace** (`gmail:contacto@origenlab.cl/…`). "
+                "**Histórico / referencia:** exportaciones **mbox** (p. ej. `contacto@labdelivery.cl`) conviven en "
+                "`emails`; el mart y los KPIs de archivo completo los incluyen — no los confunda con el buzón vivo."
+            )
             total_msgs = int(_load_df(conn, "SELECT COUNT(*) AS c FROM emails").iloc[0]["c"])
+            _op_pred = sql_predicate_contacto_gmail_source()
+            op_msgs = int(_load_df(conn, f"SELECT COUNT(*) AS c FROM emails WHERE {_op_pred}").iloc[0]["c"])
             contacts_n = int(_load_df(conn, "SELECT COUNT(*) AS c FROM contact_master").iloc[0]["c"])
             orgs_n = int(_load_df(conn, "SELECT COUNT(*) AS c FROM organization_master").iloc[0]["c"])
             docs_n = int(_load_df(conn, "SELECT COUNT(*) AS c FROM document_master").iloc[0]["c"])
@@ -1876,6 +1925,9 @@ def main() -> None:
                 render_kpi_metric("Organizaciones externas", f"{orgs_n:,}")
             with c4:
                 render_kpi_metric("Documentos útiles", f"{docs_n:,}")
+            st.caption(
+                f"Mensajes **operativos** (solo Gmail Workspace `gmail:contacto@origenlab.cl/…`): **{op_msgs:,}**."
+            )
 
             # Periodo aproximado de cobertura del archivo de correo.
             try:

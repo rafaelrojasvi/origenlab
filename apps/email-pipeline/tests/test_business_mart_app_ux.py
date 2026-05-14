@@ -130,6 +130,37 @@ def test_load_email_date_health_excludes_future_dated_from_plausible_max(tmp_pat
         conn.close()
 
 
+def test_load_email_date_health_emails_extra_where_limits_to_canonical(tmp_path: Path) -> None:
+    from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
+
+    db_path = tmp_path / "e2.sqlite"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE emails (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              date_iso TEXT,
+              source_file TEXT
+            )
+            """
+        )
+        conn.executemany(
+            "INSERT INTO emails (date_iso, source_file) VALUES (?, ?)",
+            [
+                ("2024-06-01T10:00:00Z", "gmail:contacto@origenlab.cl/INBOX"),
+                ("2033-06-09T15:09:53+01:00", "/mbox/contacto@labdelivery.cl/x/mbox"),
+            ],
+        )
+        conn.commit()
+        pred = sql_predicate_contacto_gmail_source()
+        h = app.load_email_date_health(conn, slack_days=2, emails_extra_where=pred)
+        assert h.raw_max is not None and "2033" not in h.raw_max
+        assert h.plausible_max_date_iso is not None and "2024" in h.plausible_max_date_iso
+    finally:
+        conn.close()
+
+
 def test_friendly_org_type_labels_in_spanish():
     assert "Educación" in app._friendly_org_type("education")
     assert "Empresa" in app._friendly_org_type("business")

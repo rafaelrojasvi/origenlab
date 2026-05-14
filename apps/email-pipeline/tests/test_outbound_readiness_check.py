@@ -6,6 +6,7 @@ import json
 import sqlite3
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -62,12 +63,16 @@ def _minimal_outbound_schema(conn: sqlite3.Connection) -> None:
 
 
 def _seed_fresh_sent_and_mart(conn: sqlite3.Connection) -> None:
+    now = datetime.now(timezone.utc)
+    d_sent = (now - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    d_mart = (now - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    d_sig = (now - timedelta(days=4)).strftime("%Y-%m-%dT%H:%M:%SZ")
     conn.execute(
         """
         INSERT INTO emails (source_file, folder, recipients, date_iso)
-        VALUES ('gmail:contacto@origenlab.cl/x', '[Gmail]/Enviados', 'buyer@cliente.cl',
-                '2026-04-14T15:00:00+00:00')
-        """
+        VALUES ('gmail:contacto@origenlab.cl/x', '[Gmail]/Enviados', 'buyer@cliente.cl', ?)
+        """,
+        (d_sent,),
     )
     conn.execute(
         "INSERT INTO contact_email_suppression (email) VALUES ('spam@x.cl')"
@@ -80,16 +85,19 @@ def _seed_fresh_sent_and_mart(conn: sqlite3.Connection) -> None:
     )
     conn.execute("INSERT INTO supplier_master (domain_norm) VALUES ('proveedor.cl')")
     conn.execute(
-        "INSERT INTO contact_master (email, last_seen_at) VALUES ('a@b.cl', '2026-04-13T10:00:00+00:00')"
+        "INSERT INTO contact_master (email, last_seen_at) VALUES ('a@b.cl', ?)",
+        (d_mart,),
     )
     conn.execute(
-        "INSERT INTO organization_master (domain, last_seen_at) VALUES ('b.cl', '2026-04-13T10:00:00+00:00')"
+        "INSERT INTO organization_master (domain, last_seen_at) VALUES ('b.cl', ?)",
+        (d_mart,),
     )
     conn.execute(
         """
         INSERT INTO opportunity_signals (signal_type, entity_kind, entity_key, created_at)
-        VALUES ('t', 'contact', 'a@b.cl', '2026-04-12T10:00:00+00:00')
-        """
+        VALUES ('t', 'contact', 'a@b.cl', ?)
+        """,
+        (d_sig,),
     )
     conn.commit()
 
@@ -121,6 +129,7 @@ def test_all_good_ready(tmp_path: Path) -> None:
     assert not r.warnings
     assert not r.errors
     assert r.sent["sent_email_rows"] == 1
+    assert r.sent.get("canonical_contacto_gmail_rows") == 1
     assert r.sent["sent_recipient_norm_count"] >= 1
     assert r.sent["sent_folders"] == list(resolve_outbound_sent_folders(None))
     assert r.sidecars["suppression_rows"] == 1

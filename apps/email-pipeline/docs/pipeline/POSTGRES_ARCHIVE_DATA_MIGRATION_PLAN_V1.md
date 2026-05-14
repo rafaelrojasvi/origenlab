@@ -179,11 +179,13 @@ If any check fails, exit non-zero and write details to **`--json-out`** (§8).
 
 ---
 
-## 8. Future script sketch
+## 8. Archive loader implementation
 
-Planned location: **`scripts/migrate/sqlite_archive_to_postgres.py`** (not implemented in this document).
+The one-way SQLite → Postgres archive loader is implemented at **`scripts/migrate/sqlite_archive_to_postgres.py`** (see also **`scripts/qa/validate_sqlite_archive_for_postgres.py`** and [`SCRIPT_MAP.md`](../SCRIPT_MAP.md)). This document’s earlier “future sketch” remains the design reference for load order and validation goals.
 
-**Responsibilities:**
+**Operational note:** canonical live-mail rows use `gmail:contacto@origenlab.cl/…` in SQLite; legacy mbox exports (e.g. `contacto@labdelivery.cl`) may coexist in the same `archive.emails` after migration — treat **Gmail Workspace** rows as operational truth for freshness checks; use metadata / `source_file` filters when reconciling analytics.
+
+**Responsibilities (implemented script):**
 
 - Open SQLite read-only; connect to Postgres with a migration-appropriate URL.
 - Enforce preconditions (validator exit or re-run checks).

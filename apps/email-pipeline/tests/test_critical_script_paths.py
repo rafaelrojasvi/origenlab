@@ -16,6 +16,7 @@ REPO = Path(__file__).resolve().parents[1]
         "scripts/commercial/build_commercial_intel_v1.py",
         "scripts/qa/publish_gate.py",
         "scripts/qa/check_outbound_readiness.py",
+        "scripts/qa/audit_canonical_contacto_gmail.py",
         "scripts/qa/print_outbound_run_summary.py",
         "scripts/leads/run_leads_operational_stack.sh",
         "scripts/_bootstrap.py",

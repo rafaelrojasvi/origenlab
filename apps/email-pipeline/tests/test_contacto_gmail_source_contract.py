@@ -28,7 +28,7 @@ def _load_business_mart_app():
 def test_canonical_coalesce_unqualified_matches_legacy_literal() -> None:
     assert (
         CONTACTO_GMAIL_SOURCE_SQL
-        == "lower(COALESCE(source_file, '')) LIKE 'gmail:contacto@origenlab.cl%'"
+        == "lower(COALESCE(source_file, '')) LIKE 'gmail:contacto@origenlab.cl/%'"
     )
     assert sql_predicate_contacto_gmail_source(coalesce_null=True) == CONTACTO_GMAIL_SOURCE_SQL
 
@@ -36,14 +36,14 @@ def test_canonical_coalesce_unqualified_matches_legacy_literal() -> None:
 def test_coalesce_qualified_e_matches_legacy_cases_review_inner_query() -> None:
     assert (
         sql_predicate_contacto_gmail_source(table_alias="e", coalesce_null=True)
-        == "lower(COALESCE(e.source_file, '')) LIKE 'gmail:contacto@origenlab.cl%'"
+        == "lower(COALESCE(e.source_file, '')) LIKE 'gmail:contacto@origenlab.cl/%'"
     )
 
 
 def test_non_coalesce_unqualified_matches_streamlit_and_mart_forms() -> None:
     assert (
         sql_predicate_contacto_gmail_source()
-        == "lower(source_file) LIKE 'gmail:contacto@origenlab.cl%'"
+        == "lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'"
     )
 
 

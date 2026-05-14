@@ -71,7 +71,7 @@ def _build_min_db(path: Path) -> None:
         [
             (
                 1,
-                "imap://sent",
+                "gmail:contacto@origenlab.cl/[Gmail]/Enviados",
                 "[Gmail]/Enviados",
                 "<1@example>",
                 "Cotizacion incubadora",
@@ -84,7 +84,7 @@ def _build_min_db(path: Path) -> None:
             ),
             (
                 2,
-                "imap://inbox",
+                "gmail:contacto@origenlab.cl/INBOX",
                 "INBOX",
                 "<2@example>",
                 "Re: Cotizacion incubadora",
@@ -97,7 +97,7 @@ def _build_min_db(path: Path) -> None:
             ),
             (
                 3,
-                "imap://inbox",
+                "gmail:contacto@origenlab.cl/INBOX",
                 "INBOX",
                 "<3@example>",
                 "Delivery Status Notification",
@@ -124,6 +124,90 @@ def _build_min_db(path: Path) -> None:
     )
     conn.commit()
     conn.close()
+
+
+def test_export_email_conversation_intelligence_include_legacy_sources(tmp_path: Path) -> None:
+    db = tmp_path / "emails2.sqlite"
+    out = tmp_path / "out2"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE emails (
+            id INTEGER PRIMARY KEY,
+            source_file TEXT,
+            folder TEXT,
+            message_id TEXT,
+            subject TEXT,
+            sender TEXT,
+            recipients TEXT,
+            date_iso TEXT,
+            top_reply_clean TEXT,
+            body_text_clean TEXT,
+            full_body_clean TEXT
+        );
+        CREATE TABLE contact_master (email TEXT);
+        CREATE TABLE organization_master (domain TEXT);
+        CREATE TABLE lead_master (email_norm TEXT);
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO emails (id, source_file, folder, message_id, subject, sender, recipients, date_iso, top_reply_clean, body_text_clean, full_body_clean)
+        VALUES (1, '/mbox/contacto@labdelivery.cl/Inbox/mbox', 'INBOX', '<x>', 'Hola', 'contacto@origenlab.cl', 'z@w.cl', '2026-04-10T10:00:00+00:00', 'c', '', '')
+        """
+    )
+    conn.commit()
+    conn.close()
+    res = _run(
+        "--db",
+        str(db),
+        "--gmail-user",
+        "contacto@origenlab.cl",
+        "--out-dir",
+        str(out),
+        "--include-legacy-email-sources",
+    )
+    assert res.returncode == 0, res.stderr
+    payload = json.loads(res.stdout)
+    assert payload["overall"]["total_sent"] >= 1
+
+
+def test_export_email_conversation_intelligence_default_excludes_legacy_only_sources(tmp_path: Path) -> None:
+    db = tmp_path / "emails3.sqlite"
+    out = tmp_path / "out3"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE emails (
+            id INTEGER PRIMARY KEY,
+            source_file TEXT,
+            folder TEXT,
+            message_id TEXT,
+            subject TEXT,
+            sender TEXT,
+            recipients TEXT,
+            date_iso TEXT,
+            top_reply_clean TEXT,
+            body_text_clean TEXT,
+            full_body_clean TEXT
+        );
+        CREATE TABLE contact_master (email TEXT);
+        CREATE TABLE organization_master (domain TEXT);
+        CREATE TABLE lead_master (email_norm TEXT);
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO emails (id, source_file, folder, message_id, subject, sender, recipients, date_iso, top_reply_clean, body_text_clean, full_body_clean)
+        VALUES (1, '/mbox/contacto@labdelivery.cl/Inbox/mbox', 'INBOX', '<x>', 'Hola', 'contacto@origenlab.cl', 'z@w.cl', '2026-04-10T10:00:00+00:00', 'c', '', '')
+        """
+    )
+    conn.commit()
+    conn.close()
+    res = _run("--db", str(db), "--gmail-user", "contacto@origenlab.cl", "--out-dir", str(out))
+    assert res.returncode == 0, res.stderr
+    payload = json.loads(res.stdout)
+    assert payload["overall"]["total_sent"] == 0
 
 
 def test_export_email_conversation_intelligence_outputs(tmp_path: Path) -> None:
