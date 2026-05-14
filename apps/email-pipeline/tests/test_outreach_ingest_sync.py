@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from origenlab_email_pipeline.db import connect, init_schema
@@ -13,6 +14,12 @@ from origenlab_email_pipeline.outreach_ingest_sync import (
     merge_suppression_reason,
     scan_batch_against_ingested_bounces,
 )
+
+
+def _utc_iso_days_ago(days: int) -> str:
+    """Stamp inside ``since_days`` windows regardless of when the test runs (UTC date axis)."""
+    dt = datetime.now(timezone.utc) - timedelta(days=days)
+    return dt.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def test_load_batch_emails_from_file_parses_and_dedupes() -> None:
@@ -104,10 +111,11 @@ def test_apply_writes_suppression_and_contacted(tmp_path) -> None:
         ) VALUES (
           'gmail:x/INBOX', 'INBOX', '<ndr1>', 'Delivery Status Notification (Failure)',
           'MAILER-DAEMON@example.com', 'sender@origenlab.cl',
-          '', '2026-04-11T15:00:00Z',
+          '', ?,
           'The following address failed: dead@client.cl permanent error 5.1.1', 0, 0
         )
-        """
+        """,
+        (_utc_iso_days_ago(5),),
     )
     conn.commit()
 
@@ -159,10 +167,11 @@ def test_sync_outreach_batch_cli_json(tmp_path) -> None:
         ) VALUES (
           'gmail:x/INBOX', 'INBOX', '<ndr1>', 'Returned mail: see transcript for details',
           'postmaster@corp.cl', 'a@b.cl',
-          '', '2026-04-12T10:00:00Z',
+          '', ?,
           'failed for x@y.cl (reason 5.1.1)', 0, 0
         )
-        """
+        """,
+        (_utc_iso_days_ago(5),),
     )
     conn.commit()
     conn.close()

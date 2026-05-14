@@ -47,7 +47,7 @@ def test_navigate_to_page_sets_start_page_and_flags(monkeypatch) -> None:
     monkeypatch.setattr(st, "rerun", fake_rerun, raising=False)
     navigate_to_page("Organizaciones", org_only_unis=True, extra_flag="x")
     assert called["rerun"] is True
-    assert st.session_state[SESSION_START_PAGE] == "Organizaciones"
+    assert st.session_state[SESSION_START_PAGE] == "Contactos y organizaciones"
     assert st.session_state["org_only_unis"] is True
     assert st.session_state["extra_flag"] == "x"
 

@@ -70,9 +70,9 @@ def test_today_row_operational_destination_unknown_falls_back() -> None:
 
 
 def test_today_row_nav_button_labels_match_menu_pages() -> None:
-    assert today_row_nav_button_label_es("Casos para revisar") == "Abrir Casos para revisar"
-    assert today_row_nav_button_label_es("Candidatos comerciales") == "Abrir Candidatos comerciales"
-    assert today_row_nav_button_label_es("Leads y cuentas") == "Abrir Leads y cuentas"
+    assert today_row_nav_button_label_es("Casos para revisar") == "Abrir Seguimientos y casos"
+    assert today_row_nav_button_label_es("Candidatos comerciales") == "Abrir Candidatos comerciales (Herramientas)"
+    assert today_row_nav_button_label_es("Leads y cuentas") == "Abrir Leads y cuentas (Herramientas)"
     assert today_row_nav_button_label_es("Oportunidades") == "Abrir Oportunidades"
     assert "destino" in today_row_nav_button_label_es("desconocido").lower()
 
