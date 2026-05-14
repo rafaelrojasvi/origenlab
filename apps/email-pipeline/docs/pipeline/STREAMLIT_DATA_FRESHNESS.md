@@ -11,6 +11,11 @@ La sección **Salud de datos** en `apps/business_mart_app.py` ayuda a comprobar 
 
 La app sigue siendo **solo lectura** sobre SQLite (salvo la página opcional de revisión comercial con variable de entorno explícita).
 
+<a id="m-streamlit-nav"></a>
+## Navegación (2026-05)
+
+El panel `apps/business_mart_app.py` usa un **menú lateral** en español. La página por defecto es **Inicio** (operativo Gmail `contacto@origenlab.cl`). Las herramientas avanzadas (p. ej. «Qué hacer hoy», cola marketing, borrador) viven bajo **Herramientas / Runbook**. Los handoffs internos siguen aceptando nombres de página antiguos; `navigate_to_page` los redirige al destino nuevo (ver tests `test_streamlit_navigate_to_page_redirects.py`).
+
 <a id="m-streamlit-freshness-what"></a>
 ## Qué muestra
 

@@ -112,9 +112,15 @@ def _today_workspace_rows_cached(db_path: Path, spec: TodayWorkspaceSpec) -> lis
     return [TodayWorkspaceRow(**d) for d in raw]
 
 
-def render_cases_to_review_page(conn: sqlite3.Connection, db_path: Path) -> None:
+def render_cases_to_review_page(
+    conn: sqlite3.Connection,
+    db_path: Path,
+    *,
+    show_main_heading: bool = True,
+) -> None:
     """Cola operativa de mensajes Gmail contacto para revisión; entrega a Borrador comercial (sin redactar aquí)."""
-    st.subheader("Casos para revisar")
+    if show_main_heading:
+        st.subheader("Casos para revisar")
     _scope = prioridad_scope_caption_for_page("Casos para revisar")
     if _scope:
         st.caption(_scope)

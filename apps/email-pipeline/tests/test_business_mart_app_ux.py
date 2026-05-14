@@ -83,14 +83,19 @@ def test_load_contacto_gmail_recent_emails_df_respects_limit(tmp_path: Path) -> 
               date_iso TEXT,
               subject TEXT,
               sender TEXT,
+              folder TEXT,
+              attachment_count INTEGER,
+              body TEXT,
+              full_body_clean TEXT,
+              top_reply_clean TEXT,
               source_file TEXT
             )
             """
         )
         src = "gmail:contacto@origenlab.cl/INBOX"
         conn.executemany(
-            "INSERT INTO emails (date_iso, subject, sender, source_file) VALUES (?,?,?,?)",
-            [(f"2026-03-{i+1:02d}T10:00:00Z", f"S{i}", f"u{i}@x.cl", src) for i in range(15)],
+            "INSERT INTO emails (date_iso, subject, sender, folder, attachment_count, source_file) VALUES (?,?,?,?,?,?)",
+            [(f"2026-03-{i+1:02d}T10:00:00Z", f"S{i}", f"u{i}@x.cl", "INBOX", 0, src) for i in range(15)],
         )
         conn.commit()
         df = app.load_contacto_gmail_recent_emails_df(conn, limit=5)
@@ -264,7 +269,12 @@ def test_page_status_values_cover_key_client_pages() -> None:
     from origenlab_email_pipeline.streamlit_page_status import PAGE_STATUS_PRESETS, page_status_values
 
     expected_pages = {
-        "Resumen",
+        "Inicio",
+        "Seguimientos y casos",
+        "Contactos y organizaciones",
+        "Outbound / No repetir",
+        "Histórico / Archivo legacy",
+        "Herramientas / Runbook",
         "Salud de datos",
         "Actividad contacto Gmail",
         "Casos para revisar",
@@ -310,14 +320,15 @@ def test_navigate_to_sets_session_state_and_calls_rerun(monkeypatch):
     app._navigate_to("Organizaciones", org_only_unis=True, extra_flag="x")
 
     assert called["rerun"] is True
-    assert st.session_state["start_page"] == "Organizaciones"
+    assert st.session_state["start_page"] == "Contactos y organizaciones"
+    assert st.session_state.get("coy_inner") == "Organizaciones"
     assert st.session_state["org_only_unis"] is True
     assert st.session_state["extra_flag"] == "x"
 
 
-def test_quick_action_default_page_is_resumen(monkeypatch):
+def test_quick_action_main_smoke_default_inicio(monkeypatch):
     """
-    Validar la lógica de selección de pestaña por defecto sin tocar la BD real.
+    Validar que ``main()`` no falle en el arranque por defecto (Inicio) sin BD real.
 
     Emulamos un entorno mínimo donde:
     - _connect_ro devuelve un objeto con los métodos usados.
@@ -378,7 +389,42 @@ def test_quick_action_default_page_is_resumen(monkeypatch):
         def resolved_sqlite_path(self):
             return "/tmp/dummy.sqlite"
 
+        def resolved_reports_dir(self):
+            from pathlib import Path
+
+            return Path("/tmp")
+
     monkeypatch.setattr(app, "load_settings", lambda: DummySettings())
+    monkeypatch.setattr(
+        app,
+        "load_contacto_gmail_activity_summary",
+        lambda conn, slack_days=2: app.ContactoGmailActivitySummary(10, 1, 2, 3, "2024-06-01T00:00:00Z"),
+    )
+    monkeypatch.setattr(app, "count_canonical_sent_inbox", lambda _c: (3, 2))
+    monkeypatch.setattr(app, "count_canonical_duplicate_message_id_groups", lambda _c: 0)
+    monkeypatch.setattr(app, "count_canonical_missing_message_id", lambda _c: 0)
+    monkeypatch.setattr(app, "count_canonical_missing_date_iso", lambda _c: 0)
+    monkeypatch.setattr(app, "count_canonical_attachments", lambda _c: 0)
+    monkeypatch.setattr(app, "count_canonical_empty_body", lambda _c: 0)
+    monkeypatch.setattr(app, "load_inicio_recent_canonical_rows", lambda *_a, **_k: [])
+
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.streamlit_today_workspace.gather_today_workspace_rows",
+        lambda *_a, **_k: [],
+    )
+
+    from origenlab_email_pipeline.outbound_readiness_check import OutboundReadinessReport
+
+    def fake_assess(*_a, **_k):
+        return OutboundReadinessReport(
+            verdict="ready",
+            sqlite_path="/tmp/dummy.sqlite",
+            sqlite_exists=True,
+            sqlite_read_only=True,
+        )
+
+    monkeypatch.setattr(app, "assess_outbound_readiness", fake_assess)
+    monkeypatch.setattr(app, "_safe_count", lambda _c, _t: 7)
 
     # Ejecutar main no debería lanzar excepciones; esto actúa como smoke test
     app.main()

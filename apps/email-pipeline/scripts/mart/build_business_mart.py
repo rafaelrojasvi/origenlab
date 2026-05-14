@@ -25,7 +25,7 @@ from __future__ import annotations
 import argparse
 import sqlite3
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +45,7 @@ from origenlab_email_pipeline.business_mart import (
     equipment_tags_from_text,
     guess_org_name_from_domain,
     guess_org_type_from_domain,
+    infer_internal_domains_from_top_senders,
     is_noise_sender,
     now_iso,
     primary_sender_email,
@@ -55,28 +56,6 @@ from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.pipeline_run_recorder import finish_run, get_git_describe, set_kv, start_run
 from origenlab_email_pipeline.sqlite_migrate import SchemaLayer, migrate_sqlite_schema
 from origenlab_email_pipeline.progress import iter_with_progress
-
-
-def _derive_internal_domains(conn: sqlite3.Connection, *, max_n: int = 3) -> set[str]:
-    # Use most common sender *addresses* (parsed) as a default internal guess.
-    # We avoid brittle SQL string slicing because `sender` is often `"Name" <a@b>` etc.
-    top_senders = conn.execute(
-        """
-        SELECT sender, COUNT(*) AS c
-        FROM emails
-        WHERE sender IS NOT NULL AND length(trim(sender)) > 0
-        GROUP BY sender
-        ORDER BY c DESC
-        LIMIT 50
-        """
-    ).fetchall()
-    dom_counts: Counter[str] = Counter()
-    for sender, c in top_senders:
-        se = primary_sender_email(sender or "")
-        d = domain_of(se)
-        if d:
-            dom_counts[d] += int(c or 0)
-    return {d for d, _ in dom_counts.most_common(max_n)}
 
 
 def _ext(s: str | None) -> str:
@@ -118,7 +97,7 @@ def main() -> None:
 
     internal_domains = {d.lower().strip() for d in (args.internal_domain or []) if d.strip()}
     if not internal_domains:
-        internal_domains = _derive_internal_domains(conn)
+        internal_domains = infer_internal_domains_from_top_senders(conn, max_n=3, sender_limit=50)
 
     print(f"DB: {db_path}")
     print(f"Internal domains (guess): {sorted(internal_domains)[:10]}")

@@ -13,11 +13,35 @@ import streamlit as st
 # --- Navegación global (todas las páginas del mart app) ---
 SESSION_START_PAGE = "start_page"
 
+# Páginas legacy del menú anterior → destinos del panel comercial (sidebar).
+_LEGACY_TOOL_PAGES = frozenset(
+    {
+        "Qué hacer hoy",
+        "Cola outreach marketing",
+        "Borrador comercial",
+        "Leads y cuentas",
+        "Proveedores",
+        "Candidatos comerciales",
+    }
+)
+_INNER_COY_LEGACY_PAGES = frozenset({"Organizaciones", "Contactos", "Documentos", "Equipos"})
+
 
 def navigate_to_page(page: str, **flags: object) -> None:
     """Actualizar session_state para navegación guiada y forzar recarga (mismo contrato que antes)."""
+    fs = dict(flags)
+    if page in _LEGACY_TOOL_PAGES:
+        fs.setdefault("herramienta_inner", page)
+        page = "Herramientas / Runbook"
+    elif page == "Casos para revisar":
+        page = "Seguimientos y casos"
+    elif page == "Resumen":
+        page = "Inicio"
+    elif page in _INNER_COY_LEGACY_PAGES:
+        fs.setdefault("coy_inner", page)
+        page = "Contactos y organizaciones"
     st.session_state[SESSION_START_PAGE] = page
-    for k, v in flags.items():
+    for k, v in fs.items():
         st.session_state[k] = v
     try:
         st.rerun()

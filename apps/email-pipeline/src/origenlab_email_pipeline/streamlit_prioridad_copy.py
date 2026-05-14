@@ -66,9 +66,9 @@ def prioridad_hoy_vs_casos_diff_es() -> str:
 def today_row_operational_destination_es(navigate_page: str) -> str:
     """Una línea: en qué página del menú continúa la fila (valores de ``TodayWorkspaceRow.navigate_page``)."""
     fixed: dict[str, str] = {
-        "Casos para revisar": "**Página operativa:** Casos para revisar — se revisa el hilo allí; el borrador es en otra vista.",
-        "Candidatos comerciales": "**Página operativa:** Candidatos comerciales — profundizar y aplicar la acción CI allí.",
-        "Leads y cuentas": "**Página operativa:** Leads y cuentas — profundizar en el lead y el import allí.",
+        "Casos para revisar": "**Página operativa:** Seguimientos y casos — cola Gmail contacto (antes «Casos para revisar»).",
+        "Candidatos comerciales": "**Página operativa:** Herramientas → Candidatos comerciales — profundizar y aplicar la acción CI allí.",
+        "Leads y cuentas": "**Página operativa:** Herramientas → Leads y cuentas — profundizar en el lead y el import allí.",
         "Oportunidades": "**Página operativa:** Oportunidades — profundizar en señales del mart (p. ej. cuenta dormida) allí.",
     }
     return fixed.get(navigate_page, f"**Página operativa:** {navigate_page} — vista del menú lateral.")
@@ -89,9 +89,9 @@ def today_row_visibility_hint_es(source_code: str, navigate_page: str) -> str:
 def today_row_nav_button_label_es(navigate_page: str) -> str:
     """Etiqueta visible del botón de navegación desde «Qué hacer hoy» (mismo destino que antes)."""
     labels: dict[str, str] = {
-        "Casos para revisar": "Abrir Casos para revisar",
-        "Candidatos comerciales": "Abrir Candidatos comerciales",
-        "Leads y cuentas": "Abrir Leads y cuentas",
+        "Casos para revisar": "Abrir Seguimientos y casos",
+        "Candidatos comerciales": "Abrir Candidatos comerciales (Herramientas)",
+        "Leads y cuentas": "Abrir Leads y cuentas (Herramientas)",
         "Oportunidades": "Abrir Oportunidades",
     }
     return labels.get(navigate_page, "Abrir la página destino")

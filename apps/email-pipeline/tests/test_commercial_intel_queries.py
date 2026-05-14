@@ -57,6 +57,20 @@ def test_derive_internal_domains_top_senders() -> None:
     conn.close()
 
 
+def test_derive_internal_domains_skips_mail_relay_domains() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE emails (sender TEXT)")
+    for _ in range(40):
+        conn.execute("INSERT INTO emails VALUES (?)", ("R <r@bounce.mailchannels.net>",))
+    for _ in range(4):
+        conn.execute("INSERT INTO emails VALUES (?)", ("L <l@labdelivery.cl>",))
+    conn.commit()
+    got = derive_internal_domains(conn, max_n=4)
+    assert "labdelivery.cl" in got
+    assert "mailchannels.net" not in got
+    conn.close()
+
+
 def test_derive_vendor_domains_empty_without_contact_master() -> None:
     conn = sqlite3.connect(":memory:")
     assert derive_vendor_domains(conn) == set()

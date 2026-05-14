@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import re
+import sqlite3
 from collections import Counter, defaultdict
 from typing import Iterable
 
@@ -32,6 +33,62 @@ def domain_of(email: str | None) -> str | None:
     if not email or "@" not in email:
         return None
     return email.split("@")[-1].lower()
+
+
+# ESP / bulk relay / shared hosting — not operator “internal business” domains for mart guessing.
+_INFRA_DOMAIN_SUFFIXES: tuple[str, ...] = (
+    "mailchannels.net",
+    "websitehostserver.net",
+    "sendgrid.net",
+    "sendgrid.com",
+    "amazonses.com",
+    "mailgun.org",
+    "mailgun.net",
+    "mailgun.us",
+    "postmarkapp.com",
+    "sparkpostmail.com",
+    "mandrillapp.com",
+    "socketlabs.com",
+    "elasticemail.com",
+)
+
+
+def is_infrastructure_domain_guess(domain: str | None) -> bool:
+    """True if ``domain`` looks like ESP/relay/hosting noise, not a business identity."""
+    d = (domain or "").lower().strip()
+    if not d:
+        return True
+    for suf in _INFRA_DOMAIN_SUFFIXES:
+        if d == suf or d.endswith("." + suf):
+            return True
+    return False
+
+
+def infer_internal_domains_from_top_senders(
+    conn: sqlite3.Connection,
+    *,
+    max_n: int = 3,
+    sender_limit: int = 50,
+) -> set[str]:
+    """Infer likely internal domains from frequent sender addresses; drops infrastructure domains."""
+    rows = conn.execute(
+        """
+        SELECT sender, COUNT(*) AS c
+        FROM emails
+        WHERE sender IS NOT NULL AND length(trim(sender)) > 0
+        GROUP BY sender
+        ORDER BY c DESC
+        LIMIT ?
+        """,
+        (sender_limit,),
+    ).fetchall()
+    dom_counts: Counter[str] = Counter()
+    for sender, c in rows:
+        se = primary_sender_email(sender or "")
+        d = domain_of(se)
+        if d and not is_infrastructure_domain_guess(d):
+            dom_counts[d] += int(c or 0)
+    return {dom for dom, _ in dom_counts.most_common(max_n)}
 
 
 def guess_org_name_from_domain(domain: str) -> str:

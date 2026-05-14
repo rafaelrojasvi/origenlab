@@ -4,7 +4,7 @@ import io
 import json
 import os
 import sqlite3
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -59,10 +59,6 @@ from origenlab_email_pipeline.streamlit_suppliers_browse import (
 )
 from origenlab_email_pipeline.streamlit_borrador_support import contact_suppression_reason_label
 from origenlab_email_pipeline.streamlit_page_status import render_kpi_metric, render_page_status
-from origenlab_email_pipeline.streamlit_prioridad_copy import (
-    PRIORIDAD_DEL_DIA_GROUP_TITLE,
-    PRIORIDAD_GROUP_NAV_CAPTION_ES,
-)
 from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
     SESSION_CI_TODAY_HINT,
     SESSION_LEADS_TODAY_BANNER,
@@ -76,30 +72,43 @@ from origenlab_email_pipeline.streamlit_prioridad_pages import (
     render_next_marketing_queue_page,
     render_que_hacer_hoy_page,
 )
-# Áreas de navegación: mismas vistas que antes, agrupadas para reducir ruido visual.
-_NAV_GROUPS: list[tuple[str, list[str]]] = [
-    ("Resumen y sistema", ["Resumen", "Salud de datos", "Actividad contacto Gmail"]),
-    (
-        "Prioridad del día",
-        ["Qué hacer hoy", "Casos para revisar", "Cola outreach marketing", "Borrador comercial"],
-    ),
-    (
-        "Clientes e historial (archivo)",
-        ["Candidatos comerciales", "Oportunidades", "Organizaciones", "Contactos", "Documentos", "Equipos"],
-    ),
-    ("Licitaciones / leads externos", ["Leads y cuentas", "Proveedores"]),
+from origenlab_email_pipeline.outbound_core import resolve_outbound_gmail_user, resolve_outbound_sent_folders
+from origenlab_email_pipeline.outbound_readiness_check import assess_outbound_readiness
+from origenlab_email_pipeline.streamlit_canonical_dashboard_sql import (
+    count_canonical_attachments,
+    count_canonical_duplicate_message_id_groups,
+    count_canonical_empty_body,
+    count_canonical_missing_date_iso,
+    count_canonical_missing_message_id,
+    count_canonical_sent_inbox,
+    direction_label_for_folder,
+    folder_kind_label,
+    fmt_short_date,
+    load_inicio_recent_canonical_rows,
+)
+
+# Navegación principal (sidebar). «Herramientas» agrupa vistas avanzadas sin perder funcionalidad.
+PRIMARY_SIDEBAR_PAGES: list[str] = [
+    "Inicio",
+    "Actividad contacto Gmail",
+    "Seguimientos y casos",
+    "Contactos y organizaciones",
+    "Oportunidades",
+    "Outbound / No repetir",
+    "Histórico / Archivo legacy",
+    "Salud de datos",
+    "Herramientas / Runbook",
 ]
 
-
-def _all_nav_pages() -> list[str]:
-    return [p for _, lst in _NAV_GROUPS for p in lst]
-
-
-def _nav_group_index_for_page(page: str) -> int:
-    for i, (_, lst) in enumerate(_NAV_GROUPS):
-        if page in lst:
-            return i
-    return 0
+_HERRAMIENTA_INNER_OPTIONS: list[str] = [
+    "Runbook (guía operador)",
+    "Qué hacer hoy",
+    "Cola outreach marketing",
+    "Borrador comercial",
+    "Leads y cuentas",
+    "Proveedores",
+    "Candidatos comerciales",
+]
 
 
 def _fmt_ci_entity_kind(v: str) -> str:
@@ -381,6 +390,68 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
         "para vigencia operativa, colas de casos ni memoria anti‑repetición basada en Gmail."
     )
 
+    _gmail_pred = sql_predicate_contacto_gmail_source()
+    t_canon, t_lab, t_other = st.tabs(["A) Gmail operativo (contacto)", "B) Labdelivery histórico", "C) Otros orígenes"])
+    with t_canon:
+        try:
+            n_c = int(conn.execute(f"SELECT COUNT(*) FROM emails WHERE {_gmail_pred}").fetchone()[0])
+            dup = count_canonical_duplicate_message_id_groups(conn)
+            miss_m = count_canonical_missing_message_id(conn)
+            miss_d = count_canonical_missing_date_iso(conn)
+            eb = count_canonical_empty_body(conn)
+            att = count_canonical_attachments(conn)
+            edh_c = load_email_date_health(conn, slack_days=2, emails_extra_where=_gmail_pred)
+            st.write(
+                {
+                    "filas": n_c,
+                    "grupos_message_id_duplicados": dup,
+                    "message_id_vacio": miss_m,
+                    "date_iso_vacio": miss_d,
+                    "cuerpos_vacios_canon": eb,
+                    "adjuntos_enlazados": att,
+                    "min_date_iso": edh_c.raw_min,
+                    "max_date_iso_plausible": edh_c.plausible_max_date_iso,
+                    "fechas_futuras_sospechosas": edh_c.future_dated_count,
+                }
+            )
+        except Exception as exc:
+            st.warning(str(exc))
+    with t_lab:
+        try:
+            n_l = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM emails WHERE lower(coalesce(source_file,'')) LIKE '%contacto@labdelivery%'"
+                ).fetchone()[0]
+            )
+            edh_l = load_email_date_health(
+                conn,
+                slack_days=2,
+                emails_extra_where="lower(coalesce(source_file,'')) LIKE '%contacto@labdelivery%'",
+            )
+            st.write(
+                {
+                    "filas": n_l,
+                    "min_date_iso": edh_l.raw_min,
+                    "max_date_iso_plausible": edh_l.plausible_max_date_iso,
+                    "fechas_futuras_sospechosas": edh_l.future_dated_count,
+                }
+            )
+        except Exception as exc:
+            st.warning(str(exc))
+    with t_other:
+        try:
+            n_tot = int(conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0])
+            n_c = int(conn.execute(f"SELECT COUNT(*) FROM emails WHERE {_gmail_pred}").fetchone()[0])
+            n_l = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM emails WHERE lower(coalesce(source_file,'')) LIKE '%contacto@labdelivery%'"
+                ).fetchone()[0]
+            )
+            st.write({"filas_resto_aprox": max(n_tot - n_c - n_l, 0), "filas_totales_emails": n_tot})
+        except Exception as exc:
+            st.warning(str(exc))
+    st.divider()
+
     if not _has_table(conn, "emails"):
         st.error("No existe la tabla `emails` en este archivo.")
         return
@@ -398,7 +469,6 @@ def render_data_health_page(conn: sqlite3.Connection, db_path: Path) -> None:
     st.markdown("#### Conteos principales")
     st.dataframe(pd.DataFrame(count_rows), use_container_width=True, hide_index=True)
 
-    _gmail_pred = sql_predicate_contacto_gmail_source()
     n_labdelivery = int(
         conn.execute(
             "SELECT COUNT(*) FROM emails WHERE lower(source_file) LIKE '%contacto@labdelivery%'"
@@ -724,27 +794,78 @@ def load_contacto_gmail_activity_summary(
     )
 
 
-def load_contacto_gmail_recent_emails_df(conn: sqlite3.Connection, *, limit: int = 50) -> pd.DataFrame:
+def load_contacto_gmail_recent_emails_df(
+    conn: sqlite3.Connection,
+    *,
+    limit: int = 50,
+    subject_contains: str | None = None,
+    folder_exact: str | None = None,
+    direction: str | None = None,
+    require_attachments: bool = False,
+    date_from_iso: str | None = None,
+    date_to_iso: str | None = None,
+    search_blob: str | None = None,
+) -> pd.DataFrame:
+    """Recent canonical Gmail rows; optional filters use parameterized SQL (trusted enums for folder/direction)."""
     w = _where_contacto_gmail_source()
     lim = max(1, min(int(limit), 500))
-    try:
-        return _load_df(
-            conn,
-            f"""
+    extra: list[str] = []
+    params: list[object] = []
+    if subject_contains and str(subject_contains).strip():
+        extra.append("lower(coalesce(subject,'')) LIKE ?")
+        params.append(f"%{str(subject_contains).strip().lower()}%")
+    allowed_folders = ("INBOX", "[Gmail]/Enviados", "[Gmail]/Borradores", "[Gmail]/Papelera")
+    if folder_exact and folder_exact in allowed_folders:
+        extra.append("folder = ?")
+        params.append(folder_exact)
+    if direction == "inbound":
+        extra.append(
+            "(lower(coalesce(folder,'')) LIKE '%inbox%' OR lower(trim(coalesce(folder,''))) = 'inbox')"
+        )
+    elif direction == "outbound":
+        extra.append(
+            "(lower(coalesce(folder,'')) LIKE '%enviados%' OR lower(coalesce(folder,'')) LIKE '%sent%')"
+        )
+    if require_attachments:
+        extra.append("COALESCE(attachment_count, 0) > 0")
+    if date_from_iso and str(date_from_iso).strip():
+        extra.append("date(date_iso) >= date(?)")
+        params.append(str(date_from_iso).strip()[:10])
+    if date_to_iso and str(date_to_iso).strip():
+        extra.append("date(date_iso) <= date(?)")
+        params.append(str(date_to_iso).strip()[:10])
+    if search_blob and str(search_blob).strip():
+        like = f"%{str(search_blob).strip().lower()}%"
+        extra.append(
+            "("
+            "lower(coalesce(subject,'')) LIKE ? OR "
+            "lower(coalesce(sender,'')) LIKE ? OR "
+            "lower(coalesce(body,'')) LIKE ? OR "
+            "lower(coalesce(full_body_clean,'')) LIKE ? OR "
+            "lower(coalesce(top_reply_clean,'')) LIKE ?"
+            ")"
+        )
+        params.extend([like, like, like, like, like])
+    tail = (" AND " + " AND ".join(extra)) if extra else ""
+    sql = f"""
             SELECT
               date_iso,
               substr(COALESCE(subject, ''), 1, 120) AS subject_preview,
               substr(COALESCE(sender, ''), 1, 120) AS sender_preview,
+              substr(COALESCE(folder, ''), 1, 80) AS folder_preview,
+              COALESCE(attachment_count, 0) AS attachment_count,
               source_file
             FROM emails
             WHERE {w}
+              {tail}
             ORDER BY
               CASE WHEN date_iso IS NULL OR trim(date_iso) = '' THEN 1 ELSE 0 END,
               date_iso DESC
             LIMIT ?
-            """,
-            (lim,),
-        )
+            """
+    params.append(lim)
+    try:
+        return _load_df(conn, sql, tuple(params))
     except Exception:
         return pd.DataFrame()
 
@@ -1035,16 +1156,78 @@ def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path)
         "(excluye fechas > hoy + 2 días en calendario SQLite)."
     )
 
-    st.markdown("#### Correos recientes (contacto Gmail)")
-    emails_df = load_contacto_gmail_recent_emails_df(conn, limit=50)
-    if emails_df.empty:
-        st.caption("Sin filas para mostrar.")
-    else:
-        st.dataframe(emails_df, use_container_width=True, hide_index=True)
+    with st.expander("Filtros de búsqueda (solo lectura)", expanded=False):
+        g1, g2, g3 = st.columns(3)
+        with g1:
+            d_from = st.date_input("Desde (date_iso)", value=None, key="cg_date_from")
+            d_to = st.date_input("Hasta (date_iso)", value=None, key="cg_date_to")
+        with g2:
+            fold = st.selectbox(
+                "Carpeta",
+                ["(todas)", "INBOX", "[Gmail]/Enviados", "[Gmail]/Borradores", "[Gmail]/Papelera"],
+                key="cg_folder",
+            )
+        with g3:
+            dire = st.selectbox("Dirección", ["(todas)", "Recibido", "Enviado"], key="cg_direction")
+        q_blob = st.text_input("Buscar en asunto / remitente / cuerpo (contiene)", value="", key="cg_search")
+        only_att = st.checkbox("Solo con adjuntos", value=False, key="cg_only_att")
+    direction_sql: str | None = None
+    if dire == "Recibido":
+        direction_sql = "inbound"
+    elif dire == "Enviado":
+        direction_sql = "outbound"
+    folder_sql = None if fold == "(todas)" else fold
+    date_from_s = d_from.isoformat() if d_from else None
+    date_to_s = d_to.isoformat() if d_to else None
 
+    st.markdown("#### Correos recientes (contacto Gmail)")
+    emails_df = load_contacto_gmail_recent_emails_df(
+        conn,
+        limit=80,
+        folder_exact=folder_sql,
+        direction=direction_sql,
+        require_attachments=only_att,
+        date_from_iso=date_from_s,
+        date_to_iso=date_to_s,
+        search_blob=q_blob or None,
+    )
+    if emails_df.empty:
+        st.caption("Sin filas para mostrar con los filtros actuales.")
+    else:
+        show = emails_df.rename(
+            columns={
+                "date_iso": "Fecha",
+                "subject_preview": "Asunto",
+                "sender_preview": "Remitente",
+                "folder_preview": "Carpeta",
+                "attachment_count": "Adjuntos",
+                "source_file": "Origen (técnico)",
+            }
+        )
+        st.dataframe(show, use_container_width=True, hide_index=True)
+        st.caption("La columna «Origen (técnico)» muestra el prefijo real de ingest; en operación normal no cambie.")
+
+    with st.expander("Vista previa de mensaje (selección por id)", expanded=False):
+        pick = st.number_input("ID de fila en `emails` (entero)", min_value=0, value=0, step=1, key="cg_preview_id")
+        if pick > 0:
+            try:
+                w = _where_contacto_gmail_source()
+                row = conn.execute(
+                    f"SELECT id, subject, substr(COALESCE(body, full_body_clean, top_reply_clean, ''),1,8000) AS body_excerpt "
+                    f"FROM emails WHERE id = ? AND ({w})",
+                    (int(pick),),
+                ).fetchone()
+                if not row:
+                    st.warning("No hay fila canónica con ese id (o no pertenece a Gmail contacto).")
+                else:
+                    st.markdown(f"**Asunto:** {row[1] or '—'}")
+                    st.text_area("Extracto", value=str(row[2] or ""), height=240, disabled=True, key="cg_prev_body")
+            except Exception as exc:
+                st.error(str(exc))
+
+    st.markdown("#### Documentos recientes (correos contacto Gmail)")
     docs_df = load_contacto_gmail_recent_documents_df(conn, limit=25)
     if _has_table(conn, "document_master"):
-        st.markdown("#### Documentos recientes (correos contacto Gmail)")
         if docs_df.empty:
             st.caption("Sin documentos asociados a estos `email_id` o mart no construido.")
         else:
@@ -1101,6 +1284,275 @@ def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path)
             )
 
     st.caption(f"Archivo: `{db_path}` · Vista informativa (no es bandeja de entrada completa).")
+
+
+def render_inicio_page(conn: sqlite3.Connection, db_path: Path) -> None:
+    """Panel ejecutivo: operativo Gmail canónico primero; histórico aparte."""
+    render_page_status("Inicio")
+    st.caption("Fuente operativa: **contacto@origenlab.cl** · Gmail Workspace")
+    st.info(
+        "Este panel usa por defecto el correo operativo **contacto@origenlab.cl**. "
+        "Los datos antiguos de Labdelivery y backups Outlook están en **Histórico / Archivo legacy**."
+    )
+    if not _has_table(conn, "emails"):
+        st.error("No existe la tabla `emails` en este archivo.")
+        return
+
+    summary = load_contacto_gmail_activity_summary(conn, slack_days=2)
+    sent_n, inbox_n = count_canonical_sent_inbox(conn)
+    dup_g = count_canonical_duplicate_message_id_groups(conn)
+    miss_mid = count_canonical_missing_message_id(conn)
+    miss_date = count_canonical_missing_date_iso(conn)
+    opp_n = _safe_count(conn, "opportunity_signals")
+    cont_n = _safe_count(conn, "contact_master")
+    org_n = _safe_count(conn, "organization_master")
+
+    verdict_out = "—"
+    try:
+        settings = load_settings()
+        rep = assess_outbound_readiness(
+            conn,
+            sqlite_path=db_path,
+            sqlite_exists=db_path.is_file(),
+            gmail_user=resolve_outbound_gmail_user(settings, explicit=None),
+            sent_folders=resolve_outbound_sent_folders(None),
+            max_staleness_days=90.0,
+            strict_commercial_required=False,
+        )
+        verdict_out = rep.verdict
+    except Exception as exc:
+        st.warning(f"No se pudo evaluar outbound readiness: {exc}")
+
+    r1 = st.columns(4)
+    with r1[0]:
+        render_kpi_metric("Correos operativos Gmail", f"{summary.total_rows:,}")
+    with r1[1]:
+        render_kpi_metric(
+            "Último correo (fecha plausible)",
+            (summary.most_recent_plausible_iso or "—")[:19],
+            help_text="MAX(date_iso) canónico excluyendo fechas futuras sospechosas (SQLite).",
+        )
+    with r1[2]:
+        render_kpi_metric(
+            "Correos enviados (heurística carpeta)",
+            f"{sent_n:,}" if sent_n is not None else "—",
+        )
+    with r1[3]:
+        render_kpi_metric(
+            "Correos recibidos INBOX (heurística)",
+            f"{inbox_n:,}" if inbox_n is not None else "—",
+        )
+
+    r2 = st.columns(4)
+    with r2[0]:
+        render_kpi_metric("Contactos (mart)", f"{cont_n if cont_n is not None else '—':,}")
+    with r2[1]:
+        render_kpi_metric("Organizaciones (mart)", f"{org_n if org_n is not None else '—':,}")
+    with r2[2]:
+        render_kpi_metric("Señales / oportunidades", f"{opp_n if opp_n is not None else '—':,}")
+    with r2[3]:
+        label = "Seguro para outreach" if verdict_out in ("ready", "ready_with_warnings") else "Requiere revisión"
+        render_kpi_metric("Outbound readiness", verdict_out, help_text=label)
+
+    st.markdown("#### Qué hacer hoy")
+    st.caption("Sugerencias operativas (sin mezclar histórico legacy en esta sección).")
+    try:
+        from origenlab_email_pipeline.streamlit_today_workspace import TodayWorkspaceSpec, gather_today_workspace_rows
+
+        rows = gather_today_workspace_rows(conn, TodayWorkspaceSpec(max_total_rows=12))
+        if not rows:
+            st.info("Sin filas sugeridas en este momento (o datos insuficientes).")
+        else:
+            for r in rows[:8]:
+                st.markdown(
+                    f"- **{r.tier_label_es}** — {r.reason_es} · {r.reference_es} "
+                    f"(_{r.navigate_page} en el menú Herramientas_)"
+                )
+    except Exception as exc:
+        st.warning(f"No se pudo cargar el espacio «hoy»: {exc}")
+
+    st.markdown("#### Atajos exploratorios (mart)")
+    st.caption("Accesos rápidos al mart (incluye histórico); no sustituyen la vigencia operativa Gmail.")
+    qa_row = st.columns(3)
+    with qa_row[0]:
+        if st.button("Universidades con cotización", key="inicio_qa_unis_quotes"):
+            _navigate_to("Organizaciones", org_only_unis=True)
+    with qa_row[1]:
+        if st.button("Organizaciones con cotización", key="inicio_qa_org_quotes"):
+            _navigate_to("Organizaciones", org_focus_quotes=True)
+    with qa_row[2]:
+        if st.button("Cuentas dormidas (señales)", key="inicio_qa_dormant"):
+            _navigate_to("Oportunidades", opp_signal_filter="dormant_contact")
+
+    st.markdown("#### Actividad reciente (operativo)")
+    st.caption("Últimos correos canónicos Gmail (sin cuerpo largo).")
+    raw_rows = load_inicio_recent_canonical_rows(conn, limit=10)
+    if not raw_rows:
+        st.info("Sin correos canónicos para mostrar.")
+    else:
+        disp = []
+        for row in raw_rows:
+            disp.append(
+                {
+                    "Fecha": fmt_short_date(row.get("date_iso")),
+                    "Dirección": direction_label_for_folder(row.get("folder")),
+                    "Remitente / vista": (str(row.get("sender") or "")[:80] + "…")
+                    if len(str(row.get("sender") or "")) > 80
+                    else (row.get("sender") or "—"),
+                    "Asunto": (str(row.get("subject") or "")[:100] + "…")
+                    if len(str(row.get("subject") or "")) > 100
+                    else (row.get("subject") or "—"),
+                    "Carpeta": folder_kind_label(row.get("folder")),
+                    "Adj.": int(row.get("attachment_count") or 0),
+                }
+            )
+        st.dataframe(pd.DataFrame(disp), use_container_width=True, hide_index=True)
+
+    st.markdown("#### Estado de datos (compacto)")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(
+            f"- **Máx. fecha plausible:** `{summary.most_recent_plausible_iso or '—'}`\n"
+            f"- **Grupos message_id duplicados:** `{dup_g if dup_g is not None else '—'}`\n"
+            f"- **message_id vacío:** `{miss_mid if miss_mid is not None else '—'}`\n"
+            f"- **date_iso vacío:** `{miss_date if miss_date is not None else '—'}`"
+        )
+    with c2:
+        att_n = count_canonical_attachments(conn)
+        empty_b = count_canonical_empty_body(conn)
+        st.markdown(
+            f"- **Outbound:** `{verdict_out}`\n"
+            f"- **Adjuntos ligados (canónico):** `{att_n if att_n is not None else '—'}`\n"
+            f"- **Cuerpos vacíos (canónico):** `{empty_b if empty_b is not None else '—'}`"
+        )
+    dnr_path = load_settings().resolved_reports_dir() / "active" / "current" / "do_not_repeat_master.csv"
+    try:
+        if dnr_path.is_file():
+            mtime = datetime.fromtimestamp(dnr_path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+            st.caption(f"**Memoria anti-repetición** (`do_not_repeat_master.csv`): última modificación local **{mtime}**.")
+        else:
+            st.caption("**Memoria anti-repetición:** archivo `do_not_repeat_master.csv` no encontrado en la ruta activa esperada.")
+    except OSError:
+        st.caption("**Memoria anti-repetición:** no se pudo comprobar el archivo en disco.")
+
+
+def render_historico_legacy_page(conn: sqlite3.Connection, db_path: Path) -> None:
+    st.subheader("Histórico / Archivo legacy")
+    render_page_status("Histórico / Archivo legacy")
+    st.warning(
+        "**Histórico:** datos de **contacto@labdelivery.cl**, backups Outlook, PST/mbox antiguos. "
+        "Sirven para referencia e investigación; **no** son la fuente operativa frente a Gmail Workspace."
+    )
+    if not _has_table(conn, "emails"):
+        st.error("No existe la tabla `emails`.")
+        return
+    n_lab = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM emails WHERE lower(coalesce(source_file,'')) LIKE '%contacto@labdelivery%'"
+        ).fetchone()[0]
+    )
+    pred = sql_predicate_contacto_gmail_source()
+    n_canon = int(conn.execute(f"SELECT COUNT(*) FROM emails WHERE {pred}").fetchone()[0])
+    n_other = int(conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]) - n_lab - n_canon
+    st.markdown(
+        f"- **Legacy Labdelivery (heurística path):** {n_lab:,}\n"
+        f"- **Canónico Gmail (operativo):** {n_canon:,}\n"
+        f"- **Otros / resto:** {max(n_other, 0):,}"
+    )
+    try:
+        row = conn.execute(
+            """
+            SELECT MIN(date_iso), MAX(date_iso) FROM emails
+            WHERE lower(coalesce(source_file,'')) LIKE '%contacto@labdelivery%'
+              AND date_iso IS NOT NULL AND trim(date_iso) != ''
+            """
+        ).fetchone()
+        if row and row[0]:
+            st.caption(f"Rango aproximado **Labdelivery** en `date_iso`: {str(row[0])[:10]} → {str(row[1])[:10] if row[1] else '—'}")
+    except sqlite3.Error as exc:
+        st.warning(str(exc))
+    q = st.text_input("Buscar en asunto/remitente (solo legacy Labdelivery)", value="", key="legacy_search_q")
+    if q.strip():
+        try:
+            like = f"%{q.strip().lower()}%"
+            df = _load_df(
+                conn,
+                """
+                SELECT substr(date_iso,1,19) AS fecha, substr(sender,1,80) AS remitente,
+                       substr(subject,1,120) AS asunto, source_file
+                FROM emails
+                WHERE lower(coalesce(source_file,'')) LIKE '%contacto@labdelivery%'
+                  AND (
+                    lower(coalesce(subject,'')) LIKE ?
+                    OR lower(coalesce(sender,'')) LIKE ?
+                  )
+                ORDER BY CASE WHEN date_iso IS NULL OR trim(date_iso) = '' THEN 1 ELSE 0 END,
+                         date_iso DESC
+                LIMIT 50
+                """,
+                (like, like),
+            )
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        except Exception as exc:
+            st.error(str(exc))
+
+
+def render_outbound_no_repetir_page(conn: sqlite3.Connection, db_path: Path) -> None:
+    st.subheader("Outbound / No repetir")
+    render_page_status("Outbound / No repetir")
+    st.caption("Lectura de estado; **no** se envía correo desde esta pantalla.")
+    settings = load_settings()
+    try:
+        rep = assess_outbound_readiness(
+            conn,
+            sqlite_path=db_path,
+            sqlite_exists=db_path.is_file(),
+            gmail_user=resolve_outbound_gmail_user(settings, explicit=None),
+            sent_folders=resolve_outbound_sent_folders(None),
+            max_staleness_days=90.0,
+            strict_commercial_required=False,
+        )
+        st.markdown(f"**Veredicto:** `{rep.verdict}`")
+        if rep.warnings:
+            for w in rep.warnings[:12]:
+                st.warning(w)
+        if rep.errors:
+            for e in rep.errors[:12]:
+                st.error(e)
+        st.json(
+            {
+                "sent": rep.sent,
+                "sidecars": rep.sidecars,
+                "mart": rep.mart,
+                "commercial": rep.commercial,
+            }
+        )
+    except Exception as exc:
+        st.error(str(exc))
+    st.markdown(
+        "**Export / CLI (referencia):** `uv run python scripts/leads/export_next_marketing_recipients.py`, "
+        "`uv run python scripts/qa/check_outbound_readiness.py`, "
+        "`uv run python scripts/qa/refresh_outbound_safety_memory.py`."
+    )
+
+
+def render_herramientas_runbook_page(db_path: Path) -> None:
+    st.subheader("Herramientas / Runbook")
+    render_page_status("Herramientas / Runbook")
+    st.markdown(
+        f"""
+### Guía rápida (solo lectura / operador)
+
+- **Base SQLite actual:** `{db_path}`
+- **Ingest Gmail Workspace:** `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` (ver `docs/ingest/WORKSPACE_GMAIL_IMAP.md`)
+- **Reconstruir mart:** `uv run python scripts/mart/build_business_mart.py --rebuild`
+- **Outbound readiness:** `uv run python scripts/qa/check_outbound_readiness.py`
+- **Refrescar memoria anti-repetición:** `uv run python scripts/qa/refresh_outbound_safety_memory.py`
+- **Abrir panel:** `uv run --group ui streamlit run apps/business_mart_app.py`
+
+⚠️ **No ejecute** `scripts/ingest/02_mbox_to_sqlite.py` de forma casual: puede duplicar o mezclar archivos históricos.
+        """.strip()
+    )
 
 
 def render_proveedores_page(conn: sqlite3.Connection, db_path: Path) -> None:
@@ -1812,415 +2264,130 @@ def _render_equipment_page(conn: sqlite3.Connection) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="OrigenLab — Base Comercial", layout="wide")
-    st.title("OrigenLab — Base comercial")
-    st.caption(
-        "Señales y actividad histórica en correo/adjuntos. No implica ventas confirmadas ni facturación real."
-    )
-
+    st.set_page_config(page_title="OrigenLab — Panel comercial", layout="wide")
     settings = load_settings()
     db_path = settings.resolved_sqlite_path()
+
+    with st.sidebar:
+        st.markdown("### OrigenLab")
+        st.caption("Panel comercial · correo")
+        if SESSION_START_PAGE in st.session_state:
+            st.session_state["sidebar_nav_page"] = st.session_state.pop(SESSION_START_PAGE)
+        page = st.radio(
+            "Ir a",
+            PRIMARY_SIDEBAR_PAGES,
+            key="sidebar_nav_page",
+            label_visibility="collapsed",
+        )
+
+    st.title("OrigenLab — Panel comercial")
+    if page == "Inicio":
+        st.caption("Fuente operativa: **contacto@origenlab.cl** · Gmail Workspace")
+    else:
+        st.caption(
+            "Vistas operativas e histórico separado. No implica ventas confirmadas ni facturación real."
+        )
 
     with st.expander("Fuente de datos (técnico)"):
         st.code(str(db_path))
 
     conn = _connect_ro(db_path)
     try:
-        # Navegación por área + vista (mismas rutas; handoff vía ``SESSION_START_PAGE``).
-        all_pages = _all_nav_pages()
-        if SESSION_START_PAGE in st.session_state:
-            _sp = st.session_state.pop(SESSION_START_PAGE)
-            if _sp in all_pages:
-                _gi = _nav_group_index_for_page(_sp)
-                st.session_state["nav_area_ix"] = _gi
-                if _sp in _NAV_GROUPS[_gi][1]:
-                    st.session_state[f"nav_subpage_{_gi}"] = _sp
+        tool_inner: str | None = None
+        if page == "Herramientas / Runbook":
+            tool_inner = st.radio(
+                "Herramienta",
+                _HERRAMIENTA_INNER_OPTIONS,
+                key="herramienta_inner",
+                label_visibility="collapsed",
+            )
+            if tool_inner.startswith("Runbook"):
+                render_herramientas_runbook_page(db_path)
+                return
 
-        st.markdown("##### Navegación")
-        st.caption(
-            "Elija un **área** y luego la **vista**. No hay pantallas nuevas: solo están agrupadas para orientarse más rápido."
-        )
-        _g_ix = st.selectbox(
-            "Área",
-            options=list(range(len(_NAV_GROUPS))),
-            format_func=lambda i: _NAV_GROUPS[int(i)][0],
-            label_visibility="collapsed",
-            key="nav_area_ix",
-        )
-        if _NAV_GROUPS[int(_g_ix)][0] == PRIORIDAD_DEL_DIA_GROUP_TITLE:
-            st.caption(PRIORIDAD_GROUP_NAV_CAPTION_ES)
-        _plist = _NAV_GROUPS[int(_g_ix)][1]
-        page = st.radio(
-            "Vista",
-            _plist,
-            horizontal=True,
-            label_visibility="collapsed",
-            key=f"nav_subpage_{int(_g_ix)}",
-        )
-        if page not in all_pages:
-            page = "Resumen"
+        effective_page = page
+        if page == "Contactos y organizaciones":
+            effective_page = st.radio(
+                "Sección del mart",
+                ["Contactos", "Organizaciones", "Documentos", "Equipos"],
+                horizontal=True,
+                key="coy_inner",
+            )
 
         if page == "Salud de datos":
             render_data_health_page(conn, db_path)
             return
 
-        if page == "Qué hacer hoy":
-            render_que_hacer_hoy_page(conn, db_path)
+        if page == "Inicio":
+            render_inicio_page(conn, db_path)
+            return
+
+        if page == "Seguimientos y casos":
+            st.subheader("Seguimientos y casos")
+            render_page_status("Seguimientos y casos")
+            st.caption(
+                "Cola operativa del buzón **Gmail contacto@origenlab.cl** (misma lógica que la vista histórica «Casos para revisar»). "
+                "Para la lista consolidada multi-fuente abra **Herramientas → Qué hacer hoy**."
+            )
+            render_cases_to_review_page(conn, db_path, show_main_heading=False)
             return
 
         if page == "Actividad contacto Gmail":
             render_contacto_gmail_activity_page(conn, db_path)
             return
 
-        if page == "Casos para revisar":
-            render_cases_to_review_page(conn, db_path)
+        if page == "Outbound / No repetir":
+            render_outbound_no_repetir_page(conn, db_path)
             return
 
-        if page == "Cola outreach marketing":
-            render_next_marketing_queue_page(conn, db_path)
+        if page == "Histórico / Archivo legacy":
+            render_historico_legacy_page(conn, db_path)
             return
 
-        if page == "Borrador comercial":
-            render_commercial_draft_review_page(conn, db_path)
-            return
+        strict_mart = effective_page in {
+            "Contactos",
+            "Organizaciones",
+            "Documentos",
+            "Equipos",
+            "Oportunidades",
+        } or (page == "Herramientas / Runbook" and tool_inner == "Candidatos comerciales")
 
-        if page == "Leads y cuentas":
-            render_leads_y_cuentas_page(conn, db_path)
-            return
+        if strict_mart:
+            required = ["contact_master", "organization_master", "document_master", "opportunity_signals"]
+            missing = [t for t in required if not _has_table(conn, t)]
+            if missing:
+                st.error("Faltan tablas del mart: " + ", ".join(missing))
+                st.info("Ejecute primero: `uv run python scripts/mart/build_business_mart.py --rebuild`")
+                return
 
-        if page == "Proveedores":
-            render_proveedores_page(conn, db_path)
-            return
-
-        required = ["contact_master", "organization_master", "document_master", "opportunity_signals"]
-        missing = [t for t in required if not _has_table(conn, t)]
-        if missing:
-            st.error("Faltan tablas del mart: " + ", ".join(missing))
-            st.info("Ejecute primero: `uv run python scripts/mart/build_business_mart.py --rebuild`")
-            return
-
-        if page == "Resumen":
-            st.subheader("Resumen ejecutivo")
-            render_page_status("Resumen")
-            st.caption(
-                "Panorama del archivo importado y del mart de negocio. Las tareas sugeridas del día están en **Qué hacer hoy**."
-            )
-            st.info(
-                "**Fuente operativa OrigenLab:** correo **Google Workspace** (`gmail:contacto@origenlab.cl/…`). "
-                "**Histórico / referencia:** exportaciones **mbox** (p. ej. `contacto@labdelivery.cl`) conviven en "
-                "`emails`; el mart y los KPIs de archivo completo los incluyen — no los confunda con el buzón vivo."
-            )
-            total_msgs = int(_load_df(conn, "SELECT COUNT(*) AS c FROM emails").iloc[0]["c"])
-            _op_pred = sql_predicate_contacto_gmail_source()
-            op_msgs = int(_load_df(conn, f"SELECT COUNT(*) AS c FROM emails WHERE {_op_pred}").iloc[0]["c"])
-            contacts_n = int(_load_df(conn, "SELECT COUNT(*) AS c FROM contact_master").iloc[0]["c"])
-            orgs_n = int(_load_df(conn, "SELECT COUNT(*) AS c FROM organization_master").iloc[0]["c"])
-            docs_n = int(_load_df(conn, "SELECT COUNT(*) AS c FROM document_master").iloc[0]["c"])
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                render_kpi_metric("Mensajes analizados", f"{total_msgs:,}")
-            with c2:
-                render_kpi_metric("Contactos externos", f"{contacts_n:,}")
-            with c3:
-                render_kpi_metric("Organizaciones externas", f"{orgs_n:,}")
-            with c4:
-                render_kpi_metric("Documentos útiles", f"{docs_n:,}")
-            st.caption(
-                f"Mensajes **operativos** (solo Gmail Workspace `gmail:contacto@origenlab.cl/…`): **{op_msgs:,}**."
-            )
-
-            # Periodo aproximado de cobertura del archivo de correo.
-            try:
-                period_df = _load_df(
-                    conn,
-                    "SELECT MIN(date_iso) AS primera, MAX(date_iso) AS ultima FROM emails WHERE date_iso IS NOT NULL",
-                )
-                primera = period_df.iloc[0]["primera"]
-                ultima = period_df.iloc[0]["ultima"]
-                if pd.notna(primera) and pd.notna(ultima):
-                    primera_y = str(primera)[:4]
-                    ultima_y = str(ultima)[:4]
-                    st.caption(f"Periodo aproximado cubierto por el archivo: {primera_y}–{ultima_y}.")
-            except Exception:
-                # Si falla, no obstaculiza la navegación.
-                pass
-
-            st.markdown(
-                "Esta base actúa como **memoria comercial histórica** basada en correos y adjuntos. "
-                "No representa ventas confirmadas, sino señales e indicios de interés comercial."
-            )
-
-            st.divider()
-            st.markdown("### Preguntas rápidas")
-            qa_row1 = st.columns(3)
-
-            with qa_row1[0]:
-                st.markdown("**Universidades con cotización**")
-                st.caption("Ver universidades con actividad de correos o documentos de cotización.")
-                if st.button("Ir a organizaciones (universidades)", key="qa_unis_quotes"):
-                    _navigate_to("Organizaciones", org_only_unis=True)
-
-            with qa_row1[1]:
-                st.markdown("**Clientes con muchas cotizaciones**")
-                st.caption("Organizaciones con alto volumen de correos y documentos de cotización.")
-                if st.button("Ver organizaciones con cotización", key="qa_org_quotes"):
-                    _navigate_to("Organizaciones", org_focus_quotes=True)
-
-            with qa_row1[2]:
-                st.markdown("**Proveedores con facturas**")
-                st.caption("Organizaciones con correos o documentos detectados como factura.")
-                if st.button("Ver organizaciones con facturas", key="qa_org_invoices"):
-                    _navigate_to("Organizaciones", org_only_invoices=True)
-
-            qa_row2 = st.columns(3)
-
-            with qa_row2[0]:
-                st.markdown("**Cuentas dormidas valiosas**")
-                st.caption("Contactos con mucho historial pero sin actividad reciente.")
-                if st.button("Ver oportunidades de cuentas dormidas", key="qa_dormant_contacts"):
-                    _navigate_to("Oportunidades", opp_signal_filter="dormant_contact")
-
-            with qa_row2[1]:
-                st.markdown("**Documentos de cotización recientes**")
-                st.caption("Adjuntos clasificados como cotización en los últimos años.")
-                if st.button("Ver documentos de cotización", key="qa_quote_docs"):
-                    _navigate_to("Documentos", docs_only_quotes=True)
-
-            with qa_row2[2]:
-                st.markdown("**Universidades con facturación**")
-                st.caption("Universidades donde se detectaron facturas o documentos similares.")
-                if st.button("Ver universidades con facturas", key="qa_unis_invoices"):
-                    _navigate_to("Organizaciones", org_only_unis_invoices=True)
-
-            st.divider()
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown("**Universidades con actividad de cotización**")
-                uni = _load_df(
-                    conn,
-                    """
-                    SELECT
-                      domain AS dominio,
-                      organization_name_guess AS organizacion,
-                      first_seen_at AS primera,
-                      last_seen_at AS ultima,
-                      total_emails AS total,
-                      quote_email_count AS cotiz_email,
-                      quote_doc_count AS cotiz_docs
-                    FROM organization_master
-                    WHERE organization_type_guess='education'
-                      AND (quote_email_count > 0 OR quote_doc_count > 0)
-                    ORDER BY (quote_email_count + quote_doc_count) DESC, total_emails DESC
-                    LIMIT 12
-                    """,
-                )
-                if uni.empty:
-                    st.info("No se detectó actividad de cotización en organizaciones tipo educación.")
-                else:
-                    st.dataframe(uni, use_container_width=True, hide_index=True)
-
-            with c2:
-                st.markdown("**Organizaciones con actividad de factura**")
-                inv = _load_df(
-                    conn,
-                    """
-                    SELECT
-                      domain AS dominio,
-                      organization_name_guess AS organizacion,
-                      first_seen_at AS primera,
-                      last_seen_at AS ultima,
-                      total_emails AS total,
-                      invoice_email_count AS factura_email,
-                      invoice_doc_count AS factura_docs
-                    FROM organization_master
-                    WHERE invoice_email_count > 0 OR invoice_doc_count > 0
-                    ORDER BY (invoice_email_count + invoice_doc_count) DESC, total_emails DESC
-                    LIMIT 12
-                    """,
-                )
-                if inv.empty:
-                    st.info("No se detectó actividad de factura en el mart actual.")
-                else:
-                    st.dataframe(inv, use_container_width=True, hide_index=True)
-
-            with st.expander("Informe estático (HTML)"):
-                st.markdown(
-                    "La versión estática completa del informe se encuentra en el entorno de análisis en:\n\n"
-                    "`reports/out/20260317_162013/index.html`\n\n"
-                    "Esta app muestra una vista dinámica del mismo mart; "
-                    "el informe HTML sigue siendo la referencia narrativa detallada."
-                )
-
-            # Radar de cotizaciones: organizaciones, contactos y cuentas dormidas.
-            st.divider()
-            st.markdown("### Radar de cotizaciones")
-            st.caption(
-                "Vista rápida de organizaciones y contactos con **alta actividad histórica de cotización**. "
-                "Incluye correos donde se habla de cotizar y documentos detectados como cotización."
-            )
-
-            col_orgs, col_contacts = st.columns(2)
-
-            with col_orgs:
-                st.markdown("#### Organizaciones con mayor actividad de cotización")
-                radar_orgs = _load_df(
-                    conn,
-                    """
-                    SELECT
-                      domain AS dominio,
-                      organization_name_guess AS organizacion,
-                      organization_type_guess AS tipo_org,
-                      first_seen_at AS primera,
-                      last_seen_at AS ultima,
-                      total_emails AS total,
-                      quote_email_count AS cotiz_email,
-                      quote_doc_count AS cotiz_docs,
-                      business_doc_email_count AS doc_emails,
-                      top_equipment_tags AS equipos
-                    FROM organization_master
-                    WHERE quote_email_count > 0 OR quote_doc_count > 0
-                    ORDER BY (quote_email_count + quote_doc_count) DESC, total_emails DESC
-                    LIMIT 15
-                    """,
-                )
-                if radar_orgs.empty:
-                    st.info("No se encontraron organizaciones con actividad clara de cotización.")
-                else:
-                    radar_orgs_display = radar_orgs.copy()
-                    radar_orgs_display["tipo_org"] = radar_orgs_display["tipo_org"].apply(
-                        lambda x: _friendly_org_type(str(x)) if pd.notna(x) else _friendly_org_type(None)
-                    )
-                    radar_orgs_display = radar_orgs_display.rename(
-                        columns={
-                            "dominio": "Dominio",
-                            "organizacion": "Organización",
-                            "tipo_org": "Tipo de organización",
-                            "primera": "Primera actividad",
-                            "ultima": "Última actividad",
-                            "total": "Total de correos",
-                            "cotiz_email": "Correos con cotización",
-                            "cotiz_docs": "Documentos de cotización",
-                            "doc_emails": "Correos con documentos comerciales",
-                            "equipos": "Equipos asociados (heurístico)",
-                        }
-                    )
-                    st.dataframe(radar_orgs_display, use_container_width=True, hide_index=True)
-
-            with col_contacts:
-                st.markdown("#### Contactos con mayor actividad de cotización")
-                radar_contacts = _load_df(
-                    conn,
-                    """
-                    SELECT
-                      email,
-                      domain AS dominio,
-                      organization_name_guess AS organizacion,
-                      organization_type_guess AS tipo_org,
-                      first_seen_at AS primera,
-                      last_seen_at AS ultima,
-                      total_emails AS total,
-                      quote_email_count AS cotiz_email,
-                      business_doc_email_count AS doc_emails,
-                      top_equipment_tags AS equipos
-                    FROM contact_master
-                    WHERE quote_email_count > 0
-                    ORDER BY quote_email_count DESC, total_emails DESC
-                    LIMIT 15
-                    """,
-                )
-                if radar_contacts.empty:
-                    st.info("No se encontraron contactos con actividad clara de cotización.")
-                else:
-                    radar_contacts_display = radar_contacts.copy()
-                    radar_contacts_display["tipo_org"] = radar_contacts_display["tipo_org"].apply(
-                        lambda x: _friendly_org_type(str(x)) if pd.notna(x) else _friendly_org_type(None)
-                    )
-                    radar_contacts_display = radar_contacts_display.rename(
-                        columns={
-                            "email": "Contacto (email)",
-                            "dominio": "Dominio",
-                            "organizacion": "Organización",
-                            "tipo_org": "Tipo de organización",
-                            "primera": "Primera actividad",
-                            "ultima": "Última actividad",
-                            "total": "Total de correos",
-                            "cotiz_email": "Correos con cotización",
-                            "doc_emails": "Correos con documentos comerciales",
-                            "equipos": "Equipos asociados (heurístico)",
-                        }
-                    )
-                    st.dataframe(radar_contacts_display, use_container_width=True, hide_index=True)
-
-            # Cuentas dormidas con historial de cotización (basado en señales heurísticas).
-            st.markdown("#### Cuentas dormidas con historial de cotización")
-            dormant = _load_df(
-                conn,
-                """
-                SELECT
-                  s.entity_key AS email,
-                  s.score,
-                  s.created_at,
-                  c.domain AS dominio,
-                  c.organization_name_guess AS organizacion,
-                  c.organization_type_guess AS tipo_org,
-                  c.first_seen_at,
-                  c.last_seen_at,
-                  c.total_emails,
-                  c.quote_email_count,
-                  c.business_doc_email_count,
-                  c.top_equipment_tags
-                FROM opportunity_signals s
-                JOIN contact_master c ON c.email = s.entity_key
-                WHERE s.signal_type = 'dormant_contact'
-                ORDER BY s.score DESC, s.created_at DESC
-                LIMIT 30
-                """,
-            )
-            if dormant.empty:
-                st.info(
-                    "Por ahora no se detectaron **cuentas dormidas** con historial de cotización significativo "
-                    "según las señales heurísticas actuales."
-                )
+        if page == "Herramientas / Runbook" and tool_inner is not None:
+            if tool_inner == "Qué hacer hoy":
+                render_que_hacer_hoy_page(conn, db_path)
+            elif tool_inner == "Cola outreach marketing":
+                render_next_marketing_queue_page(conn, db_path)
+            elif tool_inner == "Borrador comercial":
+                render_commercial_draft_review_page(conn, db_path)
+            elif tool_inner == "Leads y cuentas":
+                render_leads_y_cuentas_page(conn, db_path)
+            elif tool_inner == "Proveedores":
+                render_proveedores_page(conn, db_path)
+            elif tool_inner == "Candidatos comerciales":
+                pass  # fall through to candidatos block below
             else:
-                dormant_display = dormant.copy()
-                dormant_display["tipo_org"] = dormant_display["tipo_org"].apply(
-                    lambda x: _friendly_org_type(str(x)) if pd.notna(x) else _friendly_org_type(None)
-                )
-                dormant_display = dormant_display.rename(
-                    columns={
-                        "email": "Contacto (email)",
-                        "dominio": "Dominio",
-                        "organizacion": "Organización",
-                        "tipo_org": "Tipo de organización",
-                        "first_seen_at": "Primera actividad",
-                        "last_seen_at": "Última actividad registrada",
-                        "total_emails": "Total de correos",
-                        "quote_email_count": "Correos con cotización",
-                        "business_doc_email_count": "Correos con documentos comerciales",
-                        "top_equipment_tags": "Equipos asociados (heurístico)",
-                        "score": "Intensidad de la señal de cuenta dormida",
-                        "created_at": "Mart (regenerado)",
-                    }
-                )
-                st.dataframe(dormant_display, use_container_width=True, hide_index=True)
-                st.caption(
-                    "`Mart (regenerado)`: timestamp de la fila en la última reconstrucción de señales, no del último correo. "
-                    "Estas cuentas combinan historial de cotización con ausencia de actividad reciente; candidatas a reactivación."
-                )
+                return
+            if tool_inner != "Candidatos comerciales":
+                return
 
-            st.divider()
-            st.markdown("### Explorador por equipo")
-            st.caption("Ahora está en una sección dedicada para una navegación más clara.")
-            if st.button("Ir a Equipos", key="go_to_equipos"):
-                _navigate_to("Equipos")
-
-            return
-
-        if page == "Equipos":
+        if effective_page == "Equipos":
             _render_equipment_page(conn)
             return
 
-        if page == "Contactos":
+        if effective_page == "Contactos":
+            if page == "Contactos y organizaciones":
+                st.caption(
+                    "**Operativo vs mart:** `contact_master` resume **todo** el archivo importado (incluye Labdelivery/PST). "
+                    "Valide `last_seen_at` y dominio antes de tratar un contacto como prospecto fresco."
+                )
             st.subheader("Contactos")
             q = st.text_input("Buscar (email / dominio / organización)", value="")
             min_total = st.number_input("Mínimo de correos", min_value=0, value=3, step=1)
@@ -2500,7 +2667,7 @@ def main() -> None:
                             )
             return
 
-        if page == "Organizaciones":
+        if effective_page == "Organizaciones":
             st.subheader("Organizaciones")
             q = st.text_input("Buscar (dominio / nombre)", value="", key="org_q_basic")
             min_total = st.number_input("Mínimo correos", min_value=0, value=8, step=1, key="org_min_basic")
@@ -2892,7 +3059,7 @@ def main() -> None:
                             )
             return
 
-        if page == "Documentos":
+        if effective_page == "Documentos":
             st.subheader("Documentos")
             q = st.text_input("Buscar (archivo o contenido)", value="", key="doc_q_basic")
             dfd = _load_df(
@@ -2990,7 +3157,7 @@ def main() -> None:
                             st.json(d.to_dict())
             return
 
-        if page == "Candidatos comerciales":
+        if page == "Herramientas / Runbook" and tool_inner == "Candidatos comerciales":
             st.subheader("Candidatos comerciales (inteligencia comercial v1)")
             render_page_status(
                 "Candidatos comerciales",

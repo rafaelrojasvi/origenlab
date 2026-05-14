@@ -5,11 +5,10 @@ Orchestration, roll-up aggregation, and writes stay in ``build_commercial_intel_
 
 from __future__ import annotations
 
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 import sqlite3
 
-from origenlab_email_pipeline.business_mart import domain_of, primary_sender_email
+from origenlab_email_pipeline.business_mart import infer_internal_domains_from_top_senders
 
 SQL_COMMERCIAL_EMAIL_SIGNAL_FACT_FOR_ROLLUP = """
 SELECT email_id, sent_at, contact_email, org_domain, signal_code, signal_kind, reason_code,
@@ -63,22 +62,7 @@ def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
 
 
 def derive_internal_domains(conn: sqlite3.Connection, *, max_n: int = 4) -> set[str]:
-    rows = conn.execute(
-        """
-        SELECT sender, COUNT(*) c
-        FROM emails
-        WHERE sender IS NOT NULL AND length(trim(sender)) > 0
-        GROUP BY sender
-        ORDER BY c DESC
-        LIMIT 80
-        """
-    ).fetchall()
-    counts: Counter[str] = Counter()
-    for sender, n in rows:
-        d = domain_of(primary_sender_email(sender or ""))
-        if d:
-            counts[d] += int(n or 0)
-    return {d for d, _ in counts.most_common(max_n)}
+    return infer_internal_domains_from_top_senders(conn, max_n=max_n, sender_limit=80)
 
 
 def derive_vendor_domains(conn: sqlite3.Connection, *, min_rows: int = 4) -> set[str]:

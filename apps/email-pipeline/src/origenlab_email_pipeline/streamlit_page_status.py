@@ -5,6 +5,30 @@ from __future__ import annotations
 import streamlit as st
 
 PAGE_STATUS_PRESETS: dict[str, dict[str, str]] = {
+    "Inicio": {
+        "source": "Gmail Workspace **contacto@origenlab.cl** (`gmail:contacto@origenlab.cl/…`) + mart reconstruido",
+        "freshness": "Lectura al recargar; KPIs operativos priorizan el buzón canónico",
+    },
+    "Seguimientos y casos": {
+        "source": "Cola **Casos para revisar** (misma SQL: `emails` Gmail contacto)",
+        "freshness": "Según ventana de días y filtros en esta página",
+    },
+    "Contactos y organizaciones": {
+        "source": "Tablas `contact_master` / `organization_master` / `document_master` (mart sobre archivo completo)",
+        "freshness": "Última reconstrucción del mart; puede incluir histórico no operativo",
+    },
+    "Outbound / No repetir": {
+        "source": "Lectura SQLite + mismas reglas que `check_outbound_readiness` (sin envío)",
+        "freshness": "Evaluación al abrir la página",
+    },
+    "Histórico / Archivo legacy": {
+        "source": "Filas `emails` fuera del prefijo Gmail Workspace (p. ej. labdelivery, PST/mbox)",
+        "freshness": "Según última importación a este archivo",
+    },
+    "Herramientas / Runbook": {
+        "source": "Sub-vista elegida (cola marketing, borrador, leads, etc.)",
+        "freshness": "Varía por herramienta",
+    },
     "Resumen": {
         "source": "Archivo histórico + vistas derivadas del mart",
         "freshness": "Mixto: resumen derivado del archivo cargado y del mart reconstruido",
