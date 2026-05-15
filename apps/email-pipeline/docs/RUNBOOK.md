@@ -221,6 +221,7 @@ Example URL form: `postgresql+psycopg://user:pass@host:5432/dbname`. Template li
 
 **Hard limits (v1):**
 
+- FastAPI defaults to **canonical Gmail operational scope** (`mart.*_canonical`). Use `?scope=archive` for full historical mart counts and listings.
 - No write endpoints; no email send; no Gmail ingest or mart rebuild over HTTP.
 - Does not mutate SQLite (health may **read-only ping** SQLite for dependency checks only).
 - Point `ORIGENLAB_POSTGRES_URL` (or `ALEMBIC_DATABASE_URL`) at **scratch/staging Postgres** — never run production migrate loaders against shared prod from this doc.
@@ -236,8 +237,33 @@ uv run alembic -c alembic.ini upgrade head
 uv run python scripts/migrate/sqlite_outbound_sidecars_to_postgres.py --replace --postgres-url "$ORIGENLAB_POSTGRES_URL"
 uv run python scripts/migrate/sqlite_mart_core_to_postgres.py --replace --postgres-url "$ORIGENLAB_POSTGRES_URL"
 # Loads archive mart (contact_master, …) plus canonical mirrors (*_canonical) from Gmail operativo.
+# Canonical-only (fast; does not rescan full archive mart counts):
+# uv run python scripts/migrate/sqlite_mart_core_to_postgres.py --replace --tables canonical \
+#   --sqlite-db "$ORIGENLAB_SQLITE_PATH" --postgres-url "$ORIGENLAB_POSTGRES_URL"
 # Optional: uv run python scripts/migrate/sqlite_document_master_to_postgres.py --replace ...
 ```
+
+<a id="m-eprun-sync-dashboard-postgres"></a>
+#### Refresh Postgres dashboard mirror
+
+After **mart rebuild** (`build_business_mart.py`) or **Gmail refresh** (ingest), SQLite is authoritative but the **FastAPI dashboard reads Postgres mirrors**. Until you sync, the API is **eventually consistent** with Streamlit/SQLite.
+
+FastAPI defaults to **canonical Gmail operational scope**; use `?scope=archive` for full historical mart.
+
+```bash
+cd apps/email-pipeline
+export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/origenlab_scratch'
+export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
+
+uv run alembic -c alembic.ini upgrade head   # once per scratch DB (includes reporting.dashboard_sync_run)
+
+uv run python scripts/sync/sync_dashboard_postgres_mirror.py --dry-run
+uv run python scripts/sync/sync_dashboard_postgres_mirror.py
+```
+
+Options: `--only outbound`, `--only mart`, `--only canonical`, `--skip-outbound`, `--skip-mart`, `--json-out path`.
+
+Does **not** mutate SQLite, send mail, or run Gmail ingest/mart rebuild.
 
 **Run locally:**
 
