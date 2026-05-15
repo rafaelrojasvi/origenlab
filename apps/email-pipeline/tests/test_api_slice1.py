@@ -35,14 +35,20 @@ class FakeConn:
             ("mart", "contact_master"): True,
             ("mart", "organization_master"): True,
             ("mart", "opportunity_signals"): True,
+            ("mart", "contact_master_canonical"): True,
+            ("mart", "organization_master_canonical"): True,
+            ("mart", "opportunity_signals_canonical"): True,
             ("outbound", "contact_email_suppression"): True,
             ("outbound", "contact_domain_suppression"): True,
             ("outbound", "outreach_contact_state"): True,
         }
         self.counts = {
-            "mart.contact_master": 10,
-            "mart.organization_master": 5,
-            "mart.opportunity_signals": 3,
+            "mart.contact_master": 27198,
+            "mart.organization_master": 10688,
+            "mart.opportunity_signals": 2705,
+            "mart.contact_master_canonical": 120,
+            "mart.organization_master_canonical": 45,
+            "mart.opportunity_signals_canonical": 12,
             "outbound.contact_email_suppression": 2,
             "outbound.contact_domain_suppression": 1,
             "outbound.outreach_contact_state": 4,
@@ -55,6 +61,12 @@ class FakeConn:
             table = params[1]
             ok = self.tables.get((schema, table), False)
             return _FakeCursor([{"?": 1}] if ok else [])
+        if "count(*)" in s and "mart.contact_master_canonical" in s:
+            return _FakeCursor([{"n": self.counts["mart.contact_master_canonical"]}])
+        if "count(*)" in s and "mart.organization_master_canonical" in s:
+            return _FakeCursor([{"n": self.counts["mart.organization_master_canonical"]}])
+        if "count(*)" in s and "mart.opportunity_signals_canonical" in s:
+            return _FakeCursor([{"n": self.counts["mart.opportunity_signals_canonical"]}])
         if "count(*)" in s and "mart.contact_master" in s:
             return _FakeCursor([{"n": self.counts["mart.contact_master"]}])
         if "count(*)" in s and "mart.organization_master" in s:
@@ -69,11 +81,28 @@ class FakeConn:
             if "group by" in s:
                 return _FakeCursor([{"st": "contacted", "n": 2}])
             return _FakeCursor([{"n": self.counts["outbound.outreach_contact_state"]}])
-        if "from mart.contact_master" in s and "select email" in s:
+        if "from mart.contact_master_canonical" in s and "select email" in s:
             return _FakeCursor(
                 [
                     {
                         "email": "lab@example.cl",
+                        "contact_name_best": "Lab",
+                        "domain": "example.cl",
+                        "organization_name_guess": "Example",
+                        "organization_type_guess": "lab",
+                        "first_seen_at": None,
+                        "last_seen_at": None,
+                        "total_emails": 1,
+                        "confidence_score": 0.9,
+                        "top_equipment_tags": "micro",
+                    }
+                ]
+            )
+        if "from mart.contact_master" in s and "select email" in s:
+            return _FakeCursor(
+                [
+                    {
+                        "email": "archive@example.cl",
                         "contact_name_best": "Lab",
                         "domain": "example.cl",
                         "organization_name_guess": "Example",
@@ -150,22 +179,38 @@ def test_health_dependencies(client: TestClient) -> None:
     assert "postgres" in names
 
 
-def test_dashboard_summary(client: TestClient) -> None:
+def test_dashboard_summary_default_canonical_scope(client: TestClient) -> None:
     r = client.get("/dashboard/summary")
     assert r.status_code == 200
     body = r.json()
-    assert body["contact_count"] == 10
+    assert body["scope"] == "canonical"
+    assert body["contact_count"] == 120
+    assert body["archive_mirror_counts"]["contact_count"] == 27198
     assert body["eventually_consistent"] is True
     assert body["data_source"] == "postgres_mirror"
 
 
-def test_contacts_pagination(client: TestClient) -> None:
+def test_dashboard_summary_archive_scope_explicit(client: TestClient) -> None:
+    r = client.get("/dashboard/summary", params={"scope": "archive"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["scope"] == "archive"
+    assert body["contact_count"] == 27198
+
+
+def test_contacts_pagination_default_canonical(client: TestClient) -> None:
     r = client.get("/contacts", params={"limit": 10, "offset": 0})
     assert r.status_code == 200
     body = r.json()
+    assert body["scope"] == "canonical"
     assert body["table_available"] is True
-    assert len(body["items"]) >= 1
     assert body["items"][0]["email"] == "lab@example.cl"
+
+
+def test_contacts_archive_scope(client: TestClient) -> None:
+    r = client.get("/contacts", params={"scope": "archive", "limit": 5})
+    assert r.status_code == 200
+    assert r.json()["scope"] == "archive"
 
 
 def test_outbound_readiness_eventually_consistent(client: TestClient) -> None:

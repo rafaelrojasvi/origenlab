@@ -6,6 +6,15 @@ from typing import Any
 
 from psycopg import Connection
 
+from origenlab_email_pipeline.operational_scope import (
+    ARCHIVE_SCOPE_NOTE,
+    CANONICAL_POSTGRES_UNAVAILABLE_NOTE,
+    CANONICAL_SCOPE_NOTE,
+    DataScope,
+    normalize_data_scope,
+    postgres_mart_relation,
+)
+
 from origenlab_api.db import fetch_all, fetch_one, safe_count, table_exists
 from origenlab_api.schemas import (
     ContactRow,
@@ -31,11 +40,36 @@ def _clamp_offset(offset: int) -> int:
     return max(0, int(offset))
 
 
-def dashboard_summary(conn: Connection) -> DashboardSummaryResponse:
-    specs = (
-        ("mart", "contact_master", "contact_count"),
-        ("mart", "organization_master", "organization_count"),
-        ("mart", "opportunity_signals", "opportunity_signal_count"),
+def _mart_base_table(relation: str) -> str:
+    return relation.split(".", 1)[1]
+
+
+def _resolve_mart_scope(
+    conn: Connection,
+    *,
+    base: str,
+    scope: DataScope,
+) -> tuple[str, bool, str]:
+    """Return (fully-qualified relation, scope_available, scope_note)."""
+    if scope == "archive":
+        rel = postgres_mart_relation(base, "archive")
+        exists = table_exists(conn, schema="mart", table=_mart_base_table(rel))
+        return rel, exists, ARCHIVE_SCOPE_NOTE
+    rel = postgres_mart_relation(base, "canonical")
+    exists = table_exists(conn, schema="mart", table=_mart_base_table(rel))
+    if exists:
+        return rel, True, CANONICAL_SCOPE_NOTE
+    return rel, False, CANONICAL_POSTGRES_UNAVAILABLE_NOTE
+
+
+def dashboard_summary(conn: Connection, *, scope: str | None = "canonical") -> DashboardSummaryResponse:
+    sc = normalize_data_scope(scope)
+    mart_specs = (
+        ("contact_master", "contact_count"),
+        ("organization_master", "organization_count"),
+        ("opportunity_signals", "opportunity_signal_count"),
+    )
+    outbound_specs = (
         ("outbound", "contact_email_suppression", "email_suppression_count"),
         ("outbound", "contact_domain_suppression", "domain_suppression_count"),
         ("outbound", "outreach_contact_state", "outreach_state_count"),
@@ -49,11 +83,38 @@ def dashboard_summary(conn: Connection) -> DashboardSummaryResponse:
         "domain_suppression_count": 0,
         "outreach_state_count": 0,
     }
-    for schema, table, key in specs:
+    scope_note = CANONICAL_SCOPE_NOTE if sc == "canonical" else ARCHIVE_SCOPE_NOTE
+    scope_available = True
+    archive_mirror: dict[str, int] = {}
+
+    for base, key in mart_specs:
+        rel, exists, note = _resolve_mart_scope(conn, base=base, scope=sc)
+        tables[rel] = exists
+        if sc == "canonical" and not exists:
+            scope_available = False
+            scope_note = note
+        elif exists:
+            _, n = safe_count(conn, schema="mart", table=_mart_base_table(rel))
+            counts[key] = n
+        if sc == "canonical":
+            arch_rel = postgres_mart_relation(base, "archive")
+            if table_exists(conn, schema="mart", table=_mart_base_table(arch_rel)):
+                _, arch_n = safe_count(conn, schema="mart", table=_mart_base_table(arch_rel))
+                archive_mirror[key] = arch_n
+
+    for schema, table, key in outbound_specs:
         exists, n = safe_count(conn, schema=schema, table=table)
         tables[f"{schema}.{table}"] = exists
         counts[key] = n
-    return DashboardSummaryResponse(tables=tables, **counts)
+
+    return DashboardSummaryResponse(
+        tables=tables,
+        scope=sc,
+        scope_available=scope_available,
+        scope_note=scope_note,
+        archive_mirror_counts=archive_mirror,
+        **counts,
+    )
 
 
 def list_contacts(
@@ -63,12 +124,22 @@ def list_contacts(
     offset: int,
     domain: str | None,
     q: str | None,
+    scope: str | None = "canonical",
 ) -> PaginatedContactsResponse:
     limit = _clamp_limit(limit)
     offset = _clamp_offset(offset)
-    if not table_exists(conn, schema="mart", table="contact_master"):
+    sc = normalize_data_scope(scope)
+    rel, available, note = _resolve_mart_scope(conn, base="contact_master", scope=sc)
+    if not available:
         return PaginatedContactsResponse(
-            items=[], total=0, limit=limit, offset=offset, table_available=False
+            items=[],
+            total=0,
+            limit=limit,
+            offset=offset,
+            table_available=False,
+            scope=sc,
+            scope_available=False,
+            scope_note=note,
         )
 
     where: list[str] = []
@@ -87,7 +158,7 @@ def list_contacts(
 
     total_row = fetch_one(
         conn,
-        f"SELECT COUNT(*)::bigint AS n FROM mart.contact_master{where_sql}",
+        f"SELECT COUNT(*)::bigint AS n FROM {rel}{where_sql}",
         tuple(params),
     )
     total = int((total_row or {}).get("n") or 0)
@@ -98,7 +169,7 @@ def list_contacts(
         SELECT email, contact_name_best, domain, organization_name_guess,
                organization_type_guess, first_seen_at, last_seen_at,
                total_emails, confidence_score, top_equipment_tags
-        FROM mart.contact_master
+        FROM {rel}
         {where_sql}
         ORDER BY last_seen_at DESC NULLS LAST, email ASC
         LIMIT %s OFFSET %s
@@ -107,7 +178,14 @@ def list_contacts(
     )
     items = [ContactRow.model_validate(r) for r in rows]
     return PaginatedContactsResponse(
-        items=items, total=total, limit=limit, offset=offset, table_available=True
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        table_available=True,
+        scope=sc,
+        scope_available=True,
+        scope_note=note,
     )
 
 
@@ -118,12 +196,22 @@ def list_organizations(
     offset: int,
     domain: str | None,
     q: str | None,
+    scope: str | None = "canonical",
 ) -> PaginatedOrganizationsResponse:
     limit = _clamp_limit(limit)
     offset = _clamp_offset(offset)
-    if not table_exists(conn, schema="mart", table="organization_master"):
+    sc = normalize_data_scope(scope)
+    rel, available, note = _resolve_mart_scope(conn, base="organization_master", scope=sc)
+    if not available:
         return PaginatedOrganizationsResponse(
-            items=[], total=0, limit=limit, offset=offset, table_available=False
+            items=[],
+            total=0,
+            limit=limit,
+            offset=offset,
+            table_available=False,
+            scope=sc,
+            scope_available=False,
+            scope_note=note,
         )
 
     where: list[str] = []
@@ -141,7 +229,7 @@ def list_organizations(
 
     total_row = fetch_one(
         conn,
-        f"SELECT COUNT(*)::bigint AS n FROM mart.organization_master{where_sql}",
+        f"SELECT COUNT(*)::bigint AS n FROM {rel}{where_sql}",
         tuple(params),
     )
     total = int((total_row or {}).get("n") or 0)
@@ -152,7 +240,7 @@ def list_organizations(
         SELECT domain, organization_name_guess, organization_type_guess,
                first_seen_at, last_seen_at, total_emails, total_contacts,
                top_equipment_tags, key_contacts
-        FROM mart.organization_master
+        FROM {rel}
         {where_sql}
         ORDER BY last_seen_at DESC NULLS LAST, domain ASC
         LIMIT %s OFFSET %s
@@ -161,7 +249,14 @@ def list_organizations(
     )
     items = [OrganizationRow.model_validate(r) for r in rows]
     return PaginatedOrganizationsResponse(
-        items=items, total=total, limit=limit, offset=offset, table_available=True
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        table_available=True,
+        scope=sc,
+        scope_available=True,
+        scope_note=note,
     )
 
 

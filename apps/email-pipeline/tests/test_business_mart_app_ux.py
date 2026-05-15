@@ -30,6 +30,31 @@ def test_sidebar_includes_clasificacion_comercial() -> None:
     assert "PRIMARY_SIDEBAR_PAGES" in APP_SOURCE
 
 
+def test_sidebar_api_preview_wired_when_enabled() -> None:
+    assert "primary_sidebar_pages" in APP_SOURCE
+    assert "render_api_preview_page" in APP_SOURCE
+    assert 'page == "API preview"' in APP_SOURCE
+    from origenlab_email_pipeline.streamlit_api_preview import primary_sidebar_pages
+
+    base = ["Inicio", "Outbound / No repetir"]
+    assert "API preview" not in primary_sidebar_pages(base)
+
+
+def test_inicio_uses_canonical_operational_kpis_not_full_mart_headline() -> None:
+    assert "Contactos operativos Gmail" in APP_SOURCE
+    assert "Mart completo / histórico" in APP_SOURCE
+    assert 'render_kpi_metric("Contactos (mart)"' not in APP_SOURCE
+    assert "canonical_only=True" in APP_SOURCE
+    assert "Atajos exploratorios (mart)" not in APP_SOURCE
+
+
+def test_sidebar_api_preview_appears_with_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000")
+    from origenlab_email_pipeline.streamlit_api_preview import primary_sidebar_pages
+
+    assert "API preview" in primary_sidebar_pages(["Inicio"])
+
+
 def test_date_prefix_and_days_since_helpers():
     assert app._date_prefix_for_compare("2026-03-29T12:00:00Z") == "2026-03-29"
     assert app._date_prefix_for_compare(None) is None
@@ -291,6 +316,7 @@ def test_page_status_values_cover_key_client_pages() -> None:
         "Proveedores",
         "Candidatos comerciales",
         "Oportunidades",
+        "API preview",
     }
     assert expected_pages.issubset(set(PAGE_STATUS_PRESETS.keys()))
     for page in expected_pages:
@@ -407,6 +433,11 @@ def test_quick_action_main_smoke_default_inicio(monkeypatch):
         lambda conn, slack_days=2: app.ContactoGmailActivitySummary(10, 1, 2, 3, "2024-06-01T00:00:00Z"),
     )
     monkeypatch.setattr(app, "count_canonical_sent_inbox", lambda _c: (3, 2))
+    monkeypatch.setattr(app, "count_canonical_operational_contacts", lambda _c: 5)
+    monkeypatch.setattr(app, "count_canonical_operational_organizations", lambda _c: 3)
+    monkeypatch.setattr(app, "count_canonical_operational_opportunity_signals", lambda _c: 2)
+    monkeypatch.setattr(app, "count_canonical_unique_external_senders", lambda _c: 4)
+    monkeypatch.setattr(app, "count_archive_mart_table", lambda _c, _t: 100)
     monkeypatch.setattr(app, "count_canonical_duplicate_message_id_groups", lambda _c: 0)
     monkeypatch.setattr(app, "count_canonical_missing_message_id", lambda _c: 0)
     monkeypatch.setattr(app, "count_canonical_missing_date_iso", lambda _c: 0)

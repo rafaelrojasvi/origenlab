@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Query
 
 from origenlab_api.deps import DbConn
@@ -18,7 +20,11 @@ def list_organizations(
     offset: int = Query(0, ge=0),
     domain: str | None = Query(None, description="Exact domain filter"),
     q: str | None = Query(None, description="Search domain or organization name"),
+    scope: Literal["canonical", "archive"] = Query(
+        "canonical",
+        description="canonical = mart.organization_master_canonical (default); archive = full mart.",
+    ),
 ) -> PaginatedOrganizationsResponse:
     return queries.list_organizations(
-        conn, limit=limit, offset=offset, domain=domain, q=q
+        conn, limit=limit, offset=offset, domain=domain, q=q, scope=scope
     )

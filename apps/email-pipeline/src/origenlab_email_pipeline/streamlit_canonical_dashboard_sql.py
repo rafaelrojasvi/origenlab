@@ -6,6 +6,12 @@ import sqlite3
 from typing import Any
 
 from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
+from origenlab_email_pipeline.operational_scope import (
+    sql_exclude_operational_noise_email,
+    sqlite_contact_canonical_link_exists,
+    sqlite_opportunity_signal_operational_predicate,
+    sqlite_organization_canonical_link_exists,
+)
 
 
 def canonical_emails_where(alias: str | None = None) -> str:
@@ -91,6 +97,84 @@ def count_canonical_attachments(conn: sqlite3.Connection) -> int | None:
             SELECT COUNT(*) FROM attachments a
             JOIN emails e ON e.id = a.email_id
             WHERE {w}
+            """
+        ).fetchone()
+        return int(row[0]) if row else 0
+    except sqlite3.Error:
+        return None
+
+
+def count_canonical_operational_contacts(conn: sqlite3.Connection) -> int | None:
+    """Contacts in mart linked to canonical Gmail rows (excludes operational noise)."""
+    if not _table_exists(conn, "contact_master") or not _table_exists(conn, "emails"):
+        return None
+    link = sqlite_contact_canonical_link_exists("cm")
+    noise = sql_exclude_operational_noise_email("cm.email")
+    try:
+        row = conn.execute(
+            f"""
+            SELECT COUNT(*) FROM contact_master cm
+            WHERE {link}
+              AND {noise}
+            """
+        ).fetchone()
+        return int(row[0]) if row else 0
+    except sqlite3.Error:
+        return None
+
+
+def count_canonical_operational_organizations(conn: sqlite3.Connection) -> int | None:
+    if not _table_exists(conn, "organization_master") or not _table_exists(conn, "emails"):
+        return None
+    link = sqlite_organization_canonical_link_exists("om")
+    noise = sql_exclude_operational_noise_email("om.domain")
+    try:
+        row = conn.execute(
+            f"""
+            SELECT COUNT(*) FROM organization_master om
+            WHERE {link}
+              AND {noise}
+            """
+        ).fetchone()
+        return int(row[0]) if row else 0
+    except sqlite3.Error:
+        return None
+
+
+def count_canonical_operational_opportunity_signals(conn: sqlite3.Connection) -> int | None:
+    if not _table_exists(conn, "opportunity_signals") or not _table_exists(conn, "emails"):
+        return None
+    pred = sqlite_opportunity_signal_operational_predicate("os")
+    try:
+        row = conn.execute(f"SELECT COUNT(*) FROM opportunity_signals os WHERE {pred}").fetchone()
+        return int(row[0]) if row else 0
+    except sqlite3.Error:
+        return None
+
+
+def count_archive_mart_table(conn: sqlite3.Connection, table: str) -> int | None:
+    if not _table_exists(conn, table):
+        return None
+    try:
+        row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+        return int(row[0]) if row else 0
+    except sqlite3.Error:
+        return None
+
+
+def count_canonical_unique_external_senders(conn: sqlite3.Connection) -> int | None:
+    """Distinct non-noise senders on canonical Gmail rows (excluding origenlab/labdelivery)."""
+    w = canonical_emails_where()
+    noise = sql_exclude_operational_noise_email("sender")
+    try:
+        row = conn.execute(
+            f"""
+            SELECT COUNT(DISTINCT lower(trim(sender))) FROM emails
+            WHERE {w}
+              AND sender IS NOT NULL AND trim(sender) != ''
+              AND {noise}
+              AND lower(trim(sender)) NOT LIKE '%@origenlab.cl'
+              AND lower(trim(sender)) NOT LIKE '%@labdelivery.cl'
             """
         ).fetchone()
         return int(row[0]) if row else 0
@@ -254,12 +338,17 @@ def folder_kind_label(folder: str | None) -> str:
 
 __all__ = [
     "canonical_emails_where",
+    "count_archive_mart_table",
     "count_canonical_attachments",
     "count_canonical_duplicate_message_id_groups",
     "count_canonical_empty_body",
     "count_canonical_missing_date_iso",
     "count_canonical_missing_message_id",
+    "count_canonical_operational_contacts",
+    "count_canonical_operational_opportunity_signals",
+    "count_canonical_operational_organizations",
     "count_canonical_sent_inbox",
+    "count_canonical_unique_external_senders",
     "direction_label_for_folder",
     "folder_kind_label",
     "fmt_short_date",

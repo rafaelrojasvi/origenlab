@@ -58,6 +58,10 @@ from origenlab_email_pipeline.streamlit_suppliers_browse import (
     supplier_browse_ready,
 )
 from origenlab_email_pipeline.streamlit_borrador_support import contact_suppression_reason_label
+from origenlab_email_pipeline.streamlit_api_preview import (
+    primary_sidebar_pages,
+    render_api_preview_page,
+)
 from origenlab_email_pipeline.streamlit_page_status import render_kpi_metric, render_page_status
 from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
     SESSION_CI_TODAY_HINT,
@@ -75,12 +79,17 @@ from origenlab_email_pipeline.streamlit_prioridad_pages import (
 from origenlab_email_pipeline.outbound_core import resolve_outbound_gmail_user, resolve_outbound_sent_folders
 from origenlab_email_pipeline.outbound_readiness_check import assess_outbound_readiness
 from origenlab_email_pipeline.streamlit_canonical_dashboard_sql import (
+    count_archive_mart_table,
     count_canonical_attachments,
     count_canonical_duplicate_message_id_groups,
     count_canonical_empty_body,
     count_canonical_missing_date_iso,
     count_canonical_missing_message_id,
+    count_canonical_operational_contacts,
+    count_canonical_operational_opportunity_signals,
+    count_canonical_operational_organizations,
     count_canonical_sent_inbox,
+    count_canonical_unique_external_senders,
     direction_label_for_folder,
     folder_kind_label,
     fmt_short_date,
@@ -1455,9 +1464,13 @@ def render_inicio_page(conn: sqlite3.Connection, db_path: Path) -> None:
     dup_g = count_canonical_duplicate_message_id_groups(conn)
     miss_mid = count_canonical_missing_message_id(conn)
     miss_date = count_canonical_missing_date_iso(conn)
-    opp_n = _safe_count(conn, "opportunity_signals")
-    cont_n = _safe_count(conn, "contact_master")
-    org_n = _safe_count(conn, "organization_master")
+    cont_op = count_canonical_operational_contacts(conn)
+    org_op = count_canonical_operational_organizations(conn)
+    opp_op = count_canonical_operational_opportunity_signals(conn)
+    ext_senders = count_canonical_unique_external_senders(conn)
+    cont_archive = count_archive_mart_table(conn, "contact_master")
+    org_archive = count_archive_mart_table(conn, "organization_master")
+    opp_archive = count_archive_mart_table(conn, "opportunity_signals")
 
     verdict_out = "—"
     try:
@@ -1497,21 +1510,64 @@ def render_inicio_page(conn: sqlite3.Connection, db_path: Path) -> None:
 
     r2 = st.columns(4)
     with r2[0]:
-        render_kpi_metric("Contactos (mart)", f"{cont_n if cont_n is not None else '—':,}")
+        render_kpi_metric(
+            "Contactos operativos Gmail",
+            f"{cont_op if cont_op is not None else '—':,}",
+            help_text="En mart completo ligados a Gmail contacto (sin ruido rebote/ESP).",
+        )
     with r2[1]:
-        render_kpi_metric("Organizaciones (mart)", f"{org_n if org_n is not None else '—':,}")
+        render_kpi_metric(
+            "Organizaciones operativas Gmail",
+            f"{org_op if org_op is not None else '—':,}",
+        )
     with r2[2]:
-        render_kpi_metric("Señales / oportunidades", f"{opp_n if opp_n is not None else '—':,}")
+        render_kpi_metric(
+            "Señales operativas Gmail",
+            f"{opp_op if opp_op is not None else '—':,}",
+            help_text="opportunity_signals ligadas a correo canónico.",
+        )
     with r2[3]:
+        render_kpi_metric(
+            "Remitentes externos únicos",
+            f"{ext_senders if ext_senders is not None else '—':,}",
+            help_text="Distinct senders en Gmail operativo (excl. origenlab/labdelivery).",
+        )
+
+    r3 = st.columns(4)
+    with r3[0]:
         label = "Seguro para outreach" if verdict_out in ("ready", "ready_with_warnings") else "Requiere revisión"
-        render_kpi_metric("Outbound readiness", verdict_out, help_text=label)
+        render_kpi_metric("Outbound readiness (SQLite)", verdict_out, help_text=label)
+    with r3[1]:
+        render_kpi_metric("Actividad 7d", f"{summary.count_7d:,}")
+    with r3[2]:
+        render_kpi_metric("Actividad 30d", f"{summary.count_30d:,}")
+    with r3[3]:
+        render_kpi_metric("Actividad 90d", f"{summary.count_90d:,}")
+
+    with st.expander("Mart completo / histórico (referencia, no operativo)"):
+        st.caption(
+            "Conteos del mart sobre **todo** el archivo importado. "
+            "Para explorar: **Contactos y organizaciones**, **Oportunidades**, "
+            "**Histórico / Archivo legacy**, o **Herramientas**."
+        )
+        st.markdown(
+            f"- **Contactos (mart completo):** `{cont_archive if cont_archive is not None else '—':,}`\n"
+            f"- **Organizaciones (mart completo):** `{org_archive if org_archive is not None else '—':,}`\n"
+            f"- **Señales (mart completo):** `{opp_archive if opp_archive is not None else '—':,}`"
+        )
 
     st.markdown("#### Qué hacer hoy")
-    st.caption("Sugerencias operativas (sin mezclar histórico legacy en esta sección).")
+    st.caption(
+        "Sugerencias operativas solo desde **Gmail contacto** y entidades sin ruido "
+        "(sin mailer-daemon / dominios ESP del archivo completo)."
+    )
     try:
         from origenlab_email_pipeline.streamlit_today_workspace import TodayWorkspaceSpec, gather_today_workspace_rows
 
-        rows = gather_today_workspace_rows(conn, TodayWorkspaceSpec(max_total_rows=12))
+        rows = gather_today_workspace_rows(
+            conn,
+            TodayWorkspaceSpec(max_total_rows=12, canonical_only=True),
+        )
         if not rows:
             st.info("Sin filas sugeridas en este momento (o datos insuficientes).")
         else:
@@ -1522,19 +1578,6 @@ def render_inicio_page(conn: sqlite3.Connection, db_path: Path) -> None:
                 )
     except Exception as exc:
         st.warning(f"No se pudo cargar el espacio «hoy»: {exc}")
-
-    st.markdown("#### Atajos exploratorios (mart)")
-    st.caption("Accesos rápidos al mart (incluye histórico); no sustituyen la vigencia operativa Gmail.")
-    qa_row = st.columns(3)
-    with qa_row[0]:
-        if st.button("Universidades con cotización", key="inicio_qa_unis_quotes"):
-            _navigate_to("Organizaciones", org_only_unis=True)
-    with qa_row[1]:
-        if st.button("Organizaciones con cotización", key="inicio_qa_org_quotes"):
-            _navigate_to("Organizaciones", org_focus_quotes=True)
-    with qa_row[2]:
-        if st.button("Cuentas dormidas (señales)", key="inicio_qa_dormant"):
-            _navigate_to("Oportunidades", opp_signal_filter="dormant_contact")
 
     st.markdown("#### Actividad reciente (operativo)")
     st.caption("Últimos correos canónicos Gmail (sin cuerpo largo).")
@@ -2427,7 +2470,7 @@ def main() -> None:
             st.session_state["sidebar_nav_page"] = st.session_state.pop(SESSION_START_PAGE)
         page = st.radio(
             "Ir a",
-            PRIMARY_SIDEBAR_PAGES,
+            primary_sidebar_pages(PRIMARY_SIDEBAR_PAGES),
             key="sidebar_nav_page",
             label_visibility="collapsed",
         )
@@ -2442,6 +2485,10 @@ def main() -> None:
 
     with st.expander("Fuente de datos (técnico)"):
         st.code(str(db_path))
+
+    if page == "API preview":
+        render_api_preview_page()
+        return
 
     conn = _connect_ro(db_path)
     try:
@@ -2541,8 +2588,9 @@ def main() -> None:
         if effective_page == "Contactos":
             if page == "Contactos y organizaciones":
                 st.caption(
-                    "**Operativo vs mart:** `contact_master` resume **todo** el archivo importado (incluye Labdelivery/PST). "
-                    "Valide `last_seen_at` y dominio antes de tratar un contacto como prospecto fresco."
+                    "**Mart completo / histórico:** `contact_master` y `organization_master` incluyen "
+                    "Labdelivery, PST y otros orígenes. Para KPIs operativos Gmail use **Inicio** o "
+                    "**Actividad contacto Gmail**."
                 )
             st.subheader("Contactos")
             q = st.text_input("Buscar (email / dominio / organización)", value="")

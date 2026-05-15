@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import streamlit as st
 
+MIRROR_LABEL = "Postgres mirror / eventually consistent"
+
 PAGE_STATUS_PRESETS: dict[str, dict[str, str]] = {
     "Inicio": {
-        "source": "Gmail Workspace **contacto@origenlab.cl** (`gmail:contacto@origenlab.cl/…`) + mart reconstruido",
-        "freshness": "Lectura al recargar; KPIs operativos priorizan el buzón canónico",
+        "source": "Gmail Workspace **contacto@origenlab.cl** (`gmail:contacto@origenlab.cl/…`); KPIs de contactos/org/señales **operativos** (no mart completo)",
+        "freshness": "Lectura al recargar; «Qué hacer hoy» solo sugerencias canónicas sin ruido rebote/ESP",
     },
     "Seguimientos y casos": {
         "source": "Cola **Casos para revisar** (misma SQL: `emails` Gmail contacto)",
@@ -72,6 +74,10 @@ PAGE_STATUS_PRESETS: dict[str, dict[str, str]] = {
     "Oportunidades": {
         "source": "Vista derivada del mart",
         "freshness": "Derivada de señales heurísticas reconstruidas",
+    },
+    "API preview": {
+        "source": f"API FastAPI Slice 1 (GET) — **{MIRROR_LABEL}**",
+        "freshness": "Al pulsar «Actualizar desde API»; no sustituye SQLite operativo",
     },
 }
 

@@ -235,6 +235,7 @@ uv run alembic -c alembic.ini upgrade head
 # Tier A data (scratch only):
 uv run python scripts/migrate/sqlite_outbound_sidecars_to_postgres.py --replace --postgres-url "$ORIGENLAB_POSTGRES_URL"
 uv run python scripts/migrate/sqlite_mart_core_to_postgres.py --replace --postgres-url "$ORIGENLAB_POSTGRES_URL"
+# Loads archive mart (contact_master, …) plus canonical mirrors (*_canonical) from Gmail operativo.
 # Optional: uv run python scripts/migrate/sqlite_document_master_to_postgres.py --replace ...
 ```
 
@@ -251,7 +252,8 @@ OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ```bash
 curl -sS http://127.0.0.1:8000/health | jq .
-curl -sS http://127.0.0.1:8000/dashboard/summary | jq .
+curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=canonical' | jq .
+curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=archive' | jq .
 curl -sS 'http://127.0.0.1:8000/contacts?limit=5&offset=0' | jq .
 curl -sS http://127.0.0.1:8000/outbound/readiness | jq .
 ```

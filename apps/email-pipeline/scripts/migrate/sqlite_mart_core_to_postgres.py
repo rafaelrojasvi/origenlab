@@ -39,6 +39,12 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.operational_scope import (
+    sql_exclude_operational_noise_email,
+    sqlite_contact_canonical_link_exists,
+    sqlite_opportunity_signal_operational_predicate,
+    sqlite_organization_canonical_link_exists,
+)
 
 _VALIDATE_PATH = REPO / "scripts" / "qa" / "validate_sqlite_archive_for_postgres.py"
 _spec = importlib.util.spec_from_file_location("validate_sqlite_archive_for_postgres", _VALIDATE_PATH)
@@ -142,6 +148,70 @@ TABLE_SPECS: tuple[dict[str, Any], ...] = (
         "reset_sequence": True,
     },
 )
+
+_CONTACT_COLS = TABLE_SPECS[0]["columns"]
+_ORG_COLS = TABLE_SPECS[1]["columns"]
+_OPP_COLS = TABLE_SPECS[2]["columns"]
+
+_CANONICAL_CONTACT_SELECT = f"""
+SELECT {", ".join(_CONTACT_COLS)}
+FROM contact_master cm
+WHERE {sqlite_contact_canonical_link_exists("cm")}
+  AND {sql_exclude_operational_noise_email("cm.email")}
+ORDER BY cm.email
+"""
+
+_CANONICAL_ORG_SELECT = f"""
+SELECT {", ".join(_ORG_COLS)}
+FROM organization_master om
+WHERE {sqlite_organization_canonical_link_exists("om")}
+  AND {sql_exclude_operational_noise_email("om.domain")}
+ORDER BY om.domain
+"""
+
+_CANONICAL_OPP_SELECT = f"""
+SELECT {", ".join(_OPP_COLS)}
+FROM opportunity_signals os
+WHERE {sqlite_opportunity_signal_operational_predicate("os")}
+ORDER BY os.id
+"""
+
+CANONICAL_TABLE_SPECS: tuple[dict[str, Any], ...] = (
+    {
+        "source": "contact_master_canonical",
+        "target": "mart.contact_master_canonical",
+        "pk": "email",
+        "columns": _CONTACT_COLS,
+        "timestamp_columns": frozenset({"first_seen_at", "last_seen_at"}),
+        "source_select_sql": _CANONICAL_CONTACT_SELECT,
+        "requires_tables": ("contact_master", "emails"),
+        "delete_order": 6,
+    },
+    {
+        "source": "organization_master_canonical",
+        "target": "mart.organization_master_canonical",
+        "pk": "domain",
+        "columns": _ORG_COLS,
+        "timestamp_columns": frozenset({"first_seen_at", "last_seen_at"}),
+        "source_select_sql": _CANONICAL_ORG_SELECT,
+        "requires_tables": ("organization_master", "contact_master", "emails"),
+        "delete_order": 5,
+    },
+    {
+        "source": "opportunity_signals_canonical",
+        "target": "mart.opportunity_signals_canonical",
+        "pk": "id",
+        "columns": _OPP_COLS,
+        "timestamp_columns": frozenset({"created_at"}),
+        "json_columns": frozenset({"details_json"}),
+        "source_select_sql": _CANONICAL_OPP_SELECT,
+        "requires_tables": ("opportunity_signals", "emails"),
+        "delete_order": 4,
+        "reset_sequence": True,
+    },
+)
+
+ALL_TABLE_SPECS: tuple[dict[str, Any], ...] = TABLE_SPECS + CANONICAL_TABLE_SPECS
 
 
 class ConversionError(Exception):
@@ -293,6 +363,22 @@ def collect_sqlite_source_counts(
     exists_map: dict[str, bool] = {}
     for spec in specs:
         src = str(spec["source"])
+        required = tuple(spec.get("requires_tables") or (spec.get("source"),))
+        if spec.get("source_select_sql"):
+            missing = [t for t in required if not sqlite_has_table(conn, t)]
+            exists_map[src] = not missing
+            if missing:
+                counts[src] = 0
+                warnings.append(
+                    f"SQLite canonical source unavailable for {src} "
+                    f"(missing: {', '.join(missing)})"
+                )
+                continue
+            sel = str(spec["source_select_sql"])
+            counts[src] = int(
+                conn.execute(f"SELECT COUNT(*) FROM ({sel})").fetchone()[0]
+            )
+            continue
         exists = sqlite_has_table(conn, src)
         exists_map[src] = exists
         if not exists:
@@ -358,12 +444,19 @@ def load_table(
     columns = tuple(spec["columns"])
     timestamp_columns = frozenset(spec.get("timestamp_columns") or ())
     json_columns = frozenset(spec.get("json_columns") or ())
+    select_sql = spec.get("source_select_sql")
 
-    total = int(sconn.execute(f"SELECT COUNT(*) FROM {source}").fetchone()[0])
+    if select_sql:
+        total = int(sconn.execute(f"SELECT COUNT(*) FROM ({select_sql})").fetchone()[0])
+    else:
+        total = int(sconn.execute(f"SELECT COUNT(*) FROM {source}").fetchone()[0])
     loaded = 0
     sql = _insert_sql(target, columns)
     scur = sconn.cursor()
-    scur.execute(f"SELECT {', '.join(columns)} FROM {source} ORDER BY {pk}")
+    if select_sql:
+        scur.execute(str(select_sql))
+    else:
+        scur.execute(f"SELECT {', '.join(columns)} FROM {source} ORDER BY {pk}")
     while True:
         rows = scur.fetchmany(fetch_batch)
         if not rows:
@@ -442,7 +535,7 @@ def main(argv: list[str] | None = None) -> int:
     result = _empty_result()
     result["dry_run"] = bool(args.dry_run)
     result["replace"] = bool(args.replace)
-    result["loaded"] = {str(spec["source"]): 0 for spec in TABLE_SPECS}
+    result["loaded"] = {str(spec["source"]): 0 for spec in ALL_TABLE_SPECS}
 
     sqlite_path = resolve_sqlite_path(args.sqlite_db)
     if not sqlite_path.is_file():
@@ -459,7 +552,7 @@ def main(argv: list[str] | None = None) -> int:
         print(result["errors"][-1], file=sys.stderr)
         return 2
 
-    sqlite_counts, warnings, exists_map = collect_sqlite_source_counts(sconn, TABLE_SPECS)
+    sqlite_counts, warnings, exists_map = collect_sqlite_source_counts(sconn, ALL_TABLE_SPECS)
     result["sqlite_counts"] = sqlite_counts
     result["warnings"].extend(warnings)
 
@@ -487,14 +580,14 @@ def main(argv: list[str] | None = None) -> int:
     t0 = time.monotonic()
     try:
         with pconn.cursor() as cur:
-            for spec in TABLE_SPECS:
+            for spec in ALL_TABLE_SPECS:
                 schema, table = str(spec["target"]).split(".", 1)
                 if not pg_table_exists(cur, schema, table):
                     raise ValueError(
                         f"Postgres target missing: {spec['target']}. "
                         "Run: uv run alembic -c alembic.ini upgrade head"
                     )
-            for spec in TABLE_SPECS:
+            for spec in ALL_TABLE_SPECS:
                 cur.execute(f"SELECT COUNT(*) FROM {spec['target']}")
                 result["postgres_counts_before"][str(spec["source"])] = int(cur.fetchone()[0])
 
@@ -520,14 +613,24 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.replace:
             with pconn.cursor() as cur:
-                for spec in sorted(TABLE_SPECS, key=lambda s: int(s["delete_order"])):
+                for spec in sorted(ALL_TABLE_SPECS, key=lambda s: int(s["delete_order"])):
                     cur.execute(f"DELETE FROM {spec['target']}")
-                cur.execute(
-                    "SELECT setval(pg_get_serial_sequence('mart.opportunity_signals', 'id'), 1, false)"
-                )
+                for seq_table in (
+                    "mart.opportunity_signals",
+                    "mart.opportunity_signals_canonical",
+                ):
+                    cur.execute(
+                        f"""
+                        SELECT setval(
+                          pg_get_serial_sequence('{seq_table}', 'id'),
+                          1,
+                          false
+                        )
+                        """
+                    )
             pconn.commit()
 
-        for spec in TABLE_SPECS:
+        for spec in ALL_TABLE_SPECS:
             src = str(spec["source"])
             loaded = load_table(
                 sconn,
@@ -538,13 +641,16 @@ def main(argv: list[str] | None = None) -> int:
             )
             result["loaded"][src] = loaded
 
-        if any(spec.get("reset_sequence") for spec in TABLE_SPECS):
+        for seq_table in (
+            "mart.opportunity_signals",
+            "mart.opportunity_signals_canonical",
+        ):
             with pconn.cursor() as cur:
                 cur.execute(
-                    """
+                    f"""
                     SELECT setval(
-                      pg_get_serial_sequence('mart.opportunity_signals', 'id'),
-                      COALESCE((SELECT MAX(id) FROM mart.opportunity_signals), 1)
+                      pg_get_serial_sequence('{seq_table}', 'id'),
+                      COALESCE((SELECT MAX(id) FROM {seq_table}), 1)
                     )
                     """
                 )
@@ -552,7 +658,7 @@ def main(argv: list[str] | None = None) -> int:
 
         with pconn.cursor() as cur:
             row_count_ok = True
-            for spec in TABLE_SPECS:
+            for spec in ALL_TABLE_SPECS:
                 src = str(spec["source"])
                 target = str(spec["target"])
                 cur.execute(f"SELECT COUNT(*) FROM {target}")

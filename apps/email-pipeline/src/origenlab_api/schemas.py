@@ -40,6 +40,10 @@ class DashboardSummaryResponse(BaseModel):
     tables: dict[str, bool] = Field(default_factory=dict)
     data_source: Literal["postgres_mirror"] = "postgres_mirror"
     eventually_consistent: bool = True
+    scope: Literal["canonical", "archive"] = "canonical"
+    scope_available: bool = True
+    scope_note: str = ""
+    archive_mirror_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class ContactRow(BaseModel):
@@ -73,6 +77,9 @@ class PaginatedContactsResponse(BaseModel):
     limit: int
     offset: int
     table_available: bool = True
+    scope: Literal["canonical", "archive"] = "canonical"
+    scope_available: bool = True
+    scope_note: str = ""
 
 
 class PaginatedOrganizationsResponse(BaseModel):
@@ -81,6 +88,9 @@ class PaginatedOrganizationsResponse(BaseModel):
     limit: int
     offset: int
     table_available: bool = True
+    scope: Literal["canonical", "archive"] = "canonical"
+    scope_available: bool = True
+    scope_note: str = ""
 
 
 class EmailSuppressionRow(BaseModel):

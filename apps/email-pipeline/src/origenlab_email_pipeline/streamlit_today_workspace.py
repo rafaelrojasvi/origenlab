@@ -17,6 +17,10 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 from origenlab_email_pipeline.cases_review_queue import fetch_cases_review_queue
+from origenlab_email_pipeline.operational_scope import (
+    is_operational_noise_entity,
+    sqlite_opportunity_signal_operational_predicate,
+)
 from origenlab_email_pipeline.lead_export_queries import sql_upstream_active_lead_master
 from origenlab_email_pipeline.streamlit_leads_browse import lead_browse_ready
 from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
@@ -76,6 +80,7 @@ class TodayWorkspaceSpec:
     lead_limit: int = 32
     dormant_limit: int = 18
     max_total_rows: int = 95
+    canonical_only: bool = True
 
 
 @dataclass(frozen=True)
@@ -261,6 +266,8 @@ def gather_today_workspace_rows(
                 key = str(r.get("entity_key") or "").strip()
                 if not kind or not key:
                     continue
+                if sp.canonical_only and is_operational_noise_entity(kind, key):
+                    continue
                 summ = _str_iso(r.get("reason_summary") or r.get("rationale_text"))
                 if len(summ) > 220:
                     summ = summ[:217] + "…"
@@ -322,14 +329,17 @@ def gather_today_workspace_rows(
     except (KeyError, TypeError, ValueError, sqlite3.Error):
         pass
 
-    # --- Tier 4: dormant signals
+    # --- Tier 4: dormant signals (canonical Gmail linkage when canonical_only)
     if _table_exists(conn, "opportunity_signals"):
         try:
+            dormant_where = "signal_type = 'dormant_contact'"
+            if sp.canonical_only and _table_exists(conn, "emails"):
+                dormant_where += f" AND {sqlite_opportunity_signal_operational_predicate('os')}"
             cur = conn.execute(
-                """
+                f"""
                 SELECT signal_type, entity_kind, entity_key, score, created_at
-                FROM opportunity_signals
-                WHERE signal_type = 'dormant_contact'
+                FROM opportunity_signals os
+                WHERE {dormant_where}
                 ORDER BY score DESC, created_at DESC
                 LIMIT ?
                 """,
@@ -340,6 +350,8 @@ def gather_today_workspace_rows(
                 d = dict(zip(cols, tup, strict=True))
                 ek = str(d.get("entity_key") or "")
                 ekind = str(d.get("entity_kind") or "")
+                if sp.canonical_only and is_operational_noise_entity(ekind, ek):
+                    continue
                 score = _float_metric(d.get("score"))
                 ct = _str_iso(d.get("created_at"))[:19]
                 out.append(
@@ -347,7 +359,14 @@ def gather_today_workspace_rows(
                         tier=TIER_CUENTA_DORMIDA,
                         tier_label_es=TIER_LABELS_ES[TIER_CUENTA_DORMIDA],
                         source_code="oportunidad",
-                        reason_es="Fila en `opportunity_signals` con tipo **dormant_contact** (heurística sobre historial/archivo).",
+                        reason_es=(
+                            "Fila en `opportunity_signals` tipo **dormant_contact** "
+                            + (
+                                "ligada a **Gmail operativo**."
+                                if sp.canonical_only
+                                else "(heurística sobre historial/archivo)."
+                            )
+                        ),
                         reference_es=f"{ekind} · `{ek}` · intensidad **{score:.1f}**",
                         next_step_es="Abrir **Oportunidades** (vista «Cuenta dormida») para contexto y seguimiento.",
                         navigate_page="Oportunidades",
