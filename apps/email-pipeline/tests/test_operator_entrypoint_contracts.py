@@ -47,6 +47,7 @@ _BREAK_GLASS_PATHS: tuple[str, ...] = (
     "scripts/migrate/sqlite_archive_to_postgres.py",
     "scripts/migrate/sqlite_document_master_to_postgres.py",
     "scripts/migrate/sqlite_outbound_sidecars_to_postgres.py",
+    "scripts/migrate/sqlite_mart_core_to_postgres.py",
 )
 
 # Top-of-file operator warning (Stage 1.5 banners and equivalents)

@@ -1,0 +1,195 @@
+"""Tests for read-only FastAPI Slice 1 (mocked Postgres)."""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from typing import Any, Generator
+from unittest.mock import MagicMock
+
+import pytest
+
+fastapi = pytest.importorskip("fastapi")
+httpx = pytest.importorskip("httpx")
+from fastapi.testclient import TestClient
+
+from origenlab_api.config import reset_api_settings_cache
+from origenlab_api.main import create_app
+
+
+class _FakeCursor:
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
+        self._rows = rows or []
+
+    def fetchone(self) -> dict[str, Any] | None:
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return list(self._rows)
+
+
+class FakeConn:
+    """Minimal psycopg-like connection for query tests."""
+
+    def __init__(self) -> None:
+        self.tables = {
+            ("mart", "contact_master"): True,
+            ("mart", "organization_master"): True,
+            ("mart", "opportunity_signals"): True,
+            ("outbound", "contact_email_suppression"): True,
+            ("outbound", "contact_domain_suppression"): True,
+            ("outbound", "outreach_contact_state"): True,
+        }
+        self.counts = {
+            "mart.contact_master": 10,
+            "mart.organization_master": 5,
+            "mart.opportunity_signals": 3,
+            "outbound.contact_email_suppression": 2,
+            "outbound.contact_domain_suppression": 1,
+            "outbound.outreach_contact_state": 4,
+        }
+
+    def execute(self, sql: str, params: Any = None) -> _FakeCursor:
+        s = " ".join(sql.split()).lower()
+        if "information_schema.tables" in s:
+            schema = params[0]
+            table = params[1]
+            ok = self.tables.get((schema, table), False)
+            return _FakeCursor([{"?": 1}] if ok else [])
+        if "count(*)" in s and "mart.contact_master" in s:
+            return _FakeCursor([{"n": self.counts["mart.contact_master"]}])
+        if "count(*)" in s and "mart.organization_master" in s:
+            return _FakeCursor([{"n": self.counts["mart.organization_master"]}])
+        if "count(*)" in s and "mart.opportunity_signals" in s:
+            return _FakeCursor([{"n": self.counts["mart.opportunity_signals"]}])
+        if "count(*)" in s and "contact_email_suppression" in s:
+            return _FakeCursor([{"n": self.counts["outbound.contact_email_suppression"]}])
+        if "count(*)" in s and "contact_domain_suppression" in s:
+            return _FakeCursor([{"n": self.counts["outbound.contact_domain_suppression"]}])
+        if "count(*)" in s and "outreach_contact_state" in s:
+            if "group by" in s:
+                return _FakeCursor([{"st": "contacted", "n": 2}])
+            return _FakeCursor([{"n": self.counts["outbound.outreach_contact_state"]}])
+        if "from mart.contact_master" in s and "select email" in s:
+            return _FakeCursor(
+                [
+                    {
+                        "email": "lab@example.cl",
+                        "contact_name_best": "Lab",
+                        "domain": "example.cl",
+                        "organization_name_guess": "Example",
+                        "organization_type_guess": "lab",
+                        "first_seen_at": None,
+                        "last_seen_at": None,
+                        "total_emails": 1,
+                        "confidence_score": 0.9,
+                        "top_equipment_tags": "micro",
+                    }
+                ]
+            )
+        if "from outbound.contact_email_suppression" in s and "select email" in s:
+            return _FakeCursor(
+                [
+                    {
+                        "email": "bad@example.cl",
+                        "suppression_reason_code": "manual",
+                        "suppression_reason_text": None,
+                        "suppression_source": None,
+                        "last_bounced_at": None,
+                        "updated_at": None,
+                        "updated_by": None,
+                    }
+                ]
+            )
+        if "max(last_seen_at)" in s and "contact_master" in s:
+            return _FakeCursor([{"m": None}])
+        if "select 1" in s:
+            return _FakeCursor([{"?": 1}])
+        return _FakeCursor([{"n": 0}])
+
+    def close(self) -> None:
+        return None
+
+
+@pytest.fixture
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> Generator[TestClient, None, None]:
+    reset_api_settings_cache()
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@localhost:5432/scratch")
+    sqlite = tmp_path / "emails.sqlite"
+    sqlite.write_bytes(b"")
+    monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(sqlite))
+
+    fake = FakeConn()
+
+    @contextmanager
+    def _fake_pg(_url: str) -> Generator[FakeConn, None, None]:
+        yield fake
+
+    monkeypatch.setattr("origenlab_api.deps.postgres_connection", _fake_pg)
+    monkeypatch.setattr("origenlab_api.routers.health.postgres_connection", _fake_pg)
+
+    app = create_app()
+    with TestClient(app) as tc:
+        yield tc
+    reset_api_settings_cache()
+
+
+def test_health(client: TestClient) -> None:
+    r = client.get("/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["read_only"] is True
+
+
+def test_health_dependencies(client: TestClient) -> None:
+    r = client.get("/health/dependencies")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] in ("ok", "degraded")
+    names = {d["name"] for d in body["dependencies"]}
+    assert "postgres" in names
+
+
+def test_dashboard_summary(client: TestClient) -> None:
+    r = client.get("/dashboard/summary")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contact_count"] == 10
+    assert body["eventually_consistent"] is True
+    assert body["data_source"] == "postgres_mirror"
+
+
+def test_contacts_pagination(client: TestClient) -> None:
+    r = client.get("/contacts", params={"limit": 10, "offset": 0})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["table_available"] is True
+    assert len(body["items"]) >= 1
+    assert body["items"][0]["email"] == "lab@example.cl"
+
+
+def test_outbound_readiness_eventually_consistent(client: TestClient) -> None:
+    r = client.get("/outbound/readiness")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["eventually_consistent"] is True
+    assert body["data_source"] == "postgres_mirror"
+    assert "disclaimer" in body
+    assert body["verdict"] in ("ready", "ready_with_warnings", "not_ready")
+
+
+def test_suppressions_emails(client: TestClient) -> None:
+    r = client.get("/outbound/suppressions/emails")
+    assert r.status_code == 200
+    assert r.json()["table_available"] is True
+
+
+def test_missing_postgres_url_returns_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_api_settings_cache()
+    monkeypatch.delenv("ORIGENLAB_POSTGRES_URL", raising=False)
+    monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
+    app = create_app()
+    with TestClient(app) as client:
+        r = client.get("/dashboard/summary")
+    assert r.status_code == 503
+    reset_api_settings_cache()

@@ -226,6 +226,7 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | `scripts/migrate/sqlite_archive_to_postgres.py` | **TRUNCATE** / load on Postgres target |
 | `scripts/migrate/sqlite_document_master_to_postgres.py` | **DELETE** / load on Postgres target |
 | `scripts/migrate/sqlite_outbound_sidecars_to_postgres.py` | **DELETE** / load on Postgres target |
+| `scripts/migrate/sqlite_mart_core_to_postgres.py` | **DELETE** / load on Postgres `mart.contact_master`, `organization_master`, `opportunity_signals` |
 | `scripts/leads/advanced/build_lead_account_rollup.py` | **DELETE** + rebuild `lead_account_*` |
 | `scripts/qa/sync_outreach_batch_from_ingested_bounces.py` | **`--apply`** updates suppressions / state |
 | `scripts/tools/flag_ndr_bounces_from_contacto.py` | **`--apply`** writes suppressions |

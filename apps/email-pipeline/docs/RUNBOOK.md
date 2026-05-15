@@ -214,6 +214,54 @@ On **Windows** (Docker Desktop), set `ORIGENLAB_HOST_DATA_ROOT` to the host fold
 
 Example URL form: `postgresql+psycopg://user:pass@host:5432/dbname`. Template lines: [`.env.example`](../.env.example) (commented). Deeper design: [`pipeline/POSTGRES_ARCHIVE_DATA_MIGRATION_PLAN_V1.md`](pipeline/POSTGRES_ARCHIVE_DATA_MIGRATION_PLAN_V1.md), [`pipeline/POSTGRES_SCHEMA_TARGET_V1.md`](pipeline/POSTGRES_SCHEMA_TARGET_V1.md).
 
+<a id="m-eprun-api-slice1"></a>
+### Read-only dashboard API (Slice 1 — FastAPI)
+
+**Status:** experimental read-only API over **PostgreSQL mirrors** only. This is **not** a production cutover: SQLite remains authoritative for ingest, gates, and Streamlit.
+
+**Hard limits (v1):**
+
+- No write endpoints; no email send; no Gmail ingest or mart rebuild over HTTP.
+- Does not mutate SQLite (health may **read-only ping** SQLite for dependency checks only).
+- Point `ORIGENLAB_POSTGRES_URL` (or `ALEMBIC_DATABASE_URL`) at **scratch/staging Postgres** — never run production migrate loaders against shared prod from this doc.
+
+**Prerequisites:**
+
+```bash
+cd apps/email-pipeline
+uv sync --group postgres --group api
+export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/origenlab_scratch'
+uv run alembic -c alembic.ini upgrade head
+# Tier A data (scratch only):
+uv run python scripts/migrate/sqlite_outbound_sidecars_to_postgres.py --replace --postgres-url "$ORIGENLAB_POSTGRES_URL"
+uv run python scripts/migrate/sqlite_mart_core_to_postgres.py --replace --postgres-url "$ORIGENLAB_POSTGRES_URL"
+# Optional: uv run python scripts/migrate/sqlite_document_master_to_postgres.py --replace ...
+```
+
+**Run locally:**
+
+```bash
+cd apps/email-pipeline
+uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+**Example curls:**
+
+```bash
+curl -sS http://127.0.0.1:8000/health | jq .
+curl -sS http://127.0.0.1:8000/dashboard/summary | jq .
+curl -sS 'http://127.0.0.1:8000/contacts?limit=5&offset=0' | jq .
+curl -sS http://127.0.0.1:8000/outbound/readiness | jq .
+```
+
+**Endpoints (v1):** `GET /health`, `GET /health/dependencies`, `GET /dashboard/summary`, `GET /contacts`, `GET /organizations`, `GET /outbound/suppressions/emails`, `GET /outbound/contact-state`, `GET /outbound/readiness`.
+
+`/outbound/readiness` reflects **Postgres mirror** tables only and is **eventually consistent** with SQLite/Streamlit until sync is automated.
+
+Design: [`architecture/POSTGRES_API_DASHBOARD_PLAN.md`](architecture/POSTGRES_API_DASHBOARD_PLAN.md).
+
 ---
 
 <a id="m-eprun-after-import"></a>
