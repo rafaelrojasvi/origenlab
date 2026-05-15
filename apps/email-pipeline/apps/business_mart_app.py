@@ -84,13 +84,20 @@ from origenlab_email_pipeline.streamlit_canonical_dashboard_sql import (
     direction_label_for_folder,
     folder_kind_label,
     fmt_short_date,
+    load_canonical_gmail_classification_sample,
     load_inicio_recent_canonical_rows,
+)
+from origenlab_email_pipeline.email_classification_qa import (
+    classify_email_row,
+    qa_operational_internal_domains,
+    spanish_heuristic_bucket_label,
 )
 
 # Navegación principal (sidebar). «Herramientas» agrupa vistas avanzadas sin perder funcionalidad.
 PRIMARY_SIDEBAR_PAGES: list[str] = [
     "Inicio",
     "Actividad contacto Gmail",
+    "Clasificación comercial",
     "Seguimientos y casos",
     "Contactos y organizaciones",
     "Oportunidades",
@@ -1118,6 +1125,151 @@ def _signal_label(signal_type: str) -> tuple[str, str]:
         ),
     }
     return m.get(signal_type, (signal_type, "Señal heurística (ver detalles)."))
+
+
+def render_clasificacion_comercial_page(conn: sqlite3.Connection, db_path: Path) -> None:
+    """Heuristic commercial-type triage for canonical Gmail (read-only; no DB writes)."""
+    from origenlab_email_pipeline.business_mart import primary_sender_email
+
+    st.subheader("Clasificación comercial (heurística)")
+    render_page_status("Clasificación comercial")
+    st.warning(
+        "**Clasificación heurística:** no son datos de CRM ni ventas confirmadas. "
+        "Revise cada fila antes de actuar."
+    )
+    if not _has_table(conn, "emails"):
+        st.error("No existe la tabla `emails` en este archivo.")
+        return
+
+    c1, c2 = st.columns(2)
+    with c1:
+        days = st.slider("Días hacia atrás", 7, 365, 120, key="cls_days")
+    with c2:
+        limit = st.slider("Máximo de correos", 50, 2500, 500, step=50, key="cls_limit")
+
+    internal = qa_operational_internal_domains()
+    sup = supplier_email_domains(conn)
+    raw_rows = load_canonical_gmail_classification_sample(conn, days=int(days), limit=int(limit))
+    if not raw_rows:
+        st.info("Sin filas canónicas en el rango elegido.")
+        return
+
+    scored: list[dict[str, Any]] = []
+    for r in raw_rows:
+        rc = classify_email_row(
+            folder=r.get("folder"),
+            subject=r.get("subject"),
+            sender=r.get("sender"),
+            recipients=r.get("recipients"),
+            body=r.get("body"),
+            full_body_clean=r.get("full_body_clean"),
+            top_reply_clean=r.get("top_reply_clean"),
+            doc_types_csv=r.get("doc_types"),
+            supplier_domains=sup,
+            internal_domains_lower=internal,
+        )
+        pe = (primary_sender_email(r.get("sender") or "") or "").strip()
+        blob_preview = " ".join(
+            str(x or "")
+            for x in (r.get("subject"), r.get("body"), r.get("full_body_clean"))
+        )
+        preview = (blob_preview[:1200] + "…") if len(blob_preview) > 1200 else blob_preview
+        scored.append(
+            {
+                "id": r.get("id"),
+                "fecha": r.get("date_iso") or "",
+                "carpeta": r.get("folder") or "",
+                "contacto": pe or "—",
+                "asunto": r.get("subject") or "",
+                "predicted_label": rc.primary,
+                "etiqueta_ui": spanish_heuristic_bucket_label(rc.primary),
+                "confidence": rc.confidence,
+                "ambiguous": rc.ambiguous,
+                "ambiguo": "Sí" if rc.ambiguous else "No",
+                "recommended_action": rc.recommended_action,
+                "evidence": " | ".join(rc.evidence),
+                "_preview": preview,
+            }
+        )
+
+    df = pd.DataFrame(scored)
+    st.caption(f"SQLite: `{db_path}` · filas: **{len(df)}**")
+
+    st.markdown("##### Resumen por categoría (heurística)")
+    vc = df["predicted_label"].value_counts()
+    n_kpi = min(6, max(1, len(vc)))
+    cols = st.columns(n_kpi)
+    for i, (label, cnt) in enumerate(vc.head(n_kpi).items()):
+        with cols[i % n_kpi]:
+            st.metric(spanish_heuristic_bucket_label(str(label)), int(cnt))
+
+    st.markdown("##### Filtros")
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        labels_all = sorted(df["predicted_label"].astype(str).unique().tolist())
+        pick_lbl = st.multiselect("Etiqueta interna (`predicted_label`)", labels_all, default=[], key="cls_lbl")
+    with f2:
+        conf_all = sorted(df["confidence"].astype(str).unique().tolist())
+        pick_conf = st.multiselect("Confianza", conf_all, default=[], key="cls_conf")
+    with f3:
+        amb = st.selectbox("Ambiguo", ["(todos)", "Sí", "No"], key="cls_amb")
+
+    view = df.copy()
+    if pick_lbl:
+        view = view[view["predicted_label"].isin(pick_lbl)]
+    if pick_conf:
+        view = view[view["confidence"].isin(pick_conf)]
+    if amb == "Sí":
+        view = view[view["ambiguo"] == "Sí"]
+    elif amb == "No":
+        view = view[view["ambiguo"] == "No"]
+
+    show = view[
+        [
+            "fecha",
+            "carpeta",
+            "contacto",
+            "asunto",
+            "predicted_label",
+            "etiqueta_ui",
+            "confidence",
+            "ambiguo",
+            "recommended_action",
+            "evidence",
+        ]
+    ].rename(
+        columns={
+            "fecha": "Fecha",
+            "carpeta": "Carpeta",
+            "contacto": "Contacto",
+            "asunto": "Asunto",
+            "predicted_label": "predicted_label",
+            "etiqueta_ui": "Etiqueta (UI)",
+            "confidence": "Confianza",
+            "ambiguo": "Ambiguo",
+            "recommended_action": "Acción sugerida",
+            "evidence": "Evidencia",
+        }
+    )
+    st.dataframe(show, use_container_width=True, hide_index=True, height=420)
+
+    st.markdown("##### Vista previa")
+    ids = view["id"].astype(int).tolist() if len(view) else []
+    pick = st.selectbox("Expandir correo (id)", [""] + [str(x) for x in ids[:400]], key="cls_expand")
+    if pick:
+        row = next((x for x in scored if str(x["id"]) == pick), None)
+        if row:
+            st.text_area("Extracto (heurística)", value=row["_preview"], height=260, disabled=True, key="cls_pv")
+
+    st.markdown("##### Exportar para revisión manual")
+    st.markdown(
+        "El script QA genera JSON/CSV **solo lectura** (no modifica SQLite). Ejemplo desde `apps/email-pipeline`:"
+    )
+    st.code(
+        "uv run python scripts/qa/audit_email_classification_quality.py "
+        "--days 120 --limit 2500 --json --out /tmp/email_classification_quality.json",
+        language="bash",
+    )
 
 
 def render_contacto_gmail_activity_page(conn: sqlite3.Connection, db_path: Path) -> None:
@@ -2334,6 +2486,10 @@ def main() -> None:
 
         if page == "Actividad contacto Gmail":
             render_contacto_gmail_activity_page(conn, db_path)
+            return
+
+        if page == "Clasificación comercial":
+            render_clasificacion_comercial_page(conn, db_path)
             return
 
         if page == "Outbound / No repetir":

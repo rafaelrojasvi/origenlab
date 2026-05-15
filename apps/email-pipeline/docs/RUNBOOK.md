@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-22
+Last reviewed: 2026-05-14
 
 Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.). **Outbound script index + classifications:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
@@ -192,6 +192,30 @@ On **Windows** (Docker Desktop), set `ORIGENLAB_HOST_DATA_ROOT` to the host fold
 
 ---
 
+<a id="m-eprun-postgres-optional"></a>
+## Optional PostgreSQL (Alembic, archive load, outbound audit)
+
+**PostgreSQL is optional.** Ingest, outbound gates, Streamlit, and day-to-day reporting run against **SQLite** (`ORIGENLAB_SQLITE_PATH` or default under `ORIGENLAB_DATA_ROOT`). Do **not** treat Postgres as required infrastructure unless you have chosen that path explicitly.
+
+**What Postgres is used for in this repo (when enabled):**
+
+1. **Alembic** — DDL/migrations for Postgres schemas (`apps/email-pipeline/alembic/`). Requires `uv sync --group postgres`.
+2. **SQLite→Postgres loaders** — `scripts/migrate/*.py` (archive, document master, outbound sidecars). These are **break-glass**: they can **truncate or delete** rows in target Postgres tables; see [`SCRIPT_MAP.md`](SCRIPT_MAP.md#break-glass-scripts).
+3. **Optional outbound audit** — some export CLIs accept `--write-postgres-audit` to append audit rows only when requested (CSV/JSON outputs are unchanged if Postgres is absent).
+
+**First-time / safety:** run migrate loaders and destructive replace modes **only on a scratch or non-production Postgres** until you have validated row counts, FK order, and restore procedures. Never point migration scripts at a shared production Postgres instance for the first trial.
+
+**Connection URL — two discovery orders (read carefully):**
+
+| Consumer | Resolution order (first wins) |
+|----------|-------------------------------|
+| **Alembic** (`alembic/env.py`) | `ALEMBIC_DATABASE_URL`, else `ORIGENLAB_POSTGRES_URL` |
+| **Migrate scripts** (`scripts/migrate/sqlite_*_to_postgres.py`) and **optional outbound audit** on export CLIs | CLI `--postgres-url` if passed, else `ORIGENLAB_POSTGRES_URL`, else `ALEMBIC_DATABASE_URL` |
+
+Example URL form: `postgresql+psycopg://user:pass@host:5432/dbname`. Template lines: [`.env.example`](../.env.example) (commented). Deeper design: [`pipeline/POSTGRES_ARCHIVE_DATA_MIGRATION_PLAN_V1.md`](pipeline/POSTGRES_ARCHIVE_DATA_MIGRATION_PLAN_V1.md), [`pipeline/POSTGRES_SCHEMA_TARGET_V1.md`](pipeline/POSTGRES_SCHEMA_TARGET_V1.md).
+
+---
+
 <a id="m-eprun-after-import"></a>
 ## 1. After import (PST → mbox → SQLite)
 
@@ -374,7 +398,7 @@ uv run python scripts/leads/mark_sent_batch_contacted.py \
 
 **Shared outbound defaults:** canonical CLIs and preflight resolve the same Gmail user (CLI → `ORIGENLAB_GMAIL_WORKSPACE_USER` → `contacto@origenlab.cl`), the same default Sent folder pair (`[Gmail]/Enviados`, `[Gmail]/Sent Mail`), and the same `GateContext` builders via [`outbound_core.py`](../src/origenlab_email_pipeline/outbound_core.py). Archive builds write an `outbound_run` object (schema v1) into `archive_outreach_build_summary.json` and audit JSON summaries; the lead exporter can write `<stem>_outbound_summary.json` with `--write-outbound-summary` (that file includes **`sent_preflight`**; the lead CLI does **not** write **`sent_preflight`** to disk without **`--write-outbound-summary`**).
 
-**Optional Postgres outbound audit:** `--write-postgres-audit` records one row in `outbound.outbound_batch` plus recipient rows in `outbound.outbound_batch_recipient`. URL resolution is `--postgres-url` → `ORIGENLAB_POSTGRES_URL` → `ALEMBIC_DATABASE_URL`. If audit writing is requested and unavailable/failing, the command exits non-zero; CSV/JSON artifacts remain generated and unchanged.
+**Optional Postgres outbound audit:** `--write-postgres-audit` records one row in `outbound.outbound_batch` plus recipient rows in `outbound.outbound_batch_recipient`. URL resolution is `--postgres-url` → `ORIGENLAB_POSTGRES_URL` → `ALEMBIC_DATABASE_URL` (this matches migrate scripts; **Alembic alone** uses `ALEMBIC_DATABASE_URL` first — see [Optional PostgreSQL](#m-eprun-postgres-optional)). If audit writing is requested and unavailable/failing, the command exits non-zero; CSV/JSON artifacts remain generated and unchanged.
 
 **Sent-history fail-closed preflight (both lanes):** before building a batch, [`outbound_sent_preflight.py`](../src/origenlab_email_pipeline/outbound_sent_preflight.py) checks that SQLite has **matching** Sent rows for that mailbox and folder set and that **`recipients`** parse to at least one address (same predicates as gate Sent blocking). Exports **fail closed** when Sent history is **missing**, **folder-mismatched**, or **unparsable**. **Exit code `3`** means outbound Sent-history preflight failed (stderr lists counts, optional distinct folder sample, and hints). **`--allow-empty-sent-history`** is an explicit, **audited** override on either CLI and should be **rare**. **Discover the exact Gmail Sent label:** `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders`. **Ingest that folder** (example): `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"`. On success, archive **`archive_outreach_build_summary.json`** includes a top-level **`sent_preflight`** object (`ok`, `override_used`, counts, folders, errors/warnings). Streamlit **Cola outreach marketing** applies the same shared preflight; the **only** override is **`ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1`** (use only if you accept weaker Sent blocking in the UI). Details: [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md#sent-history-preflight-fail-closed).
 

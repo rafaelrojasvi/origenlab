@@ -163,6 +163,60 @@ def load_inicio_recent_canonical_rows(
         return []
 
 
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    return bool(
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            (name,),
+        ).fetchone()
+    )
+
+
+def load_canonical_gmail_classification_sample(
+    conn: sqlite3.Connection,
+    *,
+    days: int = 120,
+    limit: int = 500,
+) -> list[sqlite3.Row]:
+    """Recent canonical Gmail rows with body fields for heuristic classification (read-only)."""
+    d = max(1, min(int(days), 3660))
+    lim = max(10, min(int(limit), 10_000))
+    day_param = f"-{d} days"
+    pred = canonical_emails_where("e")
+    if _table_exists(conn, "document_master"):
+        doc_sel = (
+            "(SELECT group_concat(DISTINCT d.doc_type) "
+            "FROM document_master d WHERE d.email_id = e.id) AS doc_types"
+        )
+    else:
+        doc_sel = "NULL AS doc_types"
+    sql = f"""
+        SELECT
+          e.id,
+          e.date_iso,
+          e.folder,
+          e.sender,
+          e.recipients,
+          e.subject,
+          COALESCE(e.body, '') AS body,
+          COALESCE(e.full_body_clean, '') AS full_body_clean,
+          COALESCE(e.top_reply_clean, '') AS top_reply_clean,
+          {doc_sel}
+        FROM emails e
+        WHERE ({pred})
+          AND e.date_iso IS NOT NULL AND trim(e.date_iso) != ''
+          AND date(e.date_iso) >= date('now', ?)
+        ORDER BY e.date_iso DESC
+        LIMIT ?
+    """
+    try:
+        cur = conn.execute(sql, (day_param, lim))
+        cols = [d[0] for d in (cur.description or ())]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except sqlite3.Error:
+        return []
+
+
 def fmt_short_date(iso: str | None) -> str:
     if not iso:
         return "—"
@@ -210,4 +264,5 @@ __all__ = [
     "folder_kind_label",
     "fmt_short_date",
     "load_inicio_recent_canonical_rows",
+    "load_canonical_gmail_classification_sample",
 ]

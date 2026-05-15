@@ -24,6 +24,12 @@ app = _load_app_module()
 APP_SOURCE = (Path(__file__).resolve().parents[1] / "apps" / "business_mart_app.py").read_text(encoding="utf-8")
 
 
+def test_sidebar_includes_clasificacion_comercial() -> None:
+    assert "Clasificación comercial" in APP_SOURCE
+    assert "render_clasificacion_comercial_page" in APP_SOURCE
+    assert "PRIMARY_SIDEBAR_PAGES" in APP_SOURCE
+
+
 def test_date_prefix_and_days_since_helpers():
     assert app._date_prefix_for_compare("2026-03-29T12:00:00Z") == "2026-03-29"
     assert app._date_prefix_for_compare(None) is None

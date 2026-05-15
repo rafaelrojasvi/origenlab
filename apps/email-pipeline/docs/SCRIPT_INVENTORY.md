@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-25
+Last reviewed: 2026-05-14
 
 **Purpose:** High-level **grouping** of `scripts/` for operators and for **future cleanup planning**. It does **not** list every file. The canonical per-script map is [`SCRIPT_MAP.md`](SCRIPT_MAP.md). Full folder notes: [`../scripts/README.md`](../scripts/README.md). **Tatiana / lab vs daily outbound:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) (Stage 6E1 — not production lanes; future 6E2 may refactor large Tatiana modules).
 
@@ -40,6 +40,23 @@ Values are **representative**; some scripts in a group may differ. When in doubt
 | `tools/archive_reports_out_generated.py` | no | **yes** (to move) | no | **yes** | no | no |
 
 *\*Ingest is safe mechanically on a new machine if DB path is writable, but you still need creds to use Gmail. `run_deep_research_prospecting.py` supports `--dry-run --sample-response` with no API call and stops before send. **`plan_reports_out_cleanup` / `plan_script_consolidation`** are read-only planners (the latter scans `scripts/`; optional JSON elsewhere).*
+
+---
+
+<a id="workspace-prep-which-script"></a>
+
+## Workspace prep: which script should I run?
+
+Two different scripts initialize or clean **operator-facing folders** under `reports/out/active/`. They are **not** interchangeable.
+
+**Recommendation:** For **normal outbound lanes** (volume + precision marketing, shared gate, DNR / contacted / all-known exports, campaign inputs in **`reports/out/active/current/`**), start with **`scripts/qa/prepare_outbound_campaign_workspace.py`**. That is the path aligned with [`RUNBOOK.md`](RUNBOOK.md) daily outbound and [`SCRIPT_MAP.md`](SCRIPT_MAP.md) **Ops — daily lane** workspace prep.
+
+| Script | Use when | Output / folder touched | Daily/core vs legacy/support | Do not use for |
+|--------|----------|-------------------------|------------------------------|----------------|
+| [`scripts/qa/prepare_outbound_campaign_workspace.py`](../scripts/qa/prepare_outbound_campaign_workspace.py) | Starting or resetting the **current** outbound campaign workspace for the **two daily lanes**; keeping `active/current/` ready for DNR, DeepSearch outputs, and send lists | Primarily **`reports/out/active/current/`** (and related manifest / placeholders per `--help`) | **Daily / core** for outbound operators | Legacy **lead-hunt** “whole `active/` tree” hygiene, unified hunt CSV workflows, or steps described only in [`REPORTING.md`](REPORTING.md) / contact-hunt docs without also needing outbound `current/` |
+| [`scripts/leads/advanced/prepare_active_workspace.py`](../scripts/leads/advanced/prepare_active_workspace.py) | **Lead pipeline / weekly focus / contact-hunt** style flows: archiving duplicate English CSVs, optional `--deepsearch` / `--unified`, cleaning broader **`reports/out/active/`** layouts documented in lead and reporting guides | **`reports/out/active/`** (broader than `current/` alone; archives extras per script behavior) | **Legacy / support** for those workflows — **still maintained and not deprecated** | Replacing **`prepare_outbound_campaign_workspace.py`** for a **new outbound-only** campaign round when you only care about the two lanes and `active/current/` |
+
+Canonical operator narrative and when to pick which: [`SCRIPT_MAP.md`](SCRIPT_MAP.md#two-workspace-prep-stories-do-not-confuse) (same table as **Two workspace prep stories**).
 
 ---
 

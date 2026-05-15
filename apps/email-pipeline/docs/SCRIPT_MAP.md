@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-04-24
+Last reviewed: 2026-05-14
 
 **This document is the canonical operator map** for outbound and campaign work. It is **navigation and safety labeling only** — behavior lives in code and in [`RUNBOOK.md`](RUNBOOK.md).
 
@@ -36,6 +36,8 @@ Use this to separate *what you run daily* from *what can hurt you*:
 | **Break-glass** | Can **send mail**, **purge SQLite**, **rebuild** large derived tables, **`--apply`** side effects, or **truncate/load Postgres** — use only with intent | Called out in [Break-glass scripts](#break-glass-scripts) |
 
 **Runtime source of truth today:** **SQLite** (`ORIGENLAB_SQLITE_PATH` or default under `ORIGENLAB_DATA_ROOT`). **Gmail Workspace Sent** ingested into **`emails`** is required for outbound safety (shared gate + preflight). **Postgres** is **optional** (migration loaders, Alembic, optional outbound audit) — **not** the primary OLTP for daily lanes.
+
+**Postgres env URLs:** commented template in [`.env.example`](../.env.example). **Alembic** resolves `ALEMBIC_DATABASE_URL` before `ORIGENLAB_POSTGRES_URL`; **migrate scripts** and **`--write-postgres-audit`** resolve `--postgres-url`, then `ORIGENLAB_POSTGRES_URL`, then `ALEMBIC_DATABASE_URL` — full table in [`RUNBOOK.md`](RUNBOOK.md#m-eprun-postgres-optional). **Always trial migrate loaders on scratch Postgres first** (they can truncate/delete target tables).
 
 ---
 
@@ -164,6 +166,7 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/check_reports_out_active_hygiene.py` | OPS_AUDIT | Warn/fail when `reports/out/active/` contains unexpected generated artifacts outside `current/` |
 | `scripts/qa/validate_sqlite_archive_for_postgres.py` | OPS_MIGRATE | Read-only / pre-migrate validation |
 | `scripts/qa/audit_canonical_contacto_gmail.py` | OPS_AUDIT | Read-only: canonical Gmail vs legacy labdelivery vs other `emails` metrics |
+| `scripts/qa/audit_email_classification_quality.py` | OPS_AUDIT | Read-only: heuristic commercial-type QA on canonical Gmail (keyword audit; not production labels) |
 | `scripts/qa/audit_canonical_gmail_duplicates.py` | OPS_AUDIT | Read-only: duplicate `message_id` analysis within canonical Gmail rows |
 | `scripts/maintenance/dedupe_canonical_gmail_messages.py` | **BREAK_GLASS** | **DELETE** duplicate canonical Gmail `emails` — dry-run default; `--apply --ack-sqlite-backup` |
 | `scripts/qa/publish_gate.py` | OPS_AUDIT | Publication / trust gate (broader than outbound) |

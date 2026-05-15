@@ -9,8 +9,8 @@
 | Kind | What to use | Notes |
 |------|-------------|--------|
 | **Stable operational entrypoints** | Ingest ([`ingest/`](ingest/)), [`mart/build_business_mart.py`](mart/build_business_mart.py), [`commercial/build_commercial_intel_v1.py`](commercial/build_commercial_intel_v1.py), [`leads/run_leads_operational_stack.sh`](leads/run_leads_operational_stack.sh), QA ([`qa/publish_gate.py`](qa/publish_gate.py) and table below) | Procedures and ordering: [`docs/RUNBOOK.md`](../docs/RUNBOOK.md), **script map:** [`docs/SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md), schema map: [`docs/pipeline/SCHEMA_OWNERSHIP.md`](../docs/pipeline/SCHEMA_OWNERSHIP.md) |
-| **Lead-account (canonical)** | [`leads/build_lead_account_rollup.py`](leads/build_lead_account_rollup.py), [`leads/match_lead_accounts_to_existing_orgs.py`](leads/match_lead_accounts_to_existing_orgs.py), [`leads/validate_lead_account_rollup.py`](leads/validate_lead_account_rollup.py), [`leads/audit_lead_org_quality.py`](leads/audit_lead_org_quality.py) | Same code as root wrappers; detail: [`docs/leads/LEAD_ACCOUNT_LAYER.md`](../docs/leads/LEAD_ACCOUNT_LAYER.md) |
-| **Compatibility wrappers** | Root-level `scripts/build_lead_account_rollup.py`, `scripts/match_…`, etc. | Delegate to `leads/`; keep for bookmarks and old shell one-liners |
+| **Lead-account (canonical implementations)** | [`leads/advanced/build_lead_account_rollup.py`](leads/advanced/build_lead_account_rollup.py), [`leads/advanced/match_lead_accounts_to_existing_orgs.py`](leads/advanced/match_lead_accounts_to_existing_orgs.py), [`leads/advanced/validate_lead_account_rollup.py`](leads/advanced/validate_lead_account_rollup.py), [`leads/advanced/audit_lead_org_quality.py`](leads/advanced/audit_lead_org_quality.py) | **New docs and new commands:** prefer `scripts/leads/advanced/…`. There is **no** `scripts/leads/build_*.py` on disk for this family. Detail: [`docs/leads/LEAD_ACCOUNT_LAYER.md`](../docs/leads/LEAD_ACCOUNT_LAYER.md). |
+| **Lead-account (root compatibility wrappers)** | [`build_lead_account_rollup.py`](build_lead_account_rollup.py), [`match_lead_accounts_to_existing_orgs.py`](match_lead_accounts_to_existing_orgs.py), [`validate_lead_account_rollup.py`](validate_lead_account_rollup.py), [`audit_lead_org_quality.py`](audit_lead_org_quality.py) (under `scripts/` root) | Same behavior as `leads/advanced/*` via delegation. **Keep** for bookmarks, pasted one-liners, [`docs/SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md), and [`tests/test_critical_script_paths.py`](../tests/test_critical_script_paths.py) until those are migrated. |
 | **One-off / exploratory** | [`tools/`](tools/), [`validation/`](validation/) (phase checks), [`ml/`](ml/), some [`dataset/`](dataset/) | Not the main weekly path; useful for debugging or optional ML |
 
 **Execution:** always from **`apps/email-pipeline/`** — **`uv run python scripts/...`** or **`uv run bash scripts/...`** (see below).
@@ -25,14 +25,16 @@ From **`apps/email-pipeline/`** (monorepo: `cd apps/email-pipeline`):
 
 ## Lead-account layer (rollup + mart match)
 
-**Canonical implementations** (same `sys.path` pattern as other `scripts/leads/*.py`):
+**Canonical implementations** live under **`scripts/leads/advanced/`** (prefer these paths in **new** documentation and when typing commands from scratch):
 
-- [`leads/build_lead_account_rollup.py`](leads/build_lead_account_rollup.py) — full rollup rebuild  
-- [`leads/match_lead_accounts_to_existing_orgs.py`](leads/match_lead_accounts_to_existing_orgs.py) — match accounts → `organization_master`  
-- [`leads/validate_lead_account_rollup.py`](leads/validate_lead_account_rollup.py) — sanity checks  
-- [`leads/audit_lead_org_quality.py`](leads/audit_lead_org_quality.py) — org_name quality audit  
+- [`leads/advanced/build_lead_account_rollup.py`](leads/advanced/build_lead_account_rollup.py) — full rollup rebuild  
+- [`leads/advanced/match_lead_accounts_to_existing_orgs.py`](leads/advanced/match_lead_accounts_to_existing_orgs.py) — match accounts → `organization_master`  
+- [`leads/advanced/validate_lead_account_rollup.py`](leads/advanced/validate_lead_account_rollup.py) — sanity checks  
+- [`leads/advanced/audit_lead_org_quality.py`](leads/advanced/audit_lead_org_quality.py) — org_name quality audit  
 
-**Thin compatibility wrappers** at the repo’s `scripts/` root ([`build_lead_account_rollup.py`](build_lead_account_rollup.py), etc.) delegate to the `leads/` copies so older commands and bookmarks keep working. Prefer documenting `scripts/leads/…` for new material.  
+Paths such as `scripts/leads/build_lead_account_rollup.py` (directly under `leads/` without `advanced/`) **do not exist** for this family.
+
+**Root-level compatibility wrappers** — [`build_lead_account_rollup.py`](build_lead_account_rollup.py), [`match_lead_accounts_to_existing_orgs.py`](match_lead_accounts_to_existing_orgs.py), [`validate_lead_account_rollup.py`](validate_lead_account_rollup.py), [`audit_lead_org_quality.py`](audit_lead_org_quality.py) — delegate to the `leads/advanced/` implementations (same behavior). **Do not delete or stop maintaining** the wrappers until docs, tests ([`tests/test_critical_script_paths.py`](../tests/test_critical_script_paths.py)), bookmarks, and operator habits no longer reference the root paths ([`docs/SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md) is explicit here). **Old commands** that still use `uv run python scripts/build_lead_account_rollup.py` (etc.) remain valid; mention both root and `leads/advanced/` when updating runbooks so operators can migrate gradually.
 
 **Volume marketing (broad contacts):** [`leads/process_broad_marketing_contacts.py`](leads/process_broad_marketing_contacts.py) is the **volume marketing** contact processor (DeepSearch volume lane). The **CLI** remains the operator entrypoint; core processing lives in `origenlab_email_pipeline.core.outbound.broad_marketing_contacts`. The script **writes generated CSV outputs only** and does **not** mutate SQLite; it still loads a **read-only** gate context and DNR sidecar inputs for safety.
 

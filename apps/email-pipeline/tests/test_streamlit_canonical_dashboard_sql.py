@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from origenlab_email_pipeline.streamlit_canonical_dashboard_sql import (
     count_canonical_duplicate_message_id_groups,
     count_canonical_missing_message_id,
     direction_label_for_folder,
+    load_canonical_gmail_classification_sample,
     load_inicio_recent_canonical_rows,
 )
 
@@ -77,3 +79,40 @@ def test_load_inicio_recent_respects_limit(tmp_path: Path) -> None:
 )
 def test_direction_label_for_folder(folder: str, label: str) -> None:
     assert direction_label_for_folder(folder) == label
+
+
+def test_load_canonical_gmail_classification_sample_respects_window(tmp_path: Path) -> None:
+    db_path = tmp_path / "cls.sqlite"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE emails (
+          id INTEGER PRIMARY KEY,
+          date_iso TEXT,
+          subject TEXT,
+          sender TEXT,
+          recipients TEXT,
+          folder TEXT,
+          body TEXT,
+          full_body_clean TEXT,
+          top_reply_clean TEXT,
+          source_file TEXT
+        );
+        """
+    )
+    src = "gmail:contacto@origenlab.cl/INBOX"
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(days=400)).strftime("%Y-%m-%dT10:00:00Z")
+    new = (now - timedelta(days=5)).strftime("%Y-%m-%dT10:00:00Z")
+    conn.executemany(
+        "INSERT INTO emails (date_iso, subject, sender, recipients, folder, body, full_body_clean, top_reply_clean, source_file) VALUES (?,?,?,?,?,?,?,?,?)",
+        [
+            (old, "Old", "a@b.c", "contacto@origenlab.cl", "INBOX", "x", "", "", src),
+            (new, "New", "c@d.e", "contacto@origenlab.cl", "INBOX", "y", "", "", src),
+        ],
+    )
+    conn.commit()
+    rows = load_canonical_gmail_classification_sample(conn, days=30, limit=50)
+    assert len(rows) == 1
+    assert rows[0]["subject"] == "New"
+    conn.close()

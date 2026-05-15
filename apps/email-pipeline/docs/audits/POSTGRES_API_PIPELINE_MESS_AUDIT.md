@@ -67,7 +67,7 @@ Rationale: **schemas and migration tooling are implemented**; **data loaders and
 | | Detail |
 |---|--------|
 | **Complete** | Alembic scaffolding; archive migration script with validation hooks; docs describing load order and safety; unit tests around migrate helpers and audit module; optional audit wiring behind explicit flags. |
-| **Missing / gap** | **`.env.example` does not document `ALEMBIC_DATABASE_URL` / `ORIGENLAB_POSTGRES_URL`** (grep over `apps/email-pipeline/.env*` found no matches) — operators must discover these via `alembic/env.py` or `docs/REPRODUCIBILITY.md`. |
+| **Doc clarity (2026-05-14)** | **`.env.example`**, [`RUNBOOK.md`](../RUNBOOK.md#m-eprun-postgres-optional), and [`SCRIPT_MAP.md`](../SCRIPT_MAP.md) now document optional `ALEMBIC_DATABASE_URL` / `ORIGENLAB_POSTGRES_URL`, the **different** URL resolution order for **Alembic** vs **migrate scripts / `--write-postgres-audit`**, and a **scratch Postgres first** warning for loaders. |
 | **Risky** | Migrate scripts are **break-glass** (truncate/load semantics documented in `POSTGRES_ARCHIVE_DATA_MIGRATION_PLAN_V1.md` and `SCRIPT_MAP.md`). Running against wrong URL is high blast radius. **Dual stores** (SQLite truth + Postgres copy) can **diverge** if procedures are not disciplined. |
 
 ### 3.4 Commands that would prove Postgres works
@@ -83,10 +83,11 @@ Optional pytest marker mentioned in `tests/test_alembic_initial_migration.py` fo
 
 ### 3.5 Minimum next step if continuing Postgres migration
 
-1. **Add env template lines** to `apps/email-pipeline/.env.example` for `ALEMBIC_DATABASE_URL` / `ORIGENLAB_POSTGRES_URL` (documentation-only change when you choose to implement).
-2. **Prove Alembic head** on a disposable Postgres instance (empty DB → upgrade head).
-3. **Run** `validate_sqlite_archive_for_postgres.py --strict` on production SQLite **before** first load.
-4. **Pilot load** `sqlite_archive_to_postgres.py` on a **copy** of SQLite + scratch Postgres; compare counts (script emits JSON summary fields per implementation).
+1. **Prove Alembic head** on a disposable Postgres instance (empty DB → upgrade head).
+2. **Run** `validate_sqlite_archive_for_postgres.py --strict` on production SQLite **before** first load.
+3. **Pilot load** `sqlite_archive_to_postgres.py` on a **copy** of SQLite + scratch Postgres; compare counts (script emits JSON summary fields per implementation).
+
+*(Env template lines for Postgres URLs are in `.env.example` and the operator table is in `RUNBOOK.md` § Optional PostgreSQL — 2026-05-14.)*
 
 ### 3.6 Postgres now vs stabilize SQLite first?
 
@@ -380,7 +381,7 @@ Anything requiring **operator intent**, **secrets**, or **high blast radius**: i
 |--|--|
 | **Inspect** | `docs/pipeline/POSTGRES_ARCHIVE_DATA_MIGRATION_PLAN_V1.md`, `scripts/migrate/sqlite_archive_to_postgres.py` |
 | **Tests** | `uv run pytest -q tests/test_sqlite_archive_to_postgres_migrate.py` (and siblings) |
-| **Success** | Documented **go/no-go** + `.env.example` updated if proceeding |
+| **Success** | Documented **go/no-go**; **`.env.example` + `RUNBOOK.md` § Optional PostgreSQL** document URL vars, resolution order, and scratch-first policy (2026-05-14). |
 | **Do not touch** | SQLite as source of truth until an explicit cutover decision |
 
 ### Phase 4 — Decide API need
@@ -449,4 +450,4 @@ Result (tail): **4 failed, 1024 passed, 7 skipped** (2026-05-14).
 | **Postgres real/partial/used?** | **Partial:** real Alembic + migrate loaders + optional audit; **not** the primary app database. |
 | **API exists?** | **No** product REST API; Streamlit + optional tiny CSV HTTP server only. |
 | **Real core?** | **SQLite + Gmail ingest + outbound gate/safety + two-lane scripts** documented in `SCRIPT_MAP.md`, implemented mainly under `src/origenlab_email_pipeline/`. |
-| **Top 5 cleanup actions** | (1) **Fix 4 failing pytest tests** to restore trust. (2) **Add Postgres URL vars to `.env.example`** if Postgres path continues. (3) **Run `plan_script_consolidation.py`** and reconcile duplicate stories (workspace prep). (4) **Document “no REST API”** in `APP_CONTEXT.md` if stakeholders expect one. (5) **Keep Postgres as optional** until SQLite lanes + tests are pristine. |
+| **Top 5 cleanup actions** | (1) **Fix 4 failing pytest tests** to restore trust (done earlier). (2) **Postgres URL / optional-path docs** — `.env.example` + `RUNBOOK.md` + `SCRIPT_MAP.md` (2026-05-14). (3) **Run `plan_script_consolidation.py`** and reconcile duplicate stories (workspace prep). (4) **Document “no REST API”** in `APP_CONTEXT.md` if stakeholders expect one. (5) **Keep Postgres as optional** until SQLite lanes + tests are pristine. |
