@@ -53,6 +53,8 @@ SEND_READY_FIELDS: tuple[str, ...] = (
     "confidence",
     "fit_signal",
     "variant_type",
+    "quality_decision",
+    "quality_reasons",
 )
 
 _GENERIC_LABELS: frozenset[str] = frozenset(
@@ -117,11 +119,89 @@ _UNIVERSITY_GENERIC_LOCAL_PARTS: frozenset[str] = frozenset(
         "contacto",
         "contact",
         "info",
+        "informacion",
+        "información",
+        "informaciones",
         "admision",
         "admisiones",
         "comunicaciones",
         "extension",
         "prensa",
+        "secretaria",
+        "secretarias",
+        "rectoria",
+        "rectoría",
+        "observacion",
+        "observación",
+        "observaciones",
+        "investigacion",
+        "investigación",
+        "vinculacion",
+        "vinculación",
+        "mesaayuda",
+        "noreply",
+        "no-reply",
+    }
+)
+
+# Email domains treated as “main campus” inboxes — generic local-parts here need manual review.
+_MAIN_UNIVERSITY_EMAIL_DOMAINS: frozenset[str] = frozenset(
+    {
+        "uchile.cl",
+        "uv.cl",
+        "uach.cl",
+        "udec.cl",
+        "ubiobio.cl",
+        "usach.cl",
+        "ucsc.cl",
+        "utalca.cl",
+        "uct.cl",
+        "ufro.cl",
+        "puc.cl",
+        "uc.cl",
+    }
+)
+
+# Single URL path segments that are too broad for “send-ready” evidence alone.
+_BROAD_SINGLE_PATH_SEGMENTS: frozenset[str] = frozenset(
+    {
+        "contacto",
+        "contact",
+        "investigacion",
+        "investigación",
+        "ciencias",
+        "quimica",
+        "química",
+        "fisica",
+        "física",
+        "alimentos",
+        "extension",
+        "postgrado",
+        "admision",
+        "admisión",
+        "comunicaciones",
+        "secretaria",
+        "secretaría",
+        "rectoria",
+        "rectoría",
+        "inicio",
+        "home",
+        "index",
+        "preguntas",
+        "pregunta",
+    }
+)
+
+_PROCUREMENT_SINGLE_SLUGS: frozenset[str] = frozenset(
+    {
+        "compras",
+        "adquisiciones",
+        "proveedores",
+        "licitaciones",
+        "contratacion",
+        "contratación",
+        "contrataciones",
+        "abastecimiento",
     }
 )
 _LAB_RELEVANCE_TOKENS: tuple[str, ...] = (
@@ -262,15 +342,138 @@ def _is_university_like(institution_type: str, institution_name: str, source_url
     return any(tok in haystack for tok in _UNIVERSITY_TOKENS)
 
 
-def _has_lab_relevance_signal(*, source_url: str, fit_signal: str, contact_label: str) -> bool:
-    haystack = " ".join(
-        [
-            str(source_url or "").strip().lower(),
-            str(fit_signal or "").strip().lower(),
-            str(contact_label or "").strip().lower(),
-        ]
+def _slug_has_embedded_lab_token(slug: str) -> bool:
+    """Compound slug like ``laboratorio-microbiologia`` counts as specific evidence."""
+    s = slug.lower().replace("-", "").replace("_", "")
+    return any(
+        x in s
+        for x in (
+            "laboratorio",
+            "microbiologia",
+            "microbiología",
+            "analisis",
+            "análisis",
+            "biologia",
+            "biología",
+            "doping",
+            "ciq",
+            "servicios",
+        )
     )
-    return any(tok in haystack for tok in _LAB_RELEVANCE_TOKENS)
+
+
+def _email_domain_matches_main_university(email_domain: str) -> bool:
+    d = (email_domain or "").strip().lower()
+    if not d:
+        return False
+    return any(d == root or d.endswith("." + root) for root in _MAIN_UNIVERSITY_EMAIL_DOMAINS)
+
+
+def _is_generic_university_mailbox(email: str, institution_type: str, institution_name: str) -> bool:
+    """Root mailboxes on main university domains (contacto@, info@, …) are never send-ready."""
+    if not _is_university_like(institution_type, institution_name, ""):
+        return False
+    local = _email_local_part(email)
+    if local not in _UNIVERSITY_GENERIC_LOCAL_PARTS:
+        return False
+    return _email_domain_matches_main_university(_email_domain(email))
+
+
+def _broken_looking_url(source_url: str) -> bool:
+    s = str(source_url or "").strip().lower()
+    if "://" in s:
+        after_scheme = s.split("://", 1)[1]
+        if "//" in after_scheme:
+            return True
+    if "deepsearch" in s or "generated" in s or "placeholder" in s:
+        return True
+    return s.count("%20%20") >= 1
+
+
+def _weak_promotional_source_url(source_url: str) -> bool:
+    """Homepage, single broad faculty path, or otherwise non-actionable source."""
+    if not validate_source_url(source_url):
+        return True
+    if _broken_looking_url(source_url):
+        return True
+    if _source_path_is_homepage(source_url):
+        return True
+    parsed = urlparse(source_url)
+    segs = [x for x in (parsed.path or "").strip("/").split("/") if x]
+    if not segs:
+        return True
+    if len(segs) >= 2:
+        return False
+    slug = segs[0].lower()
+    if slug in _PROCUREMENT_SINGLE_SLUGS:
+        return False
+    if _slug_has_embedded_lab_token(slug):
+        return False
+    if slug in _BROAD_SINGLE_PATH_SEGMENTS:
+        return True
+    return len(slug) < 10
+
+
+def _label_is_general_contact_poor(label: str) -> bool:
+    s = re.sub(r"[\s_\-]+", "", str(label or "").strip().lower())
+    if "generalcontact" in s:
+        return True
+    if s in ("general", "contacto", "contact", "email", "info"):
+        return True
+    return is_generic_label(label) and "general" in str(label or "").lower()
+
+
+def _institution_claims_specific_unit(institution_name: str) -> bool:
+    n = str(institution_name or "").lower()
+    needles = (
+        "laboratorio",
+        "facultad",
+        "centro de",
+        "instituto de",
+        "departamento",
+        "programa de",
+        "escuela de",
+        "instituto ",
+    )
+    return any(x in n for x in needles)
+
+
+def _specific_org_general_contact_mismatch(
+    *, contact_label: str, institution_name: str, source_url: str
+) -> bool:
+    """Specific org name but mailbox/label is a generic «contact» without a deep source."""
+    if not _label_is_general_contact_poor(contact_label):
+        return False
+    if not _institution_claims_specific_unit(institution_name):
+        return False
+    return _weak_promotional_source_url(source_url) or (not _source_page_is_specific(source_url))
+
+
+def _has_lab_relevance_signal(*, source_url: str, fit_signal: str, contact_label: str) -> bool:
+    """Fit/contact text can establish relevance; URL alone must not be a single broad slug."""
+    fl = str(fit_signal or "").strip().lower()
+    cl = str(contact_label or "").strip().lower()
+    hay_nc = f"{fl} {cl}"
+    if any(tok in hay_nc for tok in _LAB_RELEVANCE_TOKENS):
+        return True
+    if not validate_source_url(source_url):
+        return False
+    parsed = urlparse(source_url)
+    path = (parsed.path or "").strip().lower()
+    if path.endswith(".pdf"):
+        return True
+    segs = [s for s in path.strip("/").split("/") if s]
+    if not segs:
+        return False
+    if len(segs) >= 2:
+        url_low = source_url.lower()
+        return any(tok in url_low for tok in _LAB_RELEVANCE_TOKENS)
+    slug = segs[0].lower()
+    if slug in _PROCUREMENT_SINGLE_SLUGS:
+        return True
+    if _slug_has_embedded_lab_token(slug):
+        return True
+    return False
 
 
 def _source_page_is_specific(source_url: str) -> bool:
@@ -278,16 +481,25 @@ def _source_page_is_specific(source_url: str) -> bool:
         return False
     parsed = urlparse(source_url)
     path = (parsed.path or "").strip().lower()
-    if path in _WEAK_SOURCE_PATHS or len(path.strip("/")) <= 1:
-        return False
     if path.endswith(".pdf"):
         return True
-    segments = [s for s in path.strip("/").split("/") if s]
-    if not segments:
+    if path in _WEAK_SOURCE_PATHS or len(path.strip("/")) <= 0:
         return False
-    if len(segments) == 1 and segments[0] in _GENERIC_SOURCE_PATH_TOKENS:
+    segs = [s for s in path.strip("/").split("/") if s]
+    if not segs:
         return False
-    return True
+    if len(segs) >= 2:
+        return True
+    slug = segs[0].lower()
+    if slug in _PROCUREMENT_SINGLE_SLUGS:
+        return True
+    if slug in _GENERIC_SOURCE_PATH_TOKENS:
+        return False
+    if slug in _BROAD_SINGLE_PATH_SEGMENTS:
+        return False
+    if _slug_has_embedded_lab_token(slug):
+        return True
+    return len(slug) >= 12
 
 
 def _domain_tokens(value: str) -> set[str]:
@@ -315,6 +527,32 @@ def augment_row(base: dict[str, str], **extra: str) -> dict[str, str]:
     return o
 
 
+def _dedupe_preserve(seq: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for x in seq:
+        t = x.strip()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    return out
+
+
+def _quality_decision_for_blocked(block_reason: str) -> str:
+    br = (block_reason or "").lower()
+    if "supplier" in br:
+        return "skip_supplier"
+    return "blocked_do_not_repeat"
+
+
+def _quality_decision_for_review(review_reasons: list[str]) -> str:
+    rs = {r.strip() for r in review_reasons if r.strip()}
+    if "low_confidence" in rs:
+        return "skip_low_fit"
+    return "needs_better_contact"
+
+
 def quality_review_reasons(
     *,
     email: str,
@@ -331,8 +569,6 @@ def quality_review_reasons(
     weak_source = _source_path_is_weak(source_url)
     weak_fit = is_weak_fit(fit_signal)
     generic = is_generic_label(contact_label)
-    email_local = _email_local_part(email)
-    university_like = _is_university_like(institution_type, institution_name, source_url)
     has_lab_relevance = _has_lab_relevance_signal(
         source_url=source_url, fit_signal=fit_signal, contact_label=contact_label
     )
@@ -356,22 +592,28 @@ def quality_review_reasons(
     if generic and (weak_fit or weak_source):
         reasons.append("generic_contact_weak_evidence")
 
-    if weak_source and (generic or weak_fit or "domain_mismatch" in reasons or "institution_email_mismatch" in reasons):
-        reasons.append("weak_source_match")
-    if (
-        university_like
-        and email_local in _UNIVERSITY_GENERIC_LOCAL_PARTS
-        and not has_lab_relevance
+    if weak_source and (
+        generic or weak_fit or "domain_mismatch" in reasons or "institution_email_mismatch" in reasons
     ):
-        reasons.append("university_generic_contact_requires_review")
+        reasons.append("weak_source_match")
+
+    if _is_generic_university_mailbox(email, institution_type, institution_name):
+        reasons.append("generic_university_contact")
+
+    if _weak_promotional_source_url(source_url):
+        reasons.append("weak_source_url")
+
+    if _specific_org_general_contact_mismatch(
+        contact_label=contact_label, institution_name=institution_name, source_url=source_url
+    ):
+        reasons.append("specific_org_but_general_contact")
+
     if source_is_homepage and (generic or conf == "low"):
         reasons.append("homepage_source_weak_evidence")
+
     if (not source_is_specific) and (not has_lab_relevance):
         reasons.append("source_page_not_specific")
-    if (not source_is_specific) or (not has_lab_relevance):
-        reasons.append("exact_source_required_for_send_ready")
 
-    # de-dup while preserving order
     seen: set[str] = set()
     out: list[str] = []
     for r in reasons:
@@ -408,7 +650,16 @@ def process_reviewed_marketing_rows(
         inst = str(raw.get("institution_name") or "").strip()
 
         if line_errors:
-            blocked_rows.append(augment_row(base, block_reason=";".join(line_errors), source_line=str(i)))
+            br = ";".join(line_errors)
+            blocked_rows.append(
+                augment_row(
+                    base,
+                    block_reason=br,
+                    source_line=str(i),
+                    quality_decision=_quality_decision_for_blocked(br),
+                    quality_reasons=br,
+                )
+            )
             continue
 
         assert em is not None
@@ -419,18 +670,37 @@ def process_reviewed_marketing_rows(
                     block_reason="duplicate_input",
                     source_line=str(i),
                     duplicate_of_line=str(seen_batch[em]),
+                    quality_decision=_quality_decision_for_blocked("duplicate_input"),
+                    quality_reasons="duplicate_input",
                 )
             )
             continue
         seen_batch[em] = i
 
         if em in master_email_norms:
-            blocked_rows.append(augment_row(base, block_reason="do_not_repeat_master", source_line=str(i)))
+            blocked_rows.append(
+                augment_row(
+                    base,
+                    block_reason="do_not_repeat_master",
+                    source_line=str(i),
+                    quality_decision=_quality_decision_for_blocked("do_not_repeat_master"),
+                    quality_reasons="do_not_repeat_master",
+                )
+            )
             continue
 
         gate = evaluate_export_eligibility(contact_email=em, institution_name=inst, ctx=ctx)
         if not gate.eligible:
-            blocked_rows.append(augment_row(base, block_reason=";".join(gate.reasons), source_line=str(i)))
+            br = ";".join(gate.reasons)
+            blocked_rows.append(
+                augment_row(
+                    base,
+                    block_reason=br,
+                    source_line=str(i),
+                    quality_decision=_quality_decision_for_blocked(br),
+                    quality_reasons=br,
+                )
+            )
             continue
 
         src = str(raw.get("source_url") or "").strip()
@@ -458,10 +728,20 @@ def process_reviewed_marketing_rows(
                 confidence=str(raw.get("confidence") or ""),
             )
         )
+        review_reasons = _dedupe_preserve(review_reasons)
 
         extra: dict[str, str] = {"source_line": str(i)}
         if review_reasons:
-            review_rows.append(augment_row(base, review_reason=";".join(review_reasons), **extra))
+            rr_joined = ";".join(review_reasons)
+            review_rows.append(
+                augment_row(
+                    base,
+                    review_reason=rr_joined,
+                    quality_decision=_quality_decision_for_review(review_reasons),
+                    quality_reasons=rr_joined,
+                    **extra,
+                )
+            )
         else:
             case_seq += 1
             case_id = f"MKT-{case_seq:05d}"
@@ -484,6 +764,8 @@ def process_reviewed_marketing_rows(
                     "confidence": safe_row.get("confidence", ""),
                     "fit_signal": safe_row.get("fit_signal", ""),
                     "variant_type": variant_type,
+                    "quality_decision": "pass_quality_gate",
+                    "quality_reasons": "",
                 }
             )
 
@@ -505,14 +787,30 @@ def blocked_output_fieldnames() -> list[str]:
     return list(
         dict.fromkeys(
             list(REQUIRED_INPUT_COLUMNS)
-            + ["fit_signal", "block_reason", "source_line", "duplicate_of_line"]
+            + [
+                "fit_signal",
+                "block_reason",
+                "source_line",
+                "duplicate_of_line",
+                "quality_decision",
+                "quality_reasons",
+            ]
         )
     )
 
 
 def review_output_fieldnames() -> list[str]:
     return list(
-        dict.fromkeys(list(REQUIRED_INPUT_COLUMNS) + ["fit_signal", "review_reason", "source_line"])
+        dict.fromkeys(
+            list(REQUIRED_INPUT_COLUMNS)
+            + [
+                "fit_signal",
+                "review_reason",
+                "source_line",
+                "quality_decision",
+                "quality_reasons",
+            ]
+        )
     )
 
 

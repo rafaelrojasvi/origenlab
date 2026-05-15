@@ -131,7 +131,7 @@ def _seed_db(db: Path) -> None:
 
 def _write_input(workspace: Path) -> None:
     text = """institution_name,region,city,type,contact_email,contact_label,source_url,confidence,fit_signal
-Hosp Alpha,RM,Santiago,hospital,safe@official-gate.example,Director Compras,https://official-gate.example/contacto,high,licitaciones hospital
+Hosp Alpha,RM,Santiago,hospital,safe@official-gate.example,Director Compras,https://official-gate.example/compras/contacto-area,high,licitaciones hospital
 Hosp Beta,RM,Santiago,hospital,master@gate-test.example,Compras,https://beta-gate.example/,high,ok
 Hosp Gamma,RM,Santiago,hospital,buyer1@gate-test.example,Compras,https://gamma-gate.example/,high,ok
 Hosp Delta,RM,Santiago,hospital,state1@gate-test.example,Compras,https://delta-gate.example/,high,ok
@@ -176,6 +176,7 @@ def test_processor_splits_and_send_ready(tmp_path: Path) -> None:
     assert send_rows[0]["contact_email"] == "safe@official-gate.example"
     assert send_rows[0]["email_source"] == "marketing_contacts"
     assert send_rows[0]["case_id"] == "MKT-00001"
+    assert send_rows[0].get("quality_decision") == "pass_quality_gate"
 
     with (ws / "marketing_blocked_already_known.csv").open(encoding="utf-8", newline="") as f:
         blocked = {row["contact_email"]: row["block_reason"] for row in csv.DictReader(f)}
@@ -189,8 +190,12 @@ def test_processor_splits_and_send_ready(tmp_path: Path) -> None:
     assert "user@sub.blocked-domain.example" in blocked
 
     with (ws / "marketing_needs_manual_review.csv").open(encoding="utf-8", newline="") as f:
-        review = {row["contact_email"]: row["review_reason"] for row in csv.DictReader(f)}
+        review_rows = list(csv.DictReader(f))
+    review = {row["contact_email"]: row["review_reason"] for row in review_rows}
+    review_qd = {row["contact_email"]: row.get("quality_decision", "") for row in review_rows}
     assert "low@gate-test.example" in review
+    assert "low_confidence" in review["low@gate-test.example"]
+    assert review_qd.get("low@gate-test.example") == "skip_low_fit"
     assert "li@gate-test.example" in review
     assert "gen@gate-test.example" in review
     assert "buyer@other-example.net" in review
@@ -255,19 +260,20 @@ Universidad de Talca,Maule,Talca,universidad,proveedores@utalca.cl,Adquisiciones
     with (ws / "marketing_needs_manual_review.csv").open(encoding="utf-8", newline="") as f:
         review = {row["contact_email"]: row["review_reason"] for row in csv.DictReader(f)}
     assert "contacto@uchile.cl" in review
-    assert "university_generic_contact_requires_review" in review["contacto@uchile.cl"]
+    assert "generic_university_contact" in review["contacto@uchile.cl"]
     assert "contacto@ucsc.cl" in review
-    assert "university_generic_contact_requires_review" in review["contacto@ucsc.cl"]
+    assert "generic_university_contact" in review["contacto@ucsc.cl"]
     assert "centromedico@gestion.uta.cl" in review
     assert "email_domain_institution_mismatch" in review["centromedico@gestion.uta.cl"]
     assert "adquisiciones@utalca.cl" in review
-    assert "exact_source_required_for_send_ready" in review["adquisiciones@utalca.cl"]
+    assert "weak_source_url" in review["adquisiciones@utalca.cl"]
 
     with (ws / "send_ready_marketing.csv").open(encoding="utf-8", newline="") as f:
-        send = {row["contact_email"] for row in csv.DictReader(f)}
+        send = {row["contact_email"]: row for row in csv.DictReader(f)}
     assert "decytal@usach.cl" in send
     assert "doping@ciq.uchile.cl" in send
     assert "proveedores@utalca.cl" in send
+    assert send["decytal@usach.cl"].get("quality_decision") == "pass_quality_gate"
     with (ws / "marketing_blocked_already_known.csv").open(encoding="utf-8", newline="") as f:
         blocked = {row["contact_email"]: row["block_reason"] for row in csv.DictReader(f)}
     # Officially published webmail should never be auto-blocked just for being webmail.

@@ -245,8 +245,27 @@ def test_dry_run_no_send_safety(tmp_path: Path, monkeypatch) -> None:
                     "confidence",
                     "fit_signal",
                     "variant_type",
+                    "quality_decision",
+                    "quality_reasons",
                 ],
-                [["MKT-00001", "a@x.cl", "marketing_contacts", "A", "RM", "Santiago", "universidad", "lab", "https://x.cl", "high", "fit", "broad_marketing"]],
+                [
+                    [
+                        "MKT-00001",
+                        "a@x.cl",
+                        "marketing_contacts",
+                        "A",
+                        "RM",
+                        "Santiago",
+                        "universidad",
+                        "lab",
+                        "https://x.cl",
+                        "high",
+                        "fit",
+                        "broad_marketing",
+                        "pass_quality_gate",
+                        "",
+                    ]
+                ],
             )
             _write_csv(
                 ws / "marketing_blocked_already_known.csv",
@@ -345,8 +364,27 @@ def test_candidate_limit_truncation(tmp_path: Path, monkeypatch) -> None:
                     "confidence",
                     "fit_signal",
                     "variant_type",
+                    "quality_decision",
+                    "quality_reasons",
                 ],
-                [["MKT-00001", "a1@x.cl", "marketing_contacts", "A", "RM", "Santiago", "universidad", "lab", "https://x.cl", "high", "fit", "broad_marketing"]],
+                [
+                    [
+                        "MKT-00001",
+                        "a1@x.cl",
+                        "marketing_contacts",
+                        "A",
+                        "RM",
+                        "Santiago",
+                        "universidad",
+                        "lab",
+                        "https://x.cl",
+                        "high",
+                        "fit",
+                        "broad_marketing",
+                        "pass_quality_gate",
+                        "",
+                    ]
+                ],
             )
             _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
             _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
@@ -502,8 +540,27 @@ def test_contacted_coverage_hook_non_strict(tmp_path: Path, monkeypatch) -> None
                     "confidence",
                     "fit_signal",
                     "variant_type",
+                    "quality_decision",
+                    "quality_reasons",
                 ],
-                [["MKT-00001", "a@x.cl", "marketing_contacts", "A", "RM", "Santiago", "universidad", "lab", "https://x.cl", "high", "fit", "broad_marketing"]],
+                [
+                    [
+                        "MKT-00001",
+                        "a@x.cl",
+                        "marketing_contacts",
+                        "A",
+                        "RM",
+                        "Santiago",
+                        "universidad",
+                        "lab",
+                        "https://x.cl",
+                        "high",
+                        "fit",
+                        "broad_marketing",
+                        "pass_quality_gate",
+                        "",
+                    ]
+                ],
             )
             _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
             _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
@@ -606,8 +663,40 @@ def test_retry_attempts_written_on_retryable_failure(tmp_path: Path, monkeypatch
             ws = Path(args[args.index("--workspace") + 1])
             _write_csv(
                 ws / "send_ready_marketing.csv",
-                ["case_id", "contact_email", "email_source", "institution_name", "region", "city", "type", "contact_label", "source_url", "confidence", "fit_signal", "variant_type"],
-                [["MKT-1", "a@x.cl", "marketing_contacts", "A", "RM", "Santiago", "universidad", "lab", "https://x.cl", "high", "fit", "broad_marketing"]],
+                [
+                    "case_id",
+                    "contact_email",
+                    "email_source",
+                    "institution_name",
+                    "region",
+                    "city",
+                    "type",
+                    "contact_label",
+                    "source_url",
+                    "confidence",
+                    "fit_signal",
+                    "variant_type",
+                    "quality_decision",
+                    "quality_reasons",
+                ],
+                [
+                    [
+                        "MKT-1",
+                        "a@x.cl",
+                        "marketing_contacts",
+                        "A",
+                        "RM",
+                        "Santiago",
+                        "universidad",
+                        "lab",
+                        "https://x.cl",
+                        "high",
+                        "fit",
+                        "broad_marketing",
+                        "pass_quality_gate",
+                        "",
+                    ]
+                ],
             )
             _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
             _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
@@ -797,8 +886,27 @@ def test_light_mode_uses_light_executor_and_sets_metadata(tmp_path: Path, monkey
                     "confidence",
                     "fit_signal",
                     "variant_type",
+                    "quality_decision",
+                    "quality_reasons",
                 ],
-                [["MKT-1", "a@x.cl", "marketing_contacts", "A", "RM", "Santiago", "universidad", "lab", "https://x.cl", "high", "fit", "broad_marketing"]],
+                [
+                    [
+                        "MKT-1",
+                        "a@x.cl",
+                        "marketing_contacts",
+                        "A",
+                        "RM",
+                        "Santiago",
+                        "universidad",
+                        "lab",
+                        "https://x.cl",
+                        "high",
+                        "fit",
+                        "broad_marketing",
+                        "pass_quality_gate",
+                        "",
+                    ]
+                ],
             )
             _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
             _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
@@ -888,7 +996,22 @@ def test_evidence_verification_warnings_flow_into_processing_input(tmp_path: Pat
             ws = Path(args[args.index("--workspace") + 1])
             _write_csv(
                 ws / "send_ready_marketing.csv",
-                ["case_id", "contact_email", "email_source", "institution_name", "region", "city", "type", "contact_label", "source_url", "confidence", "fit_signal", "variant_type"],
+                [
+                    "case_id",
+                    "contact_email",
+                    "email_source",
+                    "institution_name",
+                    "region",
+                    "city",
+                    "type",
+                    "contact_label",
+                    "source_url",
+                    "confidence",
+                    "fit_signal",
+                    "variant_type",
+                    "quality_decision",
+                    "quality_reasons",
+                ],
                 [],
             )
             _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
@@ -1002,7 +1125,26 @@ def test_heavy_and_light_both_run_evidence_verification(tmp_path: Path, monkeypa
             return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
         if "process_broad_marketing_contacts.py" in cmd:
             ws = Path(args[args.index("--workspace") + 1])
-            _write_csv(ws / "send_ready_marketing.csv", ["case_id", "contact_email", "email_source", "institution_name", "region", "city", "type", "contact_label", "source_url", "confidence", "fit_signal", "variant_type"], [])
+            _write_csv(
+                ws / "send_ready_marketing.csv",
+                [
+                    "case_id",
+                    "contact_email",
+                    "email_source",
+                    "institution_name",
+                    "region",
+                    "city",
+                    "type",
+                    "contact_label",
+                    "source_url",
+                    "confidence",
+                    "fit_signal",
+                    "variant_type",
+                    "quality_decision",
+                    "quality_reasons",
+                ],
+                [],
+            )
             _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
             _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
             _write_csv(ws / "marketing_safe_to_send.csv", ["contact_email"], [])
@@ -1167,7 +1309,26 @@ def test_api_request_and_response_summaries_written(tmp_path: Path, monkeypatch)
             return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
         if "process_broad_marketing_contacts.py" in cmd:
             ws = Path(args[args.index("--workspace") + 1])
-            _write_csv(ws / "send_ready_marketing.csv", ["case_id", "contact_email", "email_source", "institution_name", "region", "city", "type", "contact_label", "source_url", "confidence", "fit_signal", "variant_type"], [])
+            _write_csv(
+                ws / "send_ready_marketing.csv",
+                [
+                    "case_id",
+                    "contact_email",
+                    "email_source",
+                    "institution_name",
+                    "region",
+                    "city",
+                    "type",
+                    "contact_label",
+                    "source_url",
+                    "confidence",
+                    "fit_signal",
+                    "variant_type",
+                    "quality_decision",
+                    "quality_reasons",
+                ],
+                [],
+            )
             _write_csv(ws / "marketing_blocked_already_known.csv", ["contact_email"], [])
             _write_csv(ws / "marketing_needs_manual_review.csv", ["contact_email"], [])
             _write_csv(ws / "marketing_safe_to_send.csv", ["contact_email"], [])

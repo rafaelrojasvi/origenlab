@@ -75,6 +75,8 @@ def test_process_minimal_send_ready_and_columns(tmp_path: Path) -> None:
     assert list(res.send_ready_rows[0].keys()) == list(SEND_READY_FIELDS)
     assert res.send_ready_rows[0]["email_source"] == "marketing_contacts"
     assert res.send_ready_rows[0]["variant_type"] == "broad_marketing"
+    assert res.send_ready_rows[0]["quality_decision"] == "pass_quality_gate"
+    assert res.send_ready_rows[0]["quality_reasons"] == ""
 
 
 def test_process_duplicate_in_batch() -> None:
@@ -122,6 +124,8 @@ def test_process_master_block() -> None:
 def test_output_fieldname_lists_include_expected() -> None:
     assert "case_id" in safe_output_fieldnames()
     assert "review_reason" in review_output_fieldnames()
+    assert "quality_decision" in review_output_fieldnames()
+    assert "quality_reasons" in review_output_fieldnames()
 
 
 def test_quality_review_reasons_detect_domain_mismatch() -> None:
@@ -161,7 +165,8 @@ def test_university_generic_contact_requires_review_when_not_lab_relevant() -> N
         contact_label="Contacto",
         confidence="low",
     )
-    assert "university_generic_contact_requires_review" in reasons
+    assert "generic_university_contact" in reasons
+    assert "weak_source_url" in reasons
 
 
 def test_university_generic_contact_not_forced_when_lab_relevant_source() -> None:
@@ -174,7 +179,7 @@ def test_university_generic_contact_not_forced_when_lab_relevant_source() -> Non
         contact_label="Laboratorio de Analisis",
         confidence="high",
     )
-    assert "university_generic_contact_requires_review" not in reasons
+    assert "generic_university_contact" not in reasons
 
 
 def test_homepage_generic_contact_adds_evidence_reasons() -> None:
@@ -189,7 +194,7 @@ def test_homepage_generic_contact_adds_evidence_reasons() -> None:
     )
     assert "homepage_source_weak_evidence" in reasons
     assert "source_page_not_specific" in reasons
-    assert "exact_source_required_for_send_ready" in reasons
+    assert "generic_university_contact" in reasons
 
 
 def test_email_domain_institution_mismatch_reason() -> None:
@@ -203,6 +208,89 @@ def test_email_domain_institution_mismatch_reason() -> None:
         confidence="low",
     )
     assert "email_domain_institution_mismatch" in reasons
+
+
+def test_quality_fixture_uv_quimica_broad_path() -> None:
+    reasons = quality_review_reasons(
+        email="contacto@uv.cl",
+        institution_name="Universidad de Valparaiso",
+        institution_type="universidad",
+        source_url="https://uv.cl/quimica",
+        fit_signal="alta confianza en fit de laboratorio",
+        contact_label="Contacto",
+        confidence="high",
+    )
+    assert "generic_university_contact" in reasons
+    assert "weak_source_url" in reasons
+
+
+def test_quality_fixture_udec_alimentos_broad_path() -> None:
+    reasons = quality_review_reasons(
+        email="contacto@udec.cl",
+        institution_name="Universidad de Concepcion",
+        institution_type="universidad",
+        source_url="https://udec.cl/alimentos",
+        fit_signal="fit fuerte",
+        contact_label="Contacto",
+        confidence="high",
+    )
+    assert "generic_university_contact" in reasons
+    assert "weak_source_url" in reasons
+
+
+def test_quality_fixture_ubiobio_investigacion_broad_path() -> None:
+    reasons = quality_review_reasons(
+        email="investigacion@ubiobio.cl",
+        institution_name="Universidad del Bio-Bio",
+        institution_type="universidad",
+        source_url="https://ubiobio.cl/investigacion",
+        fit_signal="investigacion aplicada",
+        contact_label="Investigacion",
+        confidence="high",
+    )
+    assert "generic_university_contact" in reasons
+    assert "weak_source_url" in reasons
+
+
+def test_specific_lab_email_deep_url_no_generic_uni_reason() -> None:
+    reasons = quality_review_reasons(
+        email="servicios@labchem.udec.cl",
+        institution_name="Universidad de Concepcion — Laboratorio Central",
+        institution_type="universidad",
+        source_url="https://udec.cl/facultad/quimica/laboratorio/servicios-analiticos",
+        fit_signal="servicios de analisis",
+        contact_label="Coordinacion Servicios",
+        confidence="high",
+    )
+    assert "generic_university_contact" not in reasons
+    assert "weak_source_url" not in reasons
+
+
+def test_procurement_email_on_procurement_page_not_weak_url() -> None:
+    reasons = quality_review_reasons(
+        email="compras@hospital-demo.cl",
+        institution_name="Hospital Demo",
+        institution_type="hospital",
+        source_url="https://hospital-demo.cl/compras",
+        fit_signal="licitaciones",
+        contact_label="Compras",
+        confidence="high",
+    )
+    assert "weak_source_url" not in reasons
+    assert "generic_university_contact" not in reasons
+
+
+def test_specific_org_general_contact_mismatch_reason() -> None:
+    reasons = quality_review_reasons(
+        email="contacto@facultad-inventada.cl",
+        institution_name="Facultad de Quimica — Laboratorio de Analisis",
+        institution_type="universidad",
+        source_url="https://facultad-inventada.cl/quimica",
+        fit_signal="",
+        contact_label="Generalcontact",
+        confidence="high",
+    )
+    assert "specific_org_but_general_contact" in reasons
 
 
 def test_write_safe_csv_shape(tmp_path: Path) -> None:
@@ -252,3 +340,4 @@ def test_preseeded_review_reason_forces_manual_review() -> None:
     assert not res.safe_rows
     assert res.review_rows
     assert "email_not_visible_on_source" in res.review_rows[0]["review_reason"]
+    assert res.review_rows[0].get("quality_decision") == "needs_better_contact"
