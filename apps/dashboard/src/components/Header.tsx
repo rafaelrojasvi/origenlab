@@ -17,7 +17,7 @@ export function Header() {
         <p className="mt-1 text-xs text-[var(--color-muted)]">
           Vista de solo lectura (v0) · ámbito operativo canónico por defecto
         </p>
-      </motion>
+      </div>
     </header>
   );
 }

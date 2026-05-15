@@ -274,6 +274,8 @@ uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8000 --reload
 
 OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
+**React panel v0 (read-only PoC):** [`apps/dashboard/README.md`](../../dashboard/README.md) — `npm run dev` on port 5173 after API + sync. FastAPI defaults to canonical scope; CORS allows local Vite origins.
+
 **Example curls:**
 
 ```bash
