@@ -157,6 +157,9 @@ def test_loaders_called_in_order(
     ), patch(
         "origenlab_email_pipeline.dashboard_postgres_sync.write_sync_watermark",
         return_value=42,
+    ), patch(
+        "origenlab_email_pipeline.dashboard_postgres_sync.sync_email_classification_canonical",
+        return_value={"rows_written": 0, "skipped": False},
     ):
         result = run_dashboard_mirror_sync(
             ["--sqlite-db", str(db)],
@@ -283,4 +286,10 @@ def test_alembic_migration_defines_dashboard_sync_run() -> None:
     path = REPO / "alembic" / "versions" / "20260517_0008_reporting_dashboard_sync_run.py"
     text = path.read_text(encoding="utf-8")
     assert "reporting.dashboard_sync_run" in text
+
+
+def test_alembic_migration_defines_email_classification_canonical() -> None:
+    path = REPO / "alembic" / "versions" / "20260518_0009_reporting_email_classification_canonical.py"
+    text = path.read_text(encoding="utf-8")
+    assert "reporting.email_classification_canonical" in text
     assert EXPECTED_ALEMBIC_HEAD in text

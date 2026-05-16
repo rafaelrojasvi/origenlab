@@ -131,6 +131,89 @@ class PaginatedOutreachStateResponse(BaseModel):
     table_available: bool = True
 
 
+POSTGRES_MIRROR_NOTE: str = (
+    "Espejo Postgres de solo lectura; SQLite/Gmail sigue siendo la fuente operativa. "
+    "Los correos nuevos no aparecen aquí hasta ingest Gmail, rebuild del mart y sync del espejo."
+)
+
+
+class DashboardSyncMetaResponse(BaseModel):
+    """Latest dashboard Postgres mirror sync (reporting.dashboard_sync_run)."""
+
+    table_available: bool = False
+    status: Literal["missing_table", "no_rows", "success", "failed", "dry_run", "unknown"] = "no_rows"
+    latest_sync_id: int | None = None
+    started_at: datetime | str | None = None
+    finished_at: datetime | str | None = None
+    elapsed_seconds: float | None = None
+    postgres_mirror_note: str = POSTGRES_MIRROR_NOTE
+    canonical_contact_count: int = 0
+    canonical_organization_count: int = 0
+    canonical_opportunity_signal_count: int = 0
+    archive_contact_count: int = 0
+    archive_organization_count: int = 0
+    archive_opportunity_signal_count: int = 0
+    email_suppression_count: int = 0
+    domain_suppression_count: int = 0
+    outreach_state_count: int = 0
+    error_message: str | None = None
+
+
+class ClassificationSummaryResponse(BaseModel):
+    scope: Literal["canonical"] = "canonical"
+    table_available: bool = False
+    status: Literal["missing_table", "no_rows", "ok"] = "no_rows"
+    total_rows: int = 0
+    counts_by_label: dict[str, int] = Field(default_factory=dict)
+    kpi: dict[str, int] = Field(default_factory=dict)
+    disclaimer: str = (
+        "Clasificación heurística de QA sobre Gmail canónico (contacto@origenlab.cl). "
+        "No es verdad CRM ni decisión automática de envío."
+    )
+
+
+class ClassificationEmailRow(BaseModel):
+    email_id: int
+    date_iso: str | None = None
+    folder: str | None = None
+    from_addr: str | None = None
+    to_addrs: str | None = None
+    subject: str | None = None
+    predicted_label: str
+    confidence: str
+    ambiguous: bool = False
+    recommended_action: str
+    etiqueta_ui: str
+    evidence: str | None = None
+    contact_email: str | None = None
+    contact_domain: str | None = None
+
+
+class ClassificationRecentResponse(BaseModel):
+    scope: Literal["canonical"] = "canonical"
+    table_available: bool = False
+    items: list[ClassificationEmailRow] = Field(default_factory=list)
+    total: int = 0
+    limit: int = 20
+    label_filter: str | None = None
+
+
+class ClassificationActionGroup(BaseModel):
+    recommended_action: str
+    action_label_es: str
+    count: int
+    sample_subjects: list[str] = Field(default_factory=list)
+
+
+class ClassificationActionsResponse(BaseModel):
+    scope: Literal["canonical"] = "canonical"
+    table_available: bool = False
+    groups: list[ClassificationActionGroup] = Field(default_factory=list)
+    disclaimer: str = (
+        "Acciones sugeridas por heurística; el operador decide en Streamlit/CLI."
+    )
+
+
 class OutboundReadinessResponse(BaseModel):
     verdict: Literal["ready", "ready_with_warnings", "not_ready", "unknown"]
     data_source: Literal["postgres_mirror"] = "postgres_mirror"

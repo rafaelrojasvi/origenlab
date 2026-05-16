@@ -1,5 +1,6 @@
 import type { OutboundReadiness } from "../api/types";
 import { verdictLabel } from "../lib/format";
+import { translateApiMessage, translateApiMessages } from "../lib/translateApi";
 
 interface Props {
   readiness: OutboundReadiness;
@@ -19,6 +20,9 @@ function verdictClasses(verdict: string): string {
 }
 
 export function ReadinessPanel({ readiness }: Props) {
+  const warnings = translateApiMessages(readiness.warnings);
+  const errors = translateApiMessages(readiness.errors);
+
   return (
     <section
       aria-labelledby="readiness-heading"
@@ -44,23 +48,25 @@ export function ReadinessPanel({ readiness }: Props) {
         operativa. Este panel lee el espejo Postgres (solo lectura).
       </p>
       {readiness.disclaimer ? (
-        <p className="mt-2 text-xs text-[var(--color-muted)]">{readiness.disclaimer}</p>
+        <p className="mt-2 text-xs text-[var(--color-muted)]">
+          {translateApiMessage(readiness.disclaimer)}
+        </p>
       ) : null}
-      {readiness.warnings.length > 0 ? (
+      {warnings.length > 0 ? (
         <div className="mt-4">
           <h3 className="text-sm font-medium text-slate-800">Advertencias</h3>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600">
-            {readiness.warnings.map((w) => (
+            {warnings.map((w) => (
               <li key={w}>{w}</li>
             ))}
           </ul>
         </div>
       ) : null}
-      {readiness.errors.length > 0 ? (
+      {errors.length > 0 ? (
         <div className="mt-4">
           <h3 className="text-sm font-medium text-red-800">Errores</h3>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-700">
-            {readiness.errors.map((e) => (
+            {errors.map((e) => (
               <li key={e}>{e}</li>
             ))}
           </ul>

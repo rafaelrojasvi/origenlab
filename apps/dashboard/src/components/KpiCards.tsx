@@ -10,9 +10,9 @@ export function KpiCards({ summary }: Props) {
     { label: "Contactos operativos", value: summary.contact_count },
     { label: "Organizaciones operativas", value: summary.organization_count },
     { label: "Señales operativas", value: summary.opportunity_signal_count },
-    { label: "Supresiones email", value: summary.email_suppression_count },
-    { label: "Supresiones dominio", value: summary.domain_suppression_count },
-    { label: "Estados outreach", value: summary.outreach_state_count },
+    { label: "Emails suprimidos", value: summary.email_suppression_count },
+    { label: "Dominios suprimidos", value: summary.domain_suppression_count },
+    { label: "Memoria outreach", value: summary.outreach_state_count },
   ];
 
   return (

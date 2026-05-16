@@ -175,6 +175,29 @@ _HOSPITAL_OR_BUYER = re.compile(
     re.I,
 )
 
+_PURCHASE_STRONG = re.compile(
+    r"\b("
+    r"orden\s+de\s+compra|orden\s+de\s+pedido|"
+    r"\boc\s*[#:\-]|\boc\b\s*\d+|"
+    r"purchase\s+order|\bpo\s*[#:\-]|\bpo\b\s*\d+"
+    r")\b",
+    re.I,
+)
+
+_PURCHASE_MEDIUM = re.compile(
+    r"\b("
+    r"cotizaci[oó]n\s+aceptada|aceptamos\s+la\s+cotizaci[oó]n|"
+    r"proceder\s+con\s+la\s+compra|accepted\s+quotation|"
+    r"adjudicad[oa]|adjudicaci[oó]n"
+    r")\b",
+    re.I,
+)
+
+_PURCHASE_WEAK = re.compile(
+    r"\b(compra|comprado|factura|pago|despacho|invoice|payment)\b",
+    re.I,
+)
+
 _NDR_SUBJECT = re.compile(
     r"(undeliverable|delivery\s+status|failure\s+notice|mail\s+delivery\s+failed|"
     r"returned\s+mail|message\s+not\s+delivered|rechazado|no\s+entregad|"
@@ -317,6 +340,46 @@ def detect_client_or_buyer(blob: str) -> tuple[bool, str]:
     return False, ""
 
 
+def _external_company_domain_present(
+    sender: str | None,
+    recipients: str | None,
+    *,
+    internal_domains_lower: frozenset[str],
+) -> bool:
+    for e in external_contact_emails(sender, recipients, internal_domains_lower=internal_domains_lower):
+        dom = domain_of(e)
+        if dom and dom not in internal_domains_lower:
+            return True
+    return False
+
+
+def detect_purchase_or_order_signal(
+    *,
+    is_inbox: bool,
+    blob: str,
+    sender: str | None,
+    recipients: str | None,
+    internal_domains_lower: frozenset[str],
+) -> tuple[bool, str, str]:
+    """Heuristic purchase / order signal (not proof of sale)."""
+    strong = bool(_PURCHASE_STRONG.search(blob))
+    medium = bool(_PURCHASE_MEDIUM.search(blob))
+    weak = bool(_PURCHASE_WEAK.search(blob))
+    external = _external_company_domain_present(
+        sender, recipients, internal_domains_lower=internal_domains_lower
+    )
+
+    if strong and (is_inbox or external):
+        return True, "high_confidence", "purchase_strong_terms_inbound_or_company"
+    if medium:
+        return True, "medium_confidence", "purchase_acceptance_or_award_language"
+    if weak and is_inbox and external:
+        return True, "weak_signal", "purchase_weak_terms_inbound"
+    if weak and medium:
+        return True, "medium_confidence", "purchase_weak_with_acceptance_language"
+    return False, "", ""
+
+
 def _tags_by_category(tags: list[tuple[str, str, list[str]]]) -> dict[str, tuple[str, str, list[str]]]:
     return {t[0]: t for t in tags}
 
@@ -334,6 +397,10 @@ def _pick_primary_category(tags: list[tuple[str, str, list[str]]]) -> str:
         return "marketplace_or_procurement_platform"
     if "logistics_or_notification" in names:
         return "logistics_or_notification"
+
+    pur = by.get("purchase_or_order_signal")
+    if pur and pur[1] == "high_confidence":
+        return "purchase_or_order_signal"
 
     cs = by.get("cotizacion_sent")
     qr = by.get("quote_request_inbound")
@@ -404,6 +471,8 @@ def recommended_action_for_classification(primary: str, confidence: str) -> str:
         return "responder_solicitud"
     if primary == "no_response_after_sent":
         return "revisar_historico"
+    if primary == "purchase_or_order_signal":
+        return "revisar_cliente_activo"
     return "revisar_manual"
 
 
@@ -421,6 +490,7 @@ def spanish_heuristic_bucket_label(primary: str) -> str:
         "client_or_buyer": "Posible cliente / comprador",
         "unclassified": "Sin clasificar heurística",
         "no_response_after_sent": "Sin respuesta (heurística)",
+        "purchase_or_order_signal": "Posible compra / orden",
     }.get(primary, "Requiere revisión")
 
 
@@ -485,6 +555,16 @@ def classify_email_row(
     qr_hit, qr_conf, qr_ev = detect_quote_request_inbound(is_inbox, blob)
     if qr_hit:
         tags.append(("quote_request_inbound", qr_conf, [qr_ev]))
+
+    pur_hit, pur_conf, pur_ev = detect_purchase_or_order_signal(
+        is_inbox=is_inbox,
+        blob=blob,
+        sender=sender,
+        recipients=recipients,
+        internal_domains_lower=internal_domains_lower,
+    )
+    if pur_hit:
+        tags.append(("purchase_or_order_signal", pur_conf, [pur_ev]))
 
     client_hit, client_ev = detect_client_or_buyer(blob)
     if client_hit and not sup_hit:

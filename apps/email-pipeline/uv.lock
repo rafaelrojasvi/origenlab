@@ -1203,6 +1203,10 @@ api = [
 dev = [
     { name = "pytest" },
 ]
+gmail = [
+    { name = "google-auth" },
+    { name = "google-auth-oauthlib" },
+]
 ml = [
     { name = "faiss-cpu" },
     { name = "numpy" },
@@ -1252,6 +1256,10 @@ api = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 dev = [{ name = "pytest", specifier = ">=8" }]
+gmail = [
+    { name = "google-auth", specifier = ">=2.29" },
+    { name = "google-auth-oauthlib", specifier = ">=1.2" },
+]
 ml = [
     { name = "faiss-cpu", specifier = "==1.13.2" },
     { name = "numpy", specifier = "==2.3.5" },

@@ -2,7 +2,7 @@
 
 **Status:** canonical (operator aid)  
 **Owner:** email-pipeline-maintainers  
-**Last reviewed:** 2026-05-14
+**Last reviewed:** 2026-05-15
 
 Short answers for day-to-day work. **Canonical procedures and tables:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md) · [`RUNBOOK.md`](RUNBOOK.md). This page is **not** a substitute for those runbooks.
 
@@ -82,7 +82,42 @@ Short answers for day-to-day work. **Canonical procedures and tables:** [`SCRIPT
 
 ---
 
-## 8. Do not run casually
+<a id="m-opsheet-dashboard-gmail-to-react"></a>
+## 8. Commercial React dashboard (read-only)
+
+**Full runbook:** [`RUNBOOK.md`](RUNBOOK.md#m-eprun-dashboard-gmail-to-react) · Panel README: [`apps/dashboard/README.md`](../../dashboard/README.md)
+
+| Question | Answer |
+|----------|--------|
+| Where is truth for sends/gates? | **SQLite** + Streamlit / CLI |
+| What does React read? | **Postgres mirror** via FastAPI only |
+| Do new Gmail messages appear automatically? | **No** — run ingest → mart → sync |
+| Default scope | **Canonical** `contacto@origenlab.cl` (not full archive) |
+
+**Refresh chain (short):**
+
+```bash
+cd apps/email-pipeline
+export ORIGENLAB_SQLITE_PATH=… ORIGENLAB_POSTGRES_URL=…
+uv sync --group gmail --group postgres --group api
+sqlite3 "$ORIGENLAB_SQLITE_PATH" "SELECT MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder INBOX --skip-duplicate-message-id
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados" --skip-duplicate-message-id
+uv run python scripts/mart/build_business_mart.py --rebuild
+uv run python scripts/qa/refresh_outbound_safety_memory.py
+uv run alembic -c alembic.ini upgrade head
+uv run python scripts/sync/sync_dashboard_postgres_mirror.py
+uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8000
+# other terminal: cd apps/dashboard && npm run dev -- --host 127.0.0.1
+```
+
+**Smoke:** `curl …/health` · `…/dashboard/summary` · `…/meta/dashboard-sync` · `…/classification/summary`
+
+**Wrapper:** `scripts/ops/refresh_operational_dashboard_stack.py` (`--run-gmail-inbox`, `--dry-run`)
+
+---
+
+## 9. Do not run casually
 
 - **Postgres migrate:** `scripts/migrate/sqlite_*_to_postgres.py` — **optional**; scratch DB first; see [`RUNBOOK.md`](RUNBOOK.md#m-eprun-postgres-optional).
 - **Send mail:** `scripts/qa/send_inline_html_email_via_gmail_api.py` — break-glass; can send real mail.
@@ -91,7 +126,7 @@ Short answers for day-to-day work. **Canonical procedures and tables:** [`SCRIPT
 
 ---
 
-## 9. If confused
+## 10. If confused
 
 1. Open **[`SCRIPT_MAP.md`](SCRIPT_MAP.md)** (operator index) then **[`RUNBOOK.md`](RUNBOOK.md)** (step-by-step).
 2. Do **not** guess between two similarly named scripts — e.g. workspace prep: [`SCRIPT_INVENTORY.md`](SCRIPT_INVENTORY.md#workspace-prep-which-script) (stable anchor).

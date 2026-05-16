@@ -5,7 +5,8 @@ Google **Workspace** mailbox → SQLite via **Gmail IMAP** + **OAuth2** (XOAUTH2
 For Case A: **contacto@origenlab.cl** is a real Workspace user; mail lives in Gmail, not Titan.
 
 Requires optional deps:
-  uv sync --group workspace
+  uv sync --group gmail
+  # (equivalent: uv sync --group workspace)
 
 Env / files:
   ORIGENLAB_GMAIL_OAUTH_CLIENT_JSON  path to Google Cloud "Desktop" OAuth client JSON (download)
@@ -140,7 +141,7 @@ def main() -> int:
         )
     except ImportError:
         print(
-            "Missing Google OAuth libraries. Run: uv sync --group workspace",
+            "Missing Google OAuth libraries. Run: uv sync --group gmail",
             file=sys.stderr,
         )
         return 2

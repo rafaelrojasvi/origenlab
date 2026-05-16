@@ -25,7 +25,7 @@ from __future__ import annotations
 import argparse
 import sqlite3
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]

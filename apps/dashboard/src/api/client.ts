@@ -1,5 +1,9 @@
 import type {
+  ClassificationActions,
+  ClassificationRecent,
+  ClassificationSummary,
   DashboardSummary,
+  DashboardSyncMeta,
   OutboundReadiness,
   PaginatedContacts,
   PaginatedOrganizations,
@@ -8,13 +12,18 @@ import type {
 const DEFAULT_BASE = "http://127.0.0.1:8000";
 
 export function getApiBaseUrl(): string {
+  // Dev server only: same-origin via Vite proxy (avoids CORS / WSL localhost quirks).
+  if (import.meta.env.DEV && import.meta.env.MODE === "development") {
+    return "";
+  }
   const raw = import.meta.env.VITE_ORIGENLAB_API_BASE_URL?.trim() || DEFAULT_BASE;
   return raw.replace(/\/$/, "");
 }
 
 export function apiUrl(path: string, params?: Record<string, string | number>): string {
   const base = getApiBaseUrl();
-  const url = new URL(path.startsWith("/") ? path : `/${path}`, `${base}/`);
+  const origin = base || (typeof window !== "undefined" ? window.location.origin : DEFAULT_BASE);
+  const url = new URL(path.startsWith("/") ? path : `/${path}`, `${origin}/`);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, String(value));
@@ -57,4 +66,25 @@ export function fetchContacts(limit = 5): Promise<PaginatedContacts> {
 
 export function fetchOrganizations(limit = 5): Promise<PaginatedOrganizations> {
   return fetchJson<PaginatedOrganizations>(apiUrl("/organizations", { limit, offset: 0 }));
+}
+
+export function fetchDashboardSyncMeta(): Promise<DashboardSyncMeta> {
+  return fetchJson<DashboardSyncMeta>(apiUrl("/meta/dashboard-sync"));
+}
+
+export function fetchClassificationSummary(): Promise<ClassificationSummary> {
+  return fetchJson<ClassificationSummary>(apiUrl("/classification/summary"));
+}
+
+export function fetchClassificationRecent(
+  label?: string,
+  limit = 20,
+): Promise<ClassificationRecent> {
+  const params: Record<string, string | number> = { limit };
+  if (label) params.label = label;
+  return fetchJson<ClassificationRecent>(apiUrl("/classification/recent", params));
+}
+
+export function fetchClassificationActions(): Promise<ClassificationActions> {
+  return fetchJson<ClassificationActions>(apiUrl("/classification/actions"));
 }

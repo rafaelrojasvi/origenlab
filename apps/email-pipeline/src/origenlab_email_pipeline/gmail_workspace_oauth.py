@@ -1,4 +1,4 @@
-"""Google Workspace / Gmail IMAP OAuth2 helpers (optional dependency group `workspace`)."""
+"""Google Workspace / Gmail IMAP OAuth2 helpers (optional dependency group `gmail` or `workspace`)."""
 
 from __future__ import annotations
 

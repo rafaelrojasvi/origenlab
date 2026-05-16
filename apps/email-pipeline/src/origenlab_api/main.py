@@ -7,9 +7,18 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from origenlab_api.routers import contacts, dashboard, health, organizations, outbound
+from origenlab_api.routers import (
+    classification,
+    contacts,
+    dashboard,
+    health,
+    meta,
+    organizations,
+    outbound,
+)
 
-_DEFAULT_CORS_ORIGINS = (
+# Local React dashboard (Vite). Override: ORIGENLAB_API_CORS_ORIGINS=comma-separated list.
+DEFAULT_CORS_ORIGINS: tuple[str, ...] = (
     "http://127.0.0.1:5173",
     "http://localhost:5173",
     "http://127.0.0.1:4173",
@@ -17,11 +26,34 @@ _DEFAULT_CORS_ORIGINS = (
 )
 
 
-def _cors_origins() -> list[str]:
+def cors_origins() -> list[str]:
+    """Resolved allowlist for CORSMiddleware (env or defaults)."""
     raw = (os.environ.get("ORIGENLAB_API_CORS_ORIGINS") or "").strip()
     if raw:
         return [o.strip() for o in raw.split(",") if o.strip()]
-    return list(_DEFAULT_CORS_ORIGINS)
+    return list(DEFAULT_CORS_ORIGINS)
+
+
+def _install_cors(app: FastAPI) -> None:
+    """Register CORS before route handlers (middleware wraps the app outermost)."""
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins(),
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        allow_private_network=True,
+    )
+
+
+def _register_routers(app: FastAPI) -> None:
+    app.include_router(health.router)
+    app.include_router(meta.router)
+    app.include_router(classification.router)
+    app.include_router(dashboard.router)
+    app.include_router(contacts.router)
+    app.include_router(organizations.router)
+    app.include_router(outbound.router)
 
 
 def create_app() -> FastAPI:
@@ -36,18 +68,8 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
         openapi_url="/openapi.json",
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_cors_origins(),
-        allow_credentials=True,
-        allow_methods=["GET", "OPTIONS"],
-        allow_headers=["*"],
-    )
-    app.include_router(health.router)
-    app.include_router(dashboard.router)
-    app.include_router(contacts.router)
-    app.include_router(organizations.router)
-    app.include_router(outbound.router)
+    _install_cors(app)
+    _register_routers(app)
     return app
 
 

@@ -35,6 +35,12 @@ ui = [
     "pandas<3",
     "streamlit>=1.36",
 ]
+# Google Workspace Gmail IMAP ingest (05_workspace_gmail_imap_to_sqlite.py) and OAuth helpers.
+gmail = [
+    "google-auth>=2.29",
+    "google-auth-oauthlib>=1.2",
+]
+# Back-compat alias — same deps as `gmail`.
 workspace = [
     "google-auth>=2.29",
     "google-auth-oauthlib>=1.2",

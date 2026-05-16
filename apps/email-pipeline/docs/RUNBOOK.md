@@ -243,54 +243,149 @@ uv run python scripts/migrate/sqlite_mart_core_to_postgres.py --replace --postgr
 # Optional: uv run python scripts/migrate/sqlite_document_master_to_postgres.py --replace ...
 ```
 
+<a id="m-eprun-dashboard-gmail-to-react"></a>
+#### Dashboard refresh: from Gmail to React
+
+**Operator truth:** new mail in Gmail is **not** visible in the React panel until you run the steps below. Nothing in this stack auto-refreshes end-to-end.
+
+| Layer | What it is | Updates automatically? |
+|-------|------------|-------------------------|
+| **1. Gmail** `contacto@origenlab.cl` | Live mailbox (Workspace) | Yes (Google) |
+| **2. SQLite** `emails`, attachments | Operational ingest DB (authoritative for pipeline) | **No** — only when ingest scripts run |
+| **3. SQLite mart + classification** | `contact_master`, outbound safety, QA heuristics | **No** — only after `build_business_mart.py` / safety refresh |
+| **4. Postgres dashboard mirror** | Read-only copies for API (`mart.*`, `outbound.*`, `reporting.*`) | **No** — only when `sync_dashboard_postgres_mirror.py` runs |
+| **5. FastAPI** | Read-only HTTP over Postgres | **No writes** — serves whatever mirror was last synced |
+| **6. React dashboard** | Commercial panel (`apps/dashboard`) | **No** — polls FastAPI; never ingests Gmail |
+
+**Streamlit** (`business_mart_app.py`) still reads **SQLite** directly and remains the internal operator tool. React is a **read-only commercial view** over the Postgres mirror.
+
+**Scope:** API and React **default to canonical Gmail** (`source_file LIKE 'gmail:contacto@origenlab.cl/%'`). Full historical mart requires `?scope=archive` — never treat archive counts as the headline KPI.
+
+**Data flow (operator mental model):**
+
+```
+Gmail contacto@origenlab.cl
+  ↓ ingest (mutates SQLite)
+SQLite emails / attachments
+  ↓ mart rebuild + classification digest (mutates SQLite)
+SQLite mart / safety memory
+  ↓ sync_dashboard_postgres_mirror.py (writes Postgres only)
+Postgres dashboard mirror
+  ↓ FastAPI (read-only)
+React dashboard
+```
+
 <a id="m-eprun-sync-dashboard-postgres"></a>
-#### Refresh Postgres dashboard mirror
+##### Step-by-step refresh (today’s mail)
 
-After **mart rebuild** (`build_business_mart.py`) or **Gmail refresh** (ingest), SQLite is authoritative but the **FastAPI dashboard reads Postgres mirrors**. Until you sync, the API is **eventually consistent** with Streamlit/SQLite.
-
-FastAPI defaults to **canonical Gmail operational scope**; use `?scope=archive` for full historical mart.
+Set paths once per shell:
 
 ```bash
 cd apps/email-pipeline
 export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/origenlab_scratch'
 export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
 
-uv run alembic -c alembic.ini upgrade head   # once per scratch DB (includes reporting.dashboard_sync_run)
+# Once per venv (Gmail IMAP OAuth — avoids ModuleNotFoundError: google.auth):
+uv sync --group gmail
+# Dashboard mirror + API (when refreshing React): also --group postgres --group api
+```
 
-uv run python scripts/sync/sync_dashboard_postgres_mirror.py --dry-run
+**1. Check latest Gmail data already in SQLite (canonical):**
+
+```bash
+sqlite3 "$ORIGENLAB_SQLITE_PATH" \
+  "SELECT MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
+```
+
+After a successful ingest, `MAX(date_iso)` should reflect today (or your expected latest message date).
+
+**2. Ingest new Gmail (mutates SQLite):**
+
+```bash
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder INBOX --skip-duplicate-message-id
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados" --skip-duplicate-message-id
+```
+
+**3. Rebuild mart + refresh safety memory (mutates SQLite):**
+
+```bash
+uv run python scripts/mart/build_business_mart.py --rebuild
+uv run python scripts/qa/refresh_outbound_safety_memory.py
+```
+
+**4. Publish mirror to Postgres (writes Postgres; read-only on SQLite):**
+
+```bash
+uv run alembic -c alembic.ini upgrade head   # once per DB (0008 sync audit, 0009 classification)
+uv run python scripts/sync/sync_dashboard_postgres_mirror.py --dry-run   # optional preflight
 uv run python scripts/sync/sync_dashboard_postgres_mirror.py
 ```
 
-Options: `--only outbound`, `--only mart`, `--only canonical`, `--skip-outbound`, `--skip-mart`, `--json-out path`.
+Sync loads outbound sidecars, mart (archive + canonical), `reporting.dashboard_sync_run`, and `reporting.email_classification_canonical`. Options: `--only outbound|mart|canonical`, `--skip-outbound`, `--skip-mart`, `--json-out path`.
 
-Does **not** mutate SQLite, send mail, or run Gmail ingest/mart rebuild.
+**Wrapper (Gmail off by default):** `scripts/ops/refresh_operational_dashboard_stack.py` — pass `--run-gmail-inbox` / `--run-gmail-sent` to include step 2; `--dry-run` prints commands only.
 
-**Run locally:**
+**5. Run API (terminal 1):**
 
 ```bash
-cd apps/email-pipeline
 uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+**6. Run React (terminal 2):**
 
-**React panel v0 (read-only PoC):** [`apps/dashboard/README.md`](../../dashboard/README.md) — `npm run dev` on port 5173 after API + sync. FastAPI defaults to canonical scope; CORS allows local Vite origins.
+```bash
+cd ../dashboard
+npm install   # first time
+npm run dev -- --host 127.0.0.1
+```
 
-**Example curls:**
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Panel README: [`apps/dashboard/README.md`](../../dashboard/README.md).
+
+##### Smoke tests (API must be running)
 
 ```bash
 curl -sS http://127.0.0.1:8000/health | jq .
-curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=canonical' | jq .
-curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=archive' | jq .
-curl -sS 'http://127.0.0.1:8000/contacts?limit=5&offset=0' | jq .
-curl -sS http://127.0.0.1:8000/outbound/readiness | jq .
+curl -sS http://127.0.0.1:8000/dashboard/summary | jq .
+curl -sS http://127.0.0.1:8000/meta/dashboard-sync | jq .
+curl -sS http://127.0.0.1:8000/classification/summary | jq .
+curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=archive' | jq .   # explicit archive only
 ```
 
-**Endpoints (v1):** `GET /health`, `GET /health/dependencies`, `GET /dashboard/summary`, `GET /contacts`, `GET /organizations`, `GET /outbound/suppressions/emails`, `GET /outbound/contact-state`, `GET /outbound/readiness`.
+Canonical summary should show **hundreds** of contacts (operational Gmail), not tens of thousands (archive). Compare:
 
-`/outbound/readiness` reflects **Postgres mirror** tables only and is **eventually consistent** with SQLite/Streamlit until sync is automated.
+```bash
+curl -sS http://127.0.0.1:8000/dashboard/summary | jq '.scope, .contact_count'
+curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=archive' | jq '.scope, .contact_count'
+```
 
-Design: [`architecture/POSTGRES_API_DASHBOARD_PLAN.md`](architecture/POSTGRES_API_DASHBOARD_PLAN.md).
+##### What to check after refresh
+
+| Check | Expected |
+|-------|----------|
+| SQLite max canonical `date_iso` | Today (or latest mail date) **after** ingest |
+| `GET /meta/dashboard-sync` `finished_at` | **After** mart rebuild + sync (not hours/days stale unless intentional) |
+| React “Última sincronización del espejo Postgres” | Same order of magnitude as API `finished_at` |
+| `GET /dashboard/summary` default `scope` | `"canonical"` |
+| `contact_count` (canonical) | ≪ archive `contact_count` when archive is queried |
+| Classification KPIs | Non-zero after sync if canonical mail exists in SQLite window |
+
+##### Troubleshooting
+
+| Symptom | Likely cause | What to do |
+|---------|--------------|------------|
+| React **Failed to fetch** | FastAPI down, wrong URL, or CORS/proxy | Start uvicorn; in dev use Vite proxy (`npm run dev`) or set `VITE_ORIGENLAB_API_BASE_URL` |
+| API returns **zero counts** | Postgres mirror empty or migrations missing | `alembic upgrade head`; run `sync_dashboard_postgres_mirror.py` |
+| Dashboard **stale** (old sync time) | Skipped ingest, mart, or sync | Run full chain: ingest → mart → safety → sync |
+| **Postgres connection refused** | Docker/local Postgres not running | Start scratch Postgres; verify `ORIGENLAB_POSTGRES_URL` |
+| Headline KPIs look like **full archive** | Scope regression | Default must be canonical; archive only with `?scope=archive` |
+| Classification empty | Sync before 0009 migration or no canonical rows in SQLite | `alembic upgrade head`; re-sync after ingest |
+| Streamlit matches SQLite but React does not | Expected until sync | Streamlit reads SQLite; React reads Postgres mirror |
+
+**Read-only API routes (v1):** `GET /health`, `GET /health/dependencies`, `GET /meta/dashboard-sync`, `GET /dashboard/summary`, `GET /contacts`, `GET /organizations`, `GET /classification/summary`, `GET /classification/recent`, `GET /classification/actions`, `GET /outbound/suppressions/emails`, `GET /outbound/contact-state`, `GET /outbound/readiness`.
+
+`/outbound/readiness` reflects **Postgres mirrors only** (not full SQLite Sent-folder gates). OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+
+Design: [`architecture/POSTGRES_API_DASHBOARD_PLAN.md`](architecture/POSTGRES_API_DASHBOARD_PLAN.md). One-page operator summary: [`OPERATOR_CHEAT_SHEET.md`](OPERATOR_CHEAT_SHEET.md#m-opsheet-dashboard-gmail-to-react).
 
 ---
 

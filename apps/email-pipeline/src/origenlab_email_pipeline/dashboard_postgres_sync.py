@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 from urllib.parse import urlparse, urlunparse
 
+from origenlab_email_pipeline.classification_postgres_mirror import (
+    sync_email_classification_canonical,
+)
 from origenlab_email_pipeline.mart_core_postgres_migrate import (
     assert_scratch_postgres_target,
     connect_sqlite_readonly,
@@ -32,7 +35,7 @@ except ImportError as exc:  # pragma: no cover
 else:
     _PSYCOPG_IMPORT_ERROR = None
 
-EXPECTED_ALEMBIC_HEAD = "20260517_0008"
+EXPECTED_ALEMBIC_HEAD = "20260518_0009"
 DASHBOARD_SYNC_KV_KEY = "dashboard_postgres_mirror_last_sync"
 
 OUTBOUND_SCRIPT = "scripts/migrate/sqlite_outbound_sidecars_to_postgres.py"
@@ -531,6 +534,13 @@ def run_dashboard_mirror_sync(
             dry_run=False,
         )
         result["sync_run_id"] = sync_id
+        classification_sync = sync_email_classification_canonical(
+            pg_url,
+            sqlite_path,
+            sync_run_id=sync_id,
+            dry_run=False,
+        )
+        result["classification_sync"] = classification_sync
         result["ok"] = True
         result["status"] = "success"
     except Exception as exc:  # noqa: BLE001

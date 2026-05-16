@@ -21,6 +21,7 @@ from origenlab_email_pipeline.email_classification_qa import (
     canonical_where_for_alias,
     classify_email_row,
     detect_bad_email_or_bounce,
+    detect_purchase_or_order_signal,
     detect_quote_request_inbound,
     detect_university_signals,
     inbound_exists_after_sent,
@@ -608,3 +609,33 @@ def test_audit_script_json_includes_legacy_note_when_flag(legacy: bool, tmp_path
     if legacy:
         assert "legacy" in (payload["summary"].get("legacy_note") or "").lower()
     assert payload["summary"]["legacy_flag"] is legacy
+
+
+def test_detect_purchase_or_order_signal_strong_inbound() -> None:
+    hit, conf, ev = detect_purchase_or_order_signal(
+        is_inbox=True,
+        blob="Adjunto orden de compra OC-2026-44 para despacho.",
+        sender="compras@hospital.cl",
+        recipients="contacto@origenlab.cl",
+        internal_domains_lower=_internal(),
+    )
+    assert hit is True
+    assert conf == "high_confidence"
+    assert "purchase" in ev
+
+
+def test_classify_email_row_purchase_primary() -> None:
+    rc = classify_email_row(
+        folder="INBOX",
+        subject="Orden de compra 9912",
+        sender="compras@cliente.cl",
+        recipients="contacto@origenlab.cl",
+        body="Confirmamos orden de compra para equipos.",
+        full_body_clean="",
+        top_reply_clean="",
+        doc_types_csv=None,
+        supplier_domains=_empty_suppliers(),
+        internal_domains_lower=_internal(),
+    )
+    assert rc.primary == "purchase_or_order_signal"
+    assert rc.recommended_action == "revisar_cliente_activo"
