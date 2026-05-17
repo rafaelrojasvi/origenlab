@@ -4,14 +4,19 @@ import { DataTable } from "./DataTable";
 
 interface Props {
   purchases: ClassificationRecent | null;
+  /** When true, parent renders tab title; only show heuristic subsection heading. */
+  nested?: boolean;
 }
 
-export function PurchaseSignalsSection({ purchases }: Props) {
+export function PurchaseSignalsSection({ purchases, nested = false }: Props) {
   const items = purchases?.items ?? [];
 
   if (!purchases?.table_available) {
     return (
       <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6 text-sm text-[var(--color-muted)]">
+        {nested ? (
+          <h3 className="mb-2 text-base font-semibold text-brand-900">Señales detectadas</h3>
+        ) : null}
         Señales de compra no disponibles en el espejo (tabla de clasificación ausente).
       </section>
     );
@@ -20,7 +25,11 @@ export function PurchaseSignalsSection({ purchases }: Props) {
   if (items.length === 0) {
     return (
       <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6">
-        <h2 className="text-lg font-semibold text-brand-900">Compras / clientes recientes</h2>
+        {nested ? (
+          <h3 className="text-base font-semibold text-brand-900">Señales detectadas</h3>
+        ) : (
+          <h2 className="text-lg font-semibold text-brand-900">Compras / clientes recientes</h2>
+        )}
         <p className="mt-3 text-sm text-[var(--color-muted)]">
           No hay señales de compra reciente detectadas en el espejo actual.
         </p>
@@ -35,11 +44,23 @@ export function PurchaseSignalsSection({ purchases }: Props) {
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-brand-900">Compras / clientes recientes</h2>
-        <p className="text-sm text-[var(--color-muted)]">
-          Posibles señales de compra u orden en Gmail canónico. Requiere revisión humana antes de
-          tratarlo como cliente activo.
-        </p>
+        {nested ? (
+          <>
+            <h3 className="text-base font-semibold text-brand-900">Señales detectadas</h3>
+            <p className="mt-1 text-sm text-[var(--color-muted)]">
+              Posibles señales de compra u orden en Gmail canónico. Requiere revisión humana antes
+              de tratarlo como cliente activo.
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 className="text-lg font-semibold text-brand-900">Compras / clientes recientes</h2>
+            <p className="text-sm text-[var(--color-muted)]">
+              Posibles señales de compra u orden en Gmail canónico. Requiere revisión humana antes
+              de tratarlo como cliente activo.
+            </p>
+          </>
+        )}
       </div>
       <DataTable<ClassificationEmailRow>
         title="Señales detectadas"

@@ -3,6 +3,10 @@ import Layout from '../layouts/Layout.astro';
 import PageHeader from '../components/PageHeader.astro';
 import { site } from '../config/site';
 import { contact, whatsappUrl, telUrl } from '../data/contact';
+import { buildQuoteMailtoUrl } from '../lib/whatsapp';
+import { ctaLabels } from '../lib/ctaLabels';
+
+const mailtoHref = buildQuoteMailtoUrl();
 import { company } from '../data/company';
 ---
 
@@ -47,17 +51,18 @@ import { company } from '../data/company';
       </div>
     </dl>
     <p class="mt-6 flex flex-wrap gap-3">
-      <a href={`mailto:${site.email}`} class="btn-primary" aria-label={`Enviar correo a ${site.email}`}
-        >Enviar correo</a
-      >
+      <a href={mailtoHref} class="btn-primary" aria-label={ctaLabels.solicitarCotizacion}>
+        {ctaLabels.solicitarCotizacion}
+      </a>
       <a
         href={whatsappUrl()}
         class="btn-whatsapp"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Abrir WhatsApp"
-        >WhatsApp</a
+        aria-label={ctaLabels.whatsapp}
       >
+        {ctaLabels.whatsapp}
+      </a>
     </p>
   </div>
 </Layout>

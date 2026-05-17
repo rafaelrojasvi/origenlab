@@ -1,0 +1,160 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import PageHeader from '../../../components/PageHeader.astro';
+import QuoteCTA from '../../../components/QuoteCTA.astro';
+import ProductQuoteActions from '../../../components/ProductQuoteActions.astro';
+import ProductSpecTable from '../../../components/ProductSpecTable.astro';
+import { products } from '../../../data/products';
+import { getProductByFamilyAndSlug, getBrandById } from '../../../lib/catalog';
+import { getProductFamilyBySlug } from '../../../data/productFamilies';
+
+export function getStaticPaths() {
+  return products
+    .filter((product) => product.productFamilySlug === 'centrifugas')
+    .map((product) => ({
+      params: { slug: product.slug },
+    }));
+}
+
+const { slug } = Astro.params;
+const product = slug ? getProductByFamilyAndSlug('centrifugas', slug) : undefined;
+const brand = product ? getBrandById(product.brandId) : undefined;
+const family = getProductFamilyBySlug('centrifugas');
+
+if (!product) {
+  return Astro.redirect('/productos/centrifugas');
+}
+
+const metaTitle =
+  product.metaTitle ?? `${product.name} | ${product.equipmentType ?? 'Centrífuga'} | OrigenLab`;
+const metaDescription = (
+  product.metaDescription ??
+  `${product.summary} Cotización por correo o WhatsApp; disponibilidad sujeta a confirmación comercial.`
+).slice(0, 158);
+---
+
+<Layout title={metaTitle} description={metaDescription}>
+  <PageHeader title={product.name} lead={product.equipmentType} />
+
+  <div class="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    {product.imagePath && (
+      <div class="flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-6">
+        <img
+          src={product.imagePath}
+          alt={product.imageAlt ?? product.name}
+          loading="lazy"
+          class="max-h-80 w-full object-contain"
+        />
+      </div>
+    )}
+
+    <div class="space-y-6">
+      {brand && (
+        <div class="flex items-center gap-4">
+          {brand.logoPath && (
+            <img
+              src={brand.logoPath}
+              alt={brand.logoAlt ?? brand.name}
+              loading="lazy"
+              class="h-10 w-auto object-contain"
+            />
+          )}
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Marca</p>
+            <p class="font-semibold text-brand-950">
+              <a href={`/marcas/${brand.slug}`} class="hover:text-brand-800">
+                {brand.name}
+              </a>
+            </p>
+            {brand.legalName && <p class="text-xs text-slate-500">{brand.legalName}</p>}
+          </div>
+        </div>
+      )}
+
+      <p class="text-sm leading-relaxed text-slate-600">{product.description ?? product.summary}</p>
+
+      {product.availabilityNote && (
+        <p class="rounded-lg border border-brand-100 bg-brand-50/60 px-4 py-3 text-sm text-slate-700">
+          {product.availabilityNote}
+        </p>
+      )}
+
+      <ProductQuoteActions productName={product.name} brandName={brand?.name} />
+      {product.manufacturerUrl && (
+        <p class="text-sm">
+          <a
+            href={product.manufacturerUrl}
+            class="font-medium text-brand-700 hover:text-brand-800"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Ver ficha del fabricante →
+          </a>
+        </p>
+      )}
+    </div>
+  </div>
+
+  {product.applications && product.applications.length > 0 && (
+    <section class="mt-12" aria-labelledby="aplicaciones-producto-heading">
+      <h2 id="aplicaciones-producto-heading" class="section-title">Aplicaciones</h2>
+      <ul class="mt-4 flex flex-wrap gap-2">
+        {product.applications.map((tag) => (
+          <li class="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700">
+            {tag}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  {product.keySpecs && product.keySpecs.length > 0 && (
+    <section class="mt-12" aria-labelledby="especificaciones-heading">
+      <h2 id="especificaciones-heading" class="section-title">Especificaciones principales</h2>
+      <p class="mt-2 max-w-2xl text-sm text-slate-600">
+        Ficha técnica y configuración según requerimiento del laboratorio. Valores según documentación del fabricante.
+      </p>
+      <div class="mt-6">
+        <ProductSpecTable specs={product.keySpecs} attribution={product.specsAttribution} />
+      </div>
+      {product.datasheetUrl && (
+        <p class="mt-4 text-sm">
+          <a
+            href={product.datasheetUrl}
+            class="font-medium text-brand-700 hover:text-brand-800"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Catálogo PDF del fabricante (referencia) →
+          </a>
+        </p>
+      )}
+    </section>
+  )}
+
+  <section class="mt-12 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <h2 class="section-title">Condiciones comerciales</h2>
+    <p class="mt-3 text-sm leading-relaxed text-slate-600">{product.commercialNote}</p>
+    <p class="mt-2 text-sm leading-relaxed text-slate-600">
+      {family?.name ?? 'Equipo'} disponible bajo cotización a través de OrigenLab. No se prometen plazos de entrega,
+      stock ni términos de garantía en esta ficha.
+    </p>
+  </section>
+
+  <div class="mt-14">
+    <QuoteCTA
+      title={product.ctaText ?? 'Solicitar cotización'}
+      description="Comparta aplicación, configuración deseada e institución. Respondemos por correo o WhatsApp."
+    />
+  </div>
+
+  <p class="mt-10 flex flex-wrap gap-4 text-sm">
+    <a href="/productos/centrifugas" class="link-muted font-medium">← Centrífugas</a>
+    {brand && (
+      <a href={`/marcas/${brand.slug}`} class="link-muted font-medium">
+        ← {brand.name}
+      </a>
+    )}
+    <a href="/productos" class="link-muted font-medium">← Productos</a>
+  </p>
+</Layout>

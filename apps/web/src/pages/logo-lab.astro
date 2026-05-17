@@ -1,0 +1,228 @@
+---
+import Layout from '../layouts/Layout.astro';
+import PageHeader from '../components/PageHeader.astro';
+import OrigenLogoShowcase from '../components/logo/OrigenLogoShowcase.astro';
+import OrigenLogoLockupAnimated from '../components/logo/OrigenLogoLockupAnimated.astro';
+import OrigenThreeBodyCanvas from '../components/logo/OrigenThreeBodyCanvas.astro';
+import OrigenLogoMarkStatic from '../components/logo/OrigenLogoMarkStatic.astro';
+import { getMotionPreset } from '../lib/logo/motionPresets';
+
+const heroMotion = getMotionPreset('hero');
+const headerMotion = getMotionPreset('header');
+
+const comparison = [
+  {
+    option: 'Premium Atom',
+    label: 'Production header (animated)',
+    bestUse: 'Site header lockup',
+    strengths: 'Three orbit ellipses + nucleus; reads as atom at 36px on #042f2e',
+    issue: 'Busier than minimal at 16px favicon',
+  },
+  {
+    option: 'Mathematical Trace',
+    label: 'Lab / technical storytelling',
+    bestUse: 'Logo lab hero canvas, long-trail demos',
+    strengths: 'Longest trails; physics-forward identity',
+    issue: 'Not used on production home page',
+  },
+  {
+    option: 'Minimal Scientific',
+    label: 'Favicon candidate only',
+    bestUse: 'Favicon, app icon, 16–24px UI',
+    strengths: 'Clearest silhouette; fewest strokes',
+    issue: 'Too simple for main header lockup',
+  },
+  {
+    option: 'Animated canvas (premium)',
+    label: 'Lab only — not production hero',
+    bestUse: 'This page’s hero section; brand experiments',
+    strengths: 'Visible atom rings + fluorescent bodies; long loop',
+    issue: 'Home page hero uses text eyebrow only',
+  },
+] as const;
+---
+
+<Layout
+  title="OrigenLab logo lab"
+  description="Internal preview of OrigenLab logo candidates — three-body atom mark. Not production assets yet."
+  mainClass="mx-auto max-w-6xl px-6 py-10 md:py-14"
+>
+  <PageHeader
+    title="OrigenLab logo lab"
+    lead="Production: animated atom + wordmark in the site header; static atom favicon; home hero eyebrow is plain text; footer is a static lockup. This page compares candidates and lab-only hero animation. OG image unchanged."
+  />
+
+  <section class="mt-10 space-y-6" aria-labelledby="header-preview-heading">
+    <h2 id="header-preview-heading" class="section-title">Production header (animated)</h2>
+    <p class="text-sm text-slate-600">
+      Matches the live site header (<code class="rounded bg-slate-100 px-1">#042f2e</code>): transparent canvas,
+      brand-50 wordmark, brand-500 rings, short trails. {headerMotion.label} · {headerMotion.loopSeconds}s loop.
+    </p>
+    <div
+      class="flex min-h-[4.5rem] items-center justify-between gap-4 rounded-xl border border-brand-800/40 bg-brand-950 px-6 py-4 shadow-lg"
+    >
+      <OrigenLogoLockupAnimated
+        variant="dark"
+        size="md"
+        solution="premium"
+        motion="header"
+        gap="tight"
+        decorative
+      />
+      <span class="hidden text-sm font-semibold text-white/70 sm:inline">Wired in production header</span>
+    </div>
+  </section>
+
+  <section class="mt-12 space-y-6" aria-labelledby="hero-animation-heading">
+    <h2 id="hero-animation-heading" class="section-title">Hero animation (lab only)</h2>
+    <p class="text-sm text-slate-600">
+      Not on the production home page (eyebrow is text-only). {heroMotion.label} · {heroMotion.loopSeconds}s loop · longest trails.
+    </p>
+    <div class="flex flex-col items-center gap-8 rounded-2xl bg-brand-950 px-6 py-12 md:flex-row md:justify-center">
+      <OrigenThreeBodyCanvas
+        size={300}
+        solution="premium"
+        loopSeconds={heroMotion.loopSeconds}
+        trailLength={heroMotion.trailLength}
+        showRings={true}
+      />
+      <OrigenThreeBodyCanvas
+        size={300}
+        solution="premium"
+        loopSeconds={heroMotion.loopSeconds}
+        trailLength={heroMotion.trailLength}
+        showWordmark={true}
+        showRings={true}
+        class="hidden md:block"
+      />
+    </div>
+  </section>
+
+  <section class="mt-12 grid gap-6 md:grid-cols-2" aria-labelledby="surface-preview-heading">
+    <h2 id="surface-preview-heading" class="section-title md:col-span-2">Surface previews (lab)</h2>
+
+    <article class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">White background</h3>
+      <p class="mt-1 text-xs text-slate-500">md lockup · 36px icon · surface motion preset</p>
+      <div class="mt-4 flex min-h-[5rem] items-center justify-center rounded-lg border border-slate-100 bg-white py-8">
+        <OrigenLogoLockupAnimated variant="light" size="md" solution="premium" motion="surface" />
+      </div>
+    </article>
+
+    <article class="rounded-xl border border-brand-800/30 bg-brand-950 p-6 shadow-sm">
+      <h3 class="text-sm font-bold uppercase tracking-wider text-brand-300">Footer / dark (production: static)</h3>
+      <p class="mt-1 text-xs text-brand-400/80">Production footer uses static sm lockup; animated preset shown for comparison</p>
+      <div class="mt-4 flex min-h-[5rem] items-center justify-center py-8">
+        <OrigenLogoLockupAnimated variant="dark" size="md" solution="premium" motion="footer" />
+      </div>
+    </article>
+
+    <article class="rounded-xl border border-slate-200 bg-slate-50 p-6 md:col-span-2">
+      <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Favicon scale</h3>
+      <p class="mt-1 text-xs text-slate-500">
+        16px stays <strong>static</strong> (recommended). Optional 24px motion demo — very restrained.
+      </p>
+      <div class="mt-4 flex flex-wrap items-center gap-8">
+        <div class="flex items-center gap-3 rounded-2xl bg-brand-950 px-4 py-3">
+          <img src="/favicon.svg" width="16" height="16" alt="" class="size-4 shrink-0" />
+          <span class="text-xs text-brand-100">16px — matches /favicon.svg</span>
+        </div>
+        <div class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+          <OrigenLogoMarkStatic size={16} variant="light" solution="premium" showRings />
+          <span class="text-xs text-slate-600">16px light — static</span>
+        </div>
+        <div class="flex flex-col items-center gap-2 rounded-2xl border border-brand-800/30 bg-brand-950 px-5 py-4">
+          <OrigenThreeBodyCanvas
+            size={24}
+            variant="dark"
+            solution="premium"
+            showRings={true}
+            motionContext="favicon"
+            loopSeconds={getMotionPreset('favicon').loopSeconds}
+            trailLength={getMotionPreset('favicon').trailLength}
+          />
+          <span class="text-xs text-brand-100">24px motion demo</span>
+        </div>
+        <a
+          href="/logo/origenlab-favicon-candidate.svg"
+          class="text-sm font-semibold text-brand-700 hover:underline"
+          download
+        >
+          Download favicon candidate SVG
+        </a>
+      </div>
+    </article>
+  </section>
+
+  <section class="mt-14 overflow-x-auto" aria-labelledby="comparison-heading">
+    <h2 id="comparison-heading" class="section-title mb-4">Comparison</h2>
+    <table class="w-full min-w-[36rem] border-collapse text-left text-sm">
+      <thead>
+        <tr class="border-b border-slate-200 bg-slate-50">
+          <th class="px-4 py-3 font-bold text-brand-950">Option</th>
+          <th class="px-4 py-3 font-bold text-brand-950">Recommendation</th>
+          <th class="px-4 py-3 font-bold text-brand-950">Best use</th>
+          <th class="px-4 py-3 font-bold text-brand-950">Strengths</th>
+          <th class="px-4 py-3 font-bold text-brand-950">Possible issue</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          comparison.map((row) => (
+            <tr class="border-b border-slate-100">
+              <td class="px-4 py-3 font-semibold text-brand-900">{row.option}</td>
+              <td class="px-4 py-3 font-medium text-brand-700">{row.label}</td>
+              <td class="px-4 py-3 text-slate-700">{row.bestUse}</td>
+              <td class="px-4 py-3 text-slate-700">{row.strengths}</td>
+              <td class="px-4 py-3 text-slate-600">{row.issue}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <section class="mt-14" aria-labelledby="static-assets-heading">
+    <h2 id="static-assets-heading" class="section-title mb-4">Exported candidates</h2>
+    <p class="mb-4 text-sm text-slate-600">
+      Pre-rendered SVGs in <code class="rounded bg-slate-100 px-1">public/logo/</code> (do not overwrite
+      <code class="rounded bg-slate-100 px-1">favicon.svg</code> or OG until approved).
+    </p>
+    <ul class="grid gap-2 text-sm sm:grid-cols-2">
+      <li>
+        <a class="font-semibold text-brand-700 hover:underline" href="/logo/origenlab-mark-premium.svg"
+          >origenlab-mark-premium.svg</a
+        >
+      </li>
+      <li>
+        <a class="font-semibold text-brand-700 hover:underline" href="/logo/origenlab-mark-trace.svg"
+          >origenlab-mark-trace.svg</a
+        >
+      </li>
+      <li>
+        <a class="font-semibold text-brand-700 hover:underline" href="/logo/origenlab-mark-minimal.svg"
+          >origenlab-mark-minimal.svg</a
+        >
+      </li>
+      <li>
+        <a class="font-semibold text-brand-700 hover:underline" href="/logo/origenlab-lockup-dark.svg"
+          >origenlab-lockup-dark.svg</a
+        >
+      </li>
+      <li>
+        <a class="font-semibold text-brand-700 hover:underline" href="/logo/origenlab-lockup-light.svg"
+          >origenlab-lockup-light.svg</a
+        >
+      </li>
+      <li>
+        <a class="font-semibold text-brand-700 hover:underline" href="/logo/origenlab-favicon-candidate.svg"
+          >origenlab-favicon-candidate.svg</a
+        >
+      </li>
+    </ul>
+  </section>
+
+  <div class="mt-16 border-t border-slate-200 pt-12">
+    <OrigenLogoShowcase />
+  </div>
+</Layout>

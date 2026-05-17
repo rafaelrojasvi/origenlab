@@ -1,5 +1,9 @@
 ---
-import { contact, whatsappUrl } from '../data/contact';
+import { whatsappUrl } from '../data/contact';
+import { buildQuoteMailtoUrl } from '../lib/whatsapp';
+import { ctaLabels } from '../lib/ctaLabels';
+
+const mailtoHref = buildQuoteMailtoUrl();
 
 interface Props {
   title?: string;
@@ -23,17 +27,22 @@ const {
   </h2>
   <p class="mt-2 text-sm text-slate-600">{description}</p>
   <div class="mt-6 flex flex-wrap gap-3">
-    <a href={`mailto:${contact.email}`} class="btn-primary" aria-label={`Escribir a ${contact.email}`}
-      >Correo</a
+    <a
+      href={mailtoHref}
+      class="btn-primary"
+      aria-label={ctaLabels.solicitarCotizacion}
     >
+      {ctaLabels.solicitarCotizacion}
+    </a>
     <a
       href={whatsappUrl()}
       class="btn-whatsapp"
       target="_blank"
       rel="noopener noreferrer"
-      aria-label="Abrir WhatsApp"
-      >WhatsApp</a
+      aria-label={ctaLabels.whatsapp}
     >
+      {ctaLabels.whatsapp}
+    </a>
     <a href="/contacto" class="btn-outline-dark">Contacto y horario</a>
   </div>
 </section>

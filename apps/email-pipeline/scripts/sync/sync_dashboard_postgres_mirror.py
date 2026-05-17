@@ -2,7 +2,9 @@
 # -----------------------------------------------------------------------------
 # SAFETY: Read-only SQLite; writes Postgres dashboard mirror tables only via
 # existing migrate loaders (--replace on scratch/staging). No Gmail ingest, no
-# mart rebuild, no email send. See docs/RUNBOOK.md — "Refresh Postgres dashboard mirror".
+# mart rebuild, no email send. Fails closed if canonical Gmail rows exist but SQLite
+# mart tables are empty (use --allow-empty-mart break-glass only).
+# See docs/RUNBOOK.md — "Refresh Postgres dashboard mirror".
 # -----------------------------------------------------------------------------
 """Refresh Postgres dashboard mirror from SQLite (outbound sidecars + mart core)."""
 

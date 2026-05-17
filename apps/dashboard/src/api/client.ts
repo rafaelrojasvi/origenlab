@@ -2,6 +2,7 @@ import type {
   ClassificationActions,
   ClassificationRecent,
   ClassificationSummary,
+  CommercialPurchaseEventsList,
   DashboardSummary,
   DashboardSyncMeta,
   OutboundReadiness,
@@ -87,4 +88,12 @@ export function fetchClassificationRecent(
 
 export function fetchClassificationActions(): Promise<ClassificationActions> {
   return fetchJson<ClassificationActions>(apiUrl("/classification/actions"));
+}
+
+export function fetchCommercialPurchaseEvents(
+  limit = 20,
+): Promise<CommercialPurchaseEventsList> {
+  return fetchJson<CommercialPurchaseEventsList>(
+    apiUrl("/commercial/purchase-events", { limit }),
+  );
 }

@@ -28,7 +28,7 @@ import { Header } from "./components/Header";
 import { HowToReadPanel } from "./components/HowToReadPanel";
 import { KpiCards } from "./components/KpiCards";
 import { OrganizationsSection } from "./components/OrganizationsSection";
-import { PurchaseSignalsSection } from "./components/PurchaseSignalsSection";
+import { ComprasTab } from "./components/ComprasTab";
 import { ReadinessPanel } from "./components/ReadinessPanel";
 import { SyncWatermark } from "./components/SyncWatermark";
 import { TabNav, type DashboardTab } from "./components/TabNav";
@@ -170,7 +170,7 @@ export default function App() {
               />
             ) : null}
             {tab === "compras" ? (
-              <PurchaseSignalsSection purchases={data.purchaseSignals} />
+              <ComprasTab purchaseSignals={data.purchaseSignals} />
             ) : null}
             {tab === "contactos" ? (
               <div className="grid gap-6 lg:grid-cols-2">

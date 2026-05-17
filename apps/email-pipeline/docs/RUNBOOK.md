@@ -278,9 +278,18 @@ React dashboard
 <a id="m-eprun-sync-dashboard-postgres"></a>
 ##### Step-by-step refresh (today’s mail)
 
+**Shell options (optional):** for a copy-paste refresh block, prefer:
+
+```bash
+set -eo pipefail
+```
+
+Avoid `set -u` (nounset) in **zsh** / **VS Code integrated terminals** unless your prompt is compatible — with `set -u`, some themes trigger `__vsc_update_prompt: RPROMPT: parameter not set`. Bash is less picky, but `set -eo pipefail` is enough for operator scripts here.
+
 Set paths once per shell:
 
 ```bash
+set -eo pipefail
 cd apps/email-pipeline
 export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/origenlab_scratch'
 export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
@@ -290,14 +299,14 @@ uv sync --group gmail
 # Dashboard mirror + API (when refreshing React): also --group postgres --group api
 ```
 
-**1. Check latest Gmail data already in SQLite (canonical):**
+**1. Check canonical Gmail rows already in SQLite (before ingest):**
 
 ```bash
 sqlite3 "$ORIGENLAB_SQLITE_PATH" \
-  "SELECT MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
+  "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
 ```
 
-After a successful ingest, `MAX(date_iso)` should reflect today (or your expected latest message date).
+Note the row count and `MAX(date_iso)` so you can compare after ingest.
 
 **2. Ingest new Gmail (mutates SQLite):**
 
@@ -305,6 +314,15 @@ After a successful ingest, `MAX(date_iso)` should reflect today (or your expecte
 uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder INBOX --skip-duplicate-message-id
 uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados" --skip-duplicate-message-id
 ```
+
+**After ingest, verify canonical Gmail again** (count should increase if new mail arrived; `MAX(date_iso)` should be recent):
+
+```bash
+sqlite3 "$ORIGENLAB_SQLITE_PATH" \
+  "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
+```
+
+Example after a successful refresh: INBOX + Enviados may report small `inserted N` totals while canonical rows climb (e.g. ~1000+ rows, max date today).
 
 **3. Rebuild mart + refresh safety memory (mutates SQLite):**
 
@@ -316,14 +334,31 @@ uv run python scripts/qa/refresh_outbound_safety_memory.py
 **4. Publish mirror to Postgres (writes Postgres; read-only on SQLite):**
 
 ```bash
-uv run alembic -c alembic.ini upgrade head   # once per DB (0008 sync audit, 0009 classification)
+uv run alembic -c alembic.ini upgrade head   # once per DB (0008 sync audit, 0009 classification, 0010 commercial OC)
 uv run python scripts/sync/sync_dashboard_postgres_mirror.py --dry-run   # optional preflight
 uv run python scripts/sync/sync_dashboard_postgres_mirror.py
 ```
 
-Sync loads outbound sidecars, mart (archive + canonical), `reporting.dashboard_sync_run`, and `reporting.email_classification_canonical`. Options: `--only outbound|mart|canonical`, `--skip-outbound`, `--skip-mart`, `--json-out path`.
+Sync loads outbound sidecars, mart (archive + canonical), `reporting.dashboard_sync_run`, `reporting.email_classification_canonical`, and `commercial.purchase_*` (from SQLite `commercial_purchase_*`). Options: `--only outbound|mart|canonical`, `--skip-outbound`, `--skip-mart`, `--json-out path`.
+
+**Fail-closed mart guard:** if SQLite has canonical Gmail rows but `contact_master`, `organization_master`, or `opportunity_signals` are empty, sync **aborts** before `--replace` loaders (avoids wiping good Postgres data after a failed mart rebuild). Run `build_business_mart.py --rebuild` first. Break-glass only: `--allow-empty-mart`.
 
 **Wrapper (Gmail off by default):** `scripts/ops/refresh_operational_dashboard_stack.py` — pass `--run-gmail-inbox` / `--run-gmail-sent` to include step 2; `--dry-run` prints commands only.
+
+##### Promote confirmed purchase order email to commercial event
+
+When a buyer OC is confirmed in Gmail (operator-reviewed), persist structured data in SQLite, then mirror via sync:
+
+```bash
+cd apps/email-pipeline
+export ORIGENLAB_SQLITE_PATH=…   # must already contain the source email + attachments
+
+uv run python scripts/commercial/promote_purchase_order_event.py --dry-run
+uv run python scripts/commercial/promote_purchase_order_event.py --apply
+# then mart rebuild (if needed) + sync_dashboard_postgres_mirror.py as above
+```
+
+Preset implemented: **CEAF OC 26172** (`--oc-number 26172`). If the source row is missing, the script exits with ingest commands (does not create unlinked events). Re-running `--apply` is idempotent (update, not duplicate).
 
 **5. Run API (terminal 1):**
 
@@ -348,6 +383,7 @@ curl -sS http://127.0.0.1:8000/health | jq .
 curl -sS http://127.0.0.1:8000/dashboard/summary | jq .
 curl -sS http://127.0.0.1:8000/meta/dashboard-sync | jq .
 curl -sS http://127.0.0.1:8000/classification/summary | jq .
+curl -sS http://127.0.0.1:8000/commercial/purchase-events | jq .
 curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=archive' | jq .   # explicit archive only
 ```
 
@@ -362,12 +398,13 @@ curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=archive' | jq '.scope, .
 
 | Check | Expected |
 |-------|----------|
-| SQLite max canonical `date_iso` | Today (or latest mail date) **after** ingest |
+| SQLite canonical `COUNT(*)` + `MAX(date_iso)` | Row count up and max date recent **after** ingest (see queries above) |
 | `GET /meta/dashboard-sync` `finished_at` | **After** mart rebuild + sync (not hours/days stale unless intentional) |
 | React “Última sincronización del espejo Postgres” | Same order of magnitude as API `finished_at` |
 | `GET /dashboard/summary` default `scope` | `"canonical"` |
 | `contact_count` (canonical) | ≪ archive `contact_count` when archive is queried |
 | Classification KPIs | Non-zero after sync if canonical mail exists in SQLite window |
+| Postgres canonical mirror (post-sync) | Order of hundreds of contacts/orgs for operativo Gmail (not full archive tens of thousands) |
 
 ##### Troubleshooting
 
@@ -380,8 +417,9 @@ curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=archive' | jq '.scope, .
 | Headline KPIs look like **full archive** | Scope regression | Default must be canonical; archive only with `?scope=archive` |
 | Classification empty | Sync before 0009 migration or no canonical rows in SQLite | `alembic upgrade head`; re-sync after ingest |
 | Streamlit matches SQLite but React does not | Expected until sync | Streamlit reads SQLite; React reads Postgres mirror |
+| `RPROMPT: parameter not set` after `set -u` | zsh / VS Code prompt vs nounset | Use `set -eo pipefail` only, or fix theme; do not use `set -euo pipefail` in integrated zsh |
 
-**Read-only API routes (v1):** `GET /health`, `GET /health/dependencies`, `GET /meta/dashboard-sync`, `GET /dashboard/summary`, `GET /contacts`, `GET /organizations`, `GET /classification/summary`, `GET /classification/recent`, `GET /classification/actions`, `GET /outbound/suppressions/emails`, `GET /outbound/contact-state`, `GET /outbound/readiness`.
+**Read-only API routes (v1):** `GET /health`, `GET /health/dependencies`, `GET /meta/dashboard-sync`, `GET /dashboard/summary`, `GET /contacts`, `GET /organizations`, `GET /classification/summary`, `GET /classification/recent`, `GET /classification/actions`, `GET /commercial/purchase-events`, `GET /commercial/purchase-events/{id}`, `GET /outbound/suppressions/emails`, `GET /outbound/contact-state`, `GET /outbound/readiness`.
 
 `/outbound/readiness` reflects **Postgres mirrors only** (not full SQLite Sent-folder gates). OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 

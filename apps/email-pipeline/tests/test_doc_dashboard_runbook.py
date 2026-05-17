@@ -15,7 +15,9 @@ RUNBOOK_MARKERS = (
     "Gmail contacto@origenlab.cl",
     "uv sync --group gmail",
     "sync_dashboard_postgres_mirror.py",
-    "SELECT MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%'",
+    "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%'",
+    "set -eo pipefail",
+    "RPROMPT: parameter not set",
     "curl -sS http://127.0.0.1:8000/meta/dashboard-sync",
     "curl -sS http://127.0.0.1:8000/classification/summary",
     "Failed to fetch",
@@ -27,6 +29,8 @@ CHEAT_MARKERS = (
     "m-opsheet-dashboard-gmail-to-react",
     "Commercial React dashboard",
     "sync_dashboard_postgres_mirror.py",
+    "set -eo pipefail",
+    "SELECT COUNT(*), MAX(date_iso)",
 )
 
 DASHBOARD_README_MARKERS = (

@@ -17,6 +17,7 @@ export default defineConfig({
       "/outbound": { target: apiTarget, changeOrigin: true },
       "/meta": { target: apiTarget, changeOrigin: true },
       "/classification": { target: apiTarget, changeOrigin: true },
+      "/commercial": { target: apiTarget, changeOrigin: true },
     },
   },
   test: {

@@ -14,6 +14,8 @@ export const site = {
   hours: contact.hours,
   tagline: 'Equipos para laboratorio en todo Chile',
   description: `${company.name}: equipos de laboratorio en ${company.geography}. Alimentos, control de calidad, laboratorio clínico. Cotización ${contact.email} · WhatsApp ${contact.phoneDisplay}.`,
+  ogImagePath: '/og/origenlab-og.svg',
+  ogImageAlt: 'OrigenLab — Equipos para laboratorio',
   phone: contact.phoneDisplay,
   whatsapp: contact.phoneDisplay,
   nav: [

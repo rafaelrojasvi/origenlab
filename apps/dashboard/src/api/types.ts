@@ -123,6 +123,49 @@ export interface ClassificationActions {
   disclaimer: string;
 }
 
+export interface CommercialPurchaseEventItem {
+  line_number: number;
+  ref_code?: string | null;
+  product_name: string;
+  brand?: string | null;
+  quantity?: string | null;
+  net_amount_clp?: number | null;
+  evidence_source?: string | null;
+}
+
+export interface CommercialPurchaseEvent {
+  id: number;
+  source_email_id?: number | null;
+  buyer_org_name: string;
+  buyer_contact_name?: string | null;
+  buyer_contact_email?: string | null;
+  buyer_domain?: string | null;
+  purchase_status: string;
+  purchase_status_label_es: string;
+  oc_number: string;
+  quote_number?: string | null;
+  project_name?: string | null;
+  project_code?: string | null;
+  net_amount_clp?: number | null;
+  iva_amount_clp?: number | null;
+  gross_amount_clp?: number | null;
+  currency: string;
+  email_date_iso?: string | null;
+  email_subject?: string | null;
+  commercial_summary?: string | null;
+  suggested_action_es?: string | null;
+  line_items: CommercialPurchaseEventItem[];
+  product_summary?: string | null;
+}
+
+export interface CommercialPurchaseEventsList {
+  table_available: boolean;
+  items: CommercialPurchaseEvent[];
+  total: number;
+  limit: number;
+  disclaimer: string;
+}
+
 export interface OutboundReadiness {
   verdict: "ready" | "ready_with_warnings" | "not_ready" | "unknown";
   warnings: string[];

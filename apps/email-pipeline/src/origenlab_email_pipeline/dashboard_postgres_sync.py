@@ -18,6 +18,10 @@ from urllib.parse import urlparse, urlunparse
 from origenlab_email_pipeline.classification_postgres_mirror import (
     sync_email_classification_canonical,
 )
+from origenlab_email_pipeline.commercial_purchase_postgres_mirror import (
+    sync_commercial_purchase_events,
+)
+from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
 from origenlab_email_pipeline.mart_core_postgres_migrate import (
     assert_scratch_postgres_target,
     connect_sqlite_readonly,
@@ -35,7 +39,7 @@ except ImportError as exc:  # pragma: no cover
 else:
     _PSYCOPG_IMPORT_ERROR = None
 
-EXPECTED_ALEMBIC_HEAD = "20260518_0009"
+EXPECTED_ALEMBIC_HEAD = "20260519_0010"
 DASHBOARD_SYNC_KV_KEY = "dashboard_postgres_mirror_last_sync"
 
 OUTBOUND_SCRIPT = "scripts/migrate/sqlite_outbound_sidecars_to_postgres.py"
@@ -57,12 +61,25 @@ REQUIRED_MIRROR_TABLES: tuple[tuple[str, str], ...] = (
 
 REPORTING_WATERMARK_TABLE: tuple[str, str] = ("reporting", "dashboard_sync_run")
 
+# SQLite mart tables read by mart_core loader (--replace). Guard before any Postgres mart wipe.
+REQUIRED_SQLITE_MART_TABLES: tuple[str, ...] = (
+    "contact_master",
+    "organization_master",
+    "opportunity_signals",
+)
+
 
 @dataclass(frozen=True)
 class LoaderStep:
     name: str
     script_relpath: str
     argv: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqliteMartSourceCounts:
+    canonical_gmail_email_count: int
+    mart_table_counts: dict[str, int]
 
 
 def redact_postgres_url(url: str) -> str:
@@ -135,6 +152,73 @@ def list_missing_tables(cur: Any, tables: tuple[tuple[str, str], ...]) -> list[s
     return missing
 
 
+def _sqlite_table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+        (table,),
+    ).fetchone()
+    return bool(row)
+
+
+def _sqlite_table_count(conn: sqlite3.Connection, table: str) -> int:
+    if not _sqlite_table_exists(conn, table):
+        return 0
+    row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+    return int(row[0] if row else 0)
+
+
+def count_canonical_gmail_emails(conn: sqlite3.Connection) -> int:
+    if not _sqlite_table_exists(conn, "emails"):
+        return 0
+    pred = sql_predicate_contacto_gmail_source(table_alias=None, coalesce_null=False)
+    row = conn.execute(f"SELECT COUNT(*) FROM emails WHERE {pred}").fetchone()
+    return int(row[0] if row else 0)
+
+
+def collect_sqlite_mart_source_counts(sqlite_path: Path) -> SqliteMartSourceCounts:
+    """Read-only counts from SQLite before mirroring mart tables to Postgres."""
+    conn = connect_sqlite_readonly(sqlite_path)
+    try:
+        canonical = count_canonical_gmail_emails(conn)
+        mart_counts = {t: _sqlite_table_count(conn, t) for t in REQUIRED_SQLITE_MART_TABLES}
+    finally:
+        conn.close()
+    return SqliteMartSourceCounts(
+        canonical_gmail_email_count=canonical,
+        mart_table_counts=mart_counts,
+    )
+
+
+def assert_sqlite_mart_ready_for_mirror_sync(
+    sqlite_path: Path,
+    *,
+    allow_empty_mart: bool = False,
+) -> SqliteMartSourceCounts:
+    """Fail closed when canonical Gmail exists but SQLite mart tables are empty."""
+    counts = collect_sqlite_mart_source_counts(sqlite_path)
+    if allow_empty_mart or counts.canonical_gmail_email_count == 0:
+        return counts
+
+    empty_tables = [t for t in REQUIRED_SQLITE_MART_TABLES if counts.mart_table_counts.get(t, 0) == 0]
+    if not empty_tables:
+        return counts
+
+    listed = ", ".join(empty_tables)
+    raise ValueError(
+        "Refusing Postgres dashboard mirror sync: SQLite has "
+        f"{counts.canonical_gmail_email_count} canonical Gmail email row(s) "
+        f"(source_file LIKE 'gmail:contacto@origenlab.cl/%') but mart table(s) "
+        f"{listed} are empty. This usually indicates a failed or incomplete "
+        "build_business_mart.py --rebuild. Rebuild the mart on SQLite first, or pass "
+        "--allow-empty-mart (break-glass only; may replace good Postgres mirror data "
+        "with empty mart loads)."
+    )
+
+
+def mart_loader_planned(steps: list[LoaderStep]) -> bool:
+    return any(step.name == "mart_core" for step in steps)
+
+
 def preflight_sqlite(sqlite_path: Path) -> None:
     if not sqlite_path.is_file():
         raise FileNotFoundError(f"SQLite file not found: {sqlite_path}")
@@ -186,11 +270,17 @@ def collect_mirror_counts(pg_url: str) -> dict[str, int]:
         "email_suppression_count": "outbound.contact_email_suppression",
         "domain_suppression_count": "outbound.contact_domain_suppression",
         "outreach_state_count": "outbound.outreach_contact_state",
+        "commercial_purchase_event_count": "commercial.purchase_event",
+        "commercial_purchase_event_item_count": "commercial.purchase_event_item",
     }
     out: dict[str, int] = {}
     with psycopg.connect(pg_url) as conn:
         with conn.cursor() as cur:
             for key, qualified in keys.items():
+                schema, table = qualified.split(".", 1)
+                if not pg_table_exists(cur, schema=schema, table=table):
+                    out[key] = 0
+                    continue
                 cur.execute(f"SELECT COUNT(*)::bigint FROM {qualified}")
                 row = cur.fetchone()
                 out[key] = int(row[0] if not isinstance(row, dict) else row["count"])
@@ -375,6 +465,9 @@ def format_summary_text(result: dict[str, Any]) -> str:
         f"    email_suppressions: {c.get('email_suppression_count')}",
         f"    domain_suppressions: {c.get('domain_suppression_count')}",
         f"    outreach_state: {c.get('outreach_state_count')}",
+        "  commercial:",
+        f"    purchase_events: {c.get('commercial_purchase_event_count')}",
+        f"    purchase_event_items: {c.get('commercial_purchase_event_item_count')}",
     ]
     if result.get("sync_run_id") is not None:
         lines.append(f"  sync_run_id: {result.get('sync_run_id')}")
@@ -409,6 +502,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-non-scratch-postgres",
         action="store_true",
         help="Pass through to mart loader when target is not scratch/staging",
+    )
+    p.add_argument(
+        "--allow-empty-mart",
+        action="store_true",
+        help=(
+            "Break-glass: skip SQLite mart empty check before --replace loaders. "
+            "May wipe good Postgres dashboard mart data if mart rebuild failed."
+        ),
     )
     return p
 
@@ -493,6 +594,22 @@ def run_dashboard_mirror_sync(
         {"name": s.name, "script": s.script_relpath, "argv": list(s.argv)} for s in steps
     ]
 
+    if mart_loader_planned(steps):
+        phase_log("[sync] checking SQLite mart source counts (read-only)...", log=log)
+        try:
+            source_counts = assert_sqlite_mart_ready_for_mirror_sync(
+                sqlite_path,
+                allow_empty_mart=bool(args.allow_empty_mart),
+            )
+            result["sqlite_source_counts"] = {
+                "canonical_gmail_email_count": source_counts.canonical_gmail_email_count,
+                **source_counts.mart_table_counts,
+            }
+        except ValueError as exc:
+            result["errors"].append(str(exc))
+            result["elapsed_seconds"] = round(time.monotonic() - t0, 3)
+            return result
+
     if args.dry_run:
         result["counts"] = collect_mirror_counts(pg_url)
         result["ok"] = True
@@ -541,6 +658,14 @@ def run_dashboard_mirror_sync(
             dry_run=False,
         )
         result["classification_sync"] = classification_sync
+        purchase_sync = sync_commercial_purchase_events(
+            pg_url,
+            sqlite_path,
+            sync_run_id=sync_id,
+            dry_run=False,
+        )
+        result["commercial_purchase_sync"] = purchase_sync
+        result["counts"] = collect_mirror_counts(pg_url)
         result["ok"] = True
         result["status"] = "success"
     except Exception as exc:  # noqa: BLE001

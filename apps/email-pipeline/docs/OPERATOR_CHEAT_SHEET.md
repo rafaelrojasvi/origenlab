@@ -94,15 +94,17 @@ Short answers for day-to-day work. **Canonical procedures and tables:** [`SCRIPT
 | Do new Gmail messages appear automatically? | **No** — run ingest → mart → sync |
 | Default scope | **Canonical** `contacto@origenlab.cl` (not full archive) |
 
-**Refresh chain (short):**
+**Refresh chain (short):** use `set -eo pipefail` (not `set -u` in VS Code zsh — see RUNBOOK).
 
 ```bash
+set -eo pipefail
 cd apps/email-pipeline
 export ORIGENLAB_SQLITE_PATH=… ORIGENLAB_POSTGRES_URL=…
 uv sync --group gmail --group postgres --group api
-sqlite3 "$ORIGENLAB_SQLITE_PATH" "SELECT MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
+sqlite3 "$ORIGENLAB_SQLITE_PATH" "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
 uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder INBOX --skip-duplicate-message-id
 uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados" --skip-duplicate-message-id
+sqlite3 "$ORIGENLAB_SQLITE_PATH" "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
 uv run python scripts/mart/build_business_mart.py --rebuild
 uv run python scripts/qa/refresh_outbound_safety_memory.py
 uv run alembic -c alembic.ini upgrade head
@@ -111,7 +113,14 @@ uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8000
 # other terminal: cd apps/dashboard && npm run dev -- --host 127.0.0.1
 ```
 
-**Smoke:** `curl …/health` · `…/dashboard/summary` · `…/meta/dashboard-sync` · `…/classification/summary`
+**Promote confirmed OC (CEAF 26172 preset):**
+
+```bash
+uv run python scripts/commercial/promote_purchase_order_event.py --dry-run
+uv run python scripts/commercial/promote_purchase_order_event.py --apply
+```
+
+**Smoke:** `curl …/health` · `…/dashboard/summary` · `…/meta/dashboard-sync` · `…/classification/summary` · `…/commercial/purchase-events`
 
 **Wrapper:** `scripts/ops/refresh_operational_dashboard_stack.py` (`--run-gmail-inbox`, `--dry-run`)
 

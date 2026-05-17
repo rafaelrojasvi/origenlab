@@ -1,3 +1,5 @@
+import { buildWhatsAppQuoteUrl } from '../lib/whatsapp';
+
 /**
  * Datos de contacto únicos — usar en sitio y componentes.
  */
@@ -18,8 +20,9 @@ export const contact = {
   instagramHandle: null as string | null,
 } as const;
 
+/** WhatsApp con mensaje de cotización genérico (fuente única: lib/whatsapp.ts). */
 export function whatsappUrl(): string {
-  return `https://wa.me/${contact.whatsappE164}`;
+  return buildWhatsAppQuoteUrl();
 }
 
 export function telUrl(): string {

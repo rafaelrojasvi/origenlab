@@ -52,11 +52,13 @@ Abrir [http://127.0.0.1:5173](http://127.0.0.1:5173). En dev, Vite hace proxy a 
 
 Orden obligatorio (detalle en RUNBOOK):
 
-1. Comprobar SQLite: `sqlite3 "$ORIGENLAB_SQLITE_PATH" "SELECT MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"`
-2. Ingest Gmail INBOX + Enviados
-3. `build_business_mart.py --rebuild` + `refresh_outbound_safety_memory.py`
-4. `sync_dashboard_postgres_mirror.py`
-5. Recargar el panel (API ya debe estar arriba)
+1. Opcional: `set -eo pipefail` (evitar `set -u` en zsh/VS Code — ver RUNBOOK).
+2. Comprobar SQLite (antes y después del ingest):  
+   `sqlite3 "$ORIGENLAB_SQLITE_PATH" "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"`
+3. Ingest Gmail INBOX + Enviados
+4. `build_business_mart.py --rebuild` + `refresh_outbound_safety_memory.py`
+5. `sync_dashboard_postgres_mirror.py`
+6. Recargar el panel (API ya debe estar arriba)
 
 ## Smoke API
 
@@ -65,7 +67,10 @@ curl -sS http://127.0.0.1:8000/health
 curl -sS http://127.0.0.1:8000/dashboard/summary
 curl -sS http://127.0.0.1:8000/meta/dashboard-sync
 curl -sS http://127.0.0.1:8000/classification/summary
+curl -sS http://127.0.0.1:8000/commercial/purchase-events
 ```
+
+**OC confirmada (ej. CEAF 26172):** promover en SQLite antes del sync — ver RUNBOOK § “Promote confirmed purchase order”. La pestaña **Compras** muestra órdenes confirmadas (API) y señales heurísticas por separado.
 
 Comprobar: `scope` canónico por defecto; marca de sync en React ≈ `finished_at` del API; conteos canónicos mucho menores que archivo (`?scope=archive`).
 
@@ -75,7 +80,7 @@ Comprobar: `scope` canónico por defecto; marca de sync en React ≈ `finished_a
 - **Archivo histórico:** pestaña separada / `?scope=archive` en API — no es el KPI principal.
 - Pestañas: Resumen · Clasificación comercial · Compras/clientes · Contactos · Archivo.
 
-Clasificación y compras son **heurísticas de QA**, no verdad CRM.
+Clasificación y la tabla inferior de compras son **heurísticas de QA**. Las **OC confirmadas** arriba vienen de eventos promovidos en SQLite (`commercial_purchase_*`).
 
 ## Endpoints usados
 

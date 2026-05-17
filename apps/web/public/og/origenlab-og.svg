@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">OrigenLab</title>
+  <desc id="desc">Equipos para laboratorio — Valdivia, Chile</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#042f2e" />
+      <stop offset="100%" style="stop-color:#0f766e" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <text x="600" y="260" text-anchor="middle" fill="#f0fdfa" font-family="system-ui, sans-serif" font-size="72" font-weight="700">OrigenLab</text>
+  <text x="600" y="330" text-anchor="middle" fill="#ccfbf1" font-family="system-ui, sans-serif" font-size="36" font-weight="500">Equipos para laboratorio</text>
+  <text x="600" y="400" text-anchor="middle" fill="#99f6e4" font-family="system-ui, sans-serif" font-size="28">contacto@origenlab.cl</text>
+  <text x="600" y="450" text-anchor="middle" fill="#5eead4" font-family="system-ui, sans-serif" font-size="26">Valdivia, Chile</text>
+</svg>

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from origenlab_api.routers import (
     classification,
+    commercial,
     contacts,
     dashboard,
     health,
@@ -50,6 +51,7 @@ def _register_routers(app: FastAPI) -> None:
     app.include_router(health.router)
     app.include_router(meta.router)
     app.include_router(classification.router)
+    app.include_router(commercial.router)
     app.include_router(dashboard.router)
     app.include_router(contacts.router)
     app.include_router(organizations.router)

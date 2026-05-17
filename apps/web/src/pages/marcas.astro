@@ -2,17 +2,17 @@
 import Layout from '../layouts/Layout.astro';
 import PageHeader from '../components/PageHeader.astro';
 import QuoteCTA from '../components/QuoteCTA.astro';
-import ProductPreviewCard from '../components/ProductPreviewCard.astro';
 import { brands } from '../data/brands';
 import { company } from '../data/company';
 import { site } from '../config/site';
 import { products } from '../data/products';
+import { productPageHref } from '../lib/catalog';
 
-const servaBrand = brands.find((brand) => brand.slug === 'serva-electrophoresis');
-const servaProducts = servaBrand
-  ? products.filter((product) => product.brandId === servaBrand.id && product.showOnBrandPage)
-  : [];
-const otherBrands = brands.filter((brand) => !servaBrand || brand.id !== servaBrand.id);
+const homeBrands = brands.filter((brand) => brand.showOnHomeBrandsSection);
+
+function brandProducts(brandId: string) {
+  return products.filter((product) => product.brandId === brandId && product.showOnBrandPage);
+}
 ---
 
 <Layout
@@ -25,71 +25,58 @@ const otherBrands = brands.filter((brand) => !servaBrand || brand.id !== servaBr
   />
 
   <section class="mt-10" aria-labelledby="marcas-intro-heading">
-    <h2 id="marcas-intro-heading" class="section-title">Líneas disponibles por consulta</h2>
+    <h2 id="marcas-intro-heading" class="section-title">Marcas y líneas para cotización</h2>
     <p class="mt-3 max-w-3xl text-slate-600">
       Si busca una marca en particular, cotización o recomendación según su laboratorio, escríbanos.
       Definimos alcance, condiciones comerciales y documentación técnica durante el proceso de cotización.
     </p>
   </section>
 
-  {servaBrand && (
-    <section class="mt-8" aria-labelledby="serva-featured-heading">
-      <article class="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 shadow-sm md:p-8">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">Línea destacada</p>
-            <h2 id="serva-featured-heading" class="section-title mt-2">{servaBrand.name}</h2>
+  <ul class="mt-8 grid gap-4 sm:grid-cols-2">
+    {homeBrands.map((brand) => {
+      const items = brandProducts(brand.id);
+      return (
+        <li class="card-elevated flex h-full flex-col border border-brand-100">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h3 class="font-semibold text-brand-950">{brand.homeCardTitle ?? brand.name}</h3>
+            </div>
+            {brand.logoPath && (
+              <img
+                src={brand.logoPath}
+                alt={brand.logoAlt ?? brand.name}
+                loading="lazy"
+                class="h-10 w-auto shrink-0 object-contain md:h-12"
+              />
+            )}
           </div>
-          {servaBrand.logoPath && (
-            <img
-              src={servaBrand.logoPath}
-              alt={servaBrand.logoAlt ?? `Logo ${servaBrand.name}`}
-              loading="lazy"
-              class="h-12 w-auto object-contain md:h-14"
-            />
-          )}
-        </div>
-        {servaBrand.featuredIntro && (
-          <p class="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">{servaBrand.featuredIntro}</p>
-        )}
-        {servaProducts.length > 0 && (
-          <ul class="mt-6 grid gap-4 md:grid-cols-3">
-            {servaProducts.map((product) => (
-              <li class="h-full">
-                <ProductPreviewCard product={product} />
-              </li>
-            ))}
-          </ul>
-        )}
-        <div class="mt-6 border-t border-brand-100 pt-5">
-          <p class="text-sm text-slate-600">
-            {servaBrand.commercialNote ??
-              'Consulta por disponibilidad y condiciones; la confirmación se realiza durante la cotización.'}
+          <p class="mt-3 text-sm leading-relaxed text-slate-600">
+            {brand.homeCardDescription ?? brand.summary}
           </p>
-          <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <a href={`/marcas/${servaBrand.slug}`} class="btn-outline-dark min-w-[12rem] text-center">Ver detalle de la línea</a>
-            <a href="/contacto" class="btn-primary min-w-[12rem] text-center">Solicitar cotización</a>
+          {items.length > 0 && (
+            <ul class="mt-4 space-y-1.5 text-sm text-slate-600">
+              {items.slice(0, 5).map((product) => (
+                <li>
+                  <a
+                    href={productPageHref(product) ?? `/marcas/${brand.slug}`}
+                    class="font-medium text-brand-700 hover:text-brand-800"
+                  >
+                    {product.name}
+                  </a>
+                </li>
+              ))}
+              {items.length > 5 && <li class="text-slate-500">y más modelos en la ficha de marca</li>}
+            </ul>
+          )}
+          <div class="mt-auto flex flex-col gap-2 pt-5">
+            <a href={`/marcas/${brand.slug}`} class="btn-outline-dark text-center">
+              {brand.homeCardCtaLabel ?? `Ver ${brand.name}`}
+            </a>
           </div>
-        </div>
-      </article>
-    </section>
-  )}
-
-  {otherBrands.length > 0 && (
-    <section class="mt-12" aria-labelledby="otras-marcas-heading">
-      <h2 id="otras-marcas-heading" class="section-title">Otras marcas del portafolio</h2>
-      <ul class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {otherBrands.map((brand) => (
-          <li class="card-elevated">
-            <h3 class="font-semibold text-brand-950">{brand.name}</h3>
-            <p class="mt-2 text-sm text-slate-600">
-              Línea sujeta a evaluación comercial y confirmación de disponibilidad al cotizar.
-            </p>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )}
+        </li>
+      );
+    })}
+  </ul>
 
   <div class="mt-14">
     <QuoteCTA

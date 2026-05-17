@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import PageHeader from '../../components/PageHeader.astro';
 import QuoteCTA from '../../components/QuoteCTA.astro';
 import ProductPreviewCard from '../../components/ProductPreviewCard.astro';
+import ProductQuoteActions from '../../components/ProductQuoteActions.astro';
 import { brands } from '../../data/brands';
 import { products } from '../../data/products';
 
@@ -39,9 +40,16 @@ const servaProducts = servaBrand
           )}
         </div>
         {servaBrand.summary && <p class="mt-4 max-w-3xl text-sm leading-relaxed text-slate-600">{servaBrand.summary}</p>}
-        {servaBrand.featuredIntro && (
-          <p class="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">{servaBrand.featuredIntro}</p>
+        {servaBrand.brandIntro && (
+          <p class="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">{servaBrand.brandIntro}</p>
         )}
+        <p class="mt-3 max-w-3xl text-xs leading-relaxed text-slate-500">
+          Pedidos gestionados por OrigenLab según confirmación comercial. Disponibilidad y condiciones
+          se validan al cotizar; no implica stock permanente ni distribución exclusiva.
+        </p>
+        <div class="mt-6">
+          <ProductQuoteActions brandName={servaBrand.homeCardTitle ?? 'SERVA Electrophoresis'} />
+        </div>
       </section>
 
       {servaBrand.applicationAreas && servaBrand.applicationAreas.length > 0 && (

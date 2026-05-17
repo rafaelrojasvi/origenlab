@@ -37,6 +37,13 @@ describe("api client", () => {
     expect(apiUrl("/dashboard/summary", { scope: "archive" })).toContain("scope=archive");
   });
 
+  it("apiUrl builds commercial purchase-events path in dev mode", () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5173" } });
+    const url = apiUrl("/commercial/purchase-events", { limit: 20 });
+    expect(url).toBe("http://127.0.0.1:5173/commercial/purchase-events?limit=20");
+  });
+
   it("fetchDashboardSummary calls canonical endpoint by default", async () => {
     vi.stubEnv("MODE", "development");
     vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5173" } });

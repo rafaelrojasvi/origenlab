@@ -19,6 +19,7 @@ Documento de referencia para copy, IA y redacción de cotizaciones. **Fuente de 
 | **Base** | Valdivia, Chile |
 | **Oferta principal** | Venta de equipos para laboratorios de servicio e investigación |
 | **Líneas de producto** | Alimentos · Control de calidad · Laboratorio clínico |
+| **Familia editorial (equipos)** | Centrífugas Ortoalresa: Biocen 22, Biocen 22 R, Consul 22, Digicen 22, Digicen 22 R — cotización vía OrigenLab |
 | **Audiencia típica** | Laboratorios de servicios e investigación, universidades, clínicas, hospitales, industrias de I+D |
 | **Catálogos / fichas** | Catálogos y fichas técnicas disponibles según línea de producto. Contáctenos para evaluar la alternativa adecuada para su laboratorio. |
 
@@ -42,6 +43,17 @@ Documento de referencia para copy, IA y redacción de cotizaciones. **Fuente de 
 - **Garantía:** Según fabricante y condiciones del equipo; detalle en cotización.
 - **Instalación:** Cuando el equipo lo exige; alcance acordado por escrito.
 - **Puesta en marcha:** Equipos más complejos; según equipo y acuerdo comercial.
+
+---
+
+## Ortoalresa (centrífugas)
+
+- **Marca:** Ortoalresa (Álvarez Redondo S.A.) — fabricante europeo de centrífugas; datos según ficha del fabricante.
+- **Catálogo activo:** Biocen 22, Biocen 22 R, Consul 22, Digicen 22, Digicen 22 R (`/productos/centrifugas/...`). **Bioprocen 22 R** retirado del catálogo público.
+- **Inicio:** SERVA y Ortoalresa al mismo nivel en «Marcas y líneas disponibles» (sin jerarquía «marca destacada»).
+- **WhatsApp:** botón «Cotizar por WhatsApp» con mensaje prefilled (`src/lib/whatsapp.ts`).
+- **Copy:** cotización y disponibilidad sujetas a confirmación comercial; **no** afirmar representación exclusiva.
+- **Activos:** [`product-assets.md`](product-assets.md).
 
 ---
 

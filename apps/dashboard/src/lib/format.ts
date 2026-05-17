@@ -1,5 +1,10 @@
 const esNumber = new Intl.NumberFormat("es-CL");
 
+export function formatClp(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return `$${esNumber.format(value)} CLP`;
+}
+
 export function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   return esNumber.format(value);

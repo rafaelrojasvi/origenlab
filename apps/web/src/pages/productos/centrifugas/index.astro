@@ -1,0 +1,101 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import PageHeader from '../../../components/PageHeader.astro';
+import QuoteCTA from '../../../components/QuoteCTA.astro';
+import ProductPreviewCard from '../../../components/ProductPreviewCard.astro';
+import ProductQuoteActions from '../../../components/ProductQuoteActions.astro';
+import ProductComparisonStrip from '../../../components/ProductComparisonStrip.astro';
+import { getProductFamilyBySlug } from '../../../data/productFamilies';
+import { getProductsByFamilySlug, getBrandById } from '../../../lib/catalog';
+
+const family = getProductFamilyBySlug('centrifugas');
+const familyProducts = getProductsByFamilySlug('centrifugas').filter((p) => p.showOnProductsPage);
+const ortoBrand = getBrandById('ortoalresa');
+
+const filterLabels = [
+  'ventilada',
+  'refrigerada',
+  'microcentrífuga',
+  'universal',
+  'gran capacidad',
+] as const;
+---
+
+<Layout
+  title="Centrífugas de laboratorio — OrigenLab"
+  description="Centrífugas Ortoalresa para preparación de muestras y análisis. Cotización y disponibilidad sujetas a confirmación comercial."
+>
+  <PageHeader
+    title={family?.name ?? 'Centrífugas'}
+    lead={family?.description ?? 'Equipos de centrifugación para laboratorio.'}
+  />
+
+  <p class="mt-6 max-w-3xl text-sm leading-relaxed text-slate-600">
+    Equipos disponibles para evaluación técnica y cotización a través de OrigenLab. No implica stock ni
+    representación exclusiva salvo confirmación comercial por escrito.
+  </p>
+
+  <div class="mt-6">
+    <ProductQuoteActions brandName={ortoBrand?.name ?? 'Ortoalresa'} />
+  </div>
+
+  <div class="mt-8 flex flex-wrap gap-2" aria-label="Referencias de tipo de equipo">
+    {filterLabels.map((label) => (
+      <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+        {label}
+      </span>
+    ))}
+  </div>
+  <p class="mt-2 text-xs text-slate-500">
+    Etiquetas según ficha del fabricante; la configuración aplicable se confirma al cotizar.
+  </p>
+
+  {familyProducts.length > 0 && (
+    <ul class="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {familyProducts.map((product) => {
+        const brand = getBrandById(product.brandId);
+        return (
+          <li class="flex flex-col">
+            <ProductPreviewCard
+              product={product}
+              brandName={brand?.name}
+              showBrand={true}
+              showApplication={true}
+              showImage={true}
+              showWhatsApp={true}
+              brandNameForQuote="Ortoalresa"
+            />
+            {product.filterTags && product.filterTags.length > 0 && (
+              <ul class="mt-2 flex flex-wrap gap-1 px-1">
+                {product.filterTags.map((tag) => (
+                  <li class="rounded border border-slate-100 bg-white px-2 py-0.5 text-[0.65rem] text-slate-500">
+                    {tag}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  )}
+
+  <ProductComparisonStrip products={familyProducts} />
+
+  <p class="mt-8 text-sm">
+    <a href="/marcas/ortoalresa" class="font-medium text-brand-700 hover:text-brand-800">
+      Ver marca Ortoalresa →
+    </a>
+  </p>
+
+  <div class="mt-14">
+    <QuoteCTA
+      title="Solicitar cotización"
+      description="Indique equipo de interés, aplicación y ciudad. Correo o WhatsApp."
+    />
+  </div>
+
+  <p class="mt-10">
+    <a href="/productos" class="link-muted text-sm font-medium">← Volver a productos</a>
+  </p>
+</Layout>

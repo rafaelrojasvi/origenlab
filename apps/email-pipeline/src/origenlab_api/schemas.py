@@ -37,6 +37,9 @@ class DashboardSummaryResponse(BaseModel):
     email_suppression_count: int = 0
     domain_suppression_count: int = 0
     outreach_state_count: int = 0
+    commercial_purchase_event_count: int = 0
+    commercial_purchase_event_item_count: int = 0
+    latest_confirmed_purchase_gross_clp: int | None = None
     tables: dict[str, bool] = Field(default_factory=dict)
     data_source: Literal["postgres_mirror"] = "postgres_mirror"
     eventually_consistent: bool = True
@@ -212,6 +215,61 @@ class ClassificationActionsResponse(BaseModel):
     disclaimer: str = (
         "Acciones sugeridas por heurística; el operador decide en Streamlit/CLI."
     )
+
+
+class CommercialPurchaseEventItemRow(BaseModel):
+    line_number: int
+    ref_code: str | None = None
+    product_name: str
+    brand: str | None = None
+    quantity: str | None = None
+    net_amount_clp: int | None = None
+    evidence_source: str | None = None
+
+
+class CommercialPurchaseEventRow(BaseModel):
+    id: int
+    source_email_id: int | None = None
+    buyer_org_name: str
+    buyer_contact_name: str | None = None
+    buyer_contact_email: str | None = None
+    buyer_domain: str | None = None
+    purchase_status: str
+    purchase_status_label_es: str = ""
+    oc_number: str
+    quote_number: str | None = None
+    project_name: str | None = None
+    project_code: str | None = None
+    net_amount_clp: int | None = None
+    iva_amount_clp: int | None = None
+    gross_amount_clp: int | None = None
+    currency: str = "CLP"
+    email_date_iso: str | None = None
+    email_subject: str | None = None
+    commercial_summary: str | None = None
+    suggested_action_es: str | None = None
+    line_items: list[CommercialPurchaseEventItemRow] = Field(default_factory=list)
+    product_summary: str | None = None
+
+
+COMMERCIAL_PURCHASE_DISCLAIMER: str = (
+    "Eventos de compra confirmados promovidos desde Gmail/SQLite. "
+    "No sustituyen revisión operativa de OC, factura o despacho."
+)
+
+
+class CommercialPurchaseEventsListResponse(BaseModel):
+    table_available: bool = False
+    items: list[CommercialPurchaseEventRow] = Field(default_factory=list)
+    total: int = 0
+    limit: int = 20
+    disclaimer: str = COMMERCIAL_PURCHASE_DISCLAIMER
+
+
+class CommercialPurchaseEventDetailResponse(BaseModel):
+    table_available: bool = False
+    event: CommercialPurchaseEventRow | None = None
+    disclaimer: str = COMMERCIAL_PURCHASE_DISCLAIMER
 
 
 class OutboundReadinessResponse(BaseModel):

@@ -1,20 +1,32 @@
 ---
 import { site } from '../config/site';
 import { contact, whatsappUrl, telUrl } from '../data/contact';
+import OrigenLogoLockup from './logo/OrigenLogoLockup.astro';
 ---
 
 <footer class="mt-20 border-t border-brand-900/20 bg-gradient-to-b from-brand-950 to-brand-900 text-brand-100">
-  <div class="mx-auto max-w-6xl px-6 py-12">
+  <div class="mx-auto max-w-7xl px-5 py-12 lg:px-8">
     <nav
-      class="mb-8 flex flex-wrap gap-x-8 gap-y-2 border-b border-white/10 pb-8 text-sm font-semibold"
-      aria-label="Enlaces útiles"
+      class="mb-8 flex flex-wrap gap-x-6 gap-y-2 border-b border-white/10 pb-8 text-sm"
+      aria-label="Catálogo y categorías"
     >
-      <a href="/productos" class="text-white transition hover:text-brand-200">Productos y categorías</a>
-      <a href="/contacto" class="text-white transition hover:text-brand-200">Contacto y cotización</a>
+      <a href="/productos" class="font-semibold text-white transition hover:text-brand-200">Productos</a>
+      <a href="/marcas" class="font-semibold text-white transition hover:text-brand-200">Marcas</a>
+      <a href="/categorias/alimentos" class="text-brand-200 transition hover:text-white">Alimentos</a>
+      <a href="/categorias/control-de-calidad" class="text-brand-200 transition hover:text-white"
+        >Control de calidad</a
+      >
+      <a href="/categorias/laboratorio-clinico" class="text-brand-200 transition hover:text-white"
+        >Laboratorio clínico</a
+      >
+      <a href="/productos/centrifugas" class="text-brand-200 transition hover:text-white"
+        >Centrífugas Ortoalresa</a
+      >
+      <a href="/contacto" class="font-semibold text-white transition hover:text-brand-200">Contacto</a>
     </nav>
     <div class="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1fr_auto]">
       <div class="space-y-3 text-sm">
-        <p class="text-lg font-bold text-white">{site.name}</p>
+        <OrigenLogoLockup variant="dark" size="sm" solution="premium" gap="tight" transparentBg />
         <p class="text-brand-200">{site.location}</p>
         <p>
           <a href={`mailto:${site.email}`} class="text-white underline decoration-brand-400/50 underline-offset-2 hover:decoration-brand-200"
