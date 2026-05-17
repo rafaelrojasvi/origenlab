@@ -58,11 +58,11 @@ def test_scan_batch_spanish_microsoft_dsn_snippet(tmp_path) -> None:
         ) VALUES (
           'gmail:x/INBOX', 'INBOX', '<ndr_es>', 'Delivery Status Notification (Failure)',
           'Microsoft Outlook <microsoftemail@notification.microsoft.com>', 'a@b.cl',
-          '', '2026-04-16T12:00:00Z',
+          '', ?,
           ?, 0, 0
         )
         """,
-        (body,),
+        (_utc_iso_days_ago(5), body),
     )
     conn.commit()
     r = scan_batch_against_ingested_bounces(

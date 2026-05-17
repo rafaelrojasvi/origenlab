@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 
 from origenlab_email_pipeline.commercial.ceaf_oc_26172 import CEAF_OC_NUMBER, CEAF_SUBJECT_FRAGMENT
@@ -19,6 +17,7 @@ from origenlab_email_pipeline.commercial.commercial_purchase_schema import (
     commercial_purchase_tables_exist,
     ensure_commercial_purchase_tables,
 )
+import origenlab_email_pipeline.commercial_purchase_postgres_mirror as commercial_pg_mirror
 from origenlab_email_pipeline.commercial_purchase_postgres_mirror import (
     sync_commercial_purchase_events,
 )
@@ -126,7 +125,9 @@ def test_promotion_insert_and_idempotent_update(tmp_path: Path) -> None:
     assert count == 1
 
 
-def test_postgres_mirror_sync_from_sqlite(tmp_path: Path) -> None:
+def test_postgres_mirror_sync_from_sqlite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     db = tmp_path / "emails.sqlite"
     _seed_ceaf_email(db)
     conn = connect_sqlite_rw(db)
@@ -167,14 +168,19 @@ def test_postgres_mirror_sync_from_sqlite(tmp_path: Path) -> None:
         def __exit__(self, *args) -> None:
             return None
 
-    with patch(
-        "origenlab_email_pipeline.commercial_purchase_postgres_mirror.psycopg.connect",
-        return_value=FakeConn(),
-    ), patch(
-        "origenlab_email_pipeline.commercial_purchase_postgres_mirror.pg_table_exists",
-        return_value=True,
-    ):
-        result = sync_commercial_purchase_events("postgresql://u:p@127.0.0.1/scratch", db)
+    monkeypatch.setattr(
+        commercial_pg_mirror,
+        "psycopg",
+        type("P", (), {"connect": lambda *a, **k: FakeConn()}),
+    )
+
+    class _FakeJson:
+        def __init__(self, obj: object) -> None:
+            self.obj = obj
+
+    monkeypatch.setattr(commercial_pg_mirror, "Json", _FakeJson)
+    monkeypatch.setattr(commercial_pg_mirror, "pg_table_exists", lambda *a, **k: True)
+    result = sync_commercial_purchase_events("postgresql://u:p@127.0.0.1/scratch", db)
     assert result["events_built"] == 1
     assert result["items_built"] == 3
     assert result["events_written"] == 1
