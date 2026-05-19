@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# LEGACY_DO_NOT_USE: Superseded by scripts/qa/build_equipment_first_opportunity_queue.py
+# and build_equipment_first_operator_queue.py. Retained for audit/tests only — do not
+# use for current operator export, send planning, or equipment-first workflows.
+# See docs/SCRIPT_MAP.md and reports/out/active/current/manifest.json.
+# -----------------------------------------------------------------------------
 """Cross-check tender/private-lab buyer imports and emit A/B outreach queues.
 
 LEGACY_DO_NOT_USE for equipment-first public-tender work (2026-05+).

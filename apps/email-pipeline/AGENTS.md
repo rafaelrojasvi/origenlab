@@ -7,14 +7,15 @@
 1. **[`reports/out/active/current/manifest.json`](reports/out/active/current/manifest.json)** — canonical vs stale files, known warnings, parked Postgres/API.
 2. **[`reports/out/active/current/README_ACTIVE_CURRENT.md`](reports/out/active/current/README_ACTIVE_CURRENT.md)** — operator handoff for `active/current/`.
 3. **[`docs/SCRIPT_MAP.md`](docs/SCRIPT_MAP.md)** — which scripts are daily, break-glass, or lab.
-4. **[`docs/RUNBOOK.md`](docs/RUNBOOK.md)** — procedures (ingest, DNR, equipment-first, campaigns).
-5. **[`docs/CRUD_SAFETY.md`](docs/CRUD_SAFETY.md)** — mutation rules and `--apply` policy.
-6. **Operator status (read-only):**
+4. **[`docs/EXPERIMENTAL_PARKED.md`](docs/EXPERIMENTAL_PARKED.md)** — **read before** Postgres migrate/mirror, FastAPI/React dashboard, Tatiana/ML/dataset, or old campaign pilots.
+5. **[`docs/RUNBOOK.md`](docs/RUNBOOK.md)** — procedures (ingest, DNR, equipment-first, campaigns).
+6. **[`docs/CRUD_SAFETY.md`](docs/CRUD_SAFETY.md)** — mutation rules and `--apply` policy.
+7. **Operator status (read-only):**
    ```bash
    cd apps/email-pipeline
    uv run python scripts/qa/operator_status.py
    ```
-7. Optional context: [`docs/OUTBOUND_SOURCE_OF_TRUTH.md`](docs/OUTBOUND_SOURCE_OF_TRUTH.md), [`reports/out/active/current/feature_inventory_simplification_plan_20260518.md`](reports/out/active/current/feature_inventory_simplification_plan_20260518.md).
+8. Optional context: [`docs/OUTBOUND_SOURCE_OF_TRUTH.md`](docs/OUTBOUND_SOURCE_OF_TRUTH.md), [`reports/out/active/current/code_quality_simplification_audit_20260519.md`](reports/out/active/current/code_quality_simplification_audit_20260519.md).
 
 ## Hard rules (non-negotiable)
 
@@ -26,7 +27,8 @@
 | **No `--apply` without approval** | Imports, backfills, purges, suppression writes, and archive moves require explicit user consent. Default to dry-run / read-only. |
 | **No invented contacts** | Do not add buyer emails, DeepSearch rows, or marketing contacts without evidence. |
 | **Equipment-first tenders** | Use `equipment_first_operator_queue_*.csv` and aligned `buyer_opportunity_ab_queue_*.csv`. |
-| **Do not trust stale crosscheck** | **`LEGACY_DO_NOT_USE`:** `build_buyer_opportunity_queue.py`, `buyer_opportunity_crosscheck_*`, `tender_buyer_outreach_queue_*` for equipment-first export/send planning. |
+| **LEGACY scripts** | **Do not use for current operator work:** `build_buyer_opportunity_queue.py`, `buyer_opportunity_crosscheck_*`, `tender_buyer_outreach_queue_*` — use equipment-first builders instead. |
+| **Parked stack** | Read [`docs/EXPERIMENTAL_PARKED.md`](docs/EXPERIMENTAL_PARKED.md) before Postgres/API/Tatiana/ML; not required for ingest, DNR, equipment-first queues, or send safety. |
 | **No file deletes** | Unless the user explicitly requests deletion. |
 | **Tests for behavior changes** | If you change code (not docs-only), run targeted pytest; see workspace rule *Testing — definition of done*. |
 
@@ -49,7 +51,7 @@ uv run python scripts/qa/check_outbound_readiness.py # read-only DNR/Sent prefli
 
 ## Makefile shortcuts (optional)
 
-From `apps/email-pipeline/`: `make doctor`, `make safety-refresh`, `make equipment-queue`, `make audit` — see [`Makefile`](Makefile).
+From `apps/email-pipeline/`: `make doctor`, `make safety-refresh`, `make equipment-queue` (optional `DATE_SUFFIX=YYYYMMDD`), `make audit` — see [`Makefile`](Makefile).
 
 ## Monorepo pointer
 

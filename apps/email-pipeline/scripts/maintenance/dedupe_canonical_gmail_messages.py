@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# SAFETY (break-glass): DELETE duplicate canonical Gmail ``emails`` rows; --apply required.
+# See docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 """Remove duplicate canonical Gmail ``emails`` rows (same ``message_id``, same Workspace ingest).
 
 **Default: dry-run** (no writes). Pass ``--apply`` plus ``--ack-sqlite-backup`` to execute ``DELETE``.

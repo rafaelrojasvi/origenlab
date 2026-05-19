@@ -79,6 +79,19 @@ Examples: `purge_*.py`, `build_business_mart` / `build_commercial_intel` **rebui
 - **`--apply` is always risky** — it appears in the break-glass / import sections of `SCRIPT_MAP.md`.
 - **Daily lanes** document where `--apply` is **expected** (e.g. precision `process-reviewed` and import paths); do not add `--apply` in scripts that are not part of that runbook.
 
+### Phase 2C pilot: `mark_outreach_state.py` (implemented)
+
+[`scripts/leads/mark_outreach_state.py`](../scripts/leads/mark_outreach_state.py) is the first **operator sidecar** CLI on the shared mutation contract:
+
+| Behavior | Detail |
+|----------|--------|
+| **Default** | Dry-run / preview only — prints `contact_email_norm`, `old_state`, `new_state`, `source`, `updated_by`, `reason` (and optional `notes`). **No** `commit`. |
+| **Writes** | Require **`--apply`** plus **`--updated-by`** or **`--operator`**, **`--source`** or **`--source-artifact`**, and **`--reason`**. |
+| **Aliases** | `--operator` ↔ `--updated-by`; `--source-artifact` ↔ `--source` (must not conflict if both are set). |
+| **Scope** | SQLite `outreach_contact_state` only — does **not** ingest Sent or mutate Gmail. |
+
+**Operator flow:** run without `--apply` and review stdout → re-run the same args with **`--apply`** when correct. Regression tests: [`test_mark_outreach_state_cli.py`](../tests/test_mark_outreach_state_cli.py).
+
 ---
 
 ## 7. `reports/out/` policy

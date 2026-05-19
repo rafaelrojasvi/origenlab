@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 # -----------------------------------------------------------------------------
+# EXPERIMENTAL_PARKED: Postgres migration path — not daily runtime. Trial on scratch
+# Postgres only; do not run without explicit operator approval.
+# See docs/EXPERIMENTAL_PARKED.md and docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 # SAFETY (break-glass): Writes to Postgres; --replace TRUNCATEs archive.* target
 # tables before reload. Wrong target URL causes data loss on the wrong database.
 # See docs/SCRIPT_MAP.md — "Break-glass scripts".

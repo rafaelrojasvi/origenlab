@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 # -----------------------------------------------------------------------------
+# EXPERIMENTAL_PARKED: Postgres migration path — not daily runtime. Trial on scratch
+# Postgres only; do not run without explicit operator approval.
+# See docs/EXPERIMENTAL_PARKED.md and docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 # SAFETY (break-glass): Writes to Postgres mart.contact_master,
 # mart.organization_master, mart.opportunity_signals (+ *_canonical mirrors).
 # --replace DELETEs only the selected --tables group. Scratch/staging Postgres only.

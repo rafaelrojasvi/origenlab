@@ -10,8 +10,13 @@ CHEAT = REPO / "docs" / "OPERATOR_CHEAT_SHEET.md"
 DASHBOARD_README = REPO.parent / "dashboard" / "README.md"
 
 RUNBOOK_MARKERS = (
+    "m-eprun-dashboard-optional",
+    "m-eprun-daily-outbound",
+    "Daily operator truth",
+    "dashboard_stack_simplification_design_20260519.md",
     "m-eprun-dashboard-gmail-to-react",
     "Dashboard refresh: from Gmail to React",
+    "canonical-dashboard-refresh-chain",
     "Gmail contacto@origenlab.cl",
     "uv sync --group gmail",
     "sync_dashboard_postgres_mirror.py",
@@ -28,9 +33,11 @@ RUNBOOK_MARKERS = (
 CHEAT_MARKERS = (
     "m-opsheet-dashboard-gmail-to-react",
     "Commercial React dashboard",
-    "sync_dashboard_postgres_mirror.py",
-    "set -eo pipefail",
-    "SELECT COUNT(*), MAX(date_iso)",
+    "m-eprun-dashboard-optional",
+    "canonical-dashboard-refresh-chain",
+    "dashboard_stack_simplification_design_20260519.md",
+    "refresh_operational_dashboard_stack.py",
+    "EXPERIMENTAL_PARKED.md",
 )
 
 DASHBOARD_README_MARKERS = (

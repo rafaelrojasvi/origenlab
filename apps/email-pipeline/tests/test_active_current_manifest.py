@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from origenlab_email_pipeline.active_current_manifest import load_manifest, validate_manifest
+from origenlab_email_pipeline.active_current_manifest import (
+    ALLOWED_CAMPAIGN_MODES,
+    load_manifest,
+    validate_manifest,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 ACTIVE_CURRENT = REPO / "reports/out/active/current"
@@ -56,12 +60,24 @@ def test_fastlab_warning_in_manifest() -> None:
     manifest = load_manifest(MANIFEST_PATH)
     text = " ".join(manifest.get("known_warnings") or []).lower()
     assert "fastlab" in text
-    assert "pending" in text or "verification" in text
+    assert "not_contacted" in text or "corrected" in text
+    assert "manual_state_only_pending" not in text
+    assert "outreach_state contacted" not in text
     notes = manifest.get("operator_notes") or {}
     fastlab = notes.get("fastlab") or {}
-    assert fastlab.get("status") == "manual_state_only_pending_sent_verification"
+    assert fastlab.get("outreach_state") == "not_contacted"
+    assert fastlab.get("treat_as_completed_outreach") is False
 
 
 def test_manifest_json_parseable() -> None:
     data = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     assert data.get("schema_version") == "1"
+
+
+def test_manifest_campaign_mode_allowed() -> None:
+    manifest = load_manifest(MANIFEST_PATH)
+    mode = manifest.get("campaign_mode")
+    assert mode in ALLOWED_CAMPAIGN_MODES
+    assert manifest.get("current_operator_focus")
+    errors = validate_manifest(manifest, active_current=ACTIVE_CURRENT, active_root=ACTIVE_ROOT)
+    assert not any("campaign_mode" in e for e in errors), errors

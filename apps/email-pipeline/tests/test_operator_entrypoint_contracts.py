@@ -50,6 +50,7 @@ _BREAK_GLASS_PATHS: tuple[str, ...] = (
     "scripts/migrate/sqlite_document_master_to_postgres.py",
     "scripts/migrate/sqlite_outbound_sidecars_to_postgres.py",
     "scripts/migrate/sqlite_mart_core_to_postgres.py",
+    "scripts/maintenance/dedupe_canonical_gmail_messages.py",
 )
 
 # Top-of-file operator warning (Stage 1.5 banners and equivalents)
@@ -104,7 +105,7 @@ def test_compatibility_wrappers_text_and_path() -> None:
         p = REPO / rel
         assert p.is_file()
         t = p.read_text(encoding="utf-8", errors="replace").lower()
-        assert "compatibility" in t or "wrapper" in t, rel
+        assert "compatibility_wrapper" in t or "compatibility_only" in t, rel
         assert "leads/advanced" in t or "leads\\advanced" in t, rel
-        # Docstrings say delegation / no new behavior; lenient
-        assert "no behavior" in t or "delegate" in t or "runpy" in t or "implementation" in t, rel
+        assert "not preferred" in t or "no behavior" in t, rel
+        assert "runpy" in t or "delegate" in t or "implementation" in t, rel

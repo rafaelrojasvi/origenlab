@@ -56,7 +56,7 @@ Add **`--write-outbound-summary`** to emit `<stem>_outbound_summary.json` next t
 
 ## After sending
 
-- Update **blocker memory** so the next run does not re-offer the same contacts: Sent ingest for `contacto@origenlab.cl`, and/or [`mark_outreach_state.py`](../../scripts/leads/mark_outreach_state.py) / Streamlit sidecars for `outreach_contact_state`, plus suppression when appropriate.
+- Update **blocker memory** so the next run does not re-offer the same contacts: Sent ingest for `contacto@origenlab.cl`, and/or [`mark_outreach_state.py`](../../scripts/leads/mark_outreach_state.py) (preview first, then **`--apply`** with operator, source, reason) / Streamlit sidecars for `outreach_contact_state`, plus suppression when appropriate.
 - Keep the **CLI-produced CSV/JSON** (and readiness JSON if you ran it) as the record of what was selected for that batch.
 
 ## What is **not** source of truth

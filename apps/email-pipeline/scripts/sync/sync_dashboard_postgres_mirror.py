@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 # -----------------------------------------------------------------------------
+# EXPERIMENTAL_PARKED: Dashboard Postgres mirror only — not send/export truth.
+# SQLite + Gmail Sent remain operational source of truth. Do not run without explicit
+# operator approval. See docs/EXPERIMENTAL_PARKED.md.
+# -----------------------------------------------------------------------------
 # SAFETY: Read-only SQLite; writes Postgres dashboard mirror tables only via
 # existing migrate loaders (--replace on scratch/staging). No Gmail ingest, no
 # mart rebuild, no email send. Fails closed if canonical Gmail rows exist but SQLite

@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-05-14
+Last reviewed: 2026-05-19
 
 **This document is the canonical operator map** for outbound and campaign work. It is **navigation and safety labeling only** — behavior lives in code and in [`RUNBOOK.md`](RUNBOOK.md).
 
@@ -12,11 +12,11 @@ Last reviewed: 2026-05-14
 
 **Stage 6D1 (reports / `reports/out`):** path **classification** and planner aggregations are shared in [`core/reports_out.py`](../src/origenlab_email_pipeline/core/reports_out.py); [`plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) and [`archive_reports_out_generated.py`](../scripts/tools/archive_reports_out_generated.py) remain the **operator entrypoints**; archiver **dry-run** default and move-only semantics are unchanged in intent.
 
-**Stage 6E1 (Tatiana / lab):** **boundary doc only** — see [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md). Lab / Tatiana / `scripts/ml` are **not** the daily outbound lanes. Source-quality planner (`plan_source_quality.py`) labels the `tatiana_lab` bucket for the paths listed there. Future **6E2** may refactor large Tatiana modules; 6E1 does **not** move or change implementation.
+**Stage 6E1 (Tatiana / lab):** **boundary doc only** — see [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md). Lab / Tatiana / `scripts/ml` are **not** the daily outbound lanes. **Parked Postgres/API/pilots index:** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md). Source-quality planner (`plan_source_quality.py`) labels the `tatiana_lab` bucket for the paths listed there. Future **6E2** may refactor large Tatiana modules; 6E1 does **not** move or change implementation.
 
-**Root `scripts/*.py` lead-account shims** (`build_lead_account_rollup.py`, `audit_lead_org_quality.py`, `match_lead_accounts_to_existing_orgs.py`, `validate_lead_account_rollup.py`) are **compatibility wrappers** to `scripts/leads/advanced/…`—**not** deletion targets until doc/test/operator paths are migrated; see file docstrings. Pure env redaction utilities: [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py).
+**Lead-account root shims:** four files under `scripts/*.py` are **`COMPATIBILITY_WRAPPER` / `COMPATIBILITY_ONLY`** — retained for bookmarks and old one-liners; **not preferred** for new operator commands or agent prompts. **Canonical implementations:** `scripts/leads/advanced/*` (table below). **Do not delete** wrappers until doc/test references migrate. Pure env redaction utilities: [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py).
 
-**Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints (including the reports-out archive tool), asserts top-of-file warnings on the break-glass set (aligned to tables below), and checks the four root compatibility wrappers. Regressions require updating that test for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
+**Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints (including the reports-out archive tool), asserts top-of-file warnings on the break-glass set (aligned to tables below), and checks the four root compatibility wrappers. [`test_lead_compatibility_wrappers.py`](../tests/test_lead_compatibility_wrappers.py) locks wrapper→canonical mapping and SCRIPT_MAP labeling. Regressions require updating those tests for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
 
 **Canonical campaign workspace:** fresh inputs and outputs for the two outbound lanes belong in **`reports/out/active/current/`**. Other paths under `reports/out/active/` (and most of `reports/out/archive/`) are **evidence, history, or ad-hoc exports** — not the default place to pick up “today’s” CSV for DeepSearch or send lists. Keep only intentional root reference files in `active/` (`outreach_contacted_all.csv`, `all_known_marketing_contacts_dedup.csv`) because some scripts use them as default auxiliary inputs. (Stage 6C1) Volume marketing **processing** helpers for ``process_broad_marketing_contacts`` live in ``core.outbound.broad_marketing_contacts``; the **script** remains the supported entrypoint (CSV contracts unchanged). (Stage 6C2) **Do-not-repeat master** merge/summary formatting for ``export_do_not_repeat_master.py`` lives in ``core.outbound.do_not_repeat_master``; the **script** remains the daily entrypoint; **read-only** on SQLite; output filenames and JSON/CSV contract unchanged.
 
@@ -49,6 +49,21 @@ Use this to separate *what you run daily* from *what can hurt you*:
 | [`scripts/leads/advanced/prepare_active_workspace.py`](../scripts/leads/advanced/prepare_active_workspace.py) | Cleans **`reports/out/active/`** for **legacy weekly lead focus** (shortlist, hunt, deepsearch CSV hygiene; archives extras) | **Lead pipeline / REPORTING** workflows — see [`REPORTING.md`](REPORTING.md), [`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md) |
 
 If you only care about the **two daily outbound lanes**, prefer **`prepare_outbound_campaign_workspace.py`**. If you are maintaining **hunt sheets + unified active CSVs**, you may still need **`prepare_active_workspace.py`** — read both docstrings before picking one.
+
+---
+
+## Lead-account scripts: canonical vs root wrappers
+
+**Operator rule:** In **new** docs, runbooks, and agent prompts, use **`scripts/leads/advanced/…`** only. Root paths below are **COMPATIBILITY_WRAPPER** — same behavior via delegation; **not preferred** for new commands.
+
+| Tag | Root path (COMPATIBILITY_ONLY) | Canonical target (use this) | Notes |
+|-----|-------------------------------|-----------------------------|--------|
+| `COMPATIBILITY_WRAPPER` | [`scripts/build_lead_account_rollup.py`](../scripts/build_lead_account_rollup.py) | [`scripts/leads/advanced/build_lead_account_rollup.py`](../scripts/leads/advanced/build_lead_account_rollup.py) | Rebuilds `lead_account_*`; break-glass DELETE pattern on rollup |
+| `COMPATIBILITY_WRAPPER` | [`scripts/match_lead_accounts_to_existing_orgs.py`](../scripts/match_lead_accounts_to_existing_orgs.py) | [`scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py`](../scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py) | Match accounts → `organization_master` |
+| `COMPATIBILITY_WRAPPER` | [`scripts/validate_lead_account_rollup.py`](../scripts/validate_lead_account_rollup.py) | [`scripts/leads/advanced/validate_lead_account_rollup.py`](../scripts/leads/advanced/validate_lead_account_rollup.py) | Rollup sanity checks |
+| `COMPATIBILITY_WRAPPER` | [`scripts/audit_lead_org_quality.py`](../scripts/audit_lead_org_quality.py) | [`scripts/leads/advanced/audit_lead_org_quality.py`](../scripts/leads/advanced/audit_lead_org_quality.py) | Org name quality audit |
+
+Detail: [`leads/LEAD_ACCOUNT_LAYER.md`](leads/LEAD_ACCOUNT_LAYER.md) · [`../scripts/README.md`](../scripts/README.md#lead-account-rollup-and-mart-matching).
 
 ---
 
@@ -129,6 +144,7 @@ Legacy tags **KEEP_CORE** / **KEEP_AUDIT** in older prose map loosely to **OPS_C
 | `scripts/qa/export_do_not_repeat_master.py` | OPS_DAILY | Merge “do not repeat” emails for DeepSearch + volume processor | `reports/out/active/current/do_not_repeat_master.{csv,txt}`, `do_not_repeat_summary.json` |
 | `scripts/qa/export_outreach_contacted_all.py` | OPS_DAILY | Export auxiliary contacted-all list (Sent + blocking outreach state) | `reports/out/active/outreach_contacted_all.csv` |
 | `scripts/qa/refresh_outbound_safety_memory.py` | OPS_DAILY | Run canonical anti-repeat auxiliary refresh + strict checks (stops on first hard failure) | Combined step runner for contacted-all, all-known, DNR, strict coverage, hygiene, readiness |
+| `scripts/qa/validate_contacted_csv_coverage.py` | OPS_DAILY | Strict overlap of auxiliary contacted CSVs vs Sent / gate inputs (`--strict` in refresh chain) | stdout / exit code; invoked by `refresh_outbound_safety_memory.py` |
 | `scripts/research/run_deep_research_prospecting.py` | OPS_DAILY | Automated research automation (heavy weekly/off-peak, light daily) → review-ready volume batch (no send) | Writes timestamped `research_automation/<ts>/` artifacts, validates/processes, **stops before send**; `--research-mode heavy|light`; supports `--sector`, `--day-rotation`, `--daily-mode`; optional read-only `--run-contacted-coverage-check`; guardrails: `--max-candidates`, `--max-send-ready`, `--fail-on-over-limit`; compact-seed caps: `--max-seed-email-sample`, `--max-seed-institutions`, `--max-seed-domains`; presets: `--tpm-safe`, `--tiny-run`; rate-limit controls: `--max-retries`, `--initial-backoff-seconds`, `--max-backoff-seconds`, optional `--fallback-sector`; output mode: `--research-output-mode direct_csv|evidence_first`; **heavy is fail-closed true Deep Research only (`o4-mini-deep-research`/`o3-deep-research`)**. Warning: `web_search + gpt-4o-mini` is not Deep Research heavy mode. |
 | `scripts/qa/validate_campaign_csvs.py` | OPS_DAILY | CSV contracts (`marketing_contacts`, `reviewed_deepsearch`, `send_ready`, etc.) | stdout / exit code; optional `--json-out` |
 | `scripts/leads/process_broad_marketing_contacts.py` | OPS_DAILY | Validate, gate, split volume contacts | `marketing_*.csv`, `send_ready_marketing.csv`, `marketing_contacts_summary.json` |
@@ -166,7 +182,7 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/check_reports_out_active_hygiene.py` | OPS_AUDIT | Warn/fail when `reports/out/active/` contains unexpected generated artifacts outside `current/` |
 | `scripts/qa/build_equipment_first_opportunity_queue.py` | OPS_AUDIT | Equipment-first filter from `Licitacion_Publicada.csv` → `equipment_first_opportunity_queue_*.csv` (read-only on Gmail; writes reports only) |
 | `scripts/qa/build_equipment_first_operator_queue.py` | OPS_AUDIT | Canonical operator queue + aligned `buyer_opportunity_ab_queue_*.csv` from equipment-first opportunity CSV (read-only cross-check vs DNR/Sent in SQLite) |
-| `scripts/qa/build_buyer_opportunity_queue.py` | OPS_AUDIT | **LEGACY_DO_NOT_USE** (equipment-first): legacy buyer/private-lab A/B cross-check — superseded by `build_equipment_first_*`; stale `buyer_opportunity_crosscheck_*` must not drive export |
+| `scripts/qa/build_buyer_opportunity_queue.py` | OPS_AUDIT | **LEGACY_DO_NOT_USE** — file header + docstring; legacy buyer/private-lab A/B cross-check **superseded** by `build_equipment_first_*`; retained for audit/tests only; stale `buyer_opportunity_crosscheck_*` must not drive export |
 | `scripts/qa/operator_status.py` | OPS_AUDIT | **Read-only** operator snapshot: SQLite/Sent freshness, DNR files, canonical `active/current`, manifest warnings, verdict READY/CAUTION/BLOCKED |
 | `scripts/qa/build_equipment_deepsearch_vetted_queue.py` | OPS_AUDIT | Gate `equipment_deep_research_opportunities_*.csv` → vetted queue (equipment-first + DNR/Sent/state); fails clearly if input missing |
 | `scripts/qa/validate_sqlite_archive_for_postgres.py` | OPS_MIGRATE | Read-only / pre-migrate validation |
@@ -189,7 +205,7 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | ML / embeddings exploration | `scripts/ml/*` |
 | Niche campaign reconciliations | `scripts/leads/campaigns/*` (e.g. DR50 payload flows) |
 
-These are **not** the volume or precision daily lanes; see [`dataset/TATIANA_PILOT_WORKFLOW.md`](dataset/TATIANA_PILOT_WORKFLOW.md) and [`RUNBOOK.md`](RUNBOOK.md). **Scope / safety:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) (Tatiana vs production outbound, OpenAI, `reports/out`).
+These are **not** the volume or precision daily lanes; see [`dataset/TATIANA_PILOT_WORKFLOW.md`](dataset/TATIANA_PILOT_WORKFLOW.md) and [`RUNBOOK.md`](RUNBOOK.md). **Scope / safety:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) (Tatiana vs production outbound, OpenAI, `reports/out`). **Parked index (Postgres/API + pilots):** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md).
 
 ---
 
@@ -202,7 +218,7 @@ These are **not** the volume or precision daily lanes; see [`dataset/TATIANA_PIL
 | `scripts/leads/build_archive_send_batch.py` | ARCHIVE_LANE | **`contact_master`** / archive send batch lane |
 | `scripts/leads/precheck_archive_shortlist_commercial.py` | ARCHIVE_LANE | Archive commercial precheck |
 | `scripts/leads/build_manual_html_outreach_batch.py` | CONSOLIDATE | Manual HTML package (files only); overlaps “send prep” with API sender |
-| `scripts/leads/mark_outreach_state.py` | OPS_CORE | Manual single-row **`outreach_contact_state`** edits |
+| `scripts/leads/mark_outreach_state.py` | OPS_CORE | Manual **`outreach_contact_state`** edits — **dry-run default**; **`--apply`** + `--updated-by`/`--operator`, `--source`/`--source-artifact`, `--reason` to write ([CRUD_SAFETY](CRUD_SAFETY.md#phase-2c-pilot-mark_outreach_statepy-implemented)) |
 | `scripts/leads/import_operator_outreach_blocklist.py` | OPS_CORE | Blocklist → suppressions |
 | `scripts/leads/add_manual_contact_suppressions.py` | OPS_CORE | Manual suppression adds |
 | `scripts/qa/export_all_known_marketing_contacts.py` | OPS_CORE | Known-marketing dedup export across active/archive/reference sources (includes contacted-all by default) |
@@ -228,10 +244,13 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | `scripts/tools/purge_mailbox_from_sqlite.py` | **Mailbox purge**; **`--apply`** |
 | `scripts/mart/build_business_mart.py` | Rebuild pattern **deletes** mart tables before rebuild |
 | `scripts/commercial/build_commercial_intel_v1.py` | Can **delete** / rebuild commercial facts |
-| `scripts/migrate/sqlite_archive_to_postgres.py` | **TRUNCATE** / load on Postgres target |
-| `scripts/migrate/sqlite_document_master_to_postgres.py` | **DELETE** / load on Postgres target |
-| `scripts/migrate/sqlite_outbound_sidecars_to_postgres.py` | **DELETE** / load on Postgres target |
-| `scripts/migrate/sqlite_mart_core_to_postgres.py` | **DELETE** / load on Postgres `mart.contact_master`, `organization_master`, `opportunity_signals` |
+| `scripts/migrate/sqlite_archive_to_postgres.py` | **TRUNCATE** / load on Postgres target (**EXPERIMENTAL_PARKED** — see [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md)) |
+| `scripts/sync/sync_dashboard_postgres_mirror.py` | Postgres dashboard mirror load (**EXPERIMENTAL_PARKED**; not send truth) |
+| `scripts/ops/refresh_operational_dashboard_stack.py` | Optional mart + mirror stack (**DASHBOARD_ONLY**; not CORE_DAILY) |
+| `scripts/migrate/sqlite_document_master_to_postgres.py` | **DELETE** / load on Postgres target (**EXPERIMENTAL_PARKED**) |
+| `scripts/migrate/sqlite_outbound_sidecars_to_postgres.py` | **DELETE** / load on Postgres target (**EXPERIMENTAL_PARKED**) |
+| `scripts/migrate/sqlite_mart_core_to_postgres.py` | **DELETE** / load on Postgres `mart.contact_master`, `organization_master`, `opportunity_signals` (**EXPERIMENTAL_PARKED**) |
+| `scripts/maintenance/dedupe_canonical_gmail_messages.py` | **DELETE** duplicate canonical Gmail `emails` — dry-run default; `--apply --ack-sqlite-backup` |
 | `scripts/leads/advanced/build_lead_account_rollup.py` | **DELETE** + rebuild `lead_account_*` |
 | `scripts/qa/sync_outreach_batch_from_ingested_bounces.py` | **`--apply`** updates suppressions / state |
 | `scripts/tools/flag_ndr_bounces_from_contacto.py` | **`--apply`** writes suppressions |

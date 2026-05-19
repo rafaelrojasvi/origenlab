@@ -13,6 +13,110 @@ from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contact
 from origenlab_email_pipeline.outbound_core import resolve_outbound_gmail_user, resolve_outbound_sent_folders
 from origenlab_email_pipeline.outbound_readiness_check import assess_outbound_readiness
 
+_STALE_FASTLAB_SUBSTRINGS = (
+    "manual_state_only_pending",
+    "outreach_state contacted",
+    "contacted without gmail",
+)
+
+
+def _is_stale_fastlab_warning(text: str) -> bool:
+    lower = text.lower()
+    if "fastlab" not in lower:
+        return False
+    if "not_contacted" in lower or "corrected" in lower:
+        return False
+    return any(s in lower for s in _STALE_FASTLAB_SUBSTRINGS) or (
+        "contacted" in lower and "not_contacted" not in lower
+    )
+
+
+def _fastlab_email_from_manifest(manifest: dict[str, Any]) -> str:
+    notes = (manifest.get("operator_notes") or {}).get("fastlab") or {}
+    return str(notes.get("email") or "contacto@fastlab.cl").strip().lower()
+
+
+def _fetch_outreach_state(conn: sqlite3.Connection, email_norm: str) -> str | None:
+    try:
+        row = conn.execute(
+            "SELECT state FROM outreach_contact_state WHERE contact_email_norm = ?",
+            (email_norm,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return str(row[0]).strip().lower() if row and row[0] else None
+
+
+def build_fastlab_status_warning(
+    manifest: dict[str, Any],
+    *,
+    conn: sqlite3.Connection | None = None,
+) -> str | None:
+    """Canonical FastLab line for operator_status (read-only)."""
+    notes = (manifest.get("operator_notes") or {}).get("fastlab") or {}
+    email = _fastlab_email_from_manifest(manifest)
+    state = (notes.get("outreach_state") or notes.get("status") or "").strip().lower()
+    if conn is not None:
+        db_state = _fetch_outreach_state(conn, email)
+        if db_state:
+            state = db_state
+    if state == "not_contacted" or notes.get("status") == "not_contacted_no_sent_evidence":
+        return (
+            f"FastLab ({email}): corrected to not_contacted; no Gmail Sent evidence; "
+            "future outreach requires deliberate manual review."
+        )
+    if state == "contacted":
+        return (
+            f"FastLab ({email}): outreach_state contacted without Gmail Sent row — "
+            "verify Sent ingest or reset with mark_outreach_state.py."
+        )
+    return None
+
+
+def normalize_operator_warnings(
+    warnings: list[str],
+    manifest: dict[str, Any],
+    *,
+    conn: sqlite3.Connection | None = None,
+) -> list[str]:
+    """Drop stale FastLab lines and inject canonical FastLab status from manifest/SQLite."""
+    out = [w for w in warnings if not _is_stale_fastlab_warning(w)]
+    fastlab = build_fastlab_status_warning(manifest, conn=conn)
+    if fastlab:
+        out = [w for w in out if "fastlab" not in w.lower()]
+        out.append(fastlab)
+    return out
+
+
+def manifest_warnings_for_verdict(
+    manifest_warnings: list[str],
+    manifest: dict[str, Any],
+) -> list[str]:
+    """Manifest warnings that should affect READY vs CAUTION (exclude stale FastLab)."""
+    notes = (manifest.get("operator_notes") or {}).get("fastlab") or {}
+    corrected = notes.get("outreach_state") == "not_contacted"
+    out: list[str] = []
+    for w in manifest_warnings:
+        if corrected and _is_stale_fastlab_warning(w):
+            continue
+        out.append(w)
+    return out
+
+
+def build_auxiliary_file_status(
+    active_current: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve anti-repeat CSV paths per manifest (current/ vs active/)."""
+    active_root = active_current.parent
+    out: dict[str, Any] = {}
+    for rel in manifest.get("auxiliary_files_active_parent") or []:
+        out[str(rel)] = _file_freshness(active_root / rel)
+    dnr = "do_not_repeat_master.csv"
+    if dnr in (manifest.get("canonical_files") or []):
+        out[dnr] = _file_freshness(active_current / dnr)
+    return out
+
 
 @dataclass
 class OperatorStatusReport:
@@ -29,6 +133,8 @@ class OperatorStatusReport:
     auxiliary_files: dict[str, Any] = field(default_factory=dict)
     canonical_files: dict[str, Any] = field(default_factory=dict)
     equipment_queue: dict[str, Any] = field(default_factory=dict)
+    campaign_mode: str | None = None
+    current_operator_focus: str | None = None
     manifest: dict[str, Any] = field(default_factory=dict)
     postgres: dict[str, Any] = field(default_factory=dict)
     api: dict[str, Any] = field(default_factory=dict)
@@ -150,9 +256,11 @@ def build_operator_status_report(
     if manifest.get("_parse_error"):
         errors.append(f"manifest.json parse error: {manifest_path}")
         manifest = {}
-    manifest_warnings = list(manifest.get("known_warnings") or [])
+    manifest_warnings_raw = list(manifest.get("known_warnings") or [])
+    manifest_warnings = manifest_warnings_for_verdict(manifest_warnings_raw, manifest)
 
     sqlite_exists = sqlite_path.is_file()
+    sqlite_conn: sqlite3.Connection | None = None
     size_bytes: int | None = None
     global_max: str | None = None
     max_2026: str | None = None
@@ -160,11 +268,11 @@ def build_operator_status_report(
 
     if sqlite_exists:
         size_bytes = sqlite_path.stat().st_size
-        conn = sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True)
+        sqlite_conn = sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True)
         try:
-            row = conn.execute("SELECT MAX(date_iso) FROM emails").fetchone()
+            row = sqlite_conn.execute("SELECT MAX(date_iso) FROM emails").fetchone()
             global_max = row[0] if row else None
-            row2 = conn.execute(
+            row2 = sqlite_conn.execute(
                 "SELECT MAX(date_iso) FROM emails WHERE date_iso >= '2026-01-01' AND date_iso < '2027-01-01'"
             ).fetchone()
             max_2026 = row2[0] if row2 else None
@@ -174,7 +282,7 @@ def build_operator_status_report(
                 )
 
             pred = sql_predicate_contacto_gmail_source()
-            sent_row = conn.execute(
+            sent_row = sqlite_conn.execute(
                 f"""
                 SELECT COUNT(*), MAX(date_iso) FROM emails
                 WHERE {pred}
@@ -193,7 +301,7 @@ def build_operator_status_report(
 
             try:
                 readiness = assess_outbound_readiness(
-                    conn,
+                    sqlite_conn,
                     sqlite_path=sqlite_path,
                     sqlite_exists=True,
                     gmail_user=gmail_user,
@@ -211,8 +319,14 @@ def build_operator_status_report(
                     "error": str(exc),
                 }
                 warnings.append(f"outbound_readiness skipped (schema): {exc}")
+
+            for w in manifest_warnings_raw:
+                if w not in warnings:
+                    warnings.append(w)
+            warnings = normalize_operator_warnings(warnings, manifest, conn=sqlite_conn)
         finally:
-            conn.close()
+            sqlite_conn.close()
+            sqlite_conn = None
     else:
         errors.append(f"SQLite not found: {sqlite_path}")
         readiness_obj = assess_outbound_readiness(
@@ -224,16 +338,12 @@ def build_operator_status_report(
             max_staleness_days=max_staleness_days,
             strict_commercial_required=False,
         ).to_json_obj()
+        for w in manifest_warnings_raw:
+            if w not in warnings:
+                warnings.append(w)
+        warnings = normalize_operator_warnings(warnings, manifest, conn=None)
 
-    aux_names = (
-        "do_not_repeat_master.csv",
-        "outreach_contacted_all.csv",
-        "all_known_marketing_contacts_dedup.csv",
-    )
-    auxiliary: dict[str, Any] = {}
-    for name in aux_names:
-        for base in (active_current, active_current.parent):
-            auxiliary[name] = _file_freshness(base / name)
+    auxiliary = build_auxiliary_file_status(active_current, manifest)
 
     canonical_from_manifest = list(manifest.get("canonical_files") or [])
     canonical: dict[str, Any] = {}
@@ -246,10 +356,6 @@ def build_operator_status_report(
     if equip_path:
         equipment["row_count"] = _count_csv_rows(equip_path)
         equipment.update(_file_freshness(equip_path))
-
-    for w in manifest_warnings:
-        if w not in warnings:
-            warnings.append(w)
 
     verdict = compute_verdict(
         sqlite_exists=sqlite_exists,
@@ -270,6 +376,8 @@ def build_operator_status_report(
         auxiliary_files=auxiliary,
         canonical_files=canonical,
         equipment_queue=equipment,
+        campaign_mode=manifest.get("campaign_mode") if manifest else None,
+        current_operator_focus=manifest.get("current_operator_focus") if manifest else None,
         manifest={"path": str(manifest_path), "loaded": bool(manifest), "keys": sorted(manifest.keys())},
         postgres=probe_postgres_status(),
         api={
@@ -302,6 +410,11 @@ def format_human_report(report: OperatorStatusReport) -> str:
     )
     for k, v in report.sent.items():
         lines.append(f"  {k}: {v}")
+    lines.append("")
+    if report.campaign_mode is not None:
+        lines.append(f"Campaign mode: {report.campaign_mode}")
+    if report.current_operator_focus:
+        lines.append(f"Operator focus: {report.current_operator_focus}")
     lines.append("")
     lines.append("Equipment-first operator queue:")
     for k, v in report.equipment_queue.items():

@@ -294,6 +294,37 @@ def vet_deepsearch_rows(
             )
             continue
 
+        if _is_isp_account(buyer):
+            blob_early = line_blob(
+                {
+                    "title": _pick(raw, "title"),
+                    "descripcion": _pick(raw, "description"),
+                    "line_description": _pick(raw, "description"),
+                    "producto": _pick(raw, "equipment_category"),
+                    "nivel_1": "",
+                    "nivel_2": "",
+                    "nivel_3": "",
+                }
+            )
+            cats = detect_equipment_categories(blob_early)
+            hint = normalize_recommended_action(_pick(raw, "next_action_hint"))
+            vetted = "contact_after_close"
+            if hint == "account_intelligence_only":
+                vetted = "account_intelligence_only"
+            if vetted in ("quote_now", "mercado_publico_bid", "mercado_publico_question"):
+                vetted = "contact_after_close"
+            out.append(
+                VettedRow(
+                    row=raw,
+                    vetted_classification=vetted,
+                    gate_reason="isp_account_caution_prior_gmail",
+                    equipment_categories=";".join(c[0] for c in cats),
+                    dnr_flags="",
+                    operator_note=ISP_GMAIL_CAUTION_NOTE[:400],
+                )
+            )
+            continue
+
         if _is_usach_account(buyer):
             blob_early = line_blob(
                 {

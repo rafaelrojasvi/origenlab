@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for the org-quality audit CLI.
+"""COMPATIBILITY_WRAPPER (COMPATIBILITY_ONLY) — org-quality audit CLI.
 
-- **Canonical implementation:** ``scripts/leads/advanced/audit_lead_org_quality.py``.
+- **Canonical implementation:** ``scripts/leads/advanced/audit_lead_org_quality.py`` (**use for new docs and agent prompts**).
+- **Not preferred** for new operator commands; this root path delegates only.
 - This **root** path keeps legacy ``scripts/audit_lead_org_quality.py`` invocations working.
 - **Do not delete** until docs, tests, and operator references no longer need this path.
 - **No behavior** beyond delegation; do not add logic here.

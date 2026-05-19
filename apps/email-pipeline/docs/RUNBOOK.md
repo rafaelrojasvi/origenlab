@@ -2,12 +2,47 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-05-14
+Last reviewed: 2026-05-19
 
 Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.). **Outbound script index + classifications:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
+### Runbook map (pick one track)
+
+| Track | Section | When |
+|-------|---------|------|
+| **Daily outbound + equipment-first** | [Daily outbound](#m-eprun-daily-outbound) | Send safety, DNR, campaigns, tenders — **default** |
+| **Gmail ingest / Streamlit** | [Primary mailbox](#m-eprun-mailbox-primary) · [Post–Gmail ingest](#m-eprun-post-gmail-ingest) | SQLite freshness, mart on host |
+| **Optional dashboard (parked)** | [Dashboard preview stack](#m-eprun-dashboard-optional) | React panel over Postgres mirror — **explicit approval only** |
+| **Postgres DDL / migrate loaders** | [Optional PostgreSQL](#m-eprun-postgres-optional) | Scratch DB trials — not daily truth |
+
+**Parked index:** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md). **Dashboard UX design (future CLI modes):** [`dashboard_stack_simplification_design_20260519.md`](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md).
+
 <a id="m-eprun-daily-outbound"></a>
 ## Daily outbound — two lanes
+
+> **This section is daily operations.** It does **not** require Postgres, FastAPI, React, or `refresh_operational_dashboard_stack.py`. For the optional React preview chain, see [Optional dashboard preview stack (parked)](#m-eprun-dashboard-optional).
+
+### Daily operator truth (authoritative)
+
+| Decision | Source of truth |
+|----------|-----------------|
+| Sent / already contacted | Canonical Gmail ingested into SQLite `emails` (`[Gmail]/Enviados`) |
+| Anti-repeat / DNR | `refresh_outbound_safety_memory.py` → `do_not_repeat_master`, `outreach_contacted_all`, etc. |
+| Equipment-first tenders | `equipment_first_operator_queue_*` under `reports/out/active/current/` |
+| Read-only doctor | `operator_status.py`, `check_outbound_readiness.py`, `make doctor` |
+
+**Not daily truth:** Postgres dashboard mirror, FastAPI, React (`manifest.json`: `postgres_status` / `api_status` = `parked`).
+
+### Routine read-only check
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/qa/operator_status.py
+# or: make doctor   # operator_status + check_reproducibility
+# or: make audit    # operator_status + check_outbound_readiness
+```
+
+For a **planned** safety refresh (ingest + CSV exports), use `make safety-refresh` (prints commands; does not run ingest automatically) or the [anti-repeat sequence](#canonical-anti-repeat-auxiliary-refresh-sequence) below.
 
 **Where to work:** put **current** campaign inputs and outputs in **`reports/out/active/current/`** only. Other paths under `reports/out/active/` are usually **older batches, overlap exports, or evidence** — treat them as **archive context**, not as the default source for a new DeepSearch round or send list.
 
@@ -50,9 +85,10 @@ uv run python scripts/leads/run_current_campaign_pipeline.py --stage post-send \
 
 Scripts operators touch most often for outbound: **`export_outreach_contacted_all.py`**, **`export_all_known_marketing_contacts.py`**, **`export_do_not_repeat_master.py`**, **`validate_contacted_csv_coverage.py`**, **`validate_campaign_csvs.py`**, **`process_broad_marketing_contacts.py`**, **`run_current_campaign_pipeline.py`**, **`prepare_outbound_campaign_workspace.py`** (when resetting `active/current`), **`export_lead_contact_research_queue.py`**, **`import_lead_contact_research_csv.py`**, **`export_next_marketing_recipients.py`**, **`mark_sent_batch_contacted.py`**, **`05_workspace_gmail_imap_to_sqlite.py`**, optional **`send_inline_html_email_via_gmail_api.py`**. Core library modules: **`candidate_export_gate`**, **`marketing_export_context`**, **`outreach_contact_state`**, **`next_marketing_queue`**, **`csv_contracts`**, **`outbound_core`**, **`outbound_sent_preflight`**.
 
-### Canonical anti-repeat auxiliary refresh sequence
+<a id="canonical-anti-repeat-auxiliary-refresh-sequence"></a>
+### Canonical anti-repeat auxiliary refresh sequence (daily)
 
-Run this sequence before a new send cycle to keep auxiliary anti-repeat artifacts aligned:
+Run this sequence before a new send cycle to keep auxiliary anti-repeat artifacts aligned (**this is the daily path**, not the optional React dashboard stack):
 
 ```bash
 cd apps/email-pipeline
@@ -128,7 +164,7 @@ Not part of the two daily workflows: archive batch builders (**`build_archive_se
 
 - Working directory: `apps/email-pipeline/` (from monorepo root: `cd apps/email-pipeline`).
 - **Prefer `uv run python scripts/...` (or `uv run bash ...`)** from that directory so the project package and env match CI and [`scripts/README.md`](../scripts/README.md). Paths like `scripts/qa/publish_gate.py` are part of the operational contract; if you relocate scripts, update [`SCHEMA_OWNERSHIP.md`](pipeline/SCHEMA_OWNERSHIP.md) and **`tests/test_critical_script_paths.py`** together.
-- **Lead-account tools** — canonical copies live under `scripts/leads/` (`build_lead_account_rollup.py`, `match_lead_accounts_to_existing_orgs.py`, etc.); root-level `scripts/*.py` names are thin wrappers for compatibility ([`scripts/README.md`](../scripts/README.md)).
+- **Lead-account tools** — **canonical:** `scripts/leads/advanced/*` (`build_lead_account_rollup.py`, `match_lead_accounts_to_existing_orgs.py`, etc.). Root `scripts/*.py` names are **`COMPATIBILITY_WRAPPER` / `COMPATIBILITY_ONLY`** — not preferred for new commands ([`SCRIPT_MAP.md`](SCRIPT_MAP.md#lead-account-scripts-canonical-vs-root-wrappers), [`scripts/README.md`](../scripts/README.md)).
 - Prefer environment variables over machine-specific paths (`ORIGENLAB_SQLITE_PATH`, `ORIGENLAB_REPORTS_DIR`, `.env` from [`.env.example`](../.env.example)).
 - Sensitive outputs and large artifacts stay **outside** git (default data root `~/data/origenlab-email/` — see [`DATA_LOCATIONS.md`](DATA_LOCATIONS.md#m-epdata-root)).
 
@@ -166,6 +202,8 @@ After **`05_workspace_gmail_imap_to_sqlite.py`** succeeds against the **same** S
 3. **Rebuild business mart when** — You changed data that feeds organization/contact/document rollups, or Streamlit pages backed by mart tables look wrong. Run **[`build_business_mart.py`](../scripts/mart/build_business_mart.py)** on the host before expecting updated drill-downs (the Docker image does not build the mart).
 4. **Rebuild commercial intel when** — You want **Candidatos comerciales**, exports, or signal-driven views to reflect new mail. Run **`build_commercial_intel_v1.py`** (see [Commercial intelligence v1](#m-eprun-commercial-intel-v1); incremental by default, use **`--rebuild`** or **`--reprocess-days`** when you need a broader refresh).
 5. **Likely stale until rebuild** — Pages and widgets that join **`emails`** to **mart** or **`commercial_*`** tables may show old rollups or sparse signals until steps 3–4 complete. **Borrador comercial** can use verbatim text from **`emails`** immediately; richer context panels may still lag mart/commercial builds.
+
+**React dashboard:** mart/commercial rebuilds here are for **Streamlit/SQLite** workflows. Refreshing the **React** panel also requires the [optional dashboard stack](#m-eprun-dashboard-optional) (Postgres mirror) — not required for daily DNR or equipment-first.
 
 ---
 
@@ -227,7 +265,9 @@ On **Windows** (Docker Desktop), set `ORIGENLAB_HOST_DATA_ROOT` to the host fold
 <a id="m-eprun-postgres-optional"></a>
 ## Optional PostgreSQL (Alembic, archive load, outbound audit)
 
-**PostgreSQL is optional.** Ingest, outbound gates, Streamlit, and day-to-day reporting run against **SQLite** (`ORIGENLAB_SQLITE_PATH` or default under `ORIGENLAB_DATA_ROOT`). Do **not** treat Postgres as required infrastructure unless you have chosen that path explicitly.
+**PostgreSQL is optional and parked for daily ops.** Ingest, outbound gates, Streamlit, equipment-first queues, and day-to-day reporting run against **SQLite** (`ORIGENLAB_SQLITE_PATH` or default under `ORIGENLAB_DATA_ROOT`). Do **not** treat Postgres as required for send/export decisions.
+
+**React commercial panel:** use [Optional dashboard preview stack (parked)](#m-eprun-dashboard-optional) — not this section alone. **Do not run** `alembic upgrade` or `scripts/migrate/*` without explicit approval ([`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md)).
 
 **What Postgres is used for in this repo (when enabled):**
 
@@ -249,36 +289,23 @@ Example URL form: `postgresql+psycopg://user:pass@host:5432/dbname`. Template li
 <a id="m-eprun-api-slice1"></a>
 ### Read-only dashboard API (Slice 1 — FastAPI)
 
-**Status:** experimental read-only API over **PostgreSQL mirrors** only. This is **not** a production cutover: SQLite remains authoritative for ingest, gates, and Streamlit.
+**Status:** experimental read-only API over **PostgreSQL mirrors** only — part of the [optional dashboard stack](#m-eprun-dashboard-optional). SQLite remains authoritative for ingest, gates, Streamlit, and daily outbound.
 
-**Hard limits (v1):**
+**Hard limits (v1):** canonical scope by default (`?scope=archive` for full mart); no write endpoints; no Gmail send; no ingest/mart over HTTP. Use **scratch Postgres** only.
 
-- FastAPI defaults to **canonical Gmail operational scope** (`mart.*_canonical`). Use `?scope=archive` for full historical mart counts and listings.
-- No write endpoints; no email send; no Gmail ingest or mart rebuild over HTTP.
-- Does not mutate SQLite (health may **read-only ping** SQLite for dependency checks only).
-- Point `ORIGENLAB_POSTGRES_URL` (or `ALEMBIC_DATABASE_URL`) at **scratch/staging Postgres** — never run production migrate loaders against shared prod from this doc.
+**Bootstrap (scratch DB, one-time or rare):** `uv sync --group postgres --group api` · `alembic upgrade head` · optional `scripts/migrate/sqlite_*_to_postgres.py --replace` (break-glass — see [`SCRIPT_MAP.md`](SCRIPT_MAP.md#break-glass-scripts)). **Day-to-day React refresh** uses `sync_dashboard_postgres_mirror.py` in the dashboard section below, not necessarily the migrate loaders.
 
-**Prerequisites:**
+---
 
-```bash
-cd apps/email-pipeline
-uv sync --group postgres --group api
-export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/origenlab_scratch'
-uv run alembic -c alembic.ini upgrade head
-# Tier A data (scratch only):
-uv run python scripts/migrate/sqlite_outbound_sidecars_to_postgres.py --replace --postgres-url "$ORIGENLAB_POSTGRES_URL"
-uv run python scripts/migrate/sqlite_mart_core_to_postgres.py --replace --postgres-url "$ORIGENLAB_POSTGRES_URL"
-# Loads archive mart (contact_master, …) plus canonical mirrors (*_canonical) from Gmail operativo.
-# Canonical-only (fast; does not rescan full archive mart counts):
-# uv run python scripts/migrate/sqlite_mart_core_to_postgres.py --replace --tables canonical \
-#   --sqlite-db "$ORIGENLAB_SQLITE_PATH" --postgres-url "$ORIGENLAB_POSTGRES_URL"
-# Optional: uv run python scripts/migrate/sqlite_document_master_to_postgres.py --replace ...
-```
+<a id="m-eprun-dashboard-optional"></a>
+## Optional dashboard preview stack (parked)
+
+**Do not use for daily outbound or equipment-first work.** This stack is **EXPERIMENTAL_PARKED** ([`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md)): Postgres mirror + FastAPI + React read models. **`refresh_operational_dashboard_stack.py` remains dashboard-only and experimental** until [mode-based CLI redesign](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md) is implemented — today it can run mart + safety + mirror by default; prefer explicit step-by-step commands below until that changes.
 
 <a id="m-eprun-dashboard-gmail-to-react"></a>
-#### Dashboard refresh: from Gmail to React
+### Dashboard refresh: from Gmail to React
 
-**Operator truth:** new mail in Gmail is **not** visible in the React panel until you run the steps below. Nothing in this stack auto-refreshes end-to-end.
+**Operator truth:** new mail in Gmail is **not** visible in the React panel until you run the [canonical refresh chain](#canonical-dashboard-refresh-chain) below. Nothing auto-refreshes. **Daily send safety** still comes from [Daily outbound](#m-eprun-daily-outbound) (SQLite + Sent + DNR), not from React.
 
 | Layer | What it is | Updates automatically? |
 |-------|------------|-------------------------|
@@ -308,74 +335,58 @@ React dashboard
 ```
 
 <a id="m-eprun-sync-dashboard-postgres"></a>
-##### Step-by-step refresh (today’s mail)
+<a id="canonical-dashboard-refresh-chain"></a>
+### Canonical dashboard refresh chain (single copy-paste block)
 
-**Shell options (optional):** for a copy-paste refresh block, prefer:
+Use **`set -eo pipefail`** in zsh/VS Code (avoid `set -u` — can trigger `RPROMPT: parameter not set`; see [troubleshooting](#dashboard-troubleshooting)).
 
-```bash
-set -eo pipefail
-```
-
-Avoid `set -u` (nounset) in **zsh** / **VS Code integrated terminals** unless your prompt is compatible — with `set -u`, some themes trigger `__vsc_update_prompt: RPROMPT: parameter not set`. Bash is less picky, but `set -eo pipefail` is enough for operator scripts here.
-
-Set paths once per shell:
+**Once per shell** — paths and venv groups:
 
 ```bash
 set -eo pipefail
 cd apps/email-pipeline
 export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/origenlab_scratch'
 export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
-
-# Once per venv (Gmail IMAP OAuth — avoids ModuleNotFoundError: google.auth):
-uv sync --group gmail
-# Dashboard mirror + API (when refreshing React): also --group postgres --group api
+uv sync --group gmail --group postgres --group api
 ```
 
-**1. Check canonical Gmail rows already in SQLite (before ingest):**
+**Chain** (run in order when refreshing the React panel; also satisfies daily Gmail freshness if you include ingest + safety):
+
+| Step | Action | Mutates |
+|------|--------|---------|
+| A | Freshness SQL (before/after ingest) | — |
+| B | Gmail INBOX + Enviados ingest | SQLite |
+| C | `build_business_mart.py --rebuild` | SQLite (break-glass) |
+| D | `refresh_outbound_safety_memory.py` | CSV exports |
+| E | `alembic upgrade head` (if schema drift) | Postgres |
+| F | `sync_dashboard_postgres_mirror.py` | Postgres |
+| G | `uvicorn` + `npm run dev` | — |
 
 ```bash
+# A — before ingest
 sqlite3 "$ORIGENLAB_SQLITE_PATH" \
   "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
-```
 
-Note the row count and `MAX(date_iso)` so you can compare after ingest.
-
-**2. Ingest new Gmail (mutates SQLite):**
-
-```bash
+# B — Gmail (same as daily outbound; required for React to see new mail)
 uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder INBOX --skip-duplicate-message-id
 uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados" --skip-duplicate-message-id
-```
 
-**After ingest, verify canonical Gmail again** (count should increase if new mail arrived; `MAX(date_iso)` should be recent):
-
-```bash
 sqlite3 "$ORIGENLAB_SQLITE_PATH" \
   "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
-```
 
-Example after a successful refresh: INBOX + Enviados may report small `inserted N` totals while canonical rows climb (e.g. ~1000+ rows, max date today).
-
-**3. Rebuild mart + refresh safety memory (mutates SQLite):**
-
-```bash
+# C–D — SQLite mart + daily safety memory (C is break-glass; D aligns DNR CSVs)
 uv run python scripts/mart/build_business_mart.py --rebuild
 uv run python scripts/qa/refresh_outbound_safety_memory.py
-```
 
-**4. Publish mirror to Postgres (writes Postgres; read-only on SQLite):**
-
-```bash
-uv run alembic -c alembic.ini upgrade head   # once per DB (0008 sync audit, 0009 classification, 0010 commercial OC)
-uv run python scripts/sync/sync_dashboard_postgres_mirror.py --dry-run   # optional preflight
+# E–F — Postgres mirror (explicit approval; scratch DB only)
+uv run alembic -c alembic.ini upgrade head
+uv run python scripts/sync/sync_dashboard_postgres_mirror.py --dry-run
 uv run python scripts/sync/sync_dashboard_postgres_mirror.py
 ```
 
-Sync loads outbound sidecars, mart (archive + canonical), `reporting.dashboard_sync_run`, `reporting.email_classification_canonical`, and `commercial.purchase_*` (from SQLite `commercial_purchase_*`). Options: `--only outbound|mart|canonical`, `--skip-outbound`, `--skip-mart`, `--json-out path`.
+**Mirror sync notes:** loads outbound sidecars, mart (archive + canonical), `reporting.dashboard_sync_run`, `reporting.email_classification_canonical`, `commercial.purchase_*`. Options: `--only outbound|mart|canonical`, `--skip-outbound`, `--skip-mart`, `--json-out path`. **Fail-closed:** sync aborts if canonical Gmail exists but mart tables are empty — run step C first; break-glass only: `--allow-empty-mart`.
 
-**Fail-closed mart guard:** if SQLite has canonical Gmail rows but `contact_master`, `organization_master`, or `opportunity_signals` are empty, sync **aborts** before `--replace` loaders (avoids wiping good Postgres data after a failed mart rebuild). Run `build_business_mart.py --rebuild` first. Break-glass only: `--allow-empty-mart`.
-
-**Wrapper (Gmail off by default):** `scripts/ops/refresh_operational_dashboard_stack.py` — pass `--run-gmail-inbox` / `--run-gmail-sent` to include step 2; `--dry-run` prints commands only.
+**Experimental wrapper (current behavior — prefer explicit steps above):** [`refresh_operational_dashboard_stack.py`](../scripts/ops/refresh_operational_dashboard_stack.py) runs mart + safety + mirror by default; Gmail ingest is **off** unless `--run-gmail-inbox` / `--run-gmail-sent`; `--dry-run` prints only. **Planned:** `--mode sqlite-status|postgres-mirror|full-dashboard` per [design doc](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md).
 
 ##### Promote confirmed purchase order email to commercial event
 
@@ -438,24 +449,26 @@ curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=archive' | jq '.scope, .
 | Classification KPIs | Non-zero after sync if canonical mail exists in SQLite window |
 | Postgres canonical mirror (post-sync) | Order of hundreds of contacts/orgs for operativo Gmail (not full archive tens of thousands) |
 
+<a id="dashboard-troubleshooting"></a>
 ##### Troubleshooting
 
 | Symptom | Likely cause | What to do |
 |---------|--------------|------------|
 | React **Failed to fetch** | FastAPI down, wrong URL, or CORS/proxy | Start uvicorn; in dev use Vite proxy (`npm run dev`) or set `VITE_ORIGENLAB_API_BASE_URL` |
 | API returns **zero counts** | Postgres mirror empty or migrations missing | `alembic upgrade head`; run `sync_dashboard_postgres_mirror.py` |
-| Dashboard **stale** (old sync time) | Skipped ingest, mart, or sync | Run full chain: ingest → mart → safety → sync |
+| Dashboard **stale** (old sync time) | Skipped ingest, mart, or sync | Run [canonical dashboard refresh chain](#canonical-dashboard-refresh-chain) |
 | **Postgres connection refused** | Docker/local Postgres not running | Start scratch Postgres; verify `ORIGENLAB_POSTGRES_URL` |
 | Headline KPIs look like **full archive** | Scope regression | Default must be canonical; archive only with `?scope=archive` |
 | Classification empty | Sync before 0009 migration or no canonical rows in SQLite | `alembic upgrade head`; re-sync after ingest |
 | Streamlit matches SQLite but React does not | Expected until sync | Streamlit reads SQLite; React reads Postgres mirror |
 | `RPROMPT: parameter not set` after `set -u` | zsh / VS Code prompt vs nounset | Use `set -eo pipefail` only, or fix theme; do not use `set -euo pipefail` in integrated zsh |
+| Confused daily vs dashboard | Wrong section | Daily: [Daily outbound](#m-eprun-daily-outbound); React: this section only |
 
 **Read-only API routes (v1):** `GET /health`, `GET /health/dependencies`, `GET /meta/dashboard-sync`, `GET /dashboard/summary`, `GET /contacts`, `GET /organizations`, `GET /classification/summary`, `GET /classification/recent`, `GET /classification/actions`, `GET /commercial/purchase-events`, `GET /commercial/purchase-events/{id}`, `GET /outbound/suppressions/emails`, `GET /outbound/contact-state`, `GET /outbound/readiness`.
 
 `/outbound/readiness` reflects **Postgres mirrors only** (not full SQLite Sent-folder gates). OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
-Design: [`architecture/POSTGRES_API_DASHBOARD_PLAN.md`](architecture/POSTGRES_API_DASHBOARD_PLAN.md). One-page operator summary: [`OPERATOR_CHEAT_SHEET.md`](OPERATOR_CHEAT_SHEET.md#m-opsheet-dashboard-gmail-to-react).
+**References:** [`architecture/POSTGRES_API_DASHBOARD_PLAN.md`](architecture/POSTGRES_API_DASHBOARD_PLAN.md) · [`OPERATOR_CHEAT_SHEET.md`](OPERATOR_CHEAT_SHEET.md#m-opsheet-dashboard-gmail-to-react) · [`dashboard_stack_simplification_design_20260519.md`](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md)
 
 ---
 
@@ -866,9 +879,17 @@ uv run python scripts/leads/build_manual_html_outreach_batch.py \
 **After manual send:** ingest Sent if you use that for gate memory, then e.g.:
 
 ```bash
+# Preview (default)
 uv run python scripts/leads/mark_outreach_state.py \
   --batch-file reports/out/active/<your_batch>_manual_html_package/manual_html_outreach_mark_contacted.txt \
-  --state contacted --updated-by <you> --source manual_html_batch
+  --state contacted --updated-by <you> --source manual_html_batch \
+  --reason "Manual HTML batch sent <date>"
+
+# After review
+uv run python scripts/leads/mark_outreach_state.py --apply \
+  --batch-file reports/out/active/<your_batch>_manual_html_package/manual_html_outreach_mark_contacted.txt \
+  --state contacted --updated-by <you> --source manual_html_batch \
+  --reason "Manual HTML batch sent <date>"
 ```
 
 Optional: `--limit N` caps recipients after dedupe; duplicate emails (case-insensitive) keep the **first** row’s metadata.
@@ -908,7 +929,7 @@ WHERE (COALESCE(NULLIF(TRIM(lm.upstream_sync_state), ''), 'active') != 'retired_
   AND NULLIF(TRIM(COALESCE(lm.email_norm, lm.email)), '') IS NOT NULL;
 ```
 
-**Manual outreach memory (sidecar, no Sent sync):** to set or reset `outreach_contact_state` explicitly (e.g. after a call), use [`scripts/leads/mark_outreach_state.py`](../scripts/leads/mark_outreach_state.py). `contacted`, `replied`, and `snoozed` **block** cold-export eligibility for that email; `not_contacted` **does not** block and clears first/last timestamps on write.
+**Manual outreach memory (sidecar, no Sent sync):** to set or reset `outreach_contact_state` explicitly (e.g. after a call), use [`scripts/leads/mark_outreach_state.py`](../scripts/leads/mark_outreach_state.py). **Dry-run by default** — add **`--apply`** plus `--updated-by` (or `--operator`), `--source` (or `--source-artifact`), and `--reason` to write. `contacted`, `replied`, and `snoozed` **block** cold-export eligibility for that email; `not_contacted` **does not** block and clears first/last timestamps on write.
 
 **Outreach / suppression / Sent footprint:**
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 # -----------------------------------------------------------------------------
+# EXPERIMENTAL_PARKED: Postgres migration path — not daily runtime. Trial on scratch
+# Postgres only; do not run without explicit operator approval.
+# See docs/EXPERIMENTAL_PARKED.md and docs/SCRIPT_MAP.md — "Break-glass scripts".
+# -----------------------------------------------------------------------------
 # SAFETY (break-glass): Writes to Postgres outbound.*; --replace DELETEs target
 # sidecar tables before reload. Verify --postgres-url before running.
 # See docs/SCRIPT_MAP.md — "Break-glass scripts".

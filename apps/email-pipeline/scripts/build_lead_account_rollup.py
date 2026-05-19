@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for the lead-account rollup CLI.
+"""COMPATIBILITY_WRAPPER (COMPATIBILITY_ONLY) — lead-account rollup CLI.
 
-- **Canonical implementation:** ``scripts/leads/advanced/build_lead_account_rollup.py`` (prefer for new docs).
+- **Canonical implementation:** ``scripts/leads/advanced/build_lead_account_rollup.py`` (**use for new docs and agent prompts**).
+- **Not preferred** for new operator commands; this root path delegates only.
 - This **root** path exists so older bookmarks, shell one-liners, and tests that invoke
   ``scripts/build_lead_account_rollup.py`` keep working.
 - **Do not delete** this file until nothing in docs, tests, or operator flows references this path

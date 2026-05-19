@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -----------------------------------------------------------------------------
+# EXPERIMENTAL_PARKED / DASHBOARD_ONLY: Optional dashboard stack (mart + Postgres mirror).
+# Not CORE_DAILY. Gmail ingest is off by default. Do not run without explicit approval.
+# See docs/EXPERIMENTAL_PARKED.md and docs/RUNBOOK.md (dashboard refresh chain).
+# -----------------------------------------------------------------------------
 """Operator wrapper: refresh SQLite mart + Postgres dashboard mirror (no email send).
 
 Gmail ingest mutates SQLite and is **off by default**. Use explicit flags to run ingest steps.

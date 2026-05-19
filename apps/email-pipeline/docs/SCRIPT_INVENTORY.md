@@ -2,9 +2,11 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-05-14
+Last reviewed: 2026-05-19
 
 **Purpose:** High-level **grouping** of `scripts/` for operators and for **future cleanup planning**. It does **not** list every file. The canonical per-script map is [`SCRIPT_MAP.md`](SCRIPT_MAP.md). Full folder notes: [`../scripts/README.md`](../scripts/README.md). **Tatiana / lab vs daily outbound:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) (Stage 6E1 — not production lanes; future 6E2 may refactor large Tatiana modules).
+
+**Lead-account paths:** Use canonical **`scripts/leads/advanced/*`** in new docs and agent prompts. Root-level shims (`scripts/build_lead_account_rollup.py`, `scripts/match_lead_accounts_to_existing_orgs.py`, `scripts/validate_lead_account_rollup.py`, `scripts/audit_lead_org_quality.py`) are **`COMPATIBILITY_WRAPPER` / `COMPATIBILITY_ONLY`** — retained for compatibility only ([`SCRIPT_MAP.md`](SCRIPT_MAP.md#lead-account-scripts-canonical-vs-root-wrappers)).
 
 **Generated output layout:** before deleting or moving anything under [`../reports/out`](../reports/out), run the **planner** [`../scripts/qa/plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) to classify paths and list large files (buckets such as `active_current`, `active_workspace_misc` for other `active/…` paths, `client_pack_latest`, tmp/lab/archive); it does not modify the tree (see [`CRUD_SAFETY.md`](CRUD_SAFETY.md) §7). Optional **move-only** archiver (dry-run default): [`../scripts/tools/archive_reports_out_generated.py`](../scripts/tools/archive_reports_out_generated.py) — same buckets, `--apply` to relocate into `archive/manual_cleanup/…` (no deletes; break-glass). The archiver does not select `client_pack_latest` or `active_workspace_misc` with default include flags; the whole `active/` tree remains protected without `--allow-active-current`.
 
@@ -57,6 +59,21 @@ Two different scripts initialize or clean **operator-facing folders** under `rep
 | [`scripts/leads/advanced/prepare_active_workspace.py`](../scripts/leads/advanced/prepare_active_workspace.py) | **Lead pipeline / weekly focus / contact-hunt** style flows: archiving duplicate English CSVs, optional `--deepsearch` / `--unified`, cleaning broader **`reports/out/active/`** layouts documented in lead and reporting guides | **`reports/out/active/`** (broader than `current/` alone; archives extras per script behavior) | **Legacy / support** for those workflows — **still maintained and not deprecated** | Replacing **`prepare_outbound_campaign_workspace.py`** for a **new outbound-only** campaign round when you only care about the two lanes and `active/current/` |
 
 Canonical operator narrative and when to pick which: [`SCRIPT_MAP.md`](SCRIPT_MAP.md#two-workspace-prep-stories-do-not-confuse) (same table as **Two workspace prep stories**).
+
+**Agent rule:** Do **not** run either workspace prep script unless the operator **explicitly** starts a campaign round. For equipment-first tenders + warm commercial follow-up, use manifest queues — **no** workspace prep.
+
+| Script | Status | Use for |
+|--------|--------|---------|
+| `scripts/qa/prepare_outbound_campaign_workspace.py` | Canonical (outbound/campaign) | Volume/precision campaign workspace in `active/current/` |
+| `scripts/leads/advanced/prepare_active_workspace.py` | Legacy/hunt/advanced | Old lead-hunt / broad `active/` hygiene only |
+
+```mermaid
+flowchart TD
+  Q{Operator started a campaign round?}
+  Q -->|No — equipment-first / inbox only| E[Skip workspace prep]
+  Q -->|Yes — volume or precision lanes| C[prepare_outbound_campaign_workspace.py]
+  Q -->|Yes — legacy contact-hunt| L[prepare_active_workspace.py]
+```
 
 ---
 

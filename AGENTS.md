@@ -20,4 +20,4 @@ For **public website** work, read **[`apps/web/AGENTS.md`](apps/web/AGENTS.md)**
 
 ## Email-pipeline reminder
 
-Outbound and archive work lives under **`apps/email-pipeline/`**. Agents must **not** send email, mutate Gmail, or run Postgres migrations without explicit user approval. Start with **`operator_status.py`** and **`reports/out/active/current/manifest.json`** when checking operational state.
+Outbound and archive work lives under **`apps/email-pipeline/`**. Agents must **not** send email, mutate Gmail, or run Postgres migrations without explicit user approval. Read **`apps/email-pipeline/docs/EXPERIMENTAL_PARKED.md`** before Postgres/API/Tatiana/ML work; do not use **LEGACY_DO_NOT_USE** scripts for current operator tasks. Start with **`operator_status.py`** and **`reports/out/active/current/manifest.json`** when checking operational state.
