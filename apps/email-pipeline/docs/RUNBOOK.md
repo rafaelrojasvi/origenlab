@@ -74,6 +74,38 @@ uv run python scripts/qa/refresh_outbound_safety_memory.py
 # uv run python scripts/qa/refresh_outbound_safety_memory.py --fail-on-ready-with-warnings
 ```
 
+<a id="m-eprun-equipment-first-opportunities"></a>
+### Equipment-first public tender opportunities (2026-05+)
+
+Use when prioritizing **capital equipment** (centrifuges, balances, sonicators, homogenizers, incubators, osmometers) from ChileCompra **`Licitacion_Publicada.csv`**, not consumables-heavy SEREMI/hospital reagent lines.
+
+**Canonical operator outputs** (under `reports/out/active/current/`):
+
+- `equipment_first_operator_queue_YYYYMMDD.csv` — ranked tenders, `safe_channel`, no invented buyer emails
+- `buyer_opportunity_ab_queue_YYYYMMDD.csv` — equipment-only mirror (rebuilt by operator builder)
+
+**Do not use for export / send decisions:**
+
+- `buyer_opportunity_crosscheck_YYYYMMDD.csv` after manual sends or equipment-first cutover — stale private-lab `clean_new_target` rows until regenerated
+- `tender_buyer_outreach_queue_*.md` — superseded narrative for consumables-era prioritization
+
+**Build (read-only on Gmail; writes reports only):**
+
+```bash
+cd apps/email-pipeline
+# Default source: Licitacion_Publicada.zip or .csv (see --help)
+uv run python scripts/qa/build_equipment_first_opportunity_queue.py --date-suffix 20260518
+uv run python scripts/qa/build_equipment_first_operator_queue.py --date-suffix 20260518
+```
+
+**Policy:**
+
+- Excludes consumables-heavy tenders (e.g. `1497-6-LE26`, `1497-3-LE26`, `1657-8-LE26`, `1511-30-LP26`) unless a row is explicit capital equipment.
+- Public tenders: **`contact_status=no_verified_buyer_email`** — use **Mercado Público** (`mercado_publico_bid` / `mercado_publico_question`) or **supplier_quote_request**; do not cold-email invented addresses.
+- Private-lab email outreach remains a **separate lane** (ingest Sent → `mark_outreach_state` → refresh safety memory). See [`reports/out/active/current/README_ACTIVE_CURRENT.md`](../reports/out/active/current/README_ACTIVE_CURRENT.md).
+
+Scripts: [`SCRIPT_MAP.md`](SCRIPT_MAP.md) (`build_equipment_first_*`). Handoff: `equipment_first_operator_queue_*.md`, `caution_cleanup_*.md`.
+
 Research output modes:
 
 - `--research-output-mode evidence_first`: draft planning only (no model-generated contacts trusted).

@@ -8,6 +8,16 @@ Short answers for day-to-day work. **Canonical procedures and tables:** [`SCRIPT
 
 ---
 
+## 0. Read-only status (agents + operators)
+
+| | |
+|--|--|
+| **Run** | `uv run python scripts/qa/operator_status.py` or `make doctor` |
+| **Produces** | Verdict **READY / CAUTION / BLOCKED**; SQLite/Sent/DNR freshness; manifest warnings |
+| **Index** | [`reports/out/active/current/manifest.json`](../reports/out/active/current/manifest.json) · [`AGENTS.md`](../AGENTS.md) |
+
+---
+
 ## 1. Normal outbound safety refresh
 
 | | |
@@ -126,7 +136,20 @@ uv run python scripts/commercial/promote_purchase_order_event.py --apply
 
 ---
 
-## 9. Do not run casually
+## 9. Equipment-first tender opportunities
+
+| Step | Script | Output |
+|------|--------|--------|
+| Filter tenders | `scripts/qa/build_equipment_first_opportunity_queue.py` | `equipment_first_opportunity_queue_YYYYMMDD.csv` |
+| Operator queue | `scripts/qa/build_equipment_first_operator_queue.py` | `equipment_first_operator_queue_YYYYMMDD.csv` + aligned `buyer_opportunity_ab_queue_YYYYMMDD.csv` |
+
+**Rules:** equipment-first only; consumables SEREMI/hospital codes excluded; **no invented buyer emails**; active tenders via **Mercado Público** / supplier quotes — **not** cold send-ready. See [`RUNBOOK.md`](RUNBOOK.md#m-eprun-equipment-first-opportunities) and [`reports/out/active/current/README_ACTIVE_CURRENT.md`](../reports/out/active/current/README_ACTIVE_CURRENT.md).
+
+**Stale:** `buyer_opportunity_crosscheck_*.csv` — not for export after manual sends until regenerated.
+
+---
+
+## 10. Do not run casually
 
 - **Postgres migrate:** `scripts/migrate/sqlite_*_to_postgres.py` — **optional**; scratch DB first; see [`RUNBOOK.md`](RUNBOOK.md#m-eprun-postgres-optional).
 - **Send mail:** `scripts/qa/send_inline_html_email_via_gmail_api.py` — break-glass; can send real mail.
@@ -135,7 +158,7 @@ uv run python scripts/commercial/promote_purchase_order_event.py --apply
 
 ---
 
-## 10. If confused
+## 11. If confused
 
 1. Open **[`SCRIPT_MAP.md`](SCRIPT_MAP.md)** (operator index) then **[`RUNBOOK.md`](RUNBOOK.md)** (step-by-step).
 2. Do **not** guess between two similarly named scripts — e.g. workspace prep: [`SCRIPT_INVENTORY.md`](SCRIPT_INVENTORY.md#workspace-prep-which-script) (stable anchor).

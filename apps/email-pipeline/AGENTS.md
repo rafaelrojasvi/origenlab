@@ -1,0 +1,56 @@
+# Email-pipeline — agent instructions
+
+**Policy overlay for `apps/email-pipeline/`.** Factual behavior lives in code and canonical docs below. If this file conflicts with **`RUNBOOK.md`** or **`SCRIPT_MAP.md`**, follow the canonical doc.
+
+## Read before acting (in order)
+
+1. **[`reports/out/active/current/manifest.json`](reports/out/active/current/manifest.json)** — canonical vs stale files, known warnings, parked Postgres/API.
+2. **[`reports/out/active/current/README_ACTIVE_CURRENT.md`](reports/out/active/current/README_ACTIVE_CURRENT.md)** — operator handoff for `active/current/`.
+3. **[`docs/SCRIPT_MAP.md`](docs/SCRIPT_MAP.md)** — which scripts are daily, break-glass, or lab.
+4. **[`docs/RUNBOOK.md`](docs/RUNBOOK.md)** — procedures (ingest, DNR, equipment-first, campaigns).
+5. **[`docs/CRUD_SAFETY.md`](docs/CRUD_SAFETY.md)** — mutation rules and `--apply` policy.
+6. **Operator status (read-only):**
+   ```bash
+   cd apps/email-pipeline
+   uv run python scripts/qa/operator_status.py
+   ```
+7. Optional context: [`docs/OUTBOUND_SOURCE_OF_TRUTH.md`](docs/OUTBOUND_SOURCE_OF_TRUTH.md), [`reports/out/active/current/feature_inventory_simplification_plan_20260518.md`](reports/out/active/current/feature_inventory_simplification_plan_20260518.md).
+
+## Hard rules (non-negotiable)
+
+| Rule | Detail |
+|------|--------|
+| **No email sending** | Do not run `send_inline_html_email_via_gmail_api.py` or any send path unless the user explicitly orders a send test. |
+| **No Gmail mutation** | Do not create drafts, labels, or API writes. **Read-only IMAP ingest** (`05_workspace_gmail_imap_to_sqlite.py`) is allowed when the user asks to refresh Sent truth. |
+| **No Postgres migrations** | Do not run `alembic upgrade`, `sqlite_*_to_postgres.py --replace`, or `sync_dashboard_postgres_mirror.py` unless explicitly approved. Postgres is **parked** for daily ops. |
+| **No `--apply` without approval** | Imports, backfills, purges, suppression writes, and archive moves require explicit user consent. Default to dry-run / read-only. |
+| **No invented contacts** | Do not add buyer emails, DeepSearch rows, or marketing contacts without evidence. |
+| **Equipment-first tenders** | Use `equipment_first_operator_queue_*.csv` and aligned `buyer_opportunity_ab_queue_*.csv`. |
+| **Do not trust stale crosscheck** | **`LEGACY_DO_NOT_USE`:** `build_buyer_opportunity_queue.py`, `buyer_opportunity_crosscheck_*`, `tender_buyer_outreach_queue_*` for equipment-first export/send planning. |
+| **No file deletes** | Unless the user explicitly requests deletion. |
+| **Tests for behavior changes** | If you change code (not docs-only), run targeted pytest; see workspace rule *Testing — definition of done*. |
+
+## Runtime truth
+
+- **SQLite** (`ORIGENLAB_SQLITE_PATH` / settings) + **Gmail Sent in `emails`** = outbound safety truth.
+- **Postgres + FastAPI + React dashboard** = optional / **parked** — not required to mark sends or build equipment queues.
+- **Streamlit** (`apps/business_mart_app.py`) = supporting review UI on SQLite; not autonomous send.
+
+## Safe default workflow
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/qa/operator_status.py          # read-only verdict
+uv run python scripts/qa/check_outbound_readiness.py # read-only DNR/Sent preflight
+# Mutations only with explicit approval:
+# uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"
+# uv run python scripts/qa/refresh_outbound_safety_memory.py
+```
+
+## Makefile shortcuts (optional)
+
+From `apps/email-pipeline/`: `make doctor`, `make safety-refresh`, `make equipment-queue`, `make audit` — see [`Makefile`](Makefile).
+
+## Monorepo pointer
+
+[`../../docs/PROJECT_CONTEXT.md`](../../docs/PROJECT_CONTEXT.md)

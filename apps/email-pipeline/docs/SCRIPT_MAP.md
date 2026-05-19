@@ -164,6 +164,11 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/print_outbound_run_summary.py` | OPS_AUDIT | Pretty-print outbound summary JSON |
 | `scripts/qa/export_candidate_audit.py` | OPS_AUDIT | Sample rows through gate (informational) |
 | `scripts/qa/check_reports_out_active_hygiene.py` | OPS_AUDIT | Warn/fail when `reports/out/active/` contains unexpected generated artifacts outside `current/` |
+| `scripts/qa/build_equipment_first_opportunity_queue.py` | OPS_AUDIT | Equipment-first filter from `Licitacion_Publicada.csv` → `equipment_first_opportunity_queue_*.csv` (read-only on Gmail; writes reports only) |
+| `scripts/qa/build_equipment_first_operator_queue.py` | OPS_AUDIT | Canonical operator queue + aligned `buyer_opportunity_ab_queue_*.csv` from equipment-first opportunity CSV (read-only cross-check vs DNR/Sent in SQLite) |
+| `scripts/qa/build_buyer_opportunity_queue.py` | OPS_AUDIT | **LEGACY_DO_NOT_USE** (equipment-first): legacy buyer/private-lab A/B cross-check — superseded by `build_equipment_first_*`; stale `buyer_opportunity_crosscheck_*` must not drive export |
+| `scripts/qa/operator_status.py` | OPS_AUDIT | **Read-only** operator snapshot: SQLite/Sent freshness, DNR files, canonical `active/current`, manifest warnings, verdict READY/CAUTION/BLOCKED |
+| `scripts/qa/build_equipment_deepsearch_vetted_queue.py` | OPS_AUDIT | Gate `equipment_deep_research_opportunities_*.csv` → vetted queue (equipment-first + DNR/Sent/state); fails clearly if input missing |
 | `scripts/qa/validate_sqlite_archive_for_postgres.py` | OPS_MIGRATE | Read-only / pre-migrate validation |
 | `scripts/qa/audit_canonical_contacto_gmail.py` | OPS_AUDIT | Read-only: canonical Gmail vs legacy labdelivery vs other `emails` metrics |
 | `scripts/qa/audit_email_classification_quality.py` | OPS_AUDIT | Read-only: heuristic commercial-type QA on canonical Gmail (keyword audit; not production labels) |
