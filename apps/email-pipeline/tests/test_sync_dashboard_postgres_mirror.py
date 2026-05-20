@@ -20,9 +20,11 @@ from origenlab_email_pipeline.dashboard_postgres_sync import (
     build_loader_command,
     collect_mirror_counts,
     format_summary_text,
+    merge_optional_loader_details,
     plan_loader_steps,
     redact_postgres_url,
     run_dashboard_mirror_sync,
+    validate_optional_loader_audit,
     write_sync_watermark,
 )
 from origenlab_email_pipeline.db import init_schema
@@ -38,6 +40,12 @@ _PATCH_CLASSIFY = (
 )
 _PATCH_PURCHASE = (
     "origenlab_email_pipeline.dashboard_postgres_sync.sync_commercial_purchase_events"
+)
+_PATCH_OPTIONAL = (
+    "origenlab_email_pipeline.dashboard_postgres_sync.run_optional_db2_loaders"
+)
+_PATCH_UPDATE_DETAILS = (
+    "origenlab_email_pipeline.dashboard_postgres_sync.update_sync_run_details"
 )
 
 
@@ -450,6 +458,221 @@ def test_script_help() -> None:
     assert "--dry-run" in r.stdout
     assert "--only" in r.stdout
     assert "--allow-empty-mart" in r.stdout
+    assert "--include-equipment-opportunities" in r.stdout
+    assert "--include-warm-cases" in r.stdout
+
+
+def test_validate_optional_loader_audit_requires_operator_on_apply() -> None:
+    with pytest.raises(ValueError, match="updated-by"):
+        validate_optional_loader_audit(
+            include_equipment=True,
+            include_warm_cases=False,
+            dry_run=False,
+            updated_by=None,
+            reason="audit",
+        )
+
+
+def test_merge_optional_loader_details_shape() -> None:
+    details = merge_optional_loader_details(
+        {"loader_steps": []},
+        equipment_summary={
+            "source_id": 9,
+            "rows_inserted": 12,
+            "applied": True,
+        },
+        warm_summary={
+            "inserted_cases": 3,
+            "updated_cases": 2,
+            "linked_emails": 5,
+            "applied": True,
+        },
+    )
+    assert details["equipment_opportunity_source_id"] == 9
+    assert details["equipment_opportunity_row_count"] == 12
+    assert details["warm_case_inserted_count"] == 3
+    assert details["warm_case_updated_count"] == 2
+    assert details["warm_case_linked_email_count"] == 5
+
+
+def test_default_sync_does_not_call_optional_loaders(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    optional_called = {"n": 0}
+
+    def _optional(*args: Any, **kwargs: Any) -> tuple[None, None]:
+        optional_called["n"] += 1
+        return None, None
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(_PATCH_WM, return_value=1), patch(_PATCH_CLASSIFY, return_value={}), patch(
+        _PATCH_PURCHASE, return_value={}
+    ), patch(_PATCH_OPTIONAL, side_effect=_optional):
+        result = run_dashboard_mirror_sync(
+            ["--sqlite-db", str(db)],
+            repo_root=REPO,
+            loader_runner=lambda _c, _r: 0,
+        )
+
+    assert result["ok"] is True
+    assert optional_called["n"] == 0
+
+
+def test_include_equipment_flag_calls_optional_loader(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+
+    def _optional(*args: Any, **kwargs: Any) -> tuple[dict[str, Any], None]:
+        assert kwargs.get("dry_run") is False
+        return (
+            {"applied": True, "source_id": 42, "rows_inserted": 9},
+            None,
+        )
+
+    captured_details: dict[str, Any] = {}
+
+    def _capture_update(_url: str, _sync_id: int, details: dict[str, Any]) -> None:
+        captured_details.update(details)
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(_PATCH_WM, return_value=7), patch(_PATCH_CLASSIFY, return_value={}), patch(
+        _PATCH_PURCHASE, return_value={}
+    ), patch(_PATCH_OPTIONAL, side_effect=_optional), patch(
+        _PATCH_UPDATE_DETAILS, side_effect=_capture_update
+    ):
+        result = run_dashboard_mirror_sync(
+            [
+                "--sqlite-db",
+                str(db),
+                "--include-equipment-opportunities",
+                "--updated-by",
+                "op",
+                "--reason",
+                "sync test",
+            ],
+            repo_root=REPO,
+            loader_runner=lambda _c, _r: 0,
+        )
+
+    assert result["ok"] is True
+    assert result["equipment_opportunity_sync"]["source_id"] == 42
+    assert captured_details["equipment_opportunity_source_id"] == 42
+    assert captured_details["equipment_opportunity_row_count"] == 9
+
+
+def test_include_warm_cases_flag_calls_optional_loader(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+
+    def _optional(*args: Any, **kwargs: Any) -> tuple[None, dict[str, Any]]:
+        return (
+            None,
+            {
+                "applied": True,
+                "inserted_cases": 4,
+                "updated_cases": 1,
+                "linked_emails": 4,
+            },
+        )
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(_PATCH_WM, return_value=3), patch(_PATCH_CLASSIFY, return_value={}), patch(
+        _PATCH_PURCHASE, return_value={}
+    ), patch(_PATCH_OPTIONAL, side_effect=_optional), patch(_PATCH_UPDATE_DETAILS):
+        result = run_dashboard_mirror_sync(
+            [
+                "--sqlite-db",
+                str(db),
+                "--include-warm-cases",
+                "--updated-by",
+                "op",
+                "--reason",
+                "warm sync",
+            ],
+            repo_root=REPO,
+            loader_runner=lambda _c, _r: 0,
+        )
+
+    assert result["ok"] is True
+    assert result["warm_case_sync"]["inserted_cases"] == 4
+    assert result["details"]["warm_case_linked_email_count"] == 4
+
+
+def test_optional_loader_failure_surfaces_in_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+
+    def _optional(*args: Any, **kwargs: Any) -> tuple[dict[str, Any], None]:
+        raise RuntimeError("equipment_opportunity_mirror failed: source_already_loaded")
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(_PATCH_WM, return_value=1), patch(_PATCH_CLASSIFY, return_value={}), patch(
+        _PATCH_PURCHASE, return_value={}
+    ), patch(_PATCH_OPTIONAL, side_effect=_optional):
+        result = run_dashboard_mirror_sync(
+            [
+                "--sqlite-db",
+                str(db),
+                "--include-equipment-opportunities",
+                "--updated-by",
+                "op",
+                "--reason",
+                "fail test",
+            ],
+            repo_root=REPO,
+            loader_runner=lambda _c, _r: 0,
+        )
+
+    assert result["ok"] is False
+    assert any("source_already_loaded" in e for e in result["errors"])
+
+
+def test_apply_missing_reason_fails_before_loaders(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    db.write_bytes(b"x")
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    loader_called = {"n": 0}
+
+    def _fake_loader(cmd: list[str], _root: Path) -> int:
+        loader_called["n"] += 1
+        return 0
+
+    result = run_dashboard_mirror_sync(
+        [
+            "--sqlite-db",
+            str(db),
+            "--include-warm-cases",
+            "--updated-by",
+            "op",
+        ],
+        repo_root=REPO,
+        loader_runner=_fake_loader,
+    )
+    assert result["ok"] is False
+    assert any("reason" in e.lower() for e in result["errors"])
+    assert loader_called["n"] == 0
 
 
 def test_alembic_migration_defines_dashboard_sync_run() -> None:
@@ -464,8 +687,7 @@ def test_alembic_migration_defines_email_classification_canonical() -> None:
     assert "reporting.email_classification_canonical" in text
 
 
-def test_alembic_head_is_commercial_purchase_events() -> None:
-    path = REPO / "alembic" / "versions" / "20260519_0010_commercial_purchase_events.py"
-    text = path.read_text(encoding="utf-8")
-    assert "commercial.purchase_event" in text
-    assert EXPECTED_ALEMBIC_HEAD == "20260519_0010"
+def test_alembic_head_matches_db1_api_read_model_chain() -> None:
+    path = REPO / "alembic" / "versions" / "20260519_0016_api_readonly_grants.py"
+    assert path.is_file()
+    assert EXPECTED_ALEMBIC_HEAD == "20260519_0016"

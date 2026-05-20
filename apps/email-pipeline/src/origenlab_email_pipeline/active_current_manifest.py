@@ -10,6 +10,47 @@ ALLOWED_CAMPAIGN_MODES = frozenset(
     {"equipment_first", "volume_marketing", "precision_leads", "none"}
 )
 
+_OPERATOR_QUEUE_PREFIX = "equipment_first_operator_queue_"
+_STALE_CROSSCHECK_FRAGMENT = "buyer_opportunity_crosscheck"
+
+
+def _stale_paths_from_manifest(manifest: dict[str, Any]) -> set[str]:
+    return {
+        str(entry.get("path") or "").strip()
+        for entry in (manifest.get("stale_files") or [])
+        if entry.get("path")
+    }
+
+
+def _is_forbidden_queue_name(name: str) -> bool:
+    lower = name.lower()
+    return _STALE_CROSSCHECK_FRAGMENT in lower or "tender_buyer_outreach_queue" in lower
+
+
+def resolve_equipment_operator_queue_csv(active_current: Path, manifest: dict[str, Any]) -> Path | None:
+    """Pick canonical equipment_first_operator_queue CSV; never stale crosscheck artifacts."""
+    stale = _stale_paths_from_manifest(manifest)
+    active_current = active_current.resolve()
+
+    for rel in manifest.get("canonical_files") or []:
+        rel_s = str(rel).strip()
+        if not rel_s or rel_s in stale:
+            continue
+        if _is_forbidden_queue_name(rel_s):
+            continue
+        if not (rel_s.startswith(_OPERATOR_QUEUE_PREFIX) and rel_s.endswith(".csv")):
+            continue
+        candidate = active_current / rel_s
+        if candidate.is_file():
+            return candidate
+
+    globs = sorted(active_current.glob(f"{_OPERATOR_QUEUE_PREFIX}*.csv"))
+    for candidate in reversed(globs):
+        if candidate.name in stale or _is_forbidden_queue_name(candidate.name):
+            continue
+        return candidate
+    return None
+
 
 def load_manifest(path: Path) -> dict[str, Any]:
     if not path.is_file():

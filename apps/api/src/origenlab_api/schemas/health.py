@@ -9,3 +9,5 @@ class HealthResponse(BaseModel):
     ok: bool = True
     service: str = "origenlab-api"
     mode: str = "operator-sqlite-readonly"
+    backend: str = "sqlite"
+    postgres_configured: bool = False

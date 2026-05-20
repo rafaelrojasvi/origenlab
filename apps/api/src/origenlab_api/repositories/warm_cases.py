@@ -9,7 +9,6 @@ from typing import Any
 from origenlab_email_pipeline.cases_review_queue import fetch_cases_review_queue
 
 from origenlab_api.schemas.cases import WarmCaseItem
-from origenlab_api.services.warm_case_classification import row_to_warm_case_item
 
 
 def fetch_warm_cases(
@@ -46,6 +45,8 @@ def fetch_warm_cases(
         positive_signal_only and not result.enrichment_available
     )
     note = result.caption_es
+
+    from origenlab_api.services.warm_case_classification import row_to_warm_case_item
 
     category_needle = (category or "").strip().lower()
     items: list[WarmCaseItem] = []

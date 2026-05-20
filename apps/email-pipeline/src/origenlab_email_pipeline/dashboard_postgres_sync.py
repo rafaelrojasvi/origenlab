@@ -22,11 +22,19 @@ from origenlab_email_pipeline.commercial_purchase_postgres_mirror import (
     sync_commercial_purchase_events,
 )
 from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
+from origenlab_email_pipeline.equipment_opportunity_mirror import (
+    apply_load as apply_equipment_opportunity_mirror,
+    preview_load as preview_equipment_opportunity_mirror,
+)
 from origenlab_email_pipeline.mart_core_postgres_migrate import (
     assert_scratch_postgres_target,
     connect_sqlite_readonly,
     resolve_postgres_url,
     resolve_sqlite_path,
+)
+from origenlab_email_pipeline.warm_case_promotion import (
+    apply_promotion as apply_warm_case_promotion,
+    preview_promotion as preview_warm_case_promotion,
 )
 
 try:
@@ -39,7 +47,7 @@ except ImportError as exc:  # pragma: no cover
 else:
     _PSYCOPG_IMPORT_ERROR = None
 
-EXPECTED_ALEMBIC_HEAD = "20260519_0010"
+EXPECTED_ALEMBIC_HEAD = "20260519_0016"
 DASHBOARD_SYNC_KV_KEY = "dashboard_postgres_mirror_last_sync"
 
 OUTBOUND_SCRIPT = "scripts/migrate/sqlite_outbound_sidecars_to_postgres.py"
@@ -446,6 +454,183 @@ def write_sync_watermark(
     return sync_id
 
 
+def update_sync_run_details(
+    pg_url: str,
+    sync_run_id: int,
+    details: dict[str, Any],
+) -> None:
+    _require_psycopg()
+    assert psycopg is not None and Json is not None
+    with psycopg.connect(pg_url, autocommit=False) as conn:
+        with conn.cursor() as cur:
+            if pg_table_exists(
+                cur,
+                schema=REPORTING_WATERMARK_TABLE[0],
+                table=REPORTING_WATERMARK_TABLE[1],
+            ):
+                cur.execute(
+                    """
+                    UPDATE reporting.dashboard_sync_run
+                    SET details_json = %s
+                    WHERE id = %s
+                    """,
+                    (Json(details), sync_run_id),
+                )
+        conn.commit()
+
+
+def default_active_current_dir(repo_root: Path) -> Path:
+    return (repo_root / "reports" / "out" / "active" / "current").resolve()
+
+
+def validate_optional_loader_audit(
+    *,
+    include_equipment: bool,
+    include_warm_cases: bool,
+    dry_run: bool,
+    updated_by: str | None,
+    reason: str | None,
+) -> None:
+    if dry_run or not (include_equipment or include_warm_cases):
+        return
+    if not (updated_by and str(updated_by).strip()):
+        raise ValueError(
+            "Optional DB-2 loaders on apply require --updated-by (or --operator)."
+        )
+    if not (reason and str(reason).strip()):
+        raise ValueError("Optional DB-2 loaders on apply require --reason.")
+
+
+def _raise_if_optional_loader_failed(loader_name: str, summary: dict[str, Any]) -> None:
+    if summary.get("dry_run"):
+        return
+    error = summary.get("error")
+    if error:
+        raise RuntimeError(f"{loader_name} failed: {error}")
+    if not summary.get("applied"):
+        warning = summary.get("warning")
+        if loader_name == "warm_case_promotion" and warning == "no_candidates":
+            return
+        if loader_name == "equipment_opportunity_mirror" and warning == "empty_csv":
+            return
+        raise RuntimeError(f"{loader_name} apply did not complete: {summary!r}")
+
+
+def merge_optional_loader_details(
+    details: dict[str, Any],
+    *,
+    equipment_summary: dict[str, Any] | None,
+    warm_summary: dict[str, Any] | None,
+) -> dict[str, Any]:
+    merged = dict(details)
+    if equipment_summary is not None:
+        merged["equipment_opportunity_sync"] = equipment_summary
+        if equipment_summary.get("source_id") is not None:
+            merged["equipment_opportunity_source_id"] = equipment_summary["source_id"]
+        row_count = equipment_summary.get("rows_inserted")
+        if row_count is None:
+            row_count = equipment_summary.get("row_count")
+        if row_count is not None:
+            merged["equipment_opportunity_row_count"] = row_count
+    if warm_summary is not None:
+        merged["warm_case_sync"] = warm_summary
+        if warm_summary.get("inserted_cases") is not None:
+            merged["warm_case_inserted_count"] = warm_summary["inserted_cases"]
+        if warm_summary.get("updated_cases") is not None:
+            merged["warm_case_updated_count"] = warm_summary["updated_cases"]
+        linked = warm_summary.get("linked_emails")
+        if linked is not None:
+            merged["warm_case_linked_email_count"] = linked
+    return merged
+
+
+def run_equipment_opportunity_sync(
+    pg_url: str,
+    repo_root: Path,
+    *,
+    dry_run: bool,
+    updated_by: str | None,
+    reason: str | None,
+    sync_run_id: int | None,
+) -> dict[str, Any]:
+    active_current = default_active_current_dir(repo_root)
+    if dry_run:
+        return preview_equipment_opportunity_mirror(
+            active_current,
+            pg_url=pg_url,
+        )
+    return apply_equipment_opportunity_mirror(
+        pg_url,
+        active_current,
+        updated_by=str(updated_by or "").strip(),
+        reason=str(reason or "").strip(),
+        sync_run_id=sync_run_id,
+    )
+
+
+def run_warm_case_promotion_sync(
+    pg_url: str,
+    sqlite_path: Path,
+    *,
+    dry_run: bool,
+    updated_by: str | None,
+    reason: str | None,
+    days_window: int = 30,
+    limit: int = 200,
+) -> dict[str, Any]:
+    if dry_run:
+        return preview_warm_case_promotion(
+            sqlite_path,
+            days_window=days_window,
+            limit=limit,
+            pg_url=pg_url,
+        )
+    return apply_warm_case_promotion(
+        pg_url,
+        sqlite_path,
+        days_window=days_window,
+        limit=limit,
+        updated_by=str(updated_by or "").strip(),
+        reason=str(reason or "").strip(),
+    )
+
+
+def run_optional_db2_loaders(
+    *,
+    args: argparse.Namespace,
+    pg_url: str,
+    sqlite_path: Path,
+    repo_root: Path,
+    sync_run_id: int | None,
+    dry_run: bool,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    equipment_summary: dict[str, Any] | None = None
+    warm_summary: dict[str, Any] | None = None
+
+    if args.include_equipment_opportunities:
+        equipment_summary = run_equipment_opportunity_sync(
+            pg_url,
+            repo_root,
+            dry_run=dry_run,
+            updated_by=args.updated_by,
+            reason=args.reason,
+            sync_run_id=sync_run_id,
+        )
+        _raise_if_optional_loader_failed("equipment_opportunity_mirror", equipment_summary)
+
+    if args.include_warm_cases:
+        warm_summary = run_warm_case_promotion_sync(
+            pg_url,
+            sqlite_path,
+            dry_run=dry_run,
+            updated_by=args.updated_by,
+            reason=args.reason,
+        )
+        _raise_if_optional_loader_failed("warm_case_promotion", warm_summary)
+
+    return equipment_summary, warm_summary
+
+
 def format_summary_text(result: dict[str, Any]) -> str:
     c = result.get("counts") or {}
     lines = [
@@ -511,6 +696,28 @@ def build_parser() -> argparse.ArgumentParser:
             "May wipe good Postgres dashboard mart data if mart rebuild failed."
         ),
     )
+    p.add_argument(
+        "--include-equipment-opportunities",
+        action="store_true",
+        help="After mirror loaders, run equipment_first_operator_queue Postgres mirror (DB-2A).",
+    )
+    p.add_argument(
+        "--include-warm-cases",
+        action="store_true",
+        help="After mirror loaders, promote SQLite warm review queue to Postgres (DB-2B).",
+    )
+    p.add_argument(
+        "--updated-by",
+        "--operator",
+        dest="updated_by",
+        default=None,
+        help="Operator id for optional DB-2 loaders (required with --apply when flags set).",
+    )
+    p.add_argument(
+        "--reason",
+        default=None,
+        help="Audit reason for optional DB-2 loaders (required with --apply when flags set).",
+    )
     return p
 
 
@@ -548,6 +755,13 @@ def run_dashboard_mirror_sync(
         pg_url = resolve_postgres_url(args.postgres_url)
         assert_scratch_postgres_target(
             pg_url, allow_non_scratch=bool(args.allow_non_scratch_postgres)
+        )
+        validate_optional_loader_audit(
+            include_equipment=bool(args.include_equipment_opportunities),
+            include_warm_cases=bool(args.include_warm_cases),
+            dry_run=bool(args.dry_run),
+            updated_by=args.updated_by,
+            reason=args.reason,
         )
     except (ValueError, RuntimeError) as exc:
         result["errors"].append(str(exc))
@@ -612,6 +826,31 @@ def run_dashboard_mirror_sync(
 
     if args.dry_run:
         result["counts"] = collect_mirror_counts(pg_url)
+        equipment_summary: dict[str, Any] | None = None
+        warm_summary: dict[str, Any] | None = None
+        if args.include_equipment_opportunities or args.include_warm_cases:
+            try:
+                equipment_summary, warm_summary = run_optional_db2_loaders(
+                    args=args,
+                    pg_url=pg_url,
+                    sqlite_path=sqlite_path,
+                    repo_root=root,
+                    sync_run_id=None,
+                    dry_run=True,
+                )
+            except RuntimeError as exc:
+                result["errors"].append(str(exc))
+                result["elapsed_seconds"] = round(time.monotonic() - t0, 3)
+                return result
+        if equipment_summary is not None:
+            result["equipment_opportunity_sync"] = equipment_summary
+        if warm_summary is not None:
+            result["warm_case_sync"] = warm_summary
+        result["details"] = merge_optional_loader_details(
+            {"loader_steps": result["loader_steps"], "alembic_version": alembic_version},
+            equipment_summary=equipment_summary,
+            warm_summary=warm_summary,
+        )
         result["ok"] = True
         result["status"] = "dry_run"
         result["elapsed_seconds"] = round(time.monotonic() - t0, 3)
@@ -665,6 +904,37 @@ def run_dashboard_mirror_sync(
             dry_run=False,
         )
         result["commercial_purchase_sync"] = purchase_sync
+
+        details: dict[str, Any] = {
+            "loader_steps": result["loader_steps"],
+            "alembic_version": alembic_version,
+            "classification_sync": classification_sync,
+            "commercial_purchase_sync": purchase_sync,
+        }
+        equipment_summary: dict[str, Any] | None = None
+        warm_summary: dict[str, Any] | None = None
+        if args.include_equipment_opportunities or args.include_warm_cases:
+            equipment_summary, warm_summary = run_optional_db2_loaders(
+                args=args,
+                pg_url=pg_url,
+                sqlite_path=sqlite_path,
+                repo_root=root,
+                sync_run_id=sync_id,
+                dry_run=False,
+            )
+            if equipment_summary is not None:
+                result["equipment_opportunity_sync"] = equipment_summary
+            if warm_summary is not None:
+                result["warm_case_sync"] = warm_summary
+            details = merge_optional_loader_details(
+                details,
+                equipment_summary=equipment_summary,
+                warm_summary=warm_summary,
+            )
+            if sync_id is not None:
+                update_sync_run_details(pg_url, sync_id, details)
+
+        result["details"] = details
         result["counts"] = collect_mirror_counts(pg_url)
         result["ok"] = True
         result["status"] = "success"

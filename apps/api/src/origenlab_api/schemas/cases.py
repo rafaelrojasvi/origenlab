@@ -32,7 +32,7 @@ WARM_CASE_CATEGORIES: frozenset[str] = frozenset(
 
 
 class WarmCasesMeta(BaseModel):
-    data_source: Literal["sqlite"] = "sqlite"
+    data_source: Literal["sqlite", "postgres_mirror"] = "sqlite"
     read_only: bool = True
     reduced_mode: bool = False
     count: int = 0

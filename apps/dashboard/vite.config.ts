@@ -2,7 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-const apiTarget = process.env.VITE_ORIGENLAB_API_BASE_URL || "http://127.0.0.1:8000";
+/** Dev proxy target for apps/api (Dashboard-0 uses /health and /operator only). */
+const apiTarget = process.env.VITE_ORIGENLAB_API_BASE_URL || "http://127.0.0.1:8001";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -11,13 +12,9 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/health": { target: apiTarget, changeOrigin: true },
-      "/dashboard": { target: apiTarget, changeOrigin: true },
-      "/contacts": { target: apiTarget, changeOrigin: true },
-      "/organizations": { target: apiTarget, changeOrigin: true },
-      "/outbound": { target: apiTarget, changeOrigin: true },
-      "/meta": { target: apiTarget, changeOrigin: true },
-      "/classification": { target: apiTarget, changeOrigin: true },
-      "/commercial": { target: apiTarget, changeOrigin: true },
+      "/operator": { target: apiTarget, changeOrigin: true },
+      "/cases": { target: apiTarget, changeOrigin: true },
+      "/opportunities": { target: apiTarget, changeOrigin: true },
     },
   },
   test: {

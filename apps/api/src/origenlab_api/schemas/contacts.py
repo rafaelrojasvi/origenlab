@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class ContactMeta(BaseModel):
-    data_source: Literal["sqlite"] = "sqlite"
+    data_source: Literal["sqlite", "postgres_mirror"] = "sqlite"
     read_only: bool = True
     reduced_mode: bool = False
     note: str = ""

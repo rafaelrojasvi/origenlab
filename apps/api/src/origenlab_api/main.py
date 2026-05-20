@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from origenlab_api.backends.factory import validate_api_settings
 from origenlab_api.routes import cases, contacts, emails, health, operator, opportunities
+from origenlab_api.settings import get_settings
 
 
 def create_app() -> FastAPI:
@@ -26,6 +28,7 @@ def create_app() -> FastAPI:
     app.include_router(cases.router)
     app.include_router(opportunities.router)
     app.include_router(contacts.router)
+    validate_api_settings(get_settings())
     return app
 
 

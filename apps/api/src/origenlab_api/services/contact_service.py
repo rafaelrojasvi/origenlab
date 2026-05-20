@@ -1,8 +1,8 @@
-"""Contact detail service (read-only)."""
+"""Contact detail service (repository-backed)."""
 
 from __future__ import annotations
 
-from origenlab_api.repositories.contact import fetch_contact_intelligence
+from origenlab_api.backends.factory import RepositoryBundle, get_repository_bundle
 from origenlab_api.schemas.contacts import (
     ContactDetailResponse,
     ContactMeta,
@@ -13,21 +13,26 @@ from origenlab_api.schemas.contacts import (
 from origenlab_api.settings import Settings
 
 
-def build_contact_detail_response(settings: Settings, email: str) -> ContactDetailResponse:
-    sqlite_path = settings.resolved_sqlite_path()
-    active_current = settings.resolved_active_current()
-    contact, outreach, sent, warnings, reduced_mode = fetch_contact_intelligence(
-        sqlite_path,
-        active_current,
-        email,
-    )
-    note = "; ".join(warnings[:3]) if warnings else ""
-    if len(warnings) > 3:
-        note += f" (+{len(warnings) - 3} more warnings)"
+def build_contact_detail_response(
+    settings: Settings,
+    email: str,
+    *,
+    repos: RepositoryBundle | None = None,
+) -> ContactDetailResponse:
+    bundle = repos or get_repository_bundle(settings)
+    result = bundle.contact.get_contact_detail(email)
+    note = "; ".join(result.warnings[:3]) if result.warnings else ""
+    if len(result.warnings) > 3:
+        note += f" (+{len(result.warnings) - 3} more warnings)"
     return ContactDetailResponse(
-        meta=ContactMeta(reduced_mode=reduced_mode, note=note),
-        contact=ContactProfile.model_validate(contact),
-        outreach=ContactOutreach.model_validate(outreach),
-        sent_history=ContactSentHistory.model_validate(sent),
-        warnings=warnings,
+        meta=ContactMeta(
+            data_source=result.data_source,
+            read_only=True,
+            reduced_mode=result.reduced_mode,
+            note=note,
+        ),
+        contact=ContactProfile.model_validate(result.contact),
+        outreach=ContactOutreach.model_validate(result.outreach),
+        sent_history=ContactSentHistory.model_validate(result.sent_history),
+        warnings=result.warnings,
     )

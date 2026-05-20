@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ApiBackend = Literal["sqlite", "postgres"]
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _EMAIL_PIPELINE_ROOT = _API_ROOT.parent / "email-pipeline"
@@ -21,6 +24,29 @@ class Settings(BaseSettings):
 
     sqlite_path: Path | None = None
     active_current: Path | None = None
+    api_backend: str | None = None
+    postgres_url: str | None = None
+    postgres_statement_timeout_ms: int = 30_000
+    postgres_pool_size: int = 5
+
+    def resolved_api_backend(self) -> ApiBackend:
+        raw = (self.api_backend or "sqlite").strip().lower()
+        if raw not in ("sqlite", "postgres"):
+            raise ValueError(
+                f"Invalid ORIGENLAB_API_BACKEND={raw!r} (expected 'sqlite' or 'postgres')"
+            )
+        return raw  # type: ignore[return-value]
+
+    def postgres_configured(self) -> bool:
+        return bool((self.postgres_url or "").strip())
+
+    def require_postgres_url(self) -> str:
+        url = (self.postgres_url or "").strip()
+        if not url:
+            raise ValueError(
+                "ORIGENLAB_POSTGRES_URL is required when ORIGENLAB_API_BACKEND=postgres"
+            )
+        return url
 
     def resolved_sqlite_path(self) -> Path:
         if self.sqlite_path is not None:

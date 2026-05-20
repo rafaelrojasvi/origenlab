@@ -1,0 +1,365 @@
+"""Tests for warm case Postgres promotion (DB-2B)."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import sqlite3
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock
+
+import pytest
+
+from origenlab_email_pipeline import warm_case_promotion as promo
+from origenlab_email_pipeline.cases_review_queue import fetch_cases_review_queue
+from origenlab_email_pipeline.warm_case_classification import infer_warm_case_category
+
+REPO = Path(__file__).resolve().parents[1]
+SCRIPT = REPO / "scripts" / "commercial" / "promote_warm_cases_to_postgres.py"
+
+
+def _postgres_test_url_ready() -> str | None:
+    url = (os.environ.get("ORIGENLAB_TEST_POSTGRES_URL") or "").strip()
+    if not url:
+        return None
+    try:
+        import psycopg
+
+        from origenlab_email_pipeline.mart_core_postgres_migrate import normalize_postgres_url
+
+        with psycopg.connect(normalize_postgres_url(url), connect_timeout=2):
+            pass
+        return url
+    except Exception:
+        return None
+
+
+def _load_cli_module():
+    spec = importlib.util.spec_from_file_location("promote_warm_cases_cli", SCRIPT)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _mk_sqlite(path: Path, rows: list[tuple[int, str, str, str, str]]) -> None:
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE emails (
+          id INTEGER PRIMARY KEY,
+          date_iso TEXT,
+          subject TEXT,
+          sender TEXT,
+          source_file TEXT
+        );
+        """
+    )
+    for email_id, date_iso, subject, sender, source_file in rows:
+        conn.execute(
+            "INSERT INTO emails (id, date_iso, subject, sender, source_file) VALUES (?, ?, ?, ?, ?)",
+            (email_id, date_iso, subject, sender, source_file),
+        )
+    conn.commit()
+    conn.close()
+
+
+def _queue_row(
+    email_id: int,
+    *,
+    sender: str = "client@hospital.cl",
+    subject: str = "Re: Cotización equipo",
+    date_iso: str = "2026-05-19T10:00:00-04:00",
+    source_file: str = "gmail:contacto@origenlab.cl/INBOX",
+) -> dict[str, Any]:
+    return {
+        "email_id": email_id,
+        "date_iso": date_iso,
+        "subject_preview": subject,
+        "sender_preview": sender,
+        "source_file": source_file,
+        "has_positive_signal": 0,
+        "has_suppression_signal": 0,
+        "max_positive_strength": None,
+    }
+
+
+def test_build_case_key_stable_and_normalized() -> None:
+    k1 = promo.build_case_key("Client@Hospital.CL", "hospital.cl")
+    k2 = promo.build_case_key("client@hospital.cl", "hospital.cl")
+    assert k1 == k2
+    assert k1.startswith("warm:")
+    assert len(k1) == len("warm:") + 64
+
+
+def test_duplicate_queue_rows_same_case_key_deduped() -> None:
+    rows = [
+        promo.queue_row_to_promotion_record(
+            _queue_row(1, date_iso="2026-05-18T10:00:00Z"),
+            enrichment_available=False,
+        ),
+        promo.queue_row_to_promotion_record(
+            _queue_row(2, date_iso="2026-05-19T10:00:00Z"),
+            enrichment_available=False,
+        ),
+    ]
+    assert rows[0] is not None and rows[1] is not None
+    assert rows[0].case_key == rows[1].case_key
+    deduped = promo.dedupe_candidates([rows[0], rows[1]])
+    assert len(deduped) == 1
+    assert deduped[rows[0].case_key].last_email_id == 2
+
+
+def test_preview_dry_run_does_not_connect_postgres(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [(1, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+    )
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: (_ for _ in ()).throw(AssertionError())))
+    summary = promo.preview_promotion(db)
+    assert summary["dry_run"] is True
+    assert summary["applied"] is False
+    assert summary["candidate_count"] >= 1
+
+
+def test_queue_row_rejects_body_fields() -> None:
+    row = _queue_row(1)
+    row["body"] = "secret"
+    with pytest.raises(ValueError, match="body"):
+        promo.queue_row_to_promotion_record(row, enrichment_available=False)
+
+
+def test_no_body_fields_in_promotion_record() -> None:
+    rec = promo.queue_row_to_promotion_record(_queue_row(1), enrichment_available=False)
+    assert rec is not None
+    dumped = repr(rec)
+    for forbidden in ("body_html", "full_body_clean", "raw_json"):
+        assert forbidden not in dumped
+
+
+class _PromoCursor:
+    def __init__(self, *, existing: dict[str, tuple[int, str]] | None = None) -> None:
+        self.existing = existing or {}
+        self.cases: dict[str, tuple[int, str]] = dict(self.existing)
+        self.next_id = max((v[0] for v in self.cases.values()), default=0) + 1
+        self.statements: list[tuple[str, tuple[Any, ...] | None]] = []
+        self._fetch: tuple[Any, ...] | None = None
+        self.linked: set[tuple[int, int]] = set()
+
+    def execute(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
+        self.statements.append((sql, params))
+        if "SELECT id, status FROM commercial.warm_case WHERE case_key" in sql:
+            key = str(params[0]) if params else ""
+            hit = self.cases.get(key)
+            self._fetch = (hit[0], hit[1]) if hit else None
+        elif "INSERT INTO commercial.warm_case_linked_email" in sql:
+            assert params is not None
+            pair = (int(params[0]), int(params[1]))
+            if pair not in self.linked:
+                self.linked.add(pair)
+                self._fetch = (pair[0],)
+            else:
+                self._fetch = None
+        elif "INSERT INTO commercial.warm_case_equipment_signal" in sql:
+            self._fetch = (1,)
+        elif "INSERT INTO commercial.warm_case (" in sql and "ON CONFLICT" in sql:
+            assert params is not None
+            key = str(params[0])
+            status = str(params[6])
+            if key in self.cases:
+                case_id, _ = self.cases[key]
+                self.cases[key] = (case_id, status)
+            else:
+                case_id = self.next_id
+                self.next_id += 1
+                self.cases[key] = (case_id, status)
+            self._fetch = (case_id, status)
+        elif "INSERT INTO commercial.warm_case_status_history" in sql:
+            self._fetch = (1,)
+        elif "INSERT INTO commercial.warm_case_event" in sql:
+            self._fetch = (1,)
+        elif "INSERT INTO commercial.warm_case_equipment_signal" in sql:
+            self._fetch = (1,)
+        else:
+            self._fetch = None
+
+    def fetchone(self) -> tuple[Any, ...] | None:
+        return self._fetch
+
+    def __enter__(self) -> _PromoCursor:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        return None
+
+
+class _PromoConn:
+    def __init__(self, cur: _PromoCursor) -> None:
+        self.cur = cur
+        self.committed = False
+
+    def cursor(self) -> _PromoCursor:
+        return self.cur
+
+    def commit(self) -> None:
+        self.committed = True
+
+    def __enter__(self) -> _PromoConn:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        return None
+
+
+def test_apply_inserts_case_links_email_and_promote_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+    )
+    cur = _PromoCursor()
+    conn = _PromoConn(cur)
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: conn))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    summary = promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="test",
+    )
+    assert summary["applied"] is True
+    assert summary["inserted_cases"] == 1
+    assert summary["linked_emails"] == 1
+    assert summary["events_inserted"] == 1
+    assert conn.committed is True
+    sqls = " ".join(s for s, _ in cur.statements)
+    assert "TRUNCATE" not in sqls.upper()
+
+
+def test_apply_same_email_link_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+    )
+    candidates, _ = promo.load_candidates_from_sqlite(db)
+    key = next(iter(candidates.keys()))
+    case_id = 99
+    rec = candidates[key]
+    cur = _PromoCursor(existing={key: (case_id, "open")})
+    cur.linked.add((case_id, rec.last_email_id))
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    summary = promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="re-run",
+    )
+    assert summary["updated_cases"] == 1
+    assert summary["inserted_cases"] == 0
+    assert summary["linked_emails"] == 0
+    assert summary["events_inserted"] == 0
+
+
+def test_status_change_writes_status_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+    )
+    candidates, _ = promo.load_candidates_from_sqlite(db)
+    key = next(iter(candidates.keys()))
+    rec = candidates[key]
+    cur = _PromoCursor(existing={key: (7, "quoted")})
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    summary = promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="status change",
+    )
+    assert rec.status == "new"
+    assert summary["status_history_rows"] == 1
+    assert any("warm_case_status_history" in s for s, _ in cur.statements)
+
+
+def test_cli_apply_requires_operator_and_reason(tmp_path: Path) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [(1, "2026-05-19T10:00:00Z", "Hola", "a@ext.com", "gmail:contacto@origenlab.cl/inbox")],
+    )
+    cli = _load_cli_module()
+    code = cli.main(["--sqlite-db", str(db), "--apply", "--postgres-url", "postgresql://u:p@127.0.0.1/db"])
+    assert code == 2
+
+
+def test_classify_bounce_shared_module() -> None:
+    row = {
+        "email_id": 1,
+        "sender_preview": "mailer-daemon@google.com",
+        "subject_preview": "Delivery Status Notification (Failure)",
+        "source_file": "gmail:contacto@origenlab.cl/INBOX",
+    }
+    assert infer_warm_case_category(row, enrichment_available=False, include_noise=False) == "bounce"
+
+
+@pytest.mark.skipif(
+    _postgres_test_url_ready() is None,
+    reason="Set ORIGENLAB_TEST_POSTGRES_URL to a reachable disposable Postgres DB.",
+)
+def test_apply_visible_in_v_warm_case(tmp_path: Path) -> None:
+    pytest.importorskip("psycopg")
+    pg_url = _postgres_test_url_ready()
+    assert pg_url
+
+    import psycopg
+
+    from origenlab_email_pipeline.mart_core_postgres_migrate import normalize_postgres_url
+
+    db = tmp_path / "warm_pg.sqlite"
+    _mk_sqlite(
+        db,
+        [
+            (
+                50,
+                "2026-05-19T12:00:00Z",
+                "Re: Centrifuga clinica",
+                "compras@hospital.cl",
+                "gmail:contacto@origenlab.cl/inbox",
+            ),
+        ],
+    )
+    url = normalize_postgres_url(pg_url)
+
+    summary = promo.apply_promotion(
+        pg_url,
+        db,
+        updated_by="pytest",
+        reason="integration",
+    )
+    assert summary["applied"] is True
+    assert summary["inserted_cases"] >= 1 or summary["updated_cases"] >= 1
+
+    with psycopg.connect(url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM api.v_warm_case
+                WHERE contact_email = %s
+                """,
+                ("compras@hospital.cl",),
+            )
+            assert int(cur.fetchone()[0]) >= 1

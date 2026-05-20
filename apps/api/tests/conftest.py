@@ -1,10 +1,17 @@
-"""Prefer apps/api ``origenlab_api`` over email-pipeline mirror package name."""
+"""Shared pytest fixtures for apps/api."""
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import pytest
 
-_API_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_API_SRC) not in sys.path:
-    sys.path.insert(0, str(_API_SRC))
+from origenlab_api.settings import get_settings
+
+
+@pytest.fixture(autouse=True)
+def _isolate_origenlab_api_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default tests to SQLite backend unless they set env explicitly."""
+    monkeypatch.delenv("ORIGENLAB_API_BACKEND", raising=False)
+    monkeypatch.delenv("ORIGENLAB_POSTGRES_URL", raising=False)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()

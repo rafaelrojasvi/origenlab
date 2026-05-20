@@ -18,7 +18,15 @@ def test_health_returns_stable_contract() -> None:
     assert data["ok"] is True
     assert data["service"] == "origenlab-api"
     assert data["mode"] == "operator-sqlite-readonly"
-    assert set(data.keys()) == {"ok", "service", "mode"}
+    assert data["backend"] == "sqlite"
+    assert data["postgres_configured"] is False
+    assert set(data.keys()) == {
+        "ok",
+        "service",
+        "mode",
+        "backend",
+        "postgres_configured",
+    }
 
 
 def test_health_openapi_lists_route() -> None:

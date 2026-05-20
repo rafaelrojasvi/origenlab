@@ -15,11 +15,15 @@ def utc_now_iso() -> str:
 
 class ResponseMeta(BaseModel):
     generated_at: str = Field(default_factory=utc_now_iso)
-    data_source: Literal["sqlite"] = "sqlite"
+    data_source: Literal["sqlite", "postgres_mirror"] = "sqlite"
     read_only: bool = True
     sqlite_path_redacted: str = "<unset>"
 
     @classmethod
     def for_sqlite(cls, sqlite_path: Path | None) -> ResponseMeta:
         redacted = "<set>" if sqlite_path is not None and sqlite_path.is_file() else "<unset>"
-        return cls(sqlite_path_redacted=redacted)
+        return cls(data_source="sqlite", sqlite_path_redacted=redacted)
+
+    @classmethod
+    def for_postgres_mirror(cls) -> ResponseMeta:
+        return cls(data_source="postgres_mirror", read_only=True, sqlite_path_redacted="<unset>")

@@ -1,30 +1,84 @@
-# OrigenLab — Panel comercial (React v1)
+# OrigenLab — Dashboard (React)
 
-Panel **solo lectura** sobre el espejo Postgres servido por FastAPI. No envía correos, no escribe en bases de datos y no sustituye Streamlit.
+Read-only operator UI. **Dashboard v1 (Today)** talks only to **`apps/api`**:
 
-**Flujo de datos (resumen):** Gmail → ingest → SQLite → mart/clasificación → sync → Postgres → FastAPI → este panel.
+- `GET /health`, `GET /operator/status` (operator panel)
+- `GET /cases/warm`, `GET /opportunities/equipment` (read-only tables)
 
-Documentación operador completa: [`../email-pipeline/docs/RUNBOOK.md#m-eprun-dashboard-gmail-to-react`](../email-pipeline/docs/RUNBOOK.md#m-eprun-dashboard-gmail-to-react) · [`../email-pipeline/docs/OPERATOR_CHEAT_SHEET.md`](../email-pipeline/docs/OPERATOR_CHEAT_SHEET.md)
+It does not open SQLite/Postgres, CSV files, or `apps/email-pipeline` modules from the browser.
 
-## Qué actualiza solo y qué no
+Legacy commercial tabs (classification, compras, etc.) remain in the repo but are not mounted in v0 `App.tsx`.
 
-| Capa | ¿Se actualiza sola? |
-|------|---------------------|
-| Gmail | Sí (Google) |
-| SQLite (correos, mart) | **No** — requiere ingest + rebuild mart |
-| Postgres (espejo dashboard) | **No** — requiere `sync_dashboard_postgres_mirror.py` |
-| FastAPI / React | **No** — solo leen el último sync |
+## Dashboard v0 — Today / Operator Status
 
-**Correos nuevos en Gmail no aparecen aquí** hasta ejecutar ingest, rebuild del mart y sync del espejo (ver RUNBOOK).
+### Run with `apps/api`
 
-## Requisitos
+**Terminal 1 — API** (from `apps/api`):
 
-- Node.js 20+
-- FastAPI en ejecución (`apps/email-pipeline`)
-- Postgres con migraciones Alembic y sync reciente
-- SQLite operativo con Gmail canónico ingestado
+```bash
+cd apps/api
+uv sync
+export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
+# Optional Postgres mirror reads:
+# export ORIGENLAB_API_BACKEND=postgres
+# export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/origenlab_scratch'
 
-## Arranque rápido (dos terminales)
+uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+**Terminal 2 — React** (from `apps/dashboard`):
+
+```bash
+npm install
+npm run dev -- --host 127.0.0.1
+```
+
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). In dev, Vite proxies `/health`, `/operator`, `/cases`, and `/opportunities` to the API (see `vite.config.ts`, default target port **8001**).
+
+### Required env
+
+| Variable | When | Purpose |
+|----------|------|---------|
+| `VITE_ORIGENLAB_API_BASE_URL` | **Required** for `npm run build` / production / preview | Public base URL of `apps/api` (no trailing slash), e.g. `https://api.example.com` |
+
+**Production:** you **must** set `VITE_ORIGENLAB_API_BASE_URL` at build time. Production builds **throw at runtime** if it is missing (no silent `127.0.0.1` fallback).
+
+**Development:** `npm run dev` uses the Vite proxy for `/health` and `/operator` only (same origin). Optional `VITE_ORIGENLAB_API_BASE_URL` changes the proxy target in `vite.config.ts` (default `http://127.0.0.1:8001`).
+
+### Read-only scope
+
+- **GET only** — no write/send/draft/archive buttons; row actions limited to copy contact text and optional `mailto:` links.
+- **Send/outreach truth** stays in the SQLite pipeline and operator scripts; Postgres mirror (when API `backend=postgres`) is for faster list reads, not send approval.
+- **No raw email bodies** or filesystem paths in the UI (subject/snippet previews only).
+
+### Smoke (API)
+
+```bash
+curl -sS http://127.0.0.1:8001/health
+curl -sS 'http://127.0.0.1:8001/operator/status?max_staleness_days=14'
+curl -sS 'http://127.0.0.1:8001/cases/warm?limit=10&positive_signal_only=false'
+curl -sS 'http://127.0.0.1:8001/opportunities/equipment?limit=10'
+```
+
+## Tests and build
+
+```bash
+cd apps/dashboard
+npm test
+npm run build
+```
+
+Policy tests assert dashboard `src/` has no mutating `fetch` methods and no direct DB/pipeline imports.
+
+---
+
+## Legacy panel (email-pipeline FastAPI on :8000)
+
+The sections below describe the older multi-tab panel that called email-pipeline routes (`/dashboard/summary`, `/classification/*`, …). That stack is separate from Dashboard v0.
+
+Documentación operador: [`../email-pipeline/docs/RUNBOOK.md#m-eprun-dashboard-gmail-to-react`](../email-pipeline/docs/RUNBOOK.md#m-eprun-dashboard-gmail-to-react)
+
+### Arranque rápido (legacy)
 
 **Terminal 1 — API** (desde `apps/email-pipeline`):
 
@@ -34,90 +88,15 @@ export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/ori
 export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
 
 uv run alembic -c alembic.ini upgrade head
-uv run python scripts/sync/sync_dashboard_postgres_mirror.py   # tras mart rebuild / ingest
+uv run python scripts/sync/sync_dashboard_postgres_mirror.py
 
 uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-**Terminal 2 — React** (desde `apps/dashboard`):
+Point `VITE_ORIGENLAB_API_BASE_URL=http://127.0.0.1:8000` if you run the legacy tabs against that server.
+
+### Pruebas (legacy smoke)
 
 ```bash
-npm install
-npm run dev -- --host 127.0.0.1
+npm run smoke   # requiere API levantada en el puerto configurado
 ```
-
-Abrir [http://127.0.0.1:5173](http://127.0.0.1:5173). En dev, Vite hace proxy a FastAPI (mismo origen; ver `vite.config.ts`).
-
-## Refresco de datos de hoy
-
-Orden obligatorio (detalle en RUNBOOK):
-
-1. Opcional: `set -eo pipefail` (evitar `set -u` en zsh/VS Code — ver RUNBOOK).
-2. Comprobar SQLite (antes y después del ingest):  
-   `sqlite3 "$ORIGENLAB_SQLITE_PATH" "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"`
-3. Ingest Gmail INBOX + Enviados
-4. `build_business_mart.py --rebuild` + `refresh_outbound_safety_memory.py`
-5. `sync_dashboard_postgres_mirror.py`
-6. Recargar el panel (API ya debe estar arriba)
-
-## Smoke API
-
-```bash
-curl -sS http://127.0.0.1:8000/health
-curl -sS http://127.0.0.1:8000/dashboard/summary
-curl -sS http://127.0.0.1:8000/meta/dashboard-sync
-curl -sS http://127.0.0.1:8000/classification/summary
-curl -sS http://127.0.0.1:8000/commercial/purchase-events
-```
-
-**OC confirmada (ej. CEAF 26172):** promover en SQLite antes del sync — ver RUNBOOK § “Promote confirmed purchase order”. La pestaña **Compras** muestra órdenes confirmadas (API) y señales heurísticas por separado.
-
-Comprobar: `scope` canónico por defecto; marca de sync en React ≈ `finished_at` del API; conteos canónicos mucho menores que archivo (`?scope=archive`).
-
-## Ámbito y pestañas
-
-- **Por defecto:** Gmail operativo `contacto@origenlab.cl` (canónico).
-- **Archivo histórico:** pestaña separada / `?scope=archive` en API — no es el KPI principal.
-- Pestañas: Resumen · Clasificación comercial · Compras/clientes · Contactos · Archivo.
-
-Clasificación y la tabla inferior de compras son **heurísticas de QA**. Las **OC confirmadas** arriba vienen de eventos promovidos en SQLite (`commercial_purchase_*`).
-
-## Endpoints usados
-
-| Endpoint | Uso |
-|----------|-----|
-| `GET /dashboard/summary` | KPIs canónicos |
-| `GET /meta/dashboard-sync` | Última sync del espejo |
-| `GET /classification/summary` | KPIs clasificación |
-| `GET /classification/recent` | Tabla correos clasificados |
-| `GET /classification/actions` | Acciones sugeridas |
-| `GET /outbound/readiness` | Preparación espejo |
-| `GET /contacts`, `/organizations` | Listados |
-
-OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-
-## Variables de entorno
-
-```bash
-# Producción / preview build:
-VITE_ORIGENLAB_API_BASE_URL=http://127.0.0.1:8000
-```
-
-En `npm run dev`, el proxy Vite usa `VITE_ORIGENLAB_API_BASE_URL` o `http://127.0.0.1:8000` por defecto.
-
-## Pruebas
-
-```bash
-npm test
-npm run build
-npm run smoke   # requiere API levantada
-```
-
-## Problemas frecuentes
-
-| Síntoma | Acción |
-|---------|--------|
-| Failed to fetch | Levantar FastAPI; usar proxy en dev |
-| Conteos en cero | Migrar Alembic + sync Postgres |
-| Datos viejos | Ingest + mart + sync (ver RUNBOOK) |
-| KPIs de archivo en portada | Bug de scope — debe ser canónico |

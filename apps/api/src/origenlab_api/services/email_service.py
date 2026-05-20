@@ -1,9 +1,8 @@
-"""Recent emails service (read-only)."""
+"""Recent emails service (repository-backed)."""
 
 from __future__ import annotations
 
-from origenlab_api.repositories.email import list_recent_emails
-from origenlab_api.schemas.common import ResponseMeta
+from origenlab_api.backends.factory import RepositoryBundle, get_repository_bundle
 from origenlab_api.schemas.emails import EmailRecentRow, EmailsRecentResponse
 from origenlab_api.settings import Settings
 
@@ -11,26 +10,26 @@ from origenlab_api.settings import Settings
 def build_emails_recent_response(
     settings: Settings,
     *,
+    repos: RepositoryBundle | None = None,
     days: int = 7,
     limit: int = 50,
     exclude_noise: bool = True,
     folder: str | None = None,
 ) -> EmailsRecentResponse:
-    sqlite_path = settings.resolved_sqlite_path()
-    rows, enrichment_available, reduced_mode, scope_note = list_recent_emails(
-        sqlite_path,
-        days_window=days,
+    bundle = repos or get_repository_bundle(settings)
+    result = bundle.email_recent.list_recent(
+        days=days,
         limit=limit,
         exclude_noise=exclude_noise,
         folder=folder,
     )
-    items = [EmailRecentRow.model_validate(r) for r in rows]
+    items = [EmailRecentRow.model_validate(r) for r in result.items]
     return EmailsRecentResponse(
-        meta=ResponseMeta.for_sqlite(sqlite_path if sqlite_path.is_file() else None),
+        meta=result.meta,
         items=items,
         total_returned=len(items),
         days_window=days,
-        scope_note=scope_note,
-        enrichment_available=enrichment_available,
-        reduced_mode=reduced_mode,
+        scope_note=result.scope_note,
+        enrichment_available=result.enrichment_available,
+        reduced_mode=result.reduced_mode,
     )

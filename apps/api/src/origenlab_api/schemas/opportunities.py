@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class EquipmentOpportunitiesMeta(BaseModel):
-    data_source: Literal["active_current_csv"] = "active_current_csv"
+    data_source: Literal["active_current_csv", "postgres_mirror"] = "active_current_csv"
     read_only: bool = True
     count: int = 0
     source_path: str = ""

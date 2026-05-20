@@ -107,6 +107,8 @@ def fetch_equipment_opportunities(
     csv_path = resolve_operator_queue_csv(active_current, manifest)
     if csv_path is None:
         return [], EquipmentOpportunitiesMeta(
+            data_source="active_current_csv",
+            read_only=True,
             count=0,
             source_path="",
             campaign_mode=campaign_mode,
@@ -140,6 +142,8 @@ def fetch_equipment_opportunities(
     return (
         items,
         EquipmentOpportunitiesMeta(
+            data_source="active_current_csv",
+            read_only=True,
             count=len(items),
             source_path=str(csv_path),
             campaign_mode=campaign_mode,
