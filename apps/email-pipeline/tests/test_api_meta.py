@@ -57,7 +57,7 @@ def _client_with_conn(
         yield fake
 
     monkeypatch.setattr("origenlab_api.deps.postgres_connection", _fake_pg)
-    monkeypatch.setattr("origenlab_api.routers.health.postgres_connection", _fake_pg)
+    monkeypatch.setattr("origenlab_email_pipeline.postgres_dashboard_api.health.postgres_connection", _fake_pg)
     app = create_app()
     with TestClient(app) as tc:
         yield tc
@@ -89,7 +89,7 @@ def test_dashboard_sync_no_rows(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) 
     sqlite.write_bytes(b"")
     monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(sqlite))
     monkeypatch.setattr("origenlab_api.deps.postgres_connection", _pg_ctx(fake))
-    monkeypatch.setattr("origenlab_api.routers.health.postgres_connection", _pg_ctx(fake))
+    monkeypatch.setattr("origenlab_email_pipeline.postgres_dashboard_api.health.postgres_connection", _pg_ctx(fake))
     with TestClient(create_app()) as client:
         r = client.get("/meta/dashboard-sync")
     assert r.status_code == 200
@@ -124,7 +124,7 @@ def test_dashboard_sync_latest_row(monkeypatch: pytest.MonkeyPatch, tmp_path: An
     sqlite.write_bytes(b"")
     monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(sqlite))
     monkeypatch.setattr("origenlab_api.deps.postgres_connection", _pg_ctx(fake))
-    monkeypatch.setattr("origenlab_api.routers.health.postgres_connection", _pg_ctx(fake))
+    monkeypatch.setattr("origenlab_email_pipeline.postgres_dashboard_api.health.postgres_connection", _pg_ctx(fake))
     with TestClient(create_app()) as client:
         r = client.get("/meta/dashboard-sync")
     assert r.status_code == 200

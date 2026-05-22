@@ -1,5 +1,7 @@
 # OrigenLab API (`apps/api`)
 
+> **Operator handoff (v1 freeze):** [../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md](../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md)
+
 Read-only **operator API** over SQLite and `reports/out/active/current`. This app is separated from `apps/email-pipeline` so daily ingest, DNR refresh, and mutation CLIs stay unchanged.
 
 ## Package name collision (important)
@@ -62,7 +64,7 @@ CI: `tests/test_no_write_policy.py` checks GET-only routes and scans `apps/api/s
 | GET | `/emails/recent` | API-1 | Recent canonical Gmail rows (previews only; no body) |
 | GET | `/cases/warm` | API-1.1 | Warm commercial case queue (previews; heuristic categories) |
 | GET | `/opportunities/equipment` | API-1.2 | Canonical `equipment_first_operator_queue_*.csv` (manifest; no regenerate) |
-| GET | `/contacts/{email}` | API-1.3 | Contact + outreach + Sent history + DNR flags (read-only SQLite) |
+| GET | `/contacts/{email}` | API-1.3 / **Dashboard-2** | Read-only contact profile (SQLite or postgres mirror); used by Today side panel |
 
 OpenAPI: `/docs` when the server is running.
 
@@ -91,8 +93,53 @@ cd apps/api
 uv run pytest tests -q
 ```
 
+## Dashboard v1–v2 backend matrix
+
+Dashboard v1 + **Dashboard-2 contact drilldown** use **this app only** (`apps/api`), not the legacy email-pipeline API on port 8000.
+
+| Backend | Env | Smoke |
+|---------|-----|-------|
+| SQLite (default) | `ORIGENLAB_API_BACKEND` unset or `sqlite` | `dashboard_v1_http_smoke.py --expect-backend sqlite` |
+| Postgres mirror | `ORIGENLAB_API_BACKEND=postgres` + disposable `ORIGENLAB_POSTGRES_URL` | `--expect-backend postgres` |
+
+`dashboard_v1_http_smoke.py` also calls **`GET /contacts/{email}`** (email from warm/equipment rows; skips with WARN if none).
+
+Full procedure: [`../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md) · matrix detail: [`../dashboard/docs/BACKEND_MATRIX_VALIDATION.md`](../dashboard/docs/BACKEND_MATRIX_VALIDATION.md).
+
+**Freeze validation:** SQLite and disposable Postgres (`:5433`, fresh DB) contact smokes **passed**. Gmail / production scratch Postgres not used.
+
+```bash
+# SQLite smoke (TestClient + contact route)
+uv run python scripts/dashboard_v1_http_smoke.py --expect-backend sqlite
+
+# Postgres smoke (disposable ORIGENLAB_POSTGRES_URL only)
+ORIGENLAB_API_BACKEND=postgres ORIGENLAB_POSTGRES_URL='postgresql+psycopg://…@127.0.0.1:5433/origenlab_dashboard2_test' \
+  uv run python scripts/dashboard_v1_http_smoke.py --expect-backend postgres
+```
+
+Dashboard HTTP smokes: `npm run smoke:contacts`, `EXPECT_BACKEND=postgres npm run smoke:contacts`, `npm run smoke:proxy` — see dashboard README.
+
+**After postgres validation:** unset `ORIGENLAB_API_BACKEND` and postgres URLs; restart this app on SQLite (`ORIGENLAB_SQLITE_PATH` only).
+
+**Legacy API:** `apps/email-pipeline/src/origenlab_api` (port 8000, `/dashboard/*`, `/classification/*`) remains for compatibility. Do **not** delete until API-3 relocation and a reference audit are complete.
+
 ## Coexistence roadmap
 
 - **API-0** (this app): SQLite operator plane.
-- **API-3** (future): Move legacy Postgres routes from `email-pipeline/src/origenlab_api` into `apps/api` under `mirror/`.
-- **API-4** (future): Dashboard points at this app only.
+- **API-3** Phase 1 **complete**; Phase 2 **parity frozen**; Phase **3A** repoints operator docs/smokes to `:8001` `/mirror/*` (legacy `:8000` deprecated, not deleted). Dashboard Today still uses operator routes only. **Checklist:** [docs/API-3_PHASE2_PARITY_CHECKLIST.md](docs/API-3_PHASE2_PARITY_CHECKLIST.md). **Design:** [docs/API-3_PHASE1_MIRROR_ROUTE_DESIGN.md](docs/API-3_PHASE1_MIRROR_ROUTE_DESIGN.md). **Audit:** [docs/API-3_RELOCATION_AUDIT.md](docs/API-3_RELOCATION_AUDIT.md).
+
+Mirror reporting smoke (GET only; requires this app on :8001 + disposable `ORIGENLAB_POSTGRES_URL`):
+
+```bash
+cd apps/dashboard && npm run smoke:mirror
+```
+
+Optional dual-server parity (legacy :8000 + mirror :8001 both running):
+
+```bash
+cd apps/api
+uv run python scripts/mirror_parity_smoke.py \
+  --legacy-base http://127.0.0.1:8000 \
+  --mirror-base http://127.0.0.1:8001
+```
+- **API-4** (done for v1): Dashboard points at this app only.

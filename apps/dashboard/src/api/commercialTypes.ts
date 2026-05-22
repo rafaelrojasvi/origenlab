@@ -64,11 +64,18 @@ export interface EquipmentOpportunityItem {
   safe_channel: string;
   supplier_needed: string;
   contact_status: string;
+  contact_email: string;
   operator_note: string;
 }
 
 export interface EquipmentOpportunitiesResponse {
   meta: EquipmentOpportunitiesMeta;
+  items: EquipmentOpportunityItem[];
+}
+
+/** Parsed equipment payload for UI (filesystem paths stripped from meta). */
+export interface EquipmentOpportunitiesUiResponse {
+  meta: Omit<EquipmentOpportunitiesMeta, "source_path">;
   items: EquipmentOpportunityItem[];
 }
 

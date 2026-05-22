@@ -18,20 +18,21 @@ const todayPageSource = import.meta.glob("../pages/TodayPage.tsx", {
   eager: true,
 })["../pages/TodayPage.tsx"] as string;
 
-const warmTableSource = import.meta.glob("../components/commercial/WarmCasesTable.tsx", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-})["../components/commercial/WarmCasesTable.tsx"] as string;
-
-const equipmentTableSource = import.meta.glob(
-  "../components/commercial/EquipmentOpportunitiesTable.tsx",
-  {
+const commercialMountedSources = Object.entries(
+  import.meta.glob("../{pages/TodayPage,components/commercial,components/operator}/**/*.{ts,tsx}", {
     query: "?raw",
     import: "default",
     eager: true,
-  },
-)["../components/commercial/EquipmentOpportunitiesTable.tsx"] as string;
+  }),
+)
+  .filter(([path]) => !path.includes(".test."))
+  .map(([, src]) => src as string);
+
+const mailtoSource = import.meta.glob("../components/commercial/MailtoEmailLink.tsx", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+})["../components/commercial/MailtoEmailLink.tsx"] as string;
 
 const viteConfigSource = import.meta.glob("../../vite.config.ts", {
   query: "?raw",
@@ -44,6 +45,16 @@ const DASHBOARD_V1_API_PATHS = [
   "/operator/status",
   "/cases/warm",
   "/opportunities/equipment",
+];
+
+const LEGACY_API_PATH_FRAGMENTS = [
+  "/dashboard",
+  "/classification",
+  "/commercial/purchase",
+  '"/contacts"',
+  "/organizations",
+  "/outbound",
+  "/meta/dashboard",
 ];
 
 const LEGACY_PANEL_IMPORTS = [
@@ -59,12 +70,30 @@ const LEGACY_PANEL_IMPORTS = [
   "SyncWatermark",
 ];
 
-describe("Dashboard-0/1 safety (mounted Today)", () => {
+const FORBIDDEN_UI_PATTERNS = [
+  /\bbody_preview\b/,
+  /\bemail_body\b/,
+  /\bsource_path\b/,
+  /\bsqlite_path\b/,
+  /encodeURIComponent\([^)]*subject/i,
+  /mailto:[^"']*\?subject=/i,
+  /mailto:[^"']*&body=/i,
+];
+
+describe("Dashboard-2 safety (mounted Today)", () => {
   it("App.tsx mounts TodayPage only (no legacy commercial panels)", () => {
     expect(appSource).toContain("TodayPage");
     for (const symbol of LEGACY_PANEL_IMPORTS) {
       expect(appSource, `App.tsx must not import or mount ${symbol}`).not.toContain(symbol);
     }
+    expect(appSource).not.toMatch(/api\/client/);
+    expect(appSource).not.toMatch(/\/legacy\//);
+  });
+
+  it("active runtime does not import parked legacy folder", () => {
+    const activeSources = [appSource, todayPageSource, operatorClientSource].join("\n");
+    expect(activeSources).not.toMatch(/\/legacy\//);
+    expect(activeSources).not.toMatch(/legacy\/api\/client/);
   });
 
   it("operatorClient calls only apps/api Dashboard routes", () => {
@@ -72,6 +101,24 @@ describe("Dashboard-0/1 safety (mounted Today)", () => {
       (m) => m[1],
     );
     expect(paths.sort()).toEqual(DASHBOARD_V1_API_PATHS.sort());
+    for (const legacy of LEGACY_API_PATH_FRAGMENTS) {
+      expect(operatorClientSource, `legacy route ${legacy}`).not.toContain(legacy);
+    }
+  });
+
+  it("operatorClient uses GET /contacts/{email} with encoded path only", () => {
+    expect(operatorClientSource).toContain("fetchContactProfile");
+    expect(operatorClientSource).toMatch(/encodeURIComponent/);
+    expect(operatorClientSource).toMatch(/\/contacts\/\$\{encodeURIComponent/);
+    expect(operatorClientSource).not.toMatch(/operatorApiUrl\(\s*["']\/contacts["']/);
+  });
+
+  it("TodayPage does not call legacy api/client", () => {
+    expect(todayPageSource).not.toMatch(/from\s+["'][^"']*api\/client["']/);
+    expect(todayPageSource).not.toMatch(/api\/client/);
+    expect(todayPageSource).toMatch(/fetchWarmCases|fetchEquipmentOpportunities/);
+    expect(todayPageSource).toMatch(/ContactProfilePanel/);
+    expect(commercialMountedSources.join("\n")).toMatch(/Read-only contact profile/);
   });
 
   it("operatorClient uses GET fetch only", () => {
@@ -82,23 +129,32 @@ describe("Dashboard-0/1 safety (mounted Today)", () => {
   it("operatorClient requires env in production (no localhost fallback)", () => {
     expect(operatorClientSource).toMatch(/MODE\s*===\s*["']production["']/);
     expect(operatorClientSource).toContain("OperatorApiConfigError");
-    expect(operatorClientSource).toContain("PRODUCTION_API_BASE_URL_REQUIRED");
     expect(operatorClientSource).not.toMatch(/DEFAULT_API_BASE|127\.0\.0\.1:8001/);
   });
 
-  it("TodayPage uses operatorClient only (not legacy api/client)", () => {
-    expect(todayPageSource).not.toMatch(/from\s+["'][^"']*api\/client["']/);
-    expect(todayPageSource).not.toMatch(/api\/client/);
-    expect(todayPageSource).toMatch(/fetchWarmCases|fetchEquipmentOpportunities/);
-    expect(todayPageSource).not.toMatch(/sqlite_path/);
-    expect(todayPageSource).not.toMatch(/body_preview|email_body|["']body["']/);
+  it("mounted commercial UI avoids sensitive fields and mailto prefills", () => {
+    const blob = commercialMountedSources.join("\n");
+    for (const pattern of FORBIDDEN_UI_PATTERNS) {
+      expect(blob, pattern.toString()).not.toMatch(pattern);
+    }
+    expect(operatorClientSource).toContain("parseWarmCasesResponse");
+    expect(operatorClientSource).toContain("parseEquipmentOpportunitiesResponse");
   });
 
-  it("commercial tables do not render bodies or filesystem paths", () => {
-    for (const src of [warmTableSource, equipmentTableSource, todayPageSource]) {
-      expect(src).not.toMatch(/body_preview|email_body|\.body\b/);
-      expect(src).not.toMatch(/source_path/);
-    }
+  it("mailto helper is email-only", () => {
+    expect(mailtoSource).toContain("buildMailtoHref");
+    expect(mailtoSource).toMatch(/mailto:\$\{trimmed\}/);
+    expect(mailtoSource).not.toMatch(/subject=|body=/i);
+  });
+
+  it("parked legacy tree exists but is outside vitest", () => {
+    const legacyReadme = import.meta.glob("../legacy/README.md", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    })["../legacy/README.md"] as string;
+    expect(legacyReadme).toContain("PARKED");
+    expect(legacyReadme).toContain("Not mounted");
   });
 
   it("vite dev proxy exposes Dashboard v1 API routes only", () => {
@@ -106,6 +162,7 @@ describe("Dashboard-0/1 safety (mounted Today)", () => {
     expect(viteConfigSource).toMatch(/["']\/operator["']/);
     expect(viteConfigSource).toMatch(/["']\/cases["']/);
     expect(viteConfigSource).toMatch(/["']\/opportunities["']/);
+    expect(viteConfigSource).toMatch(/["']\/contacts["']/);
     expect(viteConfigSource).not.toMatch(/["']\/dashboard["']/);
     expect(viteConfigSource).not.toMatch(/["']\/classification["']/);
     expect(viteConfigSource).not.toMatch(/["']\/commercial["']/);

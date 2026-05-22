@@ -11,6 +11,7 @@ import pytest
 from origenlab_email_pipeline.streamlit_api_preview import (
     DEFAULT_API_BASE_URL,
     api_preview_enabled,
+    api_preview_paths,
     build_api_url,
     fetch_json,
     normalize_api_base_url,
@@ -49,6 +50,19 @@ def test_resolve_api_base_url_prefers_override(monkeypatch: pytest.MonkeyPatch) 
 def test_resolve_api_base_url_default_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ORIGENLAB_API_BASE_URL", raising=False)
     assert resolve_api_base_url() == DEFAULT_API_BASE_URL
+    assert DEFAULT_API_BASE_URL.endswith(":8001")
+
+
+def test_api_preview_paths_mirror_on_8001() -> None:
+    paths = api_preview_paths("http://127.0.0.1:8001")
+    assert paths["summary"].startswith("/mirror/")
+    assert paths["readiness"] == "/mirror/outbound/readiness"
+
+
+def test_api_preview_paths_legacy_on_8000() -> None:
+    paths = api_preview_paths("http://127.0.0.1:8000")
+    assert paths["summary"] == "/dashboard/summary?scope=canonical"
+    assert paths["readiness"] == "/outbound/readiness"
 
 
 def test_fetch_json_success() -> None:

@@ -82,6 +82,7 @@ def row_to_equipment_item(row: dict[str, str]) -> dict[str, Any]:
         "safe_channel": (row.get("safe_channel") or "").strip(),
         "supplier_needed": (row.get("supplier_needed") or "").strip(),
         "contact_status": (row.get("contact_status") or "").strip(),
+        "contact_email": (row.get("contact_email") or "").strip(),
         "operator_note": (row.get("operator_note") or "").strip(),
     }
 

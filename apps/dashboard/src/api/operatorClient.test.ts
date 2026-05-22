@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   OperatorApiConfigError,
   OperatorApiError,
+  contactDetailPath,
+  fetchContactProfile,
   fetchHealth,
   fetchOperatorStatus,
   getOperatorApiBaseUrl,
@@ -109,6 +111,73 @@ describe("operator API client", () => {
     const url = operatorApiUrl("/cases/warm", { limit: 30, positive_signal_only: false });
     expect(url).toContain("/cases/warm");
     expect(url).toContain("positive_signal_only=false");
+  });
+
+  it("contactDetailPath URL-encodes email for GET /contacts/{email}", () => {
+    expect(contactDetailPath("buyer+tag@acme.cl")).toBe(
+      "/contacts/buyer%2Btag%40acme.cl",
+    );
+    expect(contactDetailPath("  buyer@acme.cl  ")).toBe("/contacts/buyer%40acme.cl");
+  });
+
+  it("contactDetailPath rejects invalid email before fetch", () => {
+    expect(() => contactDetailPath("not-an-email")).toThrow(OperatorApiError);
+    expect(() => contactDetailPath("")).toThrow(OperatorApiError);
+  });
+
+  it("fetchContactProfile uses GET only and handles API errors", async () => {
+    vi.stubEnv("MODE", "production");
+    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8001");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      statusText: "Unprocessable",
+      text: async () => "invalid email",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchContactProfile("x@y.z")).rejects.toBeInstanceOf(OperatorApiError);
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: "GET" }));
+    expect(fetchMock.mock.calls[0][0]).toContain("/contacts/");
+  });
+
+  it("fetchContactProfile parses successful response", async () => {
+    vi.stubEnv("MODE", "production");
+    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8001");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          meta: { data_source: "sqlite", read_only: true, reduced_mode: false, note: "" },
+          contact: {
+            email: "a@b.cl",
+            normalized_email: "a@b.cl",
+            name: "",
+            domain: "",
+            organization_name: "",
+            organization_domain: "",
+            last_seen_at: null,
+            first_seen_at: null,
+            message_count: 0,
+          },
+          outreach: {
+            state: null,
+            last_contacted_at: null,
+            source: null,
+            notes: null,
+            do_not_repeat: false,
+            suppressed_email: false,
+            suppressed_domain: false,
+          },
+          sent_history: { sent_count: 0, latest_sent_at: null, latest_subject: null },
+          warnings: [],
+        }),
+      }),
+    );
+
+    const profile = await fetchContactProfile("a@b.cl");
+    expect(profile.contact.normalized_email).toBe("a@b.cl");
   });
 
   it("operatorApiUrl builds equipment opportunities GET path", () => {

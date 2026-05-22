@@ -1,15 +1,20 @@
+import { useMemo, useState } from "react";
 import type { ApiBackend } from "../../api/operatorTypes";
 import type { EquipmentOpportunityItem } from "../../api/commercialTypes";
+import { formatTableCountLabel } from "../../lib/clientTableView";
+import {
+  DEFAULT_EQUIPMENT_FILTERS,
+  applyEquipmentTableView,
+  equipmentFiltersActive,
+  type EquipmentSortKey,
+  type EquipmentTableFilters,
+} from "../../lib/equipmentTableView";
 import { equipmentSourceLabel } from "../../lib/dataSourceLabel";
+import { truncate } from "../../lib/safeText";
+import { TokenLabel } from "../operator/TokenLabel";
+import { ContactEmailButton } from "./ContactEmailButton";
+import { TableListToolbar, ToolbarField, toolbarInputClass, toolbarSelectClass } from "./TableListToolbar";
 import { TableSection } from "./TableSection";
-
-function truncate(text: string, max: number): string {
-  const t = text.trim();
-  if (t.length <= max) {
-    return t;
-  }
-  return `${t.slice(0, max)}…`;
-}
 
 export function EquipmentOpportunitiesTable({
   backend,
@@ -18,9 +23,11 @@ export function EquipmentOpportunitiesTable({
   loading,
   error,
   onRetry,
+  onContactSelect,
 }: {
   backend: ApiBackend;
   items: EquipmentOpportunityItem[];
+  onContactSelect: (email: string) => void;
   meta: {
     data_source: "active_current_csv" | "postgres_mirror";
     reduced_mode: boolean;
@@ -32,9 +39,58 @@ export function EquipmentOpportunitiesTable({
   error: string | null;
   onRetry: () => void;
 }) {
+  const [filters, setFilters] = useState<EquipmentTableFilters>(DEFAULT_EQUIPMENT_FILTERS);
+
   const sourceLabel = meta
     ? equipmentSourceLabel(backend, meta.data_source)
     : equipmentSourceLabel(backend, "active_current_csv");
+
+  const visibleRows = useMemo(() => applyEquipmentTableView(items, filters), [items, filters]);
+  const filtersActive = equipmentFiltersActive(filters);
+  const loadedCount = items.length;
+  const apiCount = meta?.count ?? loadedCount;
+  const campaignExtra = meta?.campaign_mode ? `campaign ${meta.campaign_mode}` : undefined;
+
+  const toolbar = (
+    <TableListToolbar>
+      <ToolbarField label="Search" className="min-w-[12rem] flex-1">
+        <input
+          type="search"
+          className={toolbarInputClass()}
+          placeholder="Buyer, region, category, item, note…"
+          value={filters.search}
+          onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+          aria-label="Search equipment opportunities"
+        />
+      </ToolbarField>
+      <ToolbarField label="Sort">
+        <select
+          className={toolbarSelectClass()}
+          value={filters.sort}
+          onChange={(e) =>
+            setFilters((f) => ({ ...f, sort: e.target.value as EquipmentSortKey }))
+          }
+          aria-label="Sort equipment opportunities"
+        >
+          <option value="rank_asc">Priority rank (low first)</option>
+          <option value="rank_desc">Priority rank (high first)</option>
+          <option value="close_date_asc">Close date (soonest)</option>
+          <option value="close_date_desc">Close date (latest)</option>
+          <option value="category">Equipment category</option>
+          <option value="buyer">Buyer</option>
+        </select>
+      </ToolbarField>
+      {filtersActive ? (
+        <button
+          type="button"
+          className="rounded-md border border-[var(--color-border)] bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+          onClick={() => setFilters(DEFAULT_EQUIPMENT_FILTERS)}
+        >
+          Clear filters
+        </button>
+      ) : null}
+    </TableListToolbar>
+  );
 
   return (
     <TableSection
@@ -44,8 +100,10 @@ export function EquipmentOpportunitiesTable({
       loading={loading}
       error={error}
       onRetry={onRetry}
-      empty={!loading && !error && items.length === 0}
-      emptyMessage="No equipment opportunities returned."
+      empty={!loading && !error && loadedCount === 0}
+      emptyMessage="No equipment opportunities returned from the API."
+      filterEmpty={!loading && !error && loadedCount > 0 && visibleRows.length === 0}
+      filterEmptyMessage="No equipment opportunities match the current search."
       reducedNote={
         meta?.reduced_mode && meta.note
           ? `Reduced mode: ${meta.note}`
@@ -53,6 +111,7 @@ export function EquipmentOpportunitiesTable({
             ? "Reduced mode: canonical queue file missing or empty."
             : undefined
       }
+      toolbar={loadedCount > 0 ? toolbar : undefined}
     >
       <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm">
         <table className="min-w-full text-left text-sm">
@@ -60,6 +119,7 @@ export function EquipmentOpportunitiesTable({
             <tr>
               <th className="px-3 py-2 font-medium">Rank</th>
               <th className="px-3 py-2 font-medium">Buyer / institution</th>
+              <th className="px-3 py-2 font-medium">Contact</th>
               <th className="px-3 py-2 font-medium">Region</th>
               <th className="px-3 py-2 font-medium">Category</th>
               <th className="px-3 py-2 font-medium">Contact status</th>
@@ -70,25 +130,48 @@ export function EquipmentOpportunitiesTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
-            {items.map((row) => (
+            {visibleRows.map((row, index) => (
               <tr
-                key={`${row.priority_rank}-${row.codigo_licitacion}`}
+                key={`eq-${row.priority_rank}-${row.codigo_licitacion || index}`}
                 className="align-top hover:bg-slate-50/80"
               >
-                <td className="px-3 py-2 font-semibold text-slate-900">{row.priority_rank}</td>
+                <td className="px-3 py-2 font-semibold text-slate-900">{row.priority_rank ?? index + 1}</td>
                 <td className="px-3 py-2">
                   <div className="font-medium text-slate-900">{row.buyer || "—"}</div>
                   <div className="text-xs text-[var(--color-muted)]">{row.codigo_licitacion}</div>
                 </td>
+                <td className="px-3 py-2">
+                  <ContactEmailButton email={row.contact_email} onSelect={onContactSelect} />
+                </td>
                 <td className="px-3 py-2 text-slate-700">{row.region || "—"}</td>
-                <td className="px-3 py-2 text-slate-700">{row.equipment_category || "—"}</td>
-                <td className="px-3 py-2 text-xs text-slate-700">{row.contact_status || "—"}</td>
+                <td className="px-3 py-2">
+                  <TokenLabel
+                    token={row.equipment_category}
+                    kind="equipment_category"
+                    className="text-slate-800"
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <TokenLabel
+                    token={row.contact_status}
+                    kind="equipment_contact_status"
+                    className="text-xs text-slate-800"
+                  />
+                </td>
                 <td className="px-3 py-2 whitespace-nowrap text-xs text-slate-600">
                   {row.close_date || "—"}
                 </td>
-                <td className="px-3 py-2 text-xs text-slate-700">{row.safe_channel || "—"}</td>
+                <td className="px-3 py-2">
+                  <TokenLabel
+                    token={row.safe_channel}
+                    kind="equipment_safe_channel"
+                    className="text-xs text-slate-800"
+                  />
+                </td>
                 <td className="px-3 py-2 max-w-sm">
-                  <p className="text-slate-800">{truncate(row.item_description, 100)}</p>
+                  <p className="text-slate-800">
+                    {row.item_description ? truncate(row.item_description, 100) : "—"}
+                  </p>
                   {row.operator_note ? (
                     <p className="mt-1 text-xs text-[var(--color-muted)]">
                       Note: {truncate(row.operator_note, 80)}
@@ -98,14 +181,26 @@ export function EquipmentOpportunitiesTable({
                     <p className="mt-1 text-xs text-slate-600">Supplier: {row.supplier_needed}</p>
                   ) : null}
                 </td>
-                <td className="px-3 py-2 text-xs text-slate-700">{row.next_action || "—"}</td>
+                <td className="px-3 py-2">
+                  <TokenLabel
+                    token={row.next_action}
+                    kind="equipment_next_action"
+                    className="text-xs text-slate-800"
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         <p className="border-t border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-muted)]">
-          Showing {items.length} of {meta?.count ?? items.length} opportunities
-          {meta?.campaign_mode ? ` · campaign ${meta.campaign_mode}` : ""}
+          {formatTableCountLabel({
+            visible: visibleRows.length,
+            loaded: loadedCount,
+            apiTotal: apiCount,
+            filtered: filtersActive,
+            noun: "opportunities",
+            extra: campaignExtra,
+          })}
         </p>
       </div>
     </TableSection>

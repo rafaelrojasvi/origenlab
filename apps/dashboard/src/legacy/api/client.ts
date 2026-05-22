@@ -1,3 +1,4 @@
+/** PARKED — legacy email-pipeline dashboard client. Not imported by Dashboard v1. See ../README.md */
 import type {
   ClassificationActions,
   ClassificationRecent,

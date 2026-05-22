@@ -15,10 +15,12 @@ export default defineConfig({
       "/operator": { target: apiTarget, changeOrigin: true },
       "/cases": { target: apiTarget, changeOrigin: true },
       "/opportunities": { target: apiTarget, changeOrigin: true },
+      "/contacts": { target: apiTarget, changeOrigin: true },
     },
   },
   test: {
     environment: "jsdom",
     globals: true,
+    exclude: ["**/node_modules/**", "**/dist/**", "src/legacy/**"],
   },
 });

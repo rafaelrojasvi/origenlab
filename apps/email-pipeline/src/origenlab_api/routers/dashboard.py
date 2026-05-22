@@ -8,7 +8,9 @@ from fastapi import APIRouter, Query
 
 from origenlab_api.deps import DbConn
 from origenlab_api.schemas import DashboardSummaryResponse
-from origenlab_api.services import queries
+from origenlab_email_pipeline.postgres_dashboard_api.summary import (
+    dashboard_summary as fetch_dashboard_summary,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -21,4 +23,4 @@ def dashboard_summary(
         description="canonical = Gmail operativo mirror; archive = full mart (explicit).",
     ),
 ) -> DashboardSummaryResponse:
-    return queries.dashboard_summary(conn, scope=scope)
+    return fetch_dashboard_summary(conn, scope=scope)

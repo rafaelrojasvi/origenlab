@@ -12,7 +12,13 @@ from origenlab_api.schemas import (
     PaginatedEmailSuppressionsResponse,
     PaginatedOutreachStateResponse,
 )
-from origenlab_api.services import queries
+from origenlab_email_pipeline.postgres_dashboard_api.outbound_lists import (
+    list_email_suppressions as fetch_email_suppressions,
+    list_outreach_contact_state as fetch_outreach_contact_state,
+)
+from origenlab_email_pipeline.postgres_dashboard_api.outbound_readiness import (
+    assess_postgres_outbound_readiness as fetch_outbound_readiness,
+)
 
 router = APIRouter(prefix="/outbound", tags=["outbound"])
 
@@ -24,7 +30,7 @@ def list_email_suppressions(
     offset: int = Query(0, ge=0),
     q: str | None = Query(None, description="Filter by email substring"),
 ) -> PaginatedEmailSuppressionsResponse:
-    return queries.list_email_suppressions(conn, limit=limit, offset=offset, q=q)
+    return fetch_email_suppressions(conn, limit=limit, offset=offset, q=q)
 
 
 @router.get("/contact-state", response_model=PaginatedOutreachStateResponse)
@@ -35,7 +41,7 @@ def list_contact_state(
     state: str | None = Query(None, description="Exact state (contacted, replied, …)"),
     q: str | None = Query(None, description="Filter by email substring"),
 ) -> PaginatedOutreachStateResponse:
-    return queries.list_outreach_contact_state(
+    return fetch_outreach_contact_state(
         conn, limit=limit, offset=offset, state=state, q=q
     )
 
@@ -46,7 +52,7 @@ def outbound_readiness(
     settings: Annotated[dict[str, str | bool], Depends(get_settings_dict)],
     max_staleness_days: float = Query(30.0, ge=1.0, le=365.0),
 ) -> OutboundReadinessResponse:
-    return queries.assess_postgres_outbound_readiness(
+    return fetch_outbound_readiness(
         conn,
         postgres_url_redacted=str(settings.get("postgres_url_redacted", "")),
         gmail_user=str(settings.get("gmail_user", "")),

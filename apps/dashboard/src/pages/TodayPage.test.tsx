@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EquipmentOpportunitiesResponse, WarmCasesResponse } from "../api/commercialTypes";
 import type { TodayPanelData } from "../api/operatorTypes";
 import { TodayPage } from "./TodayPage";
@@ -72,6 +72,7 @@ const equipmentPayload: EquipmentOpportunitiesResponse = {
       safe_channel: "mercado_publico_bid",
       supplier_needed: "no",
       contact_status: "pending",
+      contact_email: "procurement@hospital.cl",
       operator_note: "intel",
     },
   ],
@@ -84,18 +85,26 @@ vi.mock("../api/operatorClient", async (importOriginal) => {
     fetchTodayPanel: vi.fn(),
     fetchWarmCases: vi.fn(),
     fetchEquipmentOpportunities: vi.fn(),
+    fetchContactProfile: vi.fn(),
     getOperatorApiBaseUrl: vi.fn(() => ""),
   };
 });
 
 import {
+  fetchContactProfile,
   fetchEquipmentOpportunities,
   fetchTodayPanel,
   fetchWarmCases,
 } from "../api/operatorClient";
 
 describe("TodayPage", () => {
+  beforeEach(() => {
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "");
+  });
+
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
@@ -104,6 +113,15 @@ describe("TodayPage", () => {
     vi.mocked(fetchWarmCases).mockResolvedValue(warmPayload);
     vi.mocked(fetchEquipmentOpportunities).mockResolvedValue(equipmentPayload);
   }
+
+  it("shows legacy :8000 dev warning when env points at wrong port", () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000");
+    mockAllOk();
+    render(<TodayPage />);
+    screen.getByText(/Local dev misconfiguration/);
+    screen.getByText(/unset VITE_ORIGENLAB_API_BASE_URL/);
+  });
 
   it("renders Dashboard-0 operator status and Dashboard-1 tables", async () => {
     mockAllOk();
@@ -174,5 +192,83 @@ describe("TodayPage", () => {
       screen.getByText(/Warm cases: warm failed/);
     });
     screen.getByRole("button", { name: "Retry" });
+  });
+
+  it("opens read-only contact profile from warm case email", async () => {
+    mockAllOk();
+    vi.mocked(fetchContactProfile).mockResolvedValue({
+      meta: { data_source: "sqlite", read_only: true, reduced_mode: false, note: "" },
+      contact: {
+        email: "buyer@acme.cl",
+        normalized_email: "buyer@acme.cl",
+        name: "Buyer",
+        domain: "acme.cl",
+        organization_name: "ACME",
+        organization_domain: "acme.cl",
+        last_seen_at: null,
+        first_seen_at: null,
+        message_count: 1,
+      },
+      outreach: {
+        state: "open",
+        last_contacted_at: null,
+        source: null,
+        notes: null,
+        do_not_repeat: false,
+        suppressed_email: false,
+        suppressed_domain: false,
+      },
+      sent_history: { sent_count: 0, latest_sent_at: null, latest_subject: null },
+      warnings: [],
+    });
+
+    render(<TodayPage />);
+    await waitFor(() => screen.getByText("READY"));
+
+    fireEvent.click(screen.getByRole("button", { name: "buyer@acme.cl" }));
+
+    await waitFor(() => {
+      screen.getByText("Read-only contact profile");
+      screen.getByText("Buyer");
+    });
+    expect(screen.queryByText(/sqlite_path|source_path|body_preview/i)).toBeNull();
+  });
+
+  it("opens contact profile from equipment row when email exists", async () => {
+    mockAllOk();
+    vi.mocked(fetchContactProfile).mockResolvedValue({
+      meta: { data_source: "sqlite", read_only: true, reduced_mode: false, note: "" },
+      contact: {
+        email: "procurement@hospital.cl",
+        normalized_email: "procurement@hospital.cl",
+        name: "",
+        domain: "",
+        organization_name: "",
+        organization_domain: "",
+        last_seen_at: null,
+        first_seen_at: null,
+        message_count: 0,
+      },
+      outreach: {
+        state: null,
+        last_contacted_at: null,
+        source: null,
+        notes: null,
+        do_not_repeat: false,
+        suppressed_email: false,
+        suppressed_domain: false,
+      },
+      sent_history: { sent_count: 0, latest_sent_at: null, latest_subject: null },
+      warnings: [],
+    });
+
+    render(<TodayPage />);
+    await waitFor(() => screen.getByText("Hospital Regional"));
+
+    fireEvent.click(screen.getByRole("button", { name: "procurement@hospital.cl" }));
+
+    await waitFor(() => {
+      screen.getByText("Read-only contact profile");
+    });
   });
 });

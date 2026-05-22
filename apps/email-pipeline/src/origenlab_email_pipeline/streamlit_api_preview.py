@@ -13,7 +13,8 @@ import streamlit as st
 from origenlab_email_pipeline.streamlit_page_status import render_page_status
 
 ENV_API_BASE_URL = "ORIGENLAB_API_BASE_URL"
-DEFAULT_API_BASE_URL = "http://127.0.0.1:8000"
+# Phase 3A: prefer apps/api :8001 /mirror/*; legacy :8000 still supported when base ends with :8000.
+DEFAULT_API_BASE_URL = "http://127.0.0.1:8001"
 
 MIRROR_LABEL = "Postgres mirror / eventually consistent"
 
@@ -52,6 +53,28 @@ def normalize_api_base_url(url: str) -> str:
 def build_api_url(base_url: str, path: str) -> str:
     p = path if path.startswith("/") else f"/{path}"
     return f"{normalize_api_base_url(base_url)}{p}"
+
+
+def api_preview_paths(base_url: str) -> dict[str, str]:
+    """Resolve GET paths for API preview (mirror on :8001, legacy Slice-1 on :8000)."""
+    norm = normalize_api_base_url(base_url)
+    if norm.endswith(":8000"):
+        return {
+            "health": "/health",
+            "health_label": "/health",
+            "summary": "/dashboard/summary?scope=canonical",
+            "summary_label": "/dashboard/summary",
+            "readiness": "/outbound/readiness",
+            "readiness_label": "/outbound/readiness",
+        }
+    return {
+        "health": "/mirror/health/dependencies",
+        "health_label": "/mirror/health/dependencies",
+        "summary": "/mirror/dashboard/summary?scope=canonical",
+        "summary_label": "/mirror/dashboard/summary",
+        "readiness": "/mirror/outbound/readiness",
+        "readiness_label": "/mirror/outbound/readiness",
+    }
 
 
 def fetch_json(
@@ -130,7 +153,10 @@ def render_api_preview_page() -> None:
         st.session_state["api_preview_do_fetch"] = True
 
     if not st.session_state.get("api_preview_do_fetch"):
-        st.caption("Pulse **Actualizar desde API** para cargar `/health`, `/dashboard/summary` y `/outbound/readiness`.")
+        st.caption(
+            "Pulse **Actualizar desde API** para cargar dependencias, resumen mart y readiness "
+            "(rutas `/mirror/*` en :8001; legacy :8000 sin prefijo `/mirror`)."
+        )
         return
 
     try:
@@ -139,21 +165,25 @@ def render_api_preview_page() -> None:
         st.error(str(exc))
         return
 
-    health, health_err = fetch_json(base, "/health")
-    summary, summary_err = fetch_json(base, "/dashboard/summary?scope=canonical")
-    readiness, readiness_err = fetch_json(base, "/outbound/readiness")
+    paths = api_preview_paths(base)
+    health, health_err = fetch_json(base, paths["health"])
+    summary, summary_err = fetch_json(base, paths["summary"])
+    readiness, readiness_err = fetch_json(base, paths["readiness"])
 
     col_h, col_s, col_r = st.columns(3)
     with col_h:
-        st.markdown("#### /health")
+        st.markdown(f"#### {paths['health_label']}")
         if health_err:
             st.error(health_err)
         elif health:
             st.success(health.get("status", "ok"))
-            st.caption(f"service: {health.get('service', '—')} · read_only: {health.get('read_only')}")
+            if health.get("service"):
+                st.caption(f"service: {health.get('service', '—')} · read_only: {health.get('read_only')}")
+            elif health.get("postgres_url_redacted"):
+                st.caption(f"postgres: {health.get('postgres_url_redacted', '—')}")
 
     with col_s:
-        st.markdown("#### /dashboard/summary")
+        st.markdown(f"#### {paths['summary_label']}")
         if summary_err:
             st.error(summary_err)
         elif summary:
@@ -168,7 +198,7 @@ def render_api_preview_page() -> None:
                 st.caption("Sin conteos en la respuesta.")
 
     with col_r:
-        st.markdown("#### /outbound/readiness")
+        st.markdown(f"#### {paths['readiness_label']}")
         if readiness_err:
             st.error(readiness_err)
         elif readiness:

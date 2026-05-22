@@ -3,9 +3,15 @@
  * Do not add mutation methods (POST/PUT/PATCH/DELETE).
  */
 
+import { parseContactDetailResponse } from "./contactParse";
+import type { ContactProfileUi } from "./contactTypes";
+import {
+  parseEquipmentOpportunitiesResponse,
+  parseWarmCasesResponse,
+} from "./commercialParse";
 import type {
   EquipmentOpportunitiesQuery,
-  EquipmentOpportunitiesResponse,
+  EquipmentOpportunitiesUiResponse,
   WarmCasesQuery,
   WarmCasesResponse,
 } from "./commercialTypes";
@@ -127,12 +133,27 @@ export function fetchWarmCases(query: WarmCasesQuery = {}): Promise<WarmCasesRes
   if (query.include_noise) {
     params.include_noise = query.include_noise;
   }
-  return fetchJsonGet<WarmCasesResponse>(operatorApiUrl("/cases/warm", params));
+  return fetchJsonGet<unknown>(operatorApiUrl("/cases/warm", params)).then(parseWarmCasesResponse);
+}
+
+/** Build GET /contacts/{email} path with encoded email segment. */
+export function contactDetailPath(email: string): string {
+  const trimmed = email.trim();
+  if (!trimmed || !trimmed.includes("@")) {
+    throw new OperatorApiError("Invalid contact email", 422);
+  }
+  return `/contacts/${encodeURIComponent(trimmed)}`;
+}
+
+export function fetchContactProfile(email: string): Promise<ContactProfileUi> {
+  return fetchJsonGet<unknown>(operatorApiUrl(contactDetailPath(email))).then(
+    parseContactDetailResponse,
+  );
 }
 
 export function fetchEquipmentOpportunities(
   query: EquipmentOpportunitiesQuery = {},
-): Promise<EquipmentOpportunitiesResponse> {
+): Promise<EquipmentOpportunitiesUiResponse> {
   const params: Record<string, string | number | boolean> = {
     limit: query.limit ?? DEFAULT_EQUIPMENT_QUERY.limit,
     include_account_intelligence:
@@ -147,8 +168,8 @@ export function fetchEquipmentOpportunities(
   if (query.safe_channel) {
     params.safe_channel = query.safe_channel;
   }
-  return fetchJsonGet<EquipmentOpportunitiesResponse>(
-    operatorApiUrl("/opportunities/equipment", params),
+  return fetchJsonGet<unknown>(operatorApiUrl("/opportunities/equipment", params)).then(
+    parseEquipmentOpportunitiesResponse,
   );
 }
 

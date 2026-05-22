@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { EquipmentOpportunityItem } from "../../api/commercialTypes";
 import { EquipmentOpportunitiesTable } from "./EquipmentOpportunitiesTable";
 
@@ -15,6 +15,7 @@ const row: EquipmentOpportunityItem = {
   safe_channel: "mercado_publico_bid",
   supplier_needed: "yes",
   contact_status: "no_verified_buyer_email",
+  contact_email: "buyer@hospital.cl",
   operator_note: "fit=90",
 };
 
@@ -34,6 +35,7 @@ describe("EquipmentOpportunitiesTable", () => {
         loading={false}
         error={null}
         onRetry={() => {}}
+        onContactSelect={() => {}}
       />,
     );
 
@@ -41,7 +43,44 @@ describe("EquipmentOpportunitiesTable", () => {
     screen.getByText("LP-001");
     screen.getByText(/fit=90/);
     expect(screen.queryByText(/source_path/)).toBeNull();
-    expect(screen.queryByText(/body/)).toBeNull();
+    expect(screen.queryByText(/body_preview/)).toBeNull();
+  });
+
+  it("renders minimal row without crashing", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="postgres"
+        items={[
+          {
+            priority_rank: 0,
+            codigo_licitacion: "",
+            buyer: "",
+            region: "",
+            close_date: "",
+            equipment_category: "",
+            item_description: "",
+            next_action: "",
+            safe_channel: "",
+            supplier_needed: "",
+            contact_status: "",
+            contact_email: "",
+            operator_note: "",
+          },
+        ]}
+        meta={{
+          data_source: "postgres_mirror",
+          reduced_mode: true,
+          note: "empty mirror",
+          count: 0,
+          campaign_mode: null,
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
   it("shows error and empty states", () => {
@@ -53,6 +92,7 @@ describe("EquipmentOpportunitiesTable", () => {
         loading={false}
         error="Equipment API down"
         onRetry={() => {}}
+        onContactSelect={() => {}}
       />,
     );
     screen.getByText("Equipment API down");
@@ -65,8 +105,80 @@ describe("EquipmentOpportunitiesTable", () => {
         loading={false}
         error={null}
         onRetry={() => {}}
+        onContactSelect={() => {}}
       />,
     );
-    screen.getByText(/No equipment opportunities returned/);
+    screen.getByText(/No equipment opportunities returned from the API/);
+  });
+
+  it("opens contact drilldown when contact email is present", () => {
+    const onContactSelect = vi.fn();
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={onContactSelect}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "buyer@hospital.cl" }));
+    expect(onContactSelect).toHaveBeenCalledWith("buyer@hospital.cl");
+  });
+
+  it("filters by search and shows no-match message", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Search equipment opportunities"), {
+      target: { value: "zzznomatch" },
+    });
+    screen.getByText(/No equipment opportunities match the current search/);
+    expect(screen.queryByText("Universidad Ejemplo")).toBeNull();
+  });
+
+  it("does not invent contact email when field is empty", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[{ ...row, contact_email: "" }]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: null,
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /@/ })).toBeNull();
   });
 });
+

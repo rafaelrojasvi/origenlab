@@ -1,102 +1,115 @@
 # OrigenLab — Dashboard (React)
 
-Read-only operator UI. **Dashboard v1 (Today)** talks only to **`apps/api`**:
+> **Operator handoff (v1–v2 freeze):** [docs/V1_FREEZE_OPERATOR_HANDOFF.md](docs/V1_FREEZE_OPERATOR_HANDOFF.md) — three run modes (SQLite / disposable Postgres / return to SQLite), Dashboard-2 contact drilldown, smoke commands, send-truth rules.
 
-- `GET /health`, `GET /operator/status` (operator panel)
-- `GET /cases/warm`, `GET /opportunities/equipment` (read-only tables)
+**Dashboard v1** is the active read-only operator UI. It talks only to **`apps/api`** (not email-pipeline FastAPI on :8000):
 
-It does not open SQLite/Postgres, CSV files, or `apps/email-pipeline` modules from the browser.
+| Route | Use |
+|-------|-----|
+| `GET /health` | Backend / service health |
+| `GET /operator/status` | Operator verdict panel |
+| `GET /cases/warm` | Warm cases table |
+| `GET /opportunities/equipment` | Equipment opportunities table |
+| `GET /contacts/{email}` | Read-only contact profile drilldown (Dashboard-2) |
 
-Legacy commercial tabs (classification, compras, etc.) remain in the repo but are not mounted in v0 `App.tsx`.
+The browser does not open SQLite/Postgres, CSV files, or `apps/email-pipeline` modules.
 
-## Dashboard v0 — Today / Operator Status
+**Parked legacy:** the pre-v1 multi-tab panel (`/dashboard/summary`, `/classification/*`, …) lives under [`src/legacy/`](src/legacy/README.md). It is **not mounted**, **not tested** in CI, and **must not** be imported from active code.
 
-### Run with `apps/api`
+## Run locally
 
-**Terminal 1 — API** (from `apps/api`):
+**Terminal 1 — API** (`apps/api`):
 
 ```bash
 cd apps/api
 uv sync
 export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
-# Optional Postgres mirror reads:
-# export ORIGENLAB_API_BACKEND=postgres
-# export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/origenlab_scratch'
 
 uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-**Terminal 2 — React** (from `apps/dashboard`):
+**Terminal 2 — Dashboard**:
 
 ```bash
+cd apps/dashboard
 npm install
 npm run dev -- --host 127.0.0.1
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). In dev, Vite proxies `/health`, `/operator`, `/cases`, and `/opportunities` to the API (see `vite.config.ts`, default target port **8001**).
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
 
-### Required env
+Copy [`.env.example`](.env.example) to `.env` if needed — **do not** copy a `:8000` URL from older setups.
 
-| Variable | When | Purpose |
-|----------|------|---------|
-| `VITE_ORIGENLAB_API_BASE_URL` | **Required** for `npm run build` / production / preview | Public base URL of `apps/api` (no trailing slash), e.g. `https://api.example.com` |
+### Local dev vs production env
 
-**Production:** you **must** set `VITE_ORIGENLAB_API_BASE_URL` at build time. Production builds **throw at runtime** if it is missing (no silent `127.0.0.1` fallback).
+| Mode | `VITE_ORIGENLAB_API_BASE_URL` | Behavior |
+|------|-------------------------------|----------|
+| **`npm run dev`** | **Leave unset** (recommended) | Browser uses same-origin requests; Vite proxies `/health`, `/operator`, `/cases`, `/opportunities`, `/contacts` to `http://127.0.0.1:8001` |
+| **`npm run dev`** | Set to `http://127.0.0.1:8000` | **Wrong** — bypasses proxy, hits legacy email-pipeline port → “Failed to fetch”. UI shows a warning; remove the variable and **restart** `npm run dev`. |
+| **`npm run dev`** | Set to `http://127.0.0.1:8001` | Works but unnecessary; prefer unset + proxy. |
+| **`npm run build`** / production | **Required** | Set to your deployed `apps/api` host (e.g. `https://api.example.com`), no trailing slash |
 
-**Development:** `npm run dev` uses the Vite proxy for `/health` and `/operator` only (same origin). Optional `VITE_ORIGENLAB_API_BASE_URL` changes the proxy target in `vite.config.ts` (default `http://127.0.0.1:8001`).
+Production builds **throw at runtime** if `VITE_ORIGENLAB_API_BASE_URL` is missing (no silent localhost fallback).
 
-### Read-only scope
+**After changing `.env`, restart `npm run dev`** — Vite only reads env at startup.
 
-- **GET only** — no write/send/draft/archive buttons; row actions limited to copy contact text and optional `mailto:` links.
-- **Send/outreach truth** stays in the SQLite pipeline and operator scripts; Postgres mirror (when API `backend=postgres`) is for faster list reads, not send approval.
-- **No raw email bodies** or filesystem paths in the UI (subject/snippet previews only).
+## Read-only scope
 
-### Smoke (API)
-
-```bash
-curl -sS http://127.0.0.1:8001/health
-curl -sS 'http://127.0.0.1:8001/operator/status?max_staleness_days=14'
-curl -sS 'http://127.0.0.1:8001/cases/warm?limit=10&positive_signal_only=false'
-curl -sS 'http://127.0.0.1:8001/opportunities/equipment?limit=10'
-```
+- **GET only** — no write/send/draft/archive actions.
+- **Send/outreach truth** remains in the SQLite pipeline and operator scripts; Postgres mirror reads are not send approval.
+- **No raw email bodies** or filesystem paths in the UI (API snippet/subject previews only).
 
 ## Tests and build
 
 ```bash
 cd apps/dashboard
-npm test
+npm test        # active src only (excludes src/legacy)
 npm run build
+npm run smoke          # HTTP smoke → :8001 (same as smoke:sqlite)
+npm run smoke:sqlite   # assert health.backend=sqlite
+npm run smoke:postgres # assert postgres mirror labels (API must use postgres backend)
+npm run smoke:proxy    # smoke via Vite dev server :5173 (requires npm run dev)
+npm run smoke:contacts # same as smoke; includes GET /contacts/{email} when rows have email
+./scripts/run-v1-freeze-checklist.sh      # SQLite-safe CI bundle (clears stale Postgres env)
+./scripts/run-v1-postgres-matrix-check.sh  # optional; live disposable Postgres only
 ```
 
-Policy tests assert dashboard `src/` has no mutating `fetch` methods and no direct DB/pipeline imports.
+Safety tests enforce: `App.tsx` → `TodayPage` only, Dashboard v1 GET routes (including `/contacts/{email}`), no legacy client, no mutating HTTP, no DB/pipeline imports.
 
----
+### Dashboard-2 — contact drilldown (frozen & validated)
 
-## Legacy panel (email-pipeline FastAPI on :8000)
+Click a contact email in **Warm cases** or **Equipment opportunities** (when `contact_email` is present) to open a read-only **side panel** on Today (`GET /contacts/{email}` only).
 
-The sections below describe the older multi-tab panel that called email-pipeline routes (`/dashboard/summary`, `/classification/*`, …). That stack is separate from Dashboard v0.
+**Dashboard-2.3 (Today UI polish):** client-side search, status/category filters, and sort on warm cases; search and sort on equipment opportunities; row counts (`Showing N of M loaded`) and distinct empty vs no-match-filter states. All filtering is in-browser only — no extra API calls.
 
-Documentación operador: [`../email-pipeline/docs/RUNBOOK.md#m-eprun-dashboard-gmail-to-react`](../email-pipeline/docs/RUNBOOK.md#m-eprun-dashboard-gmail-to-react)
+**Dashboard-2.5 (operator usability):** optional **Hide internal OrigenLab contacts** on warm cases (`@origenlab.cl`, `@labdelivery.cl`, default off); warning emails open read-only **contact drilldown** (no mailto from warnings); humanized status/category/action labels; **OutreachTruthGuide** in the contact panel (DNR vs Sent history vs outreach state). All client-side — no write/send/draft/archive/mark-contacted/status-edit.
 
-### Arranque rápido (legacy)
+| Allowed | Forbidden |
+|---------|-----------|
+| Contact summary, outreach state, sent-history **counts/subjects**, DNR/suppression warnings (read-only) | Raw email bodies, `source_path`, `sqlite_path`, send/draft/archive/mark-contacted/status-edit |
 
-**Terminal 1 — API** (desde `apps/email-pipeline`):
+**Validation (2026-05):** SQLite contact smoke **passed**; disposable Postgres mirror on **`127.0.0.1:5433`** (`origenlab_dashboard2_test`) **passed**. Gmail and production/scratch Postgres were not touched.
 
 ```bash
-uv sync --group gmail --group postgres --group api
-export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://user:pass@127.0.0.1:5432/origenlab_scratch'
-export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
-
-uv run alembic -c alembic.ini upgrade head
-uv run python scripts/sync/sync_dashboard_postgres_mirror.py
-
-uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8000 --reload
+npm run smoke:contacts                    # :8001, includes GET /contacts/{email}
+EXPECT_BACKEND=postgres npm run smoke:contacts
+SMOKE_BASE_URL=http://127.0.0.1:5173 npm run smoke:proxy
 ```
 
-Point `VITE_ORIGENLAB_API_BASE_URL=http://127.0.0.1:8000` if you run the legacy tabs against that server.
+After postgres matrix testing, **return to SQLite** — see handoff **Mode 3** (stop postgres `uvicorn`, unset `ORIGENLAB_API_BACKEND` / postgres URLs, restart API on :8001).
 
-### Pruebas (legacy smoke)
+## Backend matrix validation
 
-```bash
-npm run smoke   # requiere API levantada en el puerto configurado
+Prove Dashboard v1 against **`apps/api`** sqlite and postgres mirror backends: [`docs/BACKEND_MATRIX_VALIDATION.md`](docs/BACKEND_MATRIX_VALIDATION.md).
+
+- **Active API:** `apps/api` on port **8001** (Dashboard v1 routes).
+- **Legacy API:** `apps/email-pipeline` FastAPI on **8000** — deprecated for Postgres mirror reporting; kept during API-3 cutover.
+- **Mirror smoke:** `npm run smoke:mirror` — GET `/mirror/*` on **:8001** (`apps/api`). **Legacy smoke:** `npm run smoke:legacy` (deprecated :8000; not in v1 freeze CI).
+
+## Mounted code map
+
+```
+App.tsx → TodayPage.tsx
+  → api/operatorClient.ts (+ commercialParse, contactParse, operatorTypes, commercialTypes, contactTypes)
+  → components/commercial/* (tables + ContactProfilePanel), components/operator/ReadOnlyBanner.tsx
 ```

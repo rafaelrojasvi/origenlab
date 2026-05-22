@@ -29,6 +29,7 @@ class EquipmentOpportunityItem(BaseModel):
     safe_channel: str = ""
     supplier_needed: str = ""
     contact_status: str = ""
+    contact_email: str = ""
     operator_note: str = ""
 
 

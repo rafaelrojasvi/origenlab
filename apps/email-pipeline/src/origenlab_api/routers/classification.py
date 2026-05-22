@@ -12,7 +12,11 @@ from origenlab_api.schemas import (
     ClassificationRecentResponse,
     ClassificationSummaryResponse,
 )
-from origenlab_api.services import queries
+from origenlab_email_pipeline.postgres_dashboard_api.classification import (
+    classification_actions as fetch_classification_actions,
+    classification_recent as fetch_classification_recent,
+    classification_summary as fetch_classification_summary,
+)
 
 router = APIRouter(prefix="/classification", tags=["classification"])
 
@@ -20,7 +24,7 @@ router = APIRouter(prefix="/classification", tags=["classification"])
 @router.get("/summary", response_model=ClassificationSummaryResponse)
 def get_classification_summary(conn: DbConn) -> ClassificationSummaryResponse:
     """KPI counts from reporting.email_classification_canonical (canonical scope only)."""
-    return queries.classification_summary(conn)
+    return fetch_classification_summary(conn)
 
 
 @router.get("/recent", response_model=ClassificationRecentResponse)
@@ -30,10 +34,10 @@ def get_classification_recent(
     limit: Annotated[int, Query(ge=1, le=200)] = 20,
 ) -> ClassificationRecentResponse:
     """Recent classified emails (heuristic QA, not CRM truth)."""
-    return queries.classification_recent(conn, label=label, limit=limit)
+    return fetch_classification_recent(conn, label=label, limit=limit)
 
 
 @router.get("/actions", response_model=ClassificationActionsResponse)
 def get_classification_actions(conn: DbConn) -> ClassificationActionsResponse:
     """Suggested triage actions grouped by recommended_action."""
-    return queries.classification_actions(conn)
+    return fetch_classification_actions(conn)

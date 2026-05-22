@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+import type { WarmCaseItem } from "../api/commercialTypes";
+import {
+  DEFAULT_WARM_FILTERS,
+  applyWarmCaseTableView,
+  filterWarmCases,
+  sortWarmCases,
+  warmCaseSearchHaystack,
+} from "./warmCaseTableView";
+
+const rows: WarmCaseItem[] = [
+  {
+    case_id: "a",
+    last_email_id: 1,
+    last_seen_at: "2026-05-10T10:00:00Z",
+    account_name: "ACME Lab",
+    contact_email: "buyer@acme.cl",
+    subject: "Centrifuge quote",
+    category: "client_reply",
+    status: "open",
+    next_action: "follow",
+    equipment_signal: "centrifuge",
+    snippet: "preview one",
+    gmail_url: null,
+  },
+  {
+    case_id: "b",
+    last_email_id: 2,
+    last_seen_at: "2026-05-19T10:00:00Z",
+    account_name: "Other Org",
+    contact_email: "vendor@supplier.com",
+    subject: "Supplier ping",
+    category: "supplier_reply",
+    status: "waiting",
+    next_action: "wait",
+    equipment_signal: "",
+    snippet: "preview two",
+    gmail_url: null,
+  },
+];
+
+describe("warmCaseTableView", () => {
+  it("search haystack includes domain and organization", () => {
+    expect(warmCaseSearchHaystack(rows[0])).toContain("acme.cl");
+    expect(warmCaseSearchHaystack(rows[0])).toContain("acme lab");
+  });
+
+  it("filters by search text", () => {
+    const filtered = filterWarmCases(rows, { ...DEFAULT_WARM_FILTERS, search: "supplier" });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].contact_email).toBe("vendor@supplier.com");
+  });
+
+  it("filters by status and category", () => {
+    const filtered = filterWarmCases(rows, {
+      ...DEFAULT_WARM_FILTERS,
+      status: "open",
+      category: "client_reply",
+    });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].case_id).toBe("a");
+  });
+
+  it("sorts by last_seen descending", () => {
+    const sorted = sortWarmCases(rows, "last_seen_desc");
+    expect(sorted[0].case_id).toBe("b");
+  });
+
+  it("apply combines filter and sort", () => {
+    const out = applyWarmCaseTableView(rows, {
+      ...DEFAULT_WARM_FILTERS,
+      search: "acme",
+      sort: "contact",
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].contact_email).toBe("buyer@acme.cl");
+  });
+
+  it("hides internal origenlab and labdelivery contacts when enabled", () => {
+    const withInternal: WarmCaseItem[] = [
+      ...rows,
+      {
+        ...rows[0],
+        case_id: "internal",
+        contact_email: "contacto@origenlab.cl",
+      },
+    ];
+    const hidden = filterWarmCases(withInternal, {
+      ...DEFAULT_WARM_FILTERS,
+      hideInternalContacts: true,
+    });
+    expect(hidden.map((r) => r.contact_email)).not.toContain("contacto@origenlab.cl");
+    expect(hidden.map((r) => r.contact_email)).toContain("buyer@acme.cl");
+  });
+});

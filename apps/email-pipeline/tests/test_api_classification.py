@@ -128,7 +128,15 @@ def class_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> Generator[Te
         yield fake
 
     monkeypatch.setattr("origenlab_api.deps.postgres_connection", _fake_pg)
-    monkeypatch.setattr("origenlab_api.routers.health.postgres_connection", _fake_pg)
+    monkeypatch.setattr("origenlab_api.db.postgres_connection", _fake_pg)
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.postgres_dashboard_api.db.postgres_connection",
+        _fake_pg,
+    )
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.postgres_dashboard_api.health.postgres_connection",
+        _fake_pg,
+    )
     app = create_app()
     with TestClient(app) as tc:
         yield tc
@@ -182,7 +190,11 @@ def test_classification_missing_table(monkeypatch: pytest.MonkeyPatch, tmp_path:
         yield fake
 
     monkeypatch.setattr("origenlab_api.deps.postgres_connection", _fake_pg)
-    monkeypatch.setattr("origenlab_api.routers.health.postgres_connection", _fake_pg)
+    monkeypatch.setattr("origenlab_api.db.postgres_connection", _fake_pg)
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.postgres_dashboard_api.db.postgres_connection",
+        _fake_pg,
+    )
     with TestClient(create_app()) as client:
         r = client.get("/classification/summary")
     assert r.json()["table_available"] is False

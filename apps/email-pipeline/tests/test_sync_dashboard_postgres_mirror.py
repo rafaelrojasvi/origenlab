@@ -255,7 +255,9 @@ def test_summary_includes_canonical_and_archive_counts() -> None:
     assert "canonical:" in text
     assert "497" in text
     assert "27198" in text
-    assert "dashboard/summary" in text
+    assert "mirror/dashboard/summary" in text
+    assert "8001" in text
+    assert "8000/dashboard/summary" in text
 
 
 def test_write_sync_watermark_inserts_run_and_kv() -> None:

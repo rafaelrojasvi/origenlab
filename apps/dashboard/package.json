@@ -9,7 +9,15 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke-v1.mjs",
+    "smoke:sqlite": "EXPECT_BACKEND=sqlite node scripts/smoke-v1.mjs",
+    "smoke:postgres": "EXPECT_BACKEND=postgres node scripts/smoke-v1.mjs",
+    "smoke:proxy": "SMOKE_BASE_URL=http://127.0.0.1:5173 node scripts/smoke-v1.mjs",
+    "smoke:contacts": "node scripts/smoke-v1.mjs",
+    "smoke:legacy": "node scripts/legacy-smoke.mjs",
+    "smoke:mirror": "node scripts/mirror-smoke.mjs",
+    "freeze:check": "./scripts/run-v1-freeze-checklist.sh",
+    "freeze:postgres": "./scripts/run-v1-postgres-matrix-check.sh"
   },
   "dependencies": {
     "react": "^19.1.0",

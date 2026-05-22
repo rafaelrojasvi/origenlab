@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-/** Smoke: API health + dashboard summary (canonical default). */
+/**
+ * PARKED — legacy smoke for email-pipeline :8000 routes (deprecated).
+ * Prefer `npm run smoke:mirror` for :8001 /mirror/* reporting.
+ * Use `npm run smoke` for Dashboard v1 Today (operator routes on :8001).
+ */
 const base = (process.env.VITE_ORIGENLAB_API_BASE_URL || "http://127.0.0.1:8000").replace(
   /\/$/,
   "",

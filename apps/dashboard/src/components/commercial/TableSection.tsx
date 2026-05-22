@@ -9,7 +9,10 @@ export function TableSection({
   onRetry,
   empty,
   emptyMessage,
+  filterEmpty,
+  filterEmptyMessage,
   reducedNote,
+  toolbar,
   children,
 }: {
   title: string;
@@ -20,7 +23,10 @@ export function TableSection({
   onRetry: () => void;
   empty: boolean;
   emptyMessage: string;
+  filterEmpty?: boolean;
+  filterEmptyMessage?: string;
   reducedNote?: string;
+  toolbar?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -69,7 +75,15 @@ export function TableSection({
         </p>
       ) : null}
 
-      {!loading && !error && !empty ? children : null}
+      {!loading && !error && !empty && toolbar ? <div className="space-y-3">{toolbar}</div> : null}
+
+      {!loading && !error && !empty && filterEmpty ? (
+        <p className="text-sm text-[var(--color-muted)]" role="status">
+          {filterEmptyMessage ?? "No rows match the current filters."}
+        </p>
+      ) : null}
+
+      {!loading && !error && !empty && !filterEmpty ? children : null}
     </section>
   );
 }

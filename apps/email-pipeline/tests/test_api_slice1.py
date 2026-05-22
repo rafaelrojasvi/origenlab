@@ -200,7 +200,15 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> Generator[TestClie
         yield fake
 
     monkeypatch.setattr("origenlab_api.deps.postgres_connection", _fake_pg)
-    monkeypatch.setattr("origenlab_api.routers.health.postgres_connection", _fake_pg)
+    monkeypatch.setattr("origenlab_api.db.postgres_connection", _fake_pg)
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.postgres_dashboard_api.db.postgres_connection",
+        _fake_pg,
+    )
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.postgres_dashboard_api.health.postgres_connection",
+        _fake_pg,
+    )
 
     app = create_app()
     with TestClient(app) as tc:

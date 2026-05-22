@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from origenlab_api.backends.factory import validate_api_settings
+from origenlab_api.mirror import router as mirror_router
 from origenlab_api.routes import cases, contacts, emails, health, operator, opportunities
 from origenlab_api.settings import get_settings
 
@@ -14,6 +15,7 @@ def create_app() -> FastAPI:
         title="OrigenLab API",
         description=(
             "Read-only operator API (SQLite-first). "
+            "Postgres mirror routes live under /mirror/* (API-3 Phase 1 complete; Phase 2 parity frozen). "
             "Does not send email, ingest Gmail, or write SQLite/Postgres. "
             "email-pipeline scripts remain the mutation path."
         ),
@@ -27,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(emails.router)
     app.include_router(cases.router)
     app.include_router(opportunities.router)
+    app.include_router(mirror_router)
     app.include_router(contacts.router)
     validate_api_settings(get_settings())
     return app

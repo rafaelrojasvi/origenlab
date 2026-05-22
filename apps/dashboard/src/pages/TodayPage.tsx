@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
-  EquipmentOpportunitiesResponse,
+  EquipmentOpportunitiesUiResponse,
   WarmCasesResponse,
 } from "../api/commercialTypes";
 import {
@@ -11,9 +11,16 @@ import {
   getOperatorApiBaseUrl,
 } from "../api/operatorClient";
 import type { TodayPanelData } from "../api/operatorTypes";
+import { ContactProfilePanel } from "../components/commercial/ContactProfilePanel";
 import { EquipmentOpportunitiesTable } from "../components/commercial/EquipmentOpportunitiesTable";
 import { WarmCasesTable } from "../components/commercial/WarmCasesTable";
+import { DevLegacyPortWarning } from "../components/operator/DevLegacyPortWarning";
+import { OperatorWarningsList } from "../components/operator/OperatorWarningsList";
 import { ReadOnlyBanner } from "../components/operator/ReadOnlyBanner";
+import {
+  getLegacyDevPortWarning,
+  logLegacyDevPortWarningIfNeeded,
+} from "../lib/devApiConfig";
 import {
   backendChipClass,
   backendLabel,
@@ -59,9 +66,11 @@ export function TodayPage() {
   const [warmLoading, setWarmLoading] = useState(true);
   const [warmError, setWarmError] = useState<string | null>(null);
 
-  const [equipment, setEquipment] = useState<EquipmentOpportunitiesResponse | null>(null);
+  const [equipment, setEquipment] = useState<EquipmentOpportunitiesUiResponse | null>(null);
   const [equipmentLoading, setEquipmentLoading] = useState(true);
   const [equipmentError, setEquipmentError] = useState<string | null>(null);
+
+  const [contactEmail, setContactEmail] = useState<string | null>(null);
 
   const loadPanel = useCallback(async () => {
     setPanelLoading(true);
@@ -110,6 +119,12 @@ export function TodayPage() {
     loadAll();
   }, [loadAll]);
 
+  const devConfigWarning = useMemo(() => getLegacyDevPortWarning(), []);
+
+  useEffect(() => {
+    logLegacyDevPortWarningIfNeeded();
+  }, [devConfigWarning]);
+
   const mirrorBackend = data?.health.backend === "postgres";
   const backend = data?.health.backend ?? "sqlite";
   const tone = data ? verdictTone(data.operator.verdict) : null;
@@ -142,6 +157,8 @@ export function TodayPage() {
 
       <main className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6">
         <ReadOnlyBanner mirrorBackend={Boolean(mirrorBackend)} />
+
+        {devConfigWarning ? <DevLegacyPortWarning message={devConfigWarning} /> : null}
 
         <div className="flex flex-wrap items-center gap-3">
           <button
@@ -227,17 +244,11 @@ export function TodayPage() {
             </section>
 
             {warnings.length > 0 ? (
-              <section className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-4">
-                <h2 className="text-sm font-semibold text-amber-950">Warnings</h2>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-950">
-                  {warnings.slice(0, WARNINGS_PREVIEW).map((w) => (
-                    <li key={w}>{w}</li>
-                  ))}
-                </ul>
-                {warningsMore > 0 ? (
-                  <p className="mt-2 text-xs text-amber-900">+{warningsMore} more warnings</p>
-                ) : null}
-              </section>
+              <OperatorWarningsList
+                warnings={warnings.slice(0, WARNINGS_PREVIEW)}
+                moreCount={warningsMore}
+                onContactSelect={setContactEmail}
+              />
             ) : (
               <p className="text-sm text-[var(--color-muted)]" role="status">
                 No warnings from operator status.
@@ -259,6 +270,7 @@ export function TodayPage() {
           loading={warmLoading}
           error={warmError}
           onRetry={() => void loadWarm()}
+          onContactSelect={setContactEmail}
         />
 
         <EquipmentOpportunitiesTable
@@ -268,13 +280,22 @@ export function TodayPage() {
           loading={equipmentLoading}
           error={equipmentError}
           onRetry={() => void loadEquipment()}
+          onContactSelect={setContactEmail}
         />
 
         <footer className="border-t border-[var(--color-border)] pt-6 text-xs text-[var(--color-muted)]">
           Dashboard v1 · Today · GET /health · /operator/status · /cases/warm ·
-          /opportunities/equipment
+          /opportunities/equipment · /contacts/{"{email}"}
         </footer>
       </main>
+
+      <ContactProfilePanel
+        email={contactEmail}
+        open={contactEmail !== null}
+        onClose={() => setContactEmail(null)}
+        backend={backend}
+        mirrorBackend={Boolean(mirrorBackend)}
+      />
     </div>
   );
 }
