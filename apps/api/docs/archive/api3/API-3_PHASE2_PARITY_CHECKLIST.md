@@ -94,6 +94,52 @@ Exit `2` if either server is unreachable. Exit `1` on status/key mismatch.
 
 ---
 
+## Phase 4B cleanup + Phase 6 gate prep
+
+| Item | Result |
+|------|--------|
+| `POSTGRES_API_DASHBOARD_PLAN.md` banner | **Done** |
+| Streamlit mirror path tests | **Done** |
+| Parked legacy README | **Done** |
+| `api3_phase6_grep_gate.sh` | **Added** (expected fail until Phase 6) |
+| Doc | [API-3_PHASE4B_CLEANUP.md](./API-3_PHASE4B_CLEANUP.md) |
+
+---
+
+## Phase 4A reference audit
+
+| Item | Result |
+|------|--------|
+| Grep audit doc | [API-3_PHASE4A_REFERENCE_AUDIT.md](./API-3_PHASE4A_REFERENCE_AUDIT.md) |
+| Delete legacy tree | **No** — zero-reference not proven |
+| Dashboard Today `:8000` / `/mirror/*` | **None** (runtime) |
+| Phase 4B | Doc refresh + optional parked-client guidance |
+
+---
+
+## Phase 3C deprecation hardening
+
+| Item | Result |
+|------|--------|
+| Legacy response headers | `X-OrigenLab-Deprecated-API`, `X-OrigenLab-Replacement: /mirror/*` |
+| Legacy startup log warning | **Yes** |
+| Mirror API emits deprecation headers | **No** |
+| Doc | [API-3_PHASE3C_DEPRECATION.md](./API-3_PHASE3C_DEPRECATION.md) |
+
+---
+
+## Phase 3B live dual-server validation
+
+| Item | Result |
+|------|--------|
+| Disposable Postgres `:5433` | `origenlab_api3_parity_test` (Docker `origenlab-api3-parity-pg`) |
+| `mirror_parity_smoke.py` (12 list routes) | **Passed** — status + top-level JSON keys |
+| `npm run smoke:mirror` | **Passed** |
+| Orchestration script | `apps/api/scripts/run_mirror_dual_server_parity.sh` |
+| Report | [API-3_PHASE3B_LIVE_PARITY_REPORT.md](./API-3_PHASE3B_LIVE_PARITY_REPORT.md) |
+
+---
+
 ## Phase 3A consumer cutover (partial)
 
 | Consumer | Change |

@@ -665,9 +665,6 @@ def format_summary_text(result: dict[str, Any]) -> str:
             "  curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary' | uv run python -m json.tool",
             "  curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary?scope=archive' | uv run python -m json.tool",
             "  curl -sS 'http://127.0.0.1:8001/mirror/meta/dashboard-sync' | uv run python -m json.tool",
-            "",
-            "Legacy API :8000 (deprecated during API-3; same JSON shape without /mirror prefix):",
-            "  curl -sS 'http://127.0.0.1:8000/dashboard/summary' | uv run python -m json.tool",
         ]
     )
     return "\n".join(lines)

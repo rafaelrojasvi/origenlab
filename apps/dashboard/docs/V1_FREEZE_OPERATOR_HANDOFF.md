@@ -6,7 +6,7 @@
 |-----------|--------|
 | **`apps/api`** (port **8001**) | **Active** dashboard API — GET only |
 | **`apps/dashboard`** (port **5173**) | **Active** read-only UI (`Today` page) |
-| **`apps/email-pipeline` API** (port **8000**) | **Legacy / compatibility** — **not removed** |
+| **Legacy email-pipeline API (:8000)** | **Removed** (API-3 Phase 6) — use `apps/api` `/mirror/*` |
 | Gmail / production SQLite / scratch Postgres | **Out of scope** for casual matrix runs — no mutations |
 
 ---
@@ -51,7 +51,7 @@ Send/outreach truth (NOT the dashboard):
 | **SQLite** | **Passed** | `npm run smoke:sqlite`, `npm run smoke:proxy`, API TestClient smoke; live UI panel from warm case |
 | **Disposable Postgres** | **Passed** | Fresh DB `origenlab_dashboard2_test` on **`127.0.0.1:5433`** (Docker `postgres:16`); `EXPECT_BACKEND=postgres npm run smoke:postgres` / `smoke:contacts` / `smoke:proxy` |
 
-**Safety during validation:** Gmail was not mutated. **Production SQLite** and **production/scratch Postgres** were not used. Mirror sync wrote only the disposable container. Legacy email-pipeline API on **:8000** was not removed.
+**Safety during validation:** Gmail was not mutated. **Production SQLite** and **production/scratch Postgres** were not used. Mirror sync wrote only the disposable container. Legacy email-pipeline API on **:8000** was **removed in API-3 Phase 6**.
 
 Example disposable Postgres bootstrap (Dashboard-2.2 reference):
 
@@ -119,7 +119,7 @@ All Dashboard-2.5 behavior is **in-browser only** on the frozen **Today** page. 
 
 **Code map (2.5):** `src/lib/internalContactFilter.ts`, `src/lib/operatorLabels.ts`, `src/lib/warningEmailLinks.ts`, `src/components/operator/OperatorWarningsList.tsx`, `src/components/operator/TokenLabel.tsx`, updates to `WarmCasesTable`, `EquipmentOpportunitiesTable`, `ContactProfilePanel`, `TodayPage`.
 
-**Legacy API:** `apps/email-pipeline` FastAPI on **:8000** remains parked — **not removed** (see [API-3 relocation audit](../../api/docs/API-3_RELOCATION_AUDIT.md)).
+**Legacy API:** email-pipeline FastAPI on **:8000** **removed** (Phase 6). See [API-3 Phase 6 completion](../../api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md).
 
 ---
 
@@ -300,16 +300,11 @@ Dashboard: keep `VITE_ORIGENLAB_API_BASE_URL` unset; refresh [http://127.0.0.1:5
 
 ---
 
-## Legacy email-pipeline API (port 8000)
+## Legacy email-pipeline API (removed — API-3 Phase 6)
 
-| | |
-|--|--|
-| **Location** | `apps/email-pipeline` → `origenlab_api` on **:8000** |
-| **Routes** | `/dashboard/summary`, `/classification/*`, `/commercial/*`, … |
-| **Dashboard v1** | **Must not** call these — parked under `apps/dashboard/src/legacy/` |
-| **Removal** | **Not in this freeze** — compatibility retained until API-3 relocation audit |
+The deprecated FastAPI app on port **8000** (`apps/email-pipeline/src/origenlab_api`) was **deleted**. Postgres mirror reporting uses **`apps/api`** `GET /mirror/*` on **:8001** only. Parked UI under `src/legacy/` targets mirror paths if revived.
 
-If `apps/dashboard/.env` sets `VITE_ORIGENLAB_API_BASE_URL=http://127.0.0.1:8000`, the UI bypasses the Vite proxy and will fail against v1 routes. **Unset the variable and restart `npm run dev`.**
+**Dev env:** leave `VITE_ORIGENLAB_API_BASE_URL` unset in `npm run dev` so Vite proxies to **:8001**. A wrong API base URL causes **Failed to fetch** for v1 routes.
 
 ---
 

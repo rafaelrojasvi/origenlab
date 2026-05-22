@@ -10,6 +10,10 @@ Use this page as the navigation and truth hierarchy for [`apps/email-pipeline/do
 
 - Commercial quotes & supplier research (policy + proposed DB entities): [`docs/business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md`](../../../docs/business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md)
 
+## HTTP API (not in this package)
+
+Postgres mirror reporting and Dashboard operator routes are served by **[`apps/api`](../../api/README.md)** on port **8001** only. Email-pipeline provides sync (`sync_dashboard_postgres_mirror.py`) and Streamlit; it does **not** expose `origenlab_api` FastAPI (removed API-3 Phase 6).
+
 ## Agent-first start
 
 - **[`SCRIPT_MAP.md`](SCRIPT_MAP.md)** — **canonical operator map** (daily outbound lanes, core / ops / lab / break-glass, workspace prep stories)

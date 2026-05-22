@@ -1,4 +1,4 @@
-/** PARKED — legacy email-pipeline dashboard client. Not imported by Dashboard v1. See ../README.md */
+/** PARKED — legacy multi-tab client (not mounted). Targets apps/api :8001 /mirror/*. See ../README.md */
 import type {
   ClassificationActions,
   ClassificationRecent,
@@ -11,10 +11,9 @@ import type {
   PaginatedOrganizations,
 } from "./types";
 
-const DEFAULT_BASE = "http://127.0.0.1:8000";
+const DEFAULT_BASE = "http://127.0.0.1:8001";
 
 export function getApiBaseUrl(): string {
-  // Dev server only: same-origin via Vite proxy (avoids CORS / WSL localhost quirks).
   if (import.meta.env.DEV && import.meta.env.MODE === "development") {
     return "";
   }
@@ -55,27 +54,27 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 export function fetchDashboardSummary(scope?: "archive"): Promise<DashboardSummary> {
   const params = scope === "archive" ? { scope: "archive" } : undefined;
-  return fetchJson<DashboardSummary>(apiUrl("/dashboard/summary", params));
+  return fetchJson<DashboardSummary>(apiUrl("/mirror/dashboard/summary", params));
 }
 
 export function fetchOutboundReadiness(): Promise<OutboundReadiness> {
-  return fetchJson<OutboundReadiness>(apiUrl("/outbound/readiness"));
+  return fetchJson<OutboundReadiness>(apiUrl("/mirror/outbound/readiness"));
 }
 
 export function fetchContacts(limit = 5): Promise<PaginatedContacts> {
-  return fetchJson<PaginatedContacts>(apiUrl("/contacts", { limit, offset: 0 }));
+  return fetchJson<PaginatedContacts>(apiUrl("/mirror/contacts", { limit, offset: 0 }));
 }
 
 export function fetchOrganizations(limit = 5): Promise<PaginatedOrganizations> {
-  return fetchJson<PaginatedOrganizations>(apiUrl("/organizations", { limit, offset: 0 }));
+  return fetchJson<PaginatedOrganizations>(apiUrl("/mirror/organizations", { limit, offset: 0 }));
 }
 
 export function fetchDashboardSyncMeta(): Promise<DashboardSyncMeta> {
-  return fetchJson<DashboardSyncMeta>(apiUrl("/meta/dashboard-sync"));
+  return fetchJson<DashboardSyncMeta>(apiUrl("/mirror/meta/dashboard-sync"));
 }
 
 export function fetchClassificationSummary(): Promise<ClassificationSummary> {
-  return fetchJson<ClassificationSummary>(apiUrl("/classification/summary"));
+  return fetchJson<ClassificationSummary>(apiUrl("/mirror/classification/summary"));
 }
 
 export function fetchClassificationRecent(
@@ -84,17 +83,17 @@ export function fetchClassificationRecent(
 ): Promise<ClassificationRecent> {
   const params: Record<string, string | number> = { limit };
   if (label) params.label = label;
-  return fetchJson<ClassificationRecent>(apiUrl("/classification/recent", params));
+  return fetchJson<ClassificationRecent>(apiUrl("/mirror/classification/recent", params));
 }
 
 export function fetchClassificationActions(): Promise<ClassificationActions> {
-  return fetchJson<ClassificationActions>(apiUrl("/classification/actions"));
+  return fetchJson<ClassificationActions>(apiUrl("/mirror/classification/actions"));
 }
 
 export function fetchCommercialPurchaseEvents(
   limit = 20,
 ): Promise<CommercialPurchaseEventsList> {
   return fetchJson<CommercialPurchaseEventsList>(
-    apiUrl("/commercial/purchase-events", { limit }),
+    apiUrl("/mirror/commercial/purchase-events", { limit }),
   );
 }

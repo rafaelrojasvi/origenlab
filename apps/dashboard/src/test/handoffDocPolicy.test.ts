@@ -42,7 +42,7 @@ describe("Dashboard-2 freeze handoff docs", () => {
     expect(matrix).toMatch(/smoke:contacts/);
     expect(matrix).toMatch(/Dashboard-2 freeze validation/i);
     expect(matrix).toMatch(/127\.0\.0\.1:5433/);
-    expect(matrix).toMatch(/legacy email-pipeline API.*not removed|not remove the legacy/i);
+    expect(matrix).toMatch(/legacy email-pipeline API.*removed|Removed.*Phase 6/i);
   });
 
   it("documents Dashboard-2.5 read-only usability", () => {
@@ -55,6 +55,6 @@ describe("Dashboard-2 freeze handoff docs", () => {
     expect(handoff).toMatch(/client-side only|in-browser only/i);
     expect(handoff).toMatch(/No.*mailto.*warnings|No.*mailto, send/i);
     expect(handoff).toMatch(/mark-contacted|status-edit/i);
-    expect(handoff).toMatch(/legacy.*:8000.*not removed|not removed.*legacy/i);
+    expect(handoff).toMatch(/Phase 6|legacy.*removed|removed.*legacy/i);
   });
 });

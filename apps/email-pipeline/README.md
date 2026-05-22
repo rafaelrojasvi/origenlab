@@ -10,6 +10,8 @@ Code lives in the repo; **put real PSTs and outputs outside the repo** (e.g. `~/
 **Agent-first app context:** [docs/APP_CONTEXT.md](docs/APP_CONTEXT.md#m-epapp-start).  
 **Documentation index** (what is canonical vs auto-generated, merges to consider): [docs/README.md](docs/README.md).
 
+**HTTP API:** This package does **not** ship FastAPI. Operator and Postgres mirror HTTP live in [`apps/api`](../api/README.md) on port **8001** (`GET /mirror/*` for mirror reporting). The React dashboard [`apps/dashboard`](../dashboard/README.md) uses operator routes only.
+
 ## GitHub & what not to commit
 
 This monorepo is meant to hold **code and docs** only; **operational data stays outside git** by default.
@@ -182,7 +184,7 @@ uv sync --group ui   # once per machine / after clone
 uv run --group ui streamlit run apps/business_mart_app.py
 ```
 
-**Share on Wi‑Fi (same LAN):** Streamlit must listen on all interfaces, and if you use **WSL2** Windows must forward the port to WSL (like you did for port 8000).
+**Share on Wi‑Fi (same LAN):** Streamlit must listen on all interfaces, and if you use **WSL2** Windows must forward the chosen port to WSL (same idea as other local dev ports).
 
 ```bash
 # From repo root — binds 0.0.0.0:8501 (override with STREAMLIT_PORT=8502)

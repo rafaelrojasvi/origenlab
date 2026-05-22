@@ -8,9 +8,9 @@ describe("api client", () => {
   });
 
   it("getApiBaseUrl strips trailing slash in production", () => {
-    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000/");
+    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8001/");
     vi.stubEnv("MODE", "production");
-    expect(getApiBaseUrl()).toBe("http://127.0.0.1:8000");
+    expect(getApiBaseUrl()).toBe("http://127.0.0.1:8001");
   });
 
   it("getApiBaseUrl is empty in dev for vite proxy", () => {
@@ -18,33 +18,35 @@ describe("api client", () => {
     expect(getApiBaseUrl()).toBe("");
   });
 
-  it("apiUrl defaults to canonical summary without scope param", () => {
-    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000");
+  it("apiUrl defaults to canonical mirror summary without scope param", () => {
+    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8001");
     vi.stubEnv("MODE", "production");
-    const url = apiUrl("/dashboard/summary");
-    expect(url).toBe("http://127.0.0.1:8000/dashboard/summary");
+    const url = apiUrl("/mirror/dashboard/summary");
+    expect(url).toBe("http://127.0.0.1:8001/mirror/dashboard/summary");
     expect(url).not.toContain("scope=");
   });
 
   it("apiUrl uses relative path in dev mode", () => {
     vi.stubEnv("MODE", "development");
     vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5173" } });
-    expect(apiUrl("/dashboard/summary")).toBe("http://127.0.0.1:5173/dashboard/summary");
+    expect(apiUrl("/mirror/dashboard/summary")).toBe(
+      "http://127.0.0.1:5173/mirror/dashboard/summary",
+    );
   });
 
   it("apiUrl adds archive scope when requested", () => {
-    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000");
-    expect(apiUrl("/dashboard/summary", { scope: "archive" })).toContain("scope=archive");
+    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8001");
+    expect(apiUrl("/mirror/dashboard/summary", { scope: "archive" })).toContain("scope=archive");
   });
 
-  it("apiUrl builds commercial purchase-events path in dev mode", () => {
+  it("apiUrl builds commercial purchase-events mirror path in dev mode", () => {
     vi.stubEnv("MODE", "development");
     vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5173" } });
-    const url = apiUrl("/commercial/purchase-events", { limit: 20 });
-    expect(url).toBe("http://127.0.0.1:5173/commercial/purchase-events?limit=20");
+    const url = apiUrl("/mirror/commercial/purchase-events", { limit: 20 });
+    expect(url).toBe("http://127.0.0.1:5173/mirror/commercial/purchase-events?limit=20");
   });
 
-  it("fetchDashboardSummary calls canonical endpoint by default", async () => {
+  it("fetchDashboardSummary calls canonical mirror endpoint by default", async () => {
     vi.stubEnv("MODE", "development");
     vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5173" } });
     const fetchMock = vi.fn().mockResolvedValue({
@@ -55,6 +57,6 @@ describe("api client", () => {
 
     const body = await fetchDashboardSummary();
     expect(body.scope).toBe("canonical");
-    expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:5173/dashboard/summary");
+    expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:5173/mirror/dashboard/summary");
   });
 });

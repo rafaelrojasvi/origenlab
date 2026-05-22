@@ -7,9 +7,9 @@ Prove **Dashboard v1** and **Dashboard-2 contact drilldown** work against **`app
 | Stack | Port (typical) | Role |
 |-------|----------------|------|
 | **`apps/api`** | **8001** | **Active** Dashboard API (`/health`, `/operator/status`, `/cases/warm`, `/opportunities/equipment`, `/contacts/{email}`) |
-| **`apps/email-pipeline/src/origenlab_api`** | **8000** | **Legacy** multi-tab dashboard API (`/dashboard/*`, `/classification/*`, …) |
+| **Legacy email-pipeline API** | **8000** | **Removed** (API-3 Phase 6). Use **`apps/api`** `GET /mirror/*` on **8001**. |
 
-Do **not** remove the legacy email-pipeline API until a separate audit confirms zero references. Dashboard v1 must not call `:8000` or legacy paths.
+Dashboard v1 must not call `/mirror/*`. Parked `src/legacy/` client uses mirror paths on :8001 if revived.
 
 ## Routes under test (GET only)
 
@@ -272,4 +272,4 @@ export ORIGENLAB_TEST_POSTGRES_URL='postgresql://…:5433/…'
 - No production SQLite mutations (read-only `ORIGENLAB_SQLITE_PATH` for API/sync source)
 - No production/scratch Postgres unless explicitly chosen
 - No write HTTP from dashboard smoke
-- Legacy email-pipeline API on :8000 **not removed**
+- Legacy email-pipeline API on :8000 **removed** (Phase 6)

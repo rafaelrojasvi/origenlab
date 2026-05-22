@@ -24,8 +24,8 @@ The following are **optional**. None are needed for:
 | **Postgres migration** | `alembic/`, `scripts/migrate/sqlite_*_to_postgres.py` | `--replace` can TRUNCATE/DELETE target tables. **Scratch Postgres only** until explicitly promoted. |
 | **Dashboard mirror** | `scripts/sync/sync_dashboard_postgres_mirror.py` | Loads Postgres mirror from SQLite; **not** send/export truth. |
 | **Dashboard stack wrapper** | `scripts/ops/refresh_operational_dashboard_stack.py` | Mart + mirror orchestration; **DASHBOARD_ONLY**; Gmail ingest off by default. |
-| **FastAPI** | `src/origenlab_api/` | Read model over Postgres mirror. |
-| **React dashboard** | `apps/dashboard/` | Polls FastAPI; no autonomous ingest. |
+| **HTTP mirror API** | [`apps/api`](../../api/README.md) (`GET /mirror/*` on :8001) | Legacy `apps/email-pipeline/src/origenlab_api` on :8000 **removed** (API-3 Phase 6) — see [`apps/api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md`](../../api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md). |
+| **React dashboard** | [`apps/dashboard`](../../dashboard/README.md) | Active **Today** UI polls `apps/api` operator routes only; parked multi-tab client under `src/legacy/`. |
 | **Tatiana pilots** | `scripts/tatiana/*`, `src/origenlab_email_pipeline/tatiana_copilot/` | Drafting / eval; not volume or precision daily lanes. |
 | **ML exploration** | `scripts/ml/*` | Embeddings / clustering experiments. |
 | **Dataset / cohort tools** | `scripts/dataset/*` | Tatiana cohort exports and label review CLIs. |

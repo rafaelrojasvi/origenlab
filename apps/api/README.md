@@ -4,14 +4,9 @@
 
 Read-only **operator API** over SQLite and `reports/out/active/current`. This app is separated from `apps/email-pipeline` so daily ingest, DNR refresh, and mutation CLIs stay unchanged.
 
-## Package name collision (important)
+## Package layout
 
-Two Python trees use the name **`origenlab_api`**. Only one should be on `sys.path` for a given process.
-
-| Location | Role |
-|----------|------|
-| **`apps/api/src/origenlab_api`** | **New separated operator API** (this app). API-0+ routes: `/health`, `/operator/status`, `/emails/recent`, … |
-| **`apps/email-pipeline/src/origenlab_api`** | **Legacy / parked Postgres mirror API** (Slice 1). Still used by some email-pipeline tooling until Phase API-3 relocation. |
+This app owns **`apps/api/src/origenlab_api`** (operator routes + `/mirror/*` Postgres reporting). The legacy email-pipeline FastAPI tree on port **8000** was **removed in API-3 Phase 6** — see [docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md](docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md).
 
 **Always run tests and uvicorn from `apps/api`:**
 
@@ -22,8 +17,6 @@ uv run pytest tests -q
 uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8001
 ```
 
-Running uvicorn from `apps/email-pipeline` imports the **legacy** package and a different app factory. Do not delete or rename the legacy tree until a focused API-3 refactor.
-
 `tests/conftest.py` prepends `apps/api/src` to `sys.path`. `tests/test_import_guard.py` asserts `origenlab_api.main` loads from **`apps/api/src`**.
 
 ## Runtime truth
@@ -31,7 +24,7 @@ Running uvicorn from `apps/email-pipeline` imports the **legacy** package and a 
 | Layer | Role |
 |-------|------|
 | **SQLite** (`ORIGENLAB_SQLITE_PATH`) | Authoritative for outbound safety, Sent memory, outreach sidecars |
-| **This API** | GET-only HTTP for operators and (later) dashboard reads |
+| **This API** | GET-only HTTP for **Dashboard Today** (`apps/dashboard`) and operator tooling |
 | **Postgres mirror** | **Parked / optional** — not required to run this app |
 | **email-pipeline** | **Write path** — ingest, `refresh_outbound_safety_memory`, `mark_outreach_state`, mart rebuilds |
 
@@ -53,7 +46,7 @@ CI: `tests/test_no_write_policy.py` checks GET-only routes and scans `apps/api/s
 
 ## CORS
 
-**Not enabled in API-0.** Local development uses direct `curl` or TestClient. When **`apps/dashboard`** is wired (Phase API-4), add explicit allowed origins (e.g. Vite `http://127.0.0.1:5173`) via `ORIGENLAB_API_CORS_ORIGINS` — do not use `allow_origins=["*"]` in production.
+**Dashboard v1 Today is wired** to this app on **:8001**. Local dev uses the **Vite proxy** (`apps/dashboard` → `:8001`), so the default operator loop does not require browser CORS. For direct browser→API access (e.g. `VITE_ORIGENLAB_API_BASE_URL`), use explicit allowed origins via `ORIGENLAB_API_CORS_ORIGINS` when CORS middleware is enabled — do not use `allow_origins=["*"]` in production.
 
 ## Endpoints
 
@@ -95,7 +88,7 @@ uv run pytest tests -q
 
 ## Dashboard v1–v2 backend matrix
 
-Dashboard v1 + **Dashboard-2 contact drilldown** use **this app only** (`apps/api`), not the legacy email-pipeline API on port 8000.
+Dashboard v1 + **Dashboard-2 contact drilldown** use **this app only** (`apps/api` on port **8001**).
 
 | Backend | Env | Smoke |
 |---------|-----|-------|
@@ -121,12 +114,9 @@ Dashboard HTTP smokes: `npm run smoke:contacts`, `EXPECT_BACKEND=postgres npm ru
 
 **After postgres validation:** unset `ORIGENLAB_API_BACKEND` and postgres URLs; restart this app on SQLite (`ORIGENLAB_SQLITE_PATH` only).
 
-**Legacy API:** `apps/email-pipeline/src/origenlab_api` (port 8000, `/dashboard/*`, `/classification/*`) remains for compatibility. Do **not** delete until API-3 relocation and a reference audit are complete.
+## API-3 mirror relocation (Phase 6 complete)
 
-## Coexistence roadmap
-
-- **API-0** (this app): SQLite operator plane.
-- **API-3** Phase 1 **complete**; Phase 2 **parity frozen**; Phase **3A** repoints operator docs/smokes to `:8001` `/mirror/*` (legacy `:8000` deprecated, not deleted). Dashboard Today still uses operator routes only. **Checklist:** [docs/API-3_PHASE2_PARITY_CHECKLIST.md](docs/API-3_PHASE2_PARITY_CHECKLIST.md). **Design:** [docs/API-3_PHASE1_MIRROR_ROUTE_DESIGN.md](docs/API-3_PHASE1_MIRROR_ROUTE_DESIGN.md). **Audit:** [docs/API-3_RELOCATION_AUDIT.md](docs/API-3_RELOCATION_AUDIT.md).
+Postgres mirror reporting lives under **`GET /mirror/*`** on this app. Legacy email-pipeline `:8000` API **removed** — [docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md](docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md). **Strict gate:** `scripts/api3_phase6_grep_gate.sh`.
 
 Mirror reporting smoke (GET only; requires this app on :8001 + disposable `ORIGENLAB_POSTGRES_URL`):
 
@@ -134,12 +124,15 @@ Mirror reporting smoke (GET only; requires this app on :8001 + disposable `ORIGE
 cd apps/dashboard && npm run smoke:mirror
 ```
 
-Optional dual-server parity (legacy :8000 + mirror :8001 both running):
+**Live mirror smoke** (disposable Postgres on `:5433`; `:8001` only):
+
+```bash
+apps/api/scripts/run_mirror_dual_server_parity.sh
+```
+
+Report (historical): [docs/archive/api3/API-3_PHASE3B_LIVE_PARITY_REPORT.md](docs/archive/api3/API-3_PHASE3B_LIVE_PARITY_REPORT.md).
 
 ```bash
 cd apps/api
-uv run python scripts/mirror_parity_smoke.py \
-  --legacy-base http://127.0.0.1:8000 \
-  --mirror-base http://127.0.0.1:8001
+uv run python scripts/mirror_parity_smoke.py --mirror-base http://127.0.0.1:8001
 ```
-- **API-4** (done for v1): Dashboard points at this app only.

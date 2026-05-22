@@ -1,4 +1,4 @@
-"""Optional Streamlit page: read-only preview of FastAPI Slice 1 (Postgres mirror)."""
+"""Optional Streamlit page: read-only preview of Postgres mirror API (apps/api :8001 /mirror/*)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ import streamlit as st
 from origenlab_email_pipeline.streamlit_page_status import render_page_status
 
 ENV_API_BASE_URL = "ORIGENLAB_API_BASE_URL"
-# Phase 3A: prefer apps/api :8001 /mirror/*; legacy :8000 still supported when base ends with :8000.
 DEFAULT_API_BASE_URL = "http://127.0.0.1:8001"
 
 MIRROR_LABEL = "Postgres mirror / eventually consistent"
@@ -55,18 +54,8 @@ def build_api_url(base_url: str, path: str) -> str:
     return f"{normalize_api_base_url(base_url)}{p}"
 
 
-def api_preview_paths(base_url: str) -> dict[str, str]:
-    """Resolve GET paths for API preview (mirror on :8001, legacy Slice-1 on :8000)."""
-    norm = normalize_api_base_url(base_url)
-    if norm.endswith(":8000"):
-        return {
-            "health": "/health",
-            "health_label": "/health",
-            "summary": "/dashboard/summary?scope=canonical",
-            "summary_label": "/dashboard/summary",
-            "readiness": "/outbound/readiness",
-            "readiness_label": "/outbound/readiness",
-        }
+def api_preview_paths(_base_url: str) -> dict[str, str]:
+    """Resolve GET paths for API preview (apps/api mirror on :8001)."""
     return {
         "health": "/mirror/health/dependencies",
         "health_label": "/mirror/health/dependencies",
@@ -145,7 +134,7 @@ def render_api_preview_page() -> None:
     base_input = st.text_input(
         "API base URL",
         value=default_url,
-        help=f"Variable de entorno `{ENV_API_BASE_URL}` o valor por defecto local.",
+        help=f"Variable de entorno `{ENV_API_BASE_URL}` o valor por defecto (`apps/api` :8001).",
         key="api_preview_base_url",
     )
 
@@ -155,7 +144,7 @@ def render_api_preview_page() -> None:
     if not st.session_state.get("api_preview_do_fetch"):
         st.caption(
             "Pulse **Actualizar desde API** para cargar dependencias, resumen mart y readiness "
-            "(rutas `/mirror/*` en :8001; legacy :8000 sin prefijo `/mirror`)."
+            "(rutas `GET /mirror/*` en apps/api :8001)."
         )
         return
 

@@ -25,10 +25,8 @@ RUNBOOK_MARKERS = (
     "RPROMPT: parameter not set",
     "curl -sS http://127.0.0.1:8001/mirror/meta/dashboard-sync",
     "curl -sS http://127.0.0.1:8001/mirror/classification/summary",
-    "curl -sS http://127.0.0.1:8000/meta/dashboard-sync",
-    "curl -sS http://127.0.0.1:8000/classification/summary",
-    "legacy API :8000 (deprecated)",
-    "mirror API :8001 (preferred",
+    "API-3 Phase 6",
+    "8001/mirror",
     "Failed to fetch",
     "scope=archive",
     "never ingests Gmail",
@@ -47,8 +45,8 @@ CHEAT_MARKERS = (
 DASHBOARD_README_MARKERS = (
     "m-eprun-dashboard-gmail-to-react",
     "sync_dashboard_postgres_mirror.py",
-    "meta/dashboard-sync",
-    "classification/summary",
+    "/mirror/meta/dashboard-sync",
+    "/mirror/classification/summary",
     "Failed to fetch",
 )
 

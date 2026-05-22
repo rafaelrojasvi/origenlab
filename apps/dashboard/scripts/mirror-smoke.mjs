@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * GET smoke for apps/api Postgres mirror routes (:8001 /mirror/*).
- * API-3 Phase 3A — preferred over smoke:legacy for mirror reporting checks.
+ * API-3 mirror reporting smoke (:8001 /mirror/* only).
  *
  * Requires uvicorn on :8001 with ORIGENLAB_POSTGRES_URL (disposable Postgres).
- * Does not call operator Today routes or legacy :8000 paths.
+ * Does not call operator Today routes.
  */
 const base = (
   process.env.ORIGENLAB_MIRROR_API_BASE_URL ||

@@ -412,16 +412,7 @@ uv sync --group dev
 uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-Mirror reporting routes live under **`/mirror/*`** (read-only GET). OpenAPI: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs). Parity checklist: [`apps/api/docs/API-3_PHASE2_PARITY_CHECKLIST.md`](../../api/docs/API-3_PHASE2_PARITY_CHECKLIST.md).
-
-**Legacy Slice-1 API (deprecated, still available on :8000 during API-3 cutover):**
-
-```bash
-cd apps/email-pipeline   # from repo root
-uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-Do **not** delete `apps/email-pipeline/src/origenlab_api` until Phase 6 sign-off.
+Mirror reporting routes live under **`/mirror/*`** (read-only GET). OpenAPI: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs). The old email-pipeline mirror HTTP server was **removed in API-3 Phase 6** — see [`apps/api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md`](../../api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md).
 
 **6. Run React (terminal 2):**
 
@@ -444,11 +435,11 @@ curl -sS http://127.0.0.1:8001/mirror/commercial/purchase-events | jq .
 curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary?scope=archive' | jq .   # explicit archive only
 ```
 
-Optional dual-server parity (both :8000 and :8001 running, disposable Postgres):
+Optional live mirror smoke (disposable Postgres, :8001 only):
 
 ```bash
 cd ../api
-uv run python scripts/mirror_parity_smoke.py --legacy-base http://127.0.0.1:8000 --mirror-base http://127.0.0.1:8001
+./scripts/run_mirror_dual_server_parity.sh
 ```
 
 Dashboard parked smoke: `cd ../dashboard && npm run smoke:mirror` (GET `/mirror/*` on :8001 only).
@@ -459,19 +450,6 @@ Canonical summary should show **hundreds** of contacts (operational Gmail), not 
 curl -sS http://127.0.0.1:8001/mirror/dashboard/summary | jq '.scope, .contact_count'
 curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary?scope=archive' | jq '.scope, .contact_count'
 ```
-
-##### Smoke tests — legacy API :8000 (deprecated)
-
-```bash
-curl -sS http://127.0.0.1:8000/health | jq .
-curl -sS http://127.0.0.1:8000/dashboard/summary | jq .
-curl -sS http://127.0.0.1:8000/meta/dashboard-sync | jq .
-curl -sS http://127.0.0.1:8000/classification/summary | jq .
-curl -sS http://127.0.0.1:8000/commercial/purchase-events | jq .
-curl -sS 'http://127.0.0.1:8000/dashboard/summary?scope=archive' | jq .
-```
-
-Legacy dashboard smoke: `cd ../dashboard && npm run smoke:legacy` (still hits :8000; not part of v1 freeze CI).
 
 ##### What to check after refresh
 
@@ -502,9 +480,7 @@ Legacy dashboard smoke: `cd ../dashboard && npm run smoke:legacy` (still hits :8
 
 **Read-only mirror routes (preferred, `apps/api` :8001):** `GET /mirror/health/dependencies`, `GET /mirror/meta/dashboard-sync`, `GET /mirror/dashboard/summary`, `GET /mirror/contacts`, `GET /mirror/organizations`, `GET /mirror/classification/summary`, `GET /mirror/classification/recent`, `GET /mirror/classification/actions`, `GET /mirror/commercial/purchase-events`, `GET /mirror/commercial/purchase-events/{event_id}`, `GET /mirror/outbound/suppressions/emails`, `GET /mirror/outbound/contact-state`, `GET /mirror/outbound/readiness`.
 
-**Legacy routes (deprecated, email-pipeline :8000):** same paths **without** `/mirror` prefix (e.g. `GET /dashboard/summary`). `GET /health` on :8000 is **not** the same contract as operator `GET /health` on :8001.
-
-`/mirror/outbound/readiness` reflects **Postgres mirrors only** (not full SQLite Sent-folder gates). OpenAPI: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) · legacy: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+`/mirror/outbound/readiness` reflects **Postgres mirrors only** (not full SQLite Sent-folder gates). OpenAPI: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs).
 
 **Dashboard v1 Today** uses operator routes on :8001 only (`/health`, `/operator/status`, `/cases/warm`, `/opportunities/equipment`, `/contacts/{email}`) — **not** `/mirror/*`.
 

@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: project-maintainers  
-Last reviewed: 2026-04-22
+Last reviewed: 2026-05-22
 
 This file is the source of truth for documentation placement, intent, and lifecycle.
 
@@ -18,6 +18,20 @@ This file is the source of truth for documentation placement, intent, and lifecy
 - Email pipeline agent context: [apps/email-pipeline/docs/APP_CONTEXT.md](../apps/email-pipeline/docs/APP_CONTEXT.md)
 - Email pipeline docs index: [apps/email-pipeline/docs/README.md](../apps/email-pipeline/docs/README.md)
 - Email pipeline operator script map: [apps/email-pipeline/docs/SCRIPT_MAP.md](../apps/email-pipeline/docs/SCRIPT_MAP.md)
+- Operator API: [apps/api/README.md](../apps/api/README.md) · [apps/api/docs/README.md](../apps/api/docs/README.md)
+- Dashboard (Today UI): [apps/dashboard/README.md](../apps/dashboard/README.md) · [apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md](../apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md)
+
+**Architecture entrypoint (monorepo):** [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) — canonical for what each app owns; do not duplicate a separate architecture index in this phase.
+
+### Operator stack (read-only HTTP + UI)
+
+| App | Canonical docs |
+|-----|----------------|
+| **Operator API** (`apps/api`, :8001) | [apps/api/README.md](../apps/api/README.md) · [apps/api/docs/README.md](../apps/api/docs/README.md) |
+| **Dashboard** (`apps/dashboard`, :5173) | [apps/dashboard/README.md](../apps/dashboard/README.md) · [apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md](../apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md) |
+| **Email pipeline** (SQLite OLTP, ingest, outbound) | [apps/email-pipeline/docs/OUTBOUND_SOURCE_OF_TRUTH.md](../apps/email-pipeline/docs/OUTBOUND_SOURCE_OF_TRUTH.md) · [RUNBOOK.md](../apps/email-pipeline/docs/RUNBOOK.md) |
+
+Historical API-3 migration notes (legacy `:8000` removal): [apps/api/docs/archive/api3/](../apps/api/docs/archive/api3/README.md) — not current operator runbooks.
 
 <a id="m-docmap-mapping"></a>
 ## Canonical vs Archive Mapping
@@ -26,6 +40,19 @@ This file is the source of truth for documentation placement, intent, and lifecy
 
 - [MONOREPO.md](./MONOREPO.md) → historical context, keep as archive reference.
 - [business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md](./business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md) → **canonical** quote/supplier **truth rules** and proposed entities (cotizaciones, proveedores, research runs vs master data).
+
+### Operator API (`apps/api`)
+
+- [apps/api/README.md](../apps/api/README.md) → **canonical** active read-only API (:8001; operator routes + `GET /mirror/*`).
+- [apps/api/docs/README.md](../apps/api/docs/README.md) → **canonical** API docs index.
+- [apps/api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md](../apps/api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md) → **canonical** removal record (legacy :8000).
+- [apps/api/docs/archive/api3/](../apps/api/docs/archive/api3/README.md) → **historical** API-3 migration context (not current runbooks).
+
+### Dashboard (`apps/dashboard`)
+
+- [apps/dashboard/README.md](../apps/dashboard/README.md) → **canonical** active read-only operator UI (:5173).
+- [apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md](../apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md) → **canonical** Today operator handoff.
+- [apps/dashboard/src/legacy/README.md](../apps/dashboard/src/legacy/README.md) → **historical** parked multi-tab UI (not active dashboard).
 
 ### Web docs
 

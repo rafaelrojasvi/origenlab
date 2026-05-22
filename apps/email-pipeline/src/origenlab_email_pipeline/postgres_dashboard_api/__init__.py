@@ -1,7 +1,7 @@
 """Shared read-only Postgres dashboard mirror queries and schemas (API-3).
 
-Used by legacy ``apps/email-pipeline/src/origenlab_api`` (:8000) and
-``apps/api`` ``/mirror/*`` routes (:8001). Not a second FastAPI app.
+Consumed by ``apps/api`` ``GET /mirror/*`` routes on port **8001** (legacy
+email-pipeline FastAPI on :8000 was removed in API-3 Phase 6).
 """
 
 from origenlab_email_pipeline.postgres_dashboard_api.classification import (

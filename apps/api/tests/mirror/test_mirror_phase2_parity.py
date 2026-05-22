@@ -1,10 +1,8 @@
-"""API-3 Phase 2: mirror parity checklist enforcement (docs/tests only)."""
+"""API-3 Phase 2: mirror parity checklist enforcement."""
 
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 from origenlab_api.main import create_app
 
@@ -25,10 +23,8 @@ _DASHBOARD_ACTIVE_SOURCES = (
 )
 
 
-def test_legacy_origenlab_api_tree_still_exists() -> None:
-    assert _LEGACY_API_ROOT.is_dir(), f"missing legacy tree: {_LEGACY_API_ROOT}"
-    assert (_LEGACY_API_ROOT / "main.py").is_file()
-    assert (_LEGACY_API_ROOT / "routers").is_dir()
+def test_legacy_email_pipeline_tree_removed_phase6() -> None:
+    assert not _LEGACY_API_ROOT.exists()
 
 
 def test_documented_mirror_routes_exist_in_openapi() -> None:
@@ -48,11 +44,11 @@ def test_documented_mirror_routes_are_get_only_in_openapi() -> None:
     assert unsafe == [], f"non-GET mirror OpenAPI operations: {unsafe}"
 
 
-def test_legacy_health_has_no_mirror_alias() -> None:
+def test_operator_health_distinct_from_mirror_dependencies() -> None:
     paths = create_app().openapi()["paths"]
     assert LEGACY_HEALTH_NO_MIRROR_ALIAS in paths
+    assert "/mirror/health/dependencies" in paths
     assert "/mirror/health" not in paths
-    assert f"/mirror{LEGACY_HEALTH_NO_MIRROR_ALIAS}" not in paths
 
 
 def test_operator_contact_detail_distinct_from_mirror_contacts_list() -> None:
@@ -79,18 +75,23 @@ def test_active_dashboard_sources_do_not_call_mirror_routes() -> None:
 
 
 def test_parity_route_pair_count_matches_phase2_checklist() -> None:
-    """Lock checklist size so a new legacy route forces doc + test updates."""
     assert len(LEGACY_TO_MIRROR_ROUTE_PAIRS) == 13
+
+
+def test_phase6_legacy_removal_doc_exists() -> None:
+    doc = Path(__file__).resolve().parents[2] / "docs" / "API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md"
+    assert doc.is_file()
 
 
 def test_mirror_parity_checklist_doc_exists() -> None:
     doc = (
         Path(__file__).resolve().parents[2]
         / "docs"
+        / "archive"
+        / "api3"
         / "API-3_PHASE2_PARITY_CHECKLIST.md"
     )
     assert doc.is_file()
     text = doc.read_text(encoding="utf-8")
-    for legacy, mirror, _note in LEGACY_TO_MIRROR_ROUTE_PAIRS:
-        assert legacy in text, f"doc missing legacy path {legacy}"
+    for _legacy, mirror, _note in LEGACY_TO_MIRROR_ROUTE_PAIRS:
         assert mirror in text, f"doc missing mirror path {mirror}"

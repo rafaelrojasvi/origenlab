@@ -2,7 +2,7 @@
 
 > **Operator handoff (v1–v2 freeze):** [docs/V1_FREEZE_OPERATOR_HANDOFF.md](docs/V1_FREEZE_OPERATOR_HANDOFF.md) — three run modes (SQLite / disposable Postgres / return to SQLite), Dashboard-2 contact drilldown, smoke commands, send-truth rules.
 
-**Dashboard v1** is the active read-only operator UI. It talks only to **`apps/api`** (not email-pipeline FastAPI on :8000):
+**Dashboard v1** is the active read-only operator UI. It talks only to **`apps/api`** on port **8001** (legacy email-pipeline API removed in API-3 Phase 6):
 
 | Route | Use |
 |-------|-----|
@@ -14,7 +14,7 @@
 
 The browser does not open SQLite/Postgres, CSV files, or `apps/email-pipeline` modules.
 
-**Parked legacy:** the pre-v1 multi-tab panel (`/dashboard/summary`, `/classification/*`, …) lives under [`src/legacy/`](src/legacy/README.md). It is **not mounted**, **not tested** in CI, and **must not** be imported from active code.
+**Parked legacy:** the pre-v1 multi-tab panel lives under [`src/legacy/`](src/legacy/README.md) (mirror paths on :8001 if revived). It is **not mounted**, **not tested** in CI, and **must not** be imported from active code.
 
 ## Run locally
 
@@ -45,7 +45,7 @@ Copy [`.env.example`](.env.example) to `.env` if needed — **do not** copy a `:
 | Mode | `VITE_ORIGENLAB_API_BASE_URL` | Behavior |
 |------|-------------------------------|----------|
 | **`npm run dev`** | **Leave unset** (recommended) | Browser uses same-origin requests; Vite proxies `/health`, `/operator`, `/cases`, `/opportunities`, `/contacts` to `http://127.0.0.1:8001` |
-| **`npm run dev`** | Set to `http://127.0.0.1:8000` | **Wrong** — bypasses proxy, hits legacy email-pipeline port → “Failed to fetch”. UI shows a warning; remove the variable and **restart** `npm run dev`. |
+| **`npm run dev`** | Set to a **wrong** API port (e.g. old legacy port) | **Wrong** — bypasses proxy → “Failed to fetch”. UI may show a dev warning; unset `VITE_ORIGENLAB_API_BASE_URL` and **restart** `npm run dev`. |
 | **`npm run dev`** | Set to `http://127.0.0.1:8001` | Works but unnecessary; prefer unset + proxy. |
 | **`npm run build`** / production | **Required** | Set to your deployed `apps/api` host (e.g. `https://api.example.com`), no trailing slash |
 
@@ -98,13 +98,23 @@ SMOKE_BASE_URL=http://127.0.0.1:5173 npm run smoke:proxy
 
 After postgres matrix testing, **return to SQLite** — see handoff **Mode 3** (stop postgres `uvicorn`, unset `ORIGENLAB_API_BACKEND` / postgres URLs, restart API on :8001).
 
+## Gmail → React operator refresh chain
+
+Full chain (Gmail ingest → mirror sync → API checks → React Today): email-pipeline RUNBOOK anchor [`m-eprun-dashboard-gmail-to-react`](../email-pipeline/docs/RUNBOOK.md#m-eprun-dashboard-gmail-to-react).
+
+After ingest, run `sync_dashboard_postgres_mirror.py`, then verify mirror freshness:
+
+- Preferred: `GET /mirror/meta/dashboard-sync` and `GET /mirror/classification/summary` on **`apps/api` :8001**
+- Mirror reporting uses **`GET /mirror/*`** on **:8001** only (not used by Dashboard v1 Today).
+
+Use unset `VITE_ORIGENLAB_API_BASE_URL` + Vite proxy to **:8001** for local dev.
+
 ## Backend matrix validation
 
 Prove Dashboard v1 against **`apps/api`** sqlite and postgres mirror backends: [`docs/BACKEND_MATRIX_VALIDATION.md`](docs/BACKEND_MATRIX_VALIDATION.md).
 
 - **Active API:** `apps/api` on port **8001** (Dashboard v1 routes).
-- **Legacy API:** `apps/email-pipeline` FastAPI on **8000** — deprecated for Postgres mirror reporting; kept during API-3 cutover.
-- **Mirror smoke:** `npm run smoke:mirror` — GET `/mirror/*` on **:8001** (`apps/api`). **Legacy smoke:** `npm run smoke:legacy` (deprecated :8000; not in v1 freeze CI).
+- **Mirror smoke:** `npm run smoke:mirror` — GET `/mirror/*` on **:8001** (`apps/api`). Legacy email-pipeline HTTP API removed (API-3 Phase 6).
 
 ## Mounted code map
 

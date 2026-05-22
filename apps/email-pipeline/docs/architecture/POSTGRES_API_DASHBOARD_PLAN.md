@@ -1,6 +1,8 @@
 # PostgreSQL + FastAPI commercial dashboard — architecture plan
 
-**Status:** design (no production cutover)  
+> **Status: historical design document.** The **active** read-only HTTP API is [`apps/api`](../../../api/README.md) on port **8001** (`GET /mirror/*` for Postgres mirror reporting; operator routes for Dashboard Today). Legacy email-pipeline FastAPI on **:8000** (`apps/email-pipeline/src/origenlab_api`) was **removed** in API-3 Phase 6. **Current architecture:** [`docs/PROJECT_CONTEXT.md`](../../../../docs/PROJECT_CONTEXT.md) · [`apps/api/README.md`](../../../api/README.md) · [API-3 removal note](../../../api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md). Body text below may still name removed paths for design history.
+
+**Status:** historical design (no production cutover; superseded by apps/api)  
 **Date:** 2026-05-15  
 **Owner:** email-pipeline maintainers  
 **Audience:** backend / product engineering  
@@ -242,7 +244,7 @@ Versioned prefix: `/api/v1`. Auth: API key or OIDC (design now, implement in sli
    - `GET /outbound/batches`, `GET /outbound/batches/{id}`
    - `GET /outbound/readiness` (read-only assessment)
 4. OpenAPI docs at `/docs`.
-5. Docker Compose service **alongside** Streamlit (port 8000), shared env `ORIGENLAB_POSTGRES_URL`.
+5. Docker Compose service **alongside** Streamlit — **deprecated:** legacy Slice-1 on port **8000**; **preferred:** `apps/api` on port **8001** (`/mirror/*`), shared env `ORIGENLAB_POSTGRES_URL`.
 6. Tests: TestClient + Testcontainers Postgres (or pytest fixtures); **no** production DB.
 
 **Data prerequisite:** Run existing loaders on **scratch Postgres** (not production):
@@ -421,7 +423,7 @@ apps/email-pipeline/
 
 **Dependencies:** reuse `origenlab_email_pipeline.config.load_settings`, add `ORIGENLAB_POSTGRES_URL`, SQLAlchemy 2 async or psycopg pool (match existing `postgres` optional group).
 
-**Deployment:** second service in `docker-compose.yml` (port 8000), same `.env` as Streamlit.
+**Deployment (historical):** a second Compose service on port **8000** was the original Slice-1 target (removed in API-3 Phase 6). **Current operator guidance:** run **`apps/api` on :8001`** only for mirror reporting (`GET /mirror/*`) and Dashboard operator routes. Same `.env` as Streamlit (`ORIGENLAB_POSTGRES_URL`).
 
 ---
 

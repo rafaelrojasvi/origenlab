@@ -1,6 +1,8 @@
 # OrigenLab monorepo audit — Postgres, API, pipeline sprawl
 
-**Status:** generated audit (read-only inspection)  
+> **Historical audit** from before **`apps/api`** and API-3 completion. **`apps/api` now exists** and is the active read-only operator/mirror API on **:8001**. Do **not** treat this file as current architecture. See [`docs/PROJECT_CONTEXT.md`](../../../../docs/PROJECT_CONTEXT.md) and [`apps/api/README.md`](../../../api/README.md).
+
+**Status:** historical audit (read-only inspection)  
 **Date:** 2026-05-14  
 **Scope:** repository `rafaelRojasVi/origenlab` (local path `/home/rafael/dev/freelance/origenlab`)  
 **Rules followed:** no deletes, no refactors, no production behavior changes; claims cite paths or command output.

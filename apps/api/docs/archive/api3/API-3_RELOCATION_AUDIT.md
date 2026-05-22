@@ -85,7 +85,7 @@ uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8000 --reload
 
 | Consumer | Location | Legacy usage |
 |----------|----------|--------------|
-| **Streamlit API preview** | `apps/email-pipeline/src/origenlab_email_pipeline/streamlit_api_preview.py` → `apps/business_mart_app.py` | When `ORIGENLAB_API_BASE_URL` is set (default `http://127.0.0.1:8000`): `GET /health`, `/dashboard/summary?scope=canonical`, `/outbound/readiness` |
+| **Streamlit API preview** | `streamlit_api_preview.py` → `business_mart_app.py` | Default **`http://127.0.0.1:8001`** with `/mirror/*` paths; explicit `:8000` base still uses legacy paths (Phase 3A) |
 | **RUNBOOK curls** | `apps/email-pipeline/docs/RUNBOOK.md` | Postgres mirror validation: `/health`, `/dashboard/summary`, `/meta/dashboard-sync`, `/classification/summary`, `/commercial/purchase-events`, archive scope |
 | **`dashboard_postgres_sync.py` hints** | `apps/email-pipeline/src/origenlab_email_pipeline/dashboard_postgres_sync.py` | Post-sync operator messages with `curl` to `:8000/dashboard/summary` |
 
@@ -204,6 +204,7 @@ Until step 6, **keep** the legacy package and port **8000** documented in RUNBOO
 
 | Doc | Purpose |
 |-----|---------|
+| [API-3_PHASE4A_REFERENCE_AUDIT.md](./API-3_PHASE4A_REFERENCE_AUDIT.md) | Phase 4A grep audit + Phase 4B tasks |
 | [API-3_PHASE2_PARITY_CHECKLIST.md](./API-3_PHASE2_PARITY_CHECKLIST.md) | Phase 2 route matrix + smoke |
 | [../README.md](../README.md) | Active API run + import guard |
 | [../../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md](../../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md) | Dashboard v1/v2 freeze; legacy :8000 warning |
@@ -222,6 +223,44 @@ Until step 6, **keep** the legacy package and port **8000** documented in RUNBOO
 | Streamlit / RUNBOOK repointed to :8001 mirror | **Phase 3A** — docs/smokes prefer `/mirror/*`; :8000 kept deprecated |
 | Dashboard Today routes changed | **No** |
 | Write actions | **None** |
+
+---
+
+## Phase 3C legacy :8000 deprecation hardening
+
+| Item | Result |
+|------|--------|
+| Docs prefer :8001 `/mirror/*` | **Yes** — RUNBOOK, Phase 3C doc |
+| Legacy :8000 routes removed | **No** |
+| Legacy tree deleted | **No** — Phase 6 gate |
+| Deprecation mechanism | Response headers + startup log warning on legacy app |
+| `smoke:legacy` | **Retained** |
+| `smoke:mirror` | **Documented as preferred** |
+| Dashboard Today | **Unchanged** |
+
+See [API-3_PHASE3C_DEPRECATION.md](./API-3_PHASE3C_DEPRECATION.md).
+
+---
+
+## Phase 4A post-deprecation reference audit
+
+| Item | Result |
+|------|--------|
+| Grep audit | [API-3_PHASE4A_REFERENCE_AUDIT.md](./API-3_PHASE4A_REFERENCE_AUDIT.md) |
+| Zero `:8000` references | **Not proven** (~22 intentional deprecated refs remain) |
+| Dashboard Today runtime on `:8000` | **None** |
+| Delete `origenlab_api` tree | **No** — Phase 6 gate |
+
+---
+
+## Phase 3B live dual-server parity
+
+| Item | Result |
+|------|--------|
+| Disposable DB | `127.0.0.1:5433/origenlab_api3_parity_test` |
+| 12 route pairs (list endpoints) | Status + JSON keys **match** |
+| `run_mirror_dual_server_parity.sh` | Automated bootstrap + smoke |
+| Legacy tree deleted | **No** |
 
 ---
 

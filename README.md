@@ -1,11 +1,9 @@
 # OrigenLab
 
 <p align="center">
-  Commercial engineering monorepo for OrigenLab with two core products:
+  Commercial engineering monorepo for OrigenLab — four apps:
   <br /><br />
-  a public marketing website built with Astro
-  <br />
-  an email intelligence and outreach operations pipeline built with Python
+  public website (Astro) · email pipeline (Python/SQLite) · operator API (FastAPI) · operator dashboard (React)
 </p>
 
 <p align="center">
@@ -17,10 +15,20 @@
 
 ## Overview
 
-This repository contains two production-oriented workstreams:
+Four applications share this monorepo:
 
-- **Website (`apps/web`)**: Astro-based marketing site for quotation and product discovery.
-- **Email pipeline (`apps/email-pipeline`)**: Python workflows for ingestion, reporting, and human-reviewed outreach assistance.
+| App | Role |
+|-----|------|
+| **`apps/web`** | Public marketing site (Astro) |
+| **`apps/email-pipeline`** | Gmail ingest, SQLite operational truth, outbound safety, reports, mutation scripts |
+| **`apps/api`** | Read-only operator HTTP API on **:8001** (Today routes + `GET /mirror/*` Postgres reporting) |
+| **`apps/dashboard`** | Read-only operator UI on **:5173** (**Today** page → `apps/api` only) |
+
+**Architecture (canonical):** [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md) — do not duplicate full topology here.
+
+**Operator dashboard + API:** [`apps/api/README.md`](apps/api/README.md) · [`apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md)
+
+Send/outreach truth stays in **SQLite + email-pipeline scripts**, not in Postgres mirror or dashboard reads.
 
 ## Scope and limitations
 
@@ -33,7 +41,9 @@ This repository contains two production-oriented workstreams:
 | App | Path | Stack |
 |-----|------|-------|
 | Website | [`apps/web/`](apps/web/) | Astro 5, Tailwind 4, TypeScript, Node 20 |
-| Email pipeline | [`apps/email-pipeline/`](apps/email-pipeline/) | Python 3.12, `uv`, SQLite, Streamlit, optional CUDA ML |
+| Email pipeline | [`apps/email-pipeline/`](apps/email-pipeline/) | Python 3.12, `uv`, SQLite, Streamlit, optional CUDA ML (**no FastAPI**) |
+| Operator API | [`apps/api/`](apps/api/) | FastAPI :8001 — operator routes + `GET /mirror/*` Postgres reporting |
+| Dashboard | [`apps/dashboard/`](apps/dashboard/) | React + Vite — read-only operator **Today** UI |
 
 ## Quick demo
 
@@ -68,9 +78,12 @@ Pipeline-specific handling is documented at [`apps/email-pipeline/docs/SECURITY.
 
 ## Documentation
 
-- Monorepo context: [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md)
-- Web app docs: [`apps/web/docs/README.md`](apps/web/docs/README.md)
-- Email pipeline docs: [`apps/email-pipeline/docs/README.md`](apps/email-pipeline/docs/README.md)
+- Monorepo architecture: [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md)
+- Documentation map: [`docs/DOCUMENTATION_MAP.md`](docs/DOCUMENTATION_MAP.md)
+- Web app: [`apps/web/docs/README.md`](apps/web/docs/README.md)
+- Email pipeline: [`apps/email-pipeline/docs/README.md`](apps/email-pipeline/docs/README.md)
+- Operator API: [`apps/api/README.md`](apps/api/README.md)
+- Dashboard (freeze handoff): [`apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md)
 - Contribution guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - Security policy: [`SECURITY.md`](SECURITY.md)
 

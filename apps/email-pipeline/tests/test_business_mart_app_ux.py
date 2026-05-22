@@ -49,7 +49,7 @@ def test_inicio_uses_canonical_operational_kpis_not_full_mart_headline() -> None
 
 
 def test_sidebar_api_preview_appears_with_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000")
+    monkeypatch.setenv("ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8001")
     from origenlab_email_pipeline.streamlit_api_preview import primary_sidebar_pages
 
     assert "API preview" in primary_sidebar_pages(["Inicio"])

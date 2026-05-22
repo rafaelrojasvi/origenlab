@@ -30,20 +30,22 @@ def test_api_preview_disabled_without_env(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_api_preview_enabled_with_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000")
+    monkeypatch.setenv("ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8001")
     assert api_preview_enabled() is True
     pages = primary_sidebar_pages(["Inicio"])
     assert pages[-1] == "API preview"
 
 
 def test_normalize_and_build_api_url() -> None:
-    assert normalize_api_base_url("127.0.0.1:8000/") == "http://127.0.0.1:8000"
-    assert build_api_url("http://127.0.0.1:8000", "/health") == "http://127.0.0.1:8000/health"
+    assert normalize_api_base_url("127.0.0.1:8001/") == "http://127.0.0.1:8001"
+    assert build_api_url("http://127.0.0.1:8001", "/mirror/health/dependencies") == (
+        "http://127.0.0.1:8001/mirror/health/dependencies"
+    )
 
 
 def test_resolve_api_base_url_prefers_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ORIGENLAB_API_BASE_URL", "http://env:9000")
-    assert resolve_api_base_url("http://override:8000") == "http://override:8000"
+    assert resolve_api_base_url("http://override:8001") == "http://override:8001"
     assert resolve_api_base_url() == "http://env:9000"
 
 
@@ -59,24 +61,40 @@ def test_api_preview_paths_mirror_on_8001() -> None:
     assert paths["readiness"] == "/mirror/outbound/readiness"
 
 
-def test_api_preview_paths_legacy_on_8000() -> None:
-    paths = api_preview_paths("http://127.0.0.1:8000")
-    assert paths["summary"] == "/dashboard/summary?scope=canonical"
-    assert paths["readiness"] == "/outbound/readiness"
+def test_default_base_uses_mirror_paths_only() -> None:
+    paths = api_preview_paths(DEFAULT_API_BASE_URL)
+    assert DEFAULT_API_BASE_URL.endswith(":8001")
+    assert paths["health"] == "/mirror/health/dependencies"
+    assert paths["summary"] == "/mirror/dashboard/summary?scope=canonical"
+    assert paths["readiness"] == "/mirror/outbound/readiness"
+    for key in ("health", "summary", "readiness"):
+        assert paths[key].startswith("/mirror/")
+
+
+def test_explicit_8001_env_resolves_mirror_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8001")
+    base = resolve_api_base_url()
+    paths = api_preview_paths(base)
+    assert base.endswith(":8001")
+    assert paths["summary"].startswith("/mirror/")
 
 
 def test_fetch_json_success() -> None:
     payload = {"status": "ok", "read_only": True}
 
     def fake_open(req, timeout=10.0):
-        assert req.full_url.endswith("/health")
+        assert "/mirror/health/dependencies" in req.full_url
         resp = MagicMock()
         resp.read.return_value = json.dumps(payload).encode("utf-8")
         resp.__enter__ = lambda s: s
         resp.__exit__ = MagicMock(return_value=False)
         return resp
 
-    data, err = fetch_json("http://127.0.0.1:8000", "/health", opener=fake_open)
+    data, err = fetch_json(
+        "http://127.0.0.1:8001",
+        "/mirror/health/dependencies",
+        opener=fake_open,
+    )
     assert err is None
     assert data == payload
 
@@ -87,7 +105,7 @@ def test_fetch_json_http_error() -> None:
     def fake_open(req, timeout=10.0):
         raise HTTPError(req.full_url, 503, "Service Unavailable", hdrs=None, fp=BytesIO(b""))
 
-    data, err = fetch_json("http://127.0.0.1:8000", "/health", opener=fake_open)
+    data, err = fetch_json("http://127.0.0.1:8001", "/mirror/health/dependencies", opener=fake_open)
     assert data is None
     assert err is not None and "503" in err
 

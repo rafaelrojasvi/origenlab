@@ -1,11 +1,35 @@
 # Contributing to OrigenLab
 
-This repository is a **monorepo**:
+This repository is a **monorepo** with four apps:
 
 - [`apps/web/`](apps/web/) — Astro marketing site (Node.js).
 - [`apps/email-pipeline/`](apps/email-pipeline/) — Python email/leads/reporting pipeline (`uv`, `pytest`, optional ML groups).
+- [`apps/api/`](apps/api/) — read-only operator FastAPI on **:8001** (GET only).
+- [`apps/dashboard/`](apps/dashboard/) — read-only operator React UI on **:5173** (**Today** → `apps/api`).
 
 Start with the map: [`docs/DOCUMENTATION_MAP.md`](docs/DOCUMENTATION_MAP.md) and monorepo context: [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md).
+
+## Operator stack (read-only)
+
+| Component | Port / default | Notes |
+|-----------|----------------|-------|
+| **`apps/api`** | **8001** | Active HTTP API. Legacy email-pipeline API on **:8000** was **removed** (API-3 Phase 6). |
+| **`apps/dashboard`** | **5173** | Active UI; no write/send from the browser. |
+| **SQLite** | `ORIGENLAB_SQLITE_PATH` | Default backend for API + pipeline; **send/outreach truth**. |
+| **Postgres mirror** | optional | Read-only reporting mirror; sync via email-pipeline scripts only when explicitly approved. |
+| **Supabase** | — | **Not implemented.** If added later, treat as hosted Postgres mirror unless a formal source-of-truth migration is approved. |
+
+Agent pointers: root [`AGENTS.md`](AGENTS.md), [`apps/api/AGENTS.md`](apps/api/AGENTS.md), [`apps/dashboard/AGENTS.md`](apps/dashboard/AGENTS.md).
+
+## Safe validation (casual testing)
+
+For dashboard/API checks without production risk:
+
+- Follow [`apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md) — Mode 1 (SQLite) or Mode 2 (**disposable** Postgres on e.g. `:5433`).
+- API smoke: `cd apps/api && uv run python scripts/dashboard_v1_http_smoke.py --expect-backend sqlite`
+- Dashboard smoke: `cd apps/dashboard && npm run smoke:sqlite` (and `npm run smoke:contacts` when rows have email)
+
+**Do not** use casual validation to mutate **Gmail**, **production SQLite**, or **production/scratch Postgres**. Mirror sync and ingest/send scripts live in **email-pipeline** and require explicit approval — see [`apps/email-pipeline/docs/CRUD_SAFETY.md`](apps/email-pipeline/docs/CRUD_SAFETY.md).
 
 ## Local setup
 

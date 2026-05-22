@@ -257,7 +257,7 @@ def test_summary_includes_canonical_and_archive_counts() -> None:
     assert "27198" in text
     assert "mirror/dashboard/summary" in text
     assert "8001" in text
-    assert "8000/dashboard/summary" in text
+    assert "8000/dashboard/summary" not in text
 
 
 def test_write_sync_watermark_inserts_run_and_kv() -> None:

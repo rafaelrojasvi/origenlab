@@ -2,17 +2,21 @@
 
 Status: canonical  
 Owner: project-maintainers  
-Last reviewed: 2026-04-13
+Last reviewed: 2026-05-22
 
 This is the primary monorepo context document for coding agents and contributors.
 
 <a id="m-proj-what"></a>
 ## What this repo is
 
-OrigenLab monorepo with two active applications:
+OrigenLab monorepo with these active applications:
 
 - [`apps/web`](../apps/web/): public marketing website (Astro, static deployment).
-- [`apps/email-pipeline`](../apps/email-pipeline/): email archive ingestion, enrichment, and reporting pipeline (Python + uv), including **human-in-the-loop drafting assistance** for OrigenLab / Labdelivery-style commercial email (Tatiana copilot — eval and pilot workflows; **not** an autonomous sender).
+- [`apps/email-pipeline`](../apps/email-pipeline/): email archive ingestion, enrichment, and reporting pipeline (Python + uv, **no FastAPI**), including **human-in-the-loop drafting assistance** for OrigenLab / Labdelivery-style commercial email (Tatiana copilot — eval and pilot workflows; **not** an autonomous sender).
+- [`apps/api`](../apps/api/): **only** operator HTTP API (FastAPI on **:8001**) — Dashboard Today routes plus Postgres mirror reporting under **`GET /mirror/*`**.
+- [`apps/dashboard`](../apps/dashboard/): read-only operator React UI (**Today** page) — calls `apps/api` operator routes only, not `/mirror/*`.
+
+**Supabase:** not currently implemented. If introduced later, treat it as a **hosted Postgres read mirror** for dashboard/reporting unless a formal source-of-truth migration is explicitly approved. It does not replace SQLite for send/outreach safety.
 
 <a id="m-proj-business"></a>
 ## Business goal
@@ -35,6 +39,8 @@ Support OrigenLab's commercial operation by:
 2. Choose app domain:
    - Web → [apps/web/docs/APP_CONTEXT.md](../apps/web/docs/APP_CONTEXT.md)
    - Email pipeline → [apps/email-pipeline/docs/APP_CONTEXT.md](../apps/email-pipeline/docs/APP_CONTEXT.md)
+   - Operator API + mirror → [apps/api/README.md](../apps/api/README.md)
+   - Dashboard → [apps/dashboard/README.md](../apps/dashboard/README.md)
 3. Open only the canonical doc for your task type (under that app’s `docs/`, e.g. [apps/web/docs/RUNBOOK.md](../apps/web/docs/RUNBOOK.md#m-webrun-local) or [apps/email-pipeline/docs/RUNBOOK.md](../apps/email-pipeline/docs/RUNBOOK.md#m-eprun-path)):
    - run/procedure → `RUNBOOK.md` (in that app’s `docs/`)
    - architecture/data flow → `ARCHITECTURE.md`
