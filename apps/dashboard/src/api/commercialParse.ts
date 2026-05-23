@@ -23,6 +23,10 @@ const WARM_CATEGORIES = new Set<string>([
   "waiting_client",
   "bounce",
   "opportunity",
+  "auto_reply",
+  "vendor_logistics",
+  "payment_admin",
+  "payment_received",
 ]);
 
 const WARM_STATUSES = new Set<string>(["new", "open", "waiting", "quoted", "problem"]);

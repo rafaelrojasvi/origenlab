@@ -84,7 +84,7 @@ def test_experimental_parked_doc_exists_and_covers_parked_areas() -> None:
     body = _EXPERIMENTAL_PARKED_DOC.read_text(encoding="utf-8").lower()
     for needle in (
         "postgres",
-        "fastapi",
+        "apps/api",
         "react",
         "tatiana",
         "scripts/ml",

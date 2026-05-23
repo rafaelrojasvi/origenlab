@@ -4,7 +4,10 @@ import type { WarmCaseCategory, WarmCaseItem, WarmCaseStatus } from "../../api/c
 import { formatTableCountLabel } from "../../lib/clientTableView";
 import { warmCasesSourceLabel } from "../../lib/dataSourceLabel";
 import {
+  clearWarmCaseTableFilters,
   DEFAULT_WARM_FILTERS,
+  WARM_VIEW_PRESET_LABELS,
+  WARM_VIEW_PRESET_ORDER,
   applyWarmCaseTableView,
   uniqueWarmCategories,
   uniqueWarmStatuses,
@@ -17,7 +20,6 @@ import { truncate } from "../../lib/safeText";
 import { TokenLabel } from "../operator/TokenLabel";
 import { ContactEmailButton } from "./ContactEmailButton";
 import { CopyTextButton } from "./CopyTextButton";
-import { MailtoEmailLink } from "./MailtoEmailLink";
 import { TableListToolbar, ToolbarField, toolbarInputClass, toolbarSelectClass } from "./TableListToolbar";
 import { TableSection } from "./TableSection";
 
@@ -55,6 +57,37 @@ export function WarmCasesTable({
   const filtersActive = warmFiltersActive(filters);
   const loadedCount = items.length;
   const apiCount = meta?.count ?? loadedCount;
+  const presetLabel = WARM_VIEW_PRESET_LABELS[filters.preset];
+
+  const presetChips = (
+    <div
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-border)] bg-slate-50/80 px-3 py-3"
+      role="group"
+      aria-label="Warm queue view preset"
+    >
+      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+        Vista
+      </span>
+      {WARM_VIEW_PRESET_ORDER.map((preset) => {
+        const active = filters.preset === preset;
+        return (
+          <button
+            key={preset}
+            type="button"
+            aria-pressed={active}
+            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+              active
+                ? "bg-brand-600 text-white shadow-sm"
+                : "border border-[var(--color-border)] bg-white text-slate-700 hover:bg-slate-100"
+            }`}
+            onClick={() => setFilters((f) => ({ ...f, preset }))}
+          >
+            {WARM_VIEW_PRESET_LABELS[preset]}
+          </button>
+        );
+      })}
+    </div>
+  );
 
   const toolbar = (
     <TableListToolbar>
@@ -135,7 +168,9 @@ export function WarmCasesTable({
         <button
           type="button"
           className="rounded-md border border-[var(--color-border)] bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-          onClick={() => setFilters(DEFAULT_WARM_FILTERS)}
+          onClick={() => setFilters(clearWarmCaseTableFilters())}
+          aria-label="Clear search and dropdown filters; reset view to Clientes reales"
+          title="Clears search, status, and category filters and resets the view preset to Clientes reales."
         >
           Clear filters
         </button>
@@ -162,7 +197,14 @@ export function WarmCasesTable({
             ? "Reduced mode: enrichment or data unavailable."
             : undefined
       }
-      toolbar={loadedCount > 0 ? toolbar : undefined}
+      toolbar={
+        loadedCount > 0 ? (
+          <div className="space-y-3">
+            {presetChips}
+            {toolbar}
+          </div>
+        ) : undefined
+      }
     >
       <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm">
         <table className="min-w-full text-left text-sm">
@@ -183,9 +225,8 @@ export function WarmCasesTable({
               <tr key={row.case_id || `warm-${index}`} className="align-top hover:bg-slate-50/80">
                 <td className="px-3 py-2">
                   <ContactEmailButton email={row.contact_email} onSelect={onContactSelect} />
-                  <div className="mt-1 flex flex-wrap gap-2">
+                  <div className="mt-1">
                     <CopyTextButton label="Copy email" value={row.contact_email} />
-                    <MailtoEmailLink email={row.contact_email} />
                   </div>
                 </td>
                 <td className="px-3 py-2 text-slate-800">{row.account_name || "—"}</td>
@@ -234,6 +275,7 @@ export function WarmCasesTable({
             apiTotal: apiCount,
             filtered: filtersActive,
             noun: "cases",
+            presetLabel,
           })}
         </p>
       </div>

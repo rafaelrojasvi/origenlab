@@ -141,6 +141,17 @@ describe("Dashboard-2 safety (mounted Today)", () => {
     expect(operatorClientSource).toContain("parseEquipmentOpportunitiesResponse");
   });
 
+  it("warm cases table does not mount mailto composer links", () => {
+    const warmTableSource = import.meta.glob("../components/commercial/WarmCasesTable.tsx", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    })["../components/commercial/WarmCasesTable.tsx"] as string;
+    expect(warmTableSource).not.toContain("MailtoEmailLink");
+    expect(warmTableSource).toContain("CopyTextButton");
+    expect(warmTableSource).toContain("ContactEmailButton");
+  });
+
   it("mailto helper is email-only", () => {
     expect(mailtoSource).toContain("buildMailtoHref");
     expect(mailtoSource).toMatch(/mailto:\$\{trimmed\}/);

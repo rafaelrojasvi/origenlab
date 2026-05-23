@@ -81,7 +81,7 @@ Apply runs append one row per retired lead to `lead_upstream_reconcile_log` (`dr
 
 ## One-command operational stack
 
-[`run_leads_operational_stack.sh`](../scripts/leads/run_leads_operational_stack.sh) runs this order (fail-fast before publish gate; manifest is always written after gate when reached):
+[`run_leads_operational_stack.sh`](../../scripts/leads/run_leads_operational_stack.sh) runs this order (fail-fast before publish gate; manifest is always written after gate when reached):
 
 0. Generate **`run_id`** (UUID) → exports `ORIGENLAB_LEADS_OPERATIONAL_RUN_ID` for pack + gate + manifest
 1. Optional file ingest (`LEADS_*_FILE`, same semantics as `run_leads_pipeline.sh`)
@@ -94,18 +94,18 @@ Apply runs append one row per retired lead to `lead_upstream_reconcile_log` (`dr
 8. Weekly focus — `run_weekly_focus.py` (omit with `--skip-focus`)
 9. Client pack — `build_leads_client_pack.py` (omit with `--skip-pack`)
 10. Publish gate — `publish_gate.py` (omit with `--skip-gate`)
-11. Run manifest — `write_operational_stack_provenance.py` → [`reports/out/active/operational_stack_last_run.json`](../reports/out/README.md) and `operational_run_manifests/<run_id>.json` (includes `publish_gate.executed` / `passed` / `exit_code`; **still written if gate fails**)
+11. Run manifest — `write_operational_stack_provenance.py` → [`reports/out/active/operational_stack_last_run.json`](../../reports/out/README.md) and `operational_run_manifests/<run_id>.json` (includes `publish_gate.executed` / `passed` / `exit_code`; **still written if gate fails**)
 
 ```bash
 bash scripts/leads/run_leads_operational_stack.sh --skip-fetch
 ```
 
-- **Mart:** this script does **not** build `organization_master` / `contact_master`. Run [`scripts/pipeline/run_aligned_stack.sh`](../pipeline/run_aligned_stack.sh) (or at least `scripts/mart/build_business_mart.py`) first when you need archive matches.
+- **Mart:** this script does **not** build `organization_master` / `contact_master`. Run [`scripts/pipeline/run_aligned_stack.sh`](../../scripts/pipeline/run_aligned_stack.sh) (or at least `scripts/mart/build_business_mart.py`) first when you need archive matches.
 - **`--reconcile-dry-run`:** affects **only** `reconcile_lead_upstream.py` (no soft-retire writes from that step). Normalize, score, match, exports, weekly focus, and client pack **still write** the DB and/or files — not a read-only stack.
 - **`--skip-gate`:** the script exits successfully but **does not** run publish validation; the final banner states the run is **not publish-safe by default**. Run `publish_gate.py` before external handoff of the pack or operational CSVs.
 - **Other flags:** `--skip-fetch`, `--skip-pack`, `--skip-focus`, `--db /path/to/emails.sqlite` (sets `ORIGENLAB_SQLITE_PATH` for children and passes `--db` into `publish_gate`).
 - **Ingest env:** same as `run_leads_pipeline.sh` (`LEADS_*_FILE`, `LEADS_EXPORT_PATH`, …).
-- **Provenance / run_id:** [`build_leads_client_pack.py`](../scripts/reports/build_leads_client_pack.py) adds `provenance` to `summary.json` (`operational_run_id` when run inside the stack; **`publish_gate_validated_this_artifact` is always false** — gate runs after pack). Same `run_id` appears in the manifest and scorecard when the stack exports the env var. See [REPORTING.md § QA](../REPORTING.md#m-eprep-leads-qa).
+- **Provenance / run_id:** [`build_leads_client_pack.py`](../../scripts/reports/build_leads_client_pack.py) adds `provenance` to `summary.json` (`operational_run_id` when run inside the stack; **`publish_gate_validated_this_artifact` is always false** — gate runs after pack). Same `run_id` appears in the manifest and scorecard when the stack exports the env var. See [REPORTING.md § QA](../REPORTING.md#m-eprep-leads-qa).
 
 For fetch-only + shorter export path without pack/gate, keep using `run_leads_pipeline.sh`.
 

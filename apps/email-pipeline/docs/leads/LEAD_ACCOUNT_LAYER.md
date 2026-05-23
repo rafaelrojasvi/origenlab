@@ -16,7 +16,7 @@ Schema source of truth: `src/origenlab_email_pipeline/lead_accounts_schema.py` (
 
 ## Design notes
 
-- **Idempotent full rebuild:** [`build_lead_account_rollup.py`](../scripts/leads/advanced/build_lead_account_rollup.py) **deletes** rollup rows and rebuilds from `lead_master`. It does **not** delete `external_leads_raw`, `lead_master`, or mart tables. Compatibility wrappers live at `scripts/build_lead_account_rollup.py` (same behavior).
+- **Idempotent full rebuild:** [`build_lead_account_rollup.py`](../../scripts/leads/advanced/build_lead_account_rollup.py) **deletes** rollup rows and rebuilds from `lead_master`. It does **not** delete `external_leads_raw`, `lead_master`, or mart tables. Compatibility wrappers live at `scripts/build_lead_account_rollup.py` (same behavior).
 - **Dedupe key:** `account_dedupe_key(normalized_name, primary_domain)` → stored as `account_dedupe_key` (unique).
 - **Junk names:** Rows with junk `org_name` and **no** usable domain are **skipped** (no membership). Junk + domain → `domain_only_fallback` + `quality_status=needs_review`.
 - **Overrides:** Insert rows into `lead_account_overrides` with `override_type` in (`remap_raw_name`, `merge`, `manual`), `is_active=1`, and `target_account_name` (and optional `normalized_source_value` / `source_value`).

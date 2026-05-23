@@ -1,0 +1,2 @@
+account,contact_name,contact_email,subject,latest_date,product_line,warm_signal,current_status,recommended_next_action,priority,owner_note,gmail_search_terms,tender_codes,source_type,ab_queue,suppression_flags
+Fixture Account,,,Fixture subject,01/01/2027,centrifuge,Fixture signal,needs_manual_contact_research,Fixture action,high,fixture,FIXTURE-1,FIXTURE-1,equipment_first_operator,B,

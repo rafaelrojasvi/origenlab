@@ -1201,7 +1201,10 @@ api = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 dev = [
+    { name = "alembic" },
+    { name = "psycopg", extra = ["binary"] },
     { name = "pytest" },
+    { name = "sqlalchemy" },
 ]
 gmail = [
     { name = "google-auth" },
@@ -1255,7 +1258,12 @@ api = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
-dev = [{ name = "pytest", specifier = ">=8" }]
+dev = [
+    { name = "alembic", specifier = ">=1.13" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
+]
 gmail = [
     { name = "google-auth", specifier = ">=2.29" },
     { name = "google-auth-oauthlib", specifier = ">=1.2" },

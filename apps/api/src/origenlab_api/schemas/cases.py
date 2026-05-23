@@ -14,6 +14,9 @@ WarmCaseCategory = Literal[
     "waiting_client",
     "bounce",
     "opportunity",
+    "auto_reply",
+    "vendor_logistics",
+    "payment_admin",
 ]
 
 WarmCaseStatus = Literal["new", "open", "waiting", "quoted", "problem"]
@@ -27,6 +30,9 @@ WARM_CASE_CATEGORIES: frozenset[str] = frozenset(
         "waiting_client",
         "bounce",
         "opportunity",
+        "auto_reply",
+        "vendor_logistics",
+        "payment_admin",
     }
 )
 

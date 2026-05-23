@@ -3,6 +3,7 @@ import type { WarmCaseItem } from "../api/commercialTypes";
 import {
   DEFAULT_WARM_FILTERS,
   applyWarmCaseTableView,
+  clearWarmCaseTableFilters,
   filterWarmCases,
   sortWarmCases,
   warmCaseSearchHaystack,
@@ -46,7 +47,11 @@ describe("warmCaseTableView", () => {
   });
 
   it("filters by search text", () => {
-    const filtered = filterWarmCases(rows, { ...DEFAULT_WARM_FILTERS, search: "supplier" });
+    const filtered = filterWarmCases(rows, {
+      ...DEFAULT_WARM_FILTERS,
+      preset: "todo",
+      search: "supplier",
+    });
     expect(filtered).toHaveLength(1);
     expect(filtered[0].contact_email).toBe("vendor@supplier.com");
   });
@@ -54,6 +59,7 @@ describe("warmCaseTableView", () => {
   it("filters by status and category", () => {
     const filtered = filterWarmCases(rows, {
       ...DEFAULT_WARM_FILTERS,
+      preset: "todo",
       status: "open",
       category: "client_reply",
     });
@@ -76,6 +82,34 @@ describe("warmCaseTableView", () => {
     expect(out[0].contact_email).toBe("buyer@acme.cl");
   });
 
+  it("hides internal contacts by default in DEFAULT_WARM_FILTERS", () => {
+    const withInternal: WarmCaseItem[] = [
+      ...rows,
+      {
+        ...rows[0],
+        case_id: "internal",
+        contact_email: "contacto@origenlab.cl",
+      },
+    ];
+    const hidden = applyWarmCaseTableView(withInternal, DEFAULT_WARM_FILTERS);
+    expect(hidden.map((r) => r.contact_email)).not.toContain("contacto@origenlab.cl");
+    expect(hidden.map((r) => r.contact_email)).toContain("buyer@acme.cl");
+    expect(hidden.map((r) => r.contact_email)).not.toContain("vendor@supplier.com");
+  });
+
+  it("default preset Clientes reales excludes supplier_reply", () => {
+    const out = applyWarmCaseTableView(rows, DEFAULT_WARM_FILTERS);
+    expect(out).toHaveLength(1);
+    expect(out[0].contact_email).toBe("buyer@acme.cl");
+  });
+
+  it("clearWarmCaseTableFilters resets to Clientes reales defaults", () => {
+    const cleared = clearWarmCaseTableFilters();
+    expect(cleared).toEqual(DEFAULT_WARM_FILTERS);
+    expect(cleared.preset).toBe("clientes_reales");
+    expect(cleared.hideInternalContacts).toBe(true);
+  });
+
   it("hides internal origenlab and labdelivery contacts when enabled", () => {
     const withInternal: WarmCaseItem[] = [
       ...rows,
@@ -87,6 +121,7 @@ describe("warmCaseTableView", () => {
     ];
     const hidden = filterWarmCases(withInternal, {
       ...DEFAULT_WARM_FILTERS,
+      preset: "todo",
       hideInternalContacts: true,
     });
     expect(hidden.map((r) => r.contact_email)).not.toContain("contacto@origenlab.cl");

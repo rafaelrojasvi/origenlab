@@ -1,0 +1,2 @@
+priority_rank,codigo_licitacion,buyer,region,close_date,equipment_category,item_description,next_action,contact_status,safe_channel,supplier_needed,supplier_contact,gmail_prior_thread,outreach_state,operator_note
+1,FIXTURE-1,Fixture Buyer,Region,01/01/2027,centrifuge,Fixture item,quote_now,no_verified_buyer_email,mercado_publico_bid,yes,Fixture supplier,none,n/a_tender_account,fixture

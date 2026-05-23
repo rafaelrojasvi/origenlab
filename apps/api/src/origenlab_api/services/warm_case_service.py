@@ -25,4 +25,7 @@ def build_warm_cases_response(
         positive_signal_only=positive_signal_only,
         include_noise=include_noise,
     )
-    return WarmCasesResponse(meta=meta, items=items)
+    return WarmCasesResponse(
+        meta=meta.model_copy(update={"count": len(items)}),
+        items=items,
+    )

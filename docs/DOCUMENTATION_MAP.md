@@ -61,7 +61,7 @@ Historical API-3 migration notes (legacy `:8000` removal): [apps/api/docs/archiv
 - [email-setup.md](../apps/web/docs/email-setup.md) → canonical email operations.
 - [security-audit-v1.md](../apps/web/docs/security-audit-v1.md) → canonical baseline audit.
 - [company-scope.md](../apps/web/docs/company-scope.md) → canonical human-facing business brief; **should match** [`apps/web/src/data/`](../apps/web/src/data/) (manually maintained; not an automated sync).
-- [floating-chat-widget-notes.md](../apps/web/docs/floating-chat-widget-notes.md) → canonical feature implementation notes.
+- Live chat (Tidio in `Layout.astro`; legacy FloatingChat removed) → [stage-4 web audit](../apps/web/docs/audits/stage-4-cleanup-hardening-2026-05-16.md) (historical; `floating-chat-widget-notes.md` not retained in-repo).
 - [compat/EMAIL_BUSINESS_SIGNAL_PROMPT.md](../apps/web/docs/compat/EMAIL_BUSINESS_SIGNAL_PROMPT.md) → archive/stub in web; canonical prompt in [AI_ML_IMPLEMENTED_SUMMARY.md](../apps/email-pipeline/docs/ml/AI_ML_IMPLEMENTED_SUMMARY.md) (appendix).
 - [compat/email-archive-locations.md](../apps/web/docs/compat/email-archive-locations.md) → archive/stub in web; canonical copy in [DATA_LOCATIONS.md](../apps/email-pipeline/docs/DATA_LOCATIONS.md#m-epdata-root).
 - [compat/legacy-mail-migration-notes.md](../apps/web/docs/compat/legacy-mail-migration-notes.md) → archive/stub in web; canonical copy in [LEGACY_MAIL_MIGRATION.md](../apps/email-pipeline/docs/ARCHIVE/research/LEGACY_MAIL_MIGRATION.md).

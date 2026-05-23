@@ -22,7 +22,7 @@ This index is the navigation hub for website documentation and agent context.
 
 ## Features
 
-- [`floating-chat-widget-notes.md`](floating-chat-widget-notes.md) (widget implementation notes)
+- **Live chat (Tidio):** active in `Layout.astro`. Legacy `FloatingChat.astro` was removed; historical context in [`audits/stage-4-cleanup-hardening-2026-05-16.md`](audits/stage-4-cleanup-hardening-2026-05-16.md) (`floating-chat-widget-notes.md` was not retained in-repo).
 
 ## Archive and cross-project stubs
 

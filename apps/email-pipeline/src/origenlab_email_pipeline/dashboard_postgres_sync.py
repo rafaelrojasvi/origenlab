@@ -513,6 +513,12 @@ def _raise_if_optional_loader_failed(loader_name: str, summary: dict[str, Any]) 
             return
         if loader_name == "equipment_opportunity_mirror" and warning == "empty_csv":
             return
+        if (
+            loader_name == "equipment_opportunity_mirror"
+            and summary.get("idempotent") == "canonical_source_already_loaded"
+            and summary.get("is_canonical") is True
+        ):
+            return
         raise RuntimeError(f"{loader_name} apply did not complete: {summary!r}")
 
 

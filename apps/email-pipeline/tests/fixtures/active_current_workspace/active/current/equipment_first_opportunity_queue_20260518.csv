@@ -1,0 +1,2 @@
+codigo_licitacion,buyer,region,close_date,title,item_description,equipment_category,fit_score,reason,next_action
+FIXTURE-1,Fixture Buyer,Region,01/01/2027,Fixture title,Fixture description,centrifuge,100,fixture,quote_now

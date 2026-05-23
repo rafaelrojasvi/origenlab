@@ -1,0 +1,29 @@
+# Disposable local Postgres for Dashboard Phase 0 mirror proof-of-life.
+#
+# Usage (from apps/email-pipeline):
+#   docker compose -f docker-compose.dashboard-postgres.yml up -d
+#   export ORIGENLAB_POSTGRES_URL='postgresql+psycopg://origenlab:origenlab@127.0.0.1:5433/origenlab_dashboard_local'
+#
+# Stop: docker compose -f docker-compose.dashboard-postgres.yml down
+# Data is stored in a named volume; remove with: docker compose -f docker-compose.dashboard-postgres.yml down -v
+
+services:
+  dashboard-postgres:
+    image: postgres:16
+    container_name: origenlab-dashboard-local-pg
+    environment:
+      POSTGRES_USER: origenlab
+      POSTGRES_PASSWORD: origenlab
+      POSTGRES_DB: origenlab_dashboard_local
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U origenlab -d origenlab_dashboard_local"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - origenlab_dashboard_local_pgdata:/var/lib/postgresql/data
+
+volumes:
+  origenlab_dashboard_local_pgdata:

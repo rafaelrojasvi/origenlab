@@ -44,9 +44,19 @@ API-0 is **read-only**. The HTTP app does not invoke and must not grow imports f
 
 CI: `tests/test_no_write_policy.py` checks GET-only routes and scans `apps/api/src/origenlab_api` for forbidden script references.
 
-## CORS
+## CORS and production mode
 
-**Dashboard v1 Today is wired** to this app on **:8001**. Local dev uses the **Vite proxy** (`apps/dashboard` → `:8001`), so the default operator loop does not require browser CORS. For direct browser→API access (e.g. `VITE_ORIGENLAB_API_BASE_URL`), use explicit allowed origins via `ORIGENLAB_API_CORS_ORIGINS` when CORS middleware is enabled — do not use `allow_origins=["*"]` in production.
+**Dashboard v1** uses the **Vite proxy** in dev (no CORS needed). Production static dashboard calls the API directly — set:
+
+| Variable | Production example |
+|----------|-------------------|
+| `ORIGENLAB_ENV` | `production` |
+| `ORIGENLAB_API_BACKEND` | `postgres` |
+| `ORIGENLAB_POSTGRES_URL` | Cloud Postgres DSN |
+| `ORIGENLAB_API_CORS_ORIGINS` | `https://dashboard.origenlab.cl` (no `*`) |
+| `ORIGENLAB_API_DISABLE_DOCS` | `true` (optional; docs also off when `ORIGENLAB_ENV=production`) |
+
+CORS middleware allows **GET, HEAD, OPTIONS** only. See [`../email-pipeline/docs/PHASE1_CLOUD_READ_PATH.md`](../email-pipeline/docs/PHASE1_CLOUD_READ_PATH.md) and [`.env.production.example`](.env.production.example).
 
 ## Endpoints
 

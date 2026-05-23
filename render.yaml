@@ -1,0 +1,52 @@
+# OrigenLab Today — Phase 1 cloud read path (manual mirror sync from local worker).
+# Apply: render blueprint launch or connect repo and use this spec.
+#
+# Prerequisites: operator runs sync_dashboard_mirror_to_cloud.sh from laptop/VPS
+# with ORIGENLAB_CLOUD_POSTGRES_URL (see docs/PHASE1_CLOUD_READ_PATH.md).
+
+databases:
+  - name: origenlab-dashboard-db
+    databaseName: origenlab_dashboard
+    user: origenlab
+    plan: basic-256mb
+    region: oregon
+
+services:
+  - type: web
+    name: origenlab-api
+    runtime: docker
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: ORIGENLAB_ENV
+        value: production
+      - key: ORIGENLAB_API_BACKEND
+        value: postgres
+      - key: ORIGENLAB_API_DISABLE_DOCS
+        value: "true"
+      - key: ORIGENLAB_API_CORS_ORIGINS
+        value: https://dashboard.origenlab.cl
+      - key: ORIGENLAB_POSTGRES_URL
+        fromDatabase:
+          name: origenlab-dashboard-db
+          property: connectionString
+
+  - type: web
+    name: origenlab-dashboard
+    runtime: static
+    buildCommand: >-
+      cd apps/dashboard &&
+      npm ci &&
+      VITE_ORIGENLAB_API_BASE_URL=https://api.origenlab.cl npm run build
+    staticPublishPath: apps/dashboard/dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_ORIGENLAB_API_BASE_URL
+        value: https://api.origenlab.cl
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -214,7 +214,7 @@ class _RecordingConn:
         return None
 
 
-def test_same_csv_apply_returns_source_already_loaded_without_commit(
+def test_same_csv_apply_idempotently_promotes_canonical_without_reload(
     active_workspace: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     conn = _RecordingConn(existing_source_id=1)
@@ -227,12 +227,47 @@ def test_same_csv_apply_returns_source_already_loaded_without_commit(
         reason="reapply",
     )
     assert summary["applied"] is False
-    assert summary["error"] == "source_already_loaded"
+    assert summary["idempotent"] == "canonical_source_already_loaded"
+    assert summary["is_canonical"] is True
     assert summary["existing_source_id"] == 1
-    assert summary["hint"] == mirror._SOURCE_ALREADY_LOADED_HINT
-    assert conn.committed is False
+    assert summary["source_id"] == 1
+    assert conn.committed is True
     sqls = [s for s, _ in conn.cur.statements]
+    assert any("SET is_canonical = TRUE" in s for s in sqls)
     assert not any("INSERT INTO commercial.equipment_opportunity_source" in s for s in sqls)
+
+
+def test_non_active_queue_source_already_loaded_still_errors(
+    active_workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    other_csv = active_workspace / "equipment_first_operator_queue_20260501.csv"
+    _write_queue_csv(
+        other_csv,
+        ["1,OLD-1,B,RM,,c,d,quote_now,x,s,y,,,,n\n"],
+    )
+    (active_workspace / "manifest.json").write_text(
+        json.dumps(
+            {
+                "campaign_mode": "equipment_first",
+                "canonical_files": ["equipment_first_operator_queue_20260518.csv"],
+                "stale_files": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    conn = _RecordingConn(existing_source_id=9)
+    monkeypatch.setattr(mirror, "psycopg", MagicMock(connect=lambda *a, **k: conn))
+
+    summary = mirror.apply_load(
+        "postgresql://u:p@127.0.0.1/db",
+        active_workspace,
+        csv_path=other_csv,
+        updated_by="op",
+        reason="stale reapply",
+    )
+    assert summary["applied"] is False
+    assert summary["error"] == "source_already_loaded"
+    assert conn.committed is False
 
 
 def test_replace_source_reuses_existing_source_id(
@@ -358,12 +393,21 @@ def test_apply_writes_source_and_rows(active_workspace: Path, monkeypatch: pytes
         reason="mirror test",
     )
     assert summary["applied"] is True
+    assert summary["is_canonical"] is True
     assert summary["source_id"] == 99
     assert summary["rows_inserted"] == 2
     assert conn.committed is True
     sqls = [s for s, _ in conn.cur.statements]
     assert any("INSERT INTO commercial.equipment_opportunity_source" in s for s in sqls)
     assert any("INSERT INTO commercial.equipment_opportunity" in s for s in sqls)
+
+
+def test_empty_manifest_still_promotes_resolved_active_queue(active_workspace: Path) -> None:
+    (active_workspace / "manifest.json").unlink()
+    manifest = {}
+    resolved = resolve_equipment_operator_queue_csv(active_workspace, manifest)
+    assert resolved is not None
+    assert mirror.should_promote_equipment_source_as_canonical(manifest, resolved, active_workspace)
 
 
 def test_canonical_flag_updates_on_apply(active_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -482,7 +526,8 @@ def test_apply_and_view_on_disposable_postgres(active_workspace: Path) -> None:
         updated_by="pytest",
         reason="reapply blocked",
     )
-    assert reapply["error"] == "source_already_loaded"
+    assert reapply.get("idempotent") == "canonical_source_already_loaded"
+    assert reapply["is_canonical"] is True
     assert reapply["existing_source_id"] == summary["source_id"]
 
     replaced = mirror.apply_load(

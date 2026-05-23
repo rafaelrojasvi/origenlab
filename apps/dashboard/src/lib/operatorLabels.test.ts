@@ -17,6 +17,14 @@ describe("operatorLabels", () => {
     );
   });
 
+  it("maps audit warm categories and next actions", () => {
+    expect(formatOperatorToken("vendor_logistics", "warm_category").label).toContain("Logística");
+    expect(formatOperatorToken("payment_admin", "warm_category").label).toContain("Pago");
+    expect(formatOperatorToken("auto_reply", "warm_category").label).toBe("Respuesta automática");
+    expect(formatOperatorToken("vendor_logistics", "warm_next_action").label).toContain("logística");
+    expect(formatOperatorToken("payment_admin", "warm_next_action").label).toContain("pago");
+  });
+
   it("falls back to spaced raw token for unknown values", () => {
     const out = formatOperatorToken("custom_token", "warm_status");
     expect(out.raw).toBe("custom_token");

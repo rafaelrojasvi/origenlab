@@ -5,12 +5,15 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from origenlab_api.backends.factory import validate_api_settings
+from origenlab_api.http_security import configure_http_security, openapi_docs_enabled
 from origenlab_api.mirror import router as mirror_router
 from origenlab_api.routes import cases, contacts, emails, health, operator, opportunities
 from origenlab_api.settings import get_settings
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
+    docs_on = openapi_docs_enabled(settings)
     app = FastAPI(
         title="OrigenLab API",
         description=(
@@ -20,10 +23,11 @@ def create_app() -> FastAPI:
             "email-pipeline scripts remain the mutation path."
         ),
         version="0.1.0",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url="/docs" if docs_on else None,
+        redoc_url="/redoc" if docs_on else None,
+        openapi_url="/openapi.json" if docs_on else None,
     )
+    configure_http_security(app, settings)
     app.include_router(health.router)
     app.include_router(operator.router)
     app.include_router(emails.router)
@@ -31,7 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(opportunities.router)
     app.include_router(mirror_router)
     app.include_router(contacts.router)
-    validate_api_settings(get_settings())
+    validate_api_settings(settings)
     return app
 
 

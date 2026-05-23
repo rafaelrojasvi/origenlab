@@ -48,18 +48,24 @@ def fetch_warm_cases(
 
     from origenlab_api.services.warm_case_classification import row_to_warm_case_item
 
-    category_needle = (category or "").strip().lower()
-    items: list[WarmCaseItem] = []
+    from origenlab_api.services.warm_case_output_normalize import normalize_warm_case_items
+
+    category_needle = (category or "").strip().lower() or None
+    raw_items: list[WarmCaseItem] = []
     for raw in result.rows:
-        item, cat = row_to_warm_case_item(
+        item, _cat = row_to_warm_case_item(
             raw,
             enrichment_available=result.enrichment_available,
             include_noise=include_noise,
         )
-        if category_needle and cat != category_needle:
-            continue
-        items.append(item)
-        if len(items) >= cap:
+        raw_items.append(item)
+        if len(raw_items) >= cap * 2:
             break
+
+    items = normalize_warm_case_items(
+        raw_items,
+        include_noise=include_noise,
+        category_filter=category_needle,
+    )[:cap]
 
     return items, result.enrichment_available, reduced_mode, note

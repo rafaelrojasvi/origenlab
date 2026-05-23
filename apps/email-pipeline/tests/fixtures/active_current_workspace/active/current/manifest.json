@@ -1,0 +1,52 @@
+{
+  "schema_version": "1",
+  "generated_at": "2026-05-19T12:00:00+00:00",
+  "workspace": "reports/out/active/current",
+  "runtime_truth": {
+    "primary_store": "sqlite",
+    "outbound_safety": "gmail_sent_ingested_into_emails_table",
+    "notes": "Postgres and apps/api mirror are optional — not daily send truth."
+  },
+  "postgres_status": "parked",
+  "api_status": "parked",
+  "campaign_mode": "equipment_first",
+  "current_operator_focus": "equipment-first tenders; CI fixture workspace",
+  "canonical_files": [
+    "equipment_first_operator_queue_20260518.csv",
+    "equipment_first_operator_queue_20260518.md",
+    "buyer_opportunity_ab_queue_20260518.csv",
+    "equipment_first_opportunity_queue_20260518.csv",
+    "do_not_repeat_master.csv",
+    "manifest.json",
+    "README_ACTIVE_CURRENT.md"
+  ],
+  "auxiliary_files_active_parent": [
+    "outreach_contacted_all.csv",
+    "all_known_marketing_contacts_dedup.csv"
+  ],
+  "stale_files": [
+    {
+      "path": "buyer_opportunity_crosscheck_20260518.csv",
+      "reason": "Predates equipment-first cutover; not canonical."
+    }
+  ],
+  "legacy_do_not_use": {
+    "scripts": ["scripts/qa/build_buyer_opportunity_queue.py"],
+    "artifacts_glob": [
+      "buyer_opportunity_crosscheck_*",
+      "tender_buyer_outreach_queue_*"
+    ],
+    "replacement": "scripts/qa/build_equipment_first_operator_queue.py"
+  },
+  "known_warnings": [
+    "FastLab (contacto@fastlab.cl): outreach_state not_contacted (corrected 2026-05-19) — no Gmail Sent row.",
+    "buyer_opportunity_crosscheck_20260518.csv is stale — do not use for export or send decisions."
+  ],
+  "operator_notes": {
+    "fastlab": {
+      "email": "contacto@fastlab.cl",
+      "outreach_state": "not_contacted",
+      "treat_as_completed_outreach": false
+    }
+  }
+}

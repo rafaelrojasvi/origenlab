@@ -1,6 +1,11 @@
 import type { WarmCaseCategory, WarmCaseItem, WarmCaseStatus } from "../api/commercialTypes";
 import { emailDomain, matchesSearch, normalizeSearchQuery, parseSortableTimestamp } from "./clientTableView";
 import { isInternalOperatorContact } from "./internalContactFilter";
+import {
+  DEFAULT_WARM_VIEW_PRESET,
+  filterWarmCasesByViewPreset,
+  type WarmCaseViewPreset,
+} from "./warmCaseViewPreset";
 
 export type WarmCaseSortKey = "last_seen_desc" | "last_seen_asc" | "status" | "category" | "contact";
 
@@ -9,8 +14,10 @@ export interface WarmCaseTableFilters {
   status: WarmCaseStatus | "";
   category: WarmCaseCategory | "";
   sort: WarmCaseSortKey;
-  /** When true, hide @origenlab.cl and @labdelivery.cl (client-side only). Default off. */
+  /** When true, hide @origenlab.cl and @labdelivery.cl (client-side only). Default on. */
   hideInternalContacts: boolean;
+  /** Queue focus preset (client-side). Default: real client threads. */
+  preset: WarmCaseViewPreset;
 }
 
 export const DEFAULT_WARM_FILTERS: WarmCaseTableFilters = {
@@ -18,8 +25,14 @@ export const DEFAULT_WARM_FILTERS: WarmCaseTableFilters = {
   status: "",
   category: "",
   sort: "last_seen_desc",
-  hideInternalContacts: false,
+  hideInternalContacts: true,
+  preset: DEFAULT_WARM_VIEW_PRESET,
 };
+
+/** Resets search/status/category and view preset to Clientes reales (initial load state). */
+export function clearWarmCaseTableFilters(): WarmCaseTableFilters {
+  return { ...DEFAULT_WARM_FILTERS };
+}
 
 const STATUS_ORDER: Record<WarmCaseStatus, number> = {
   problem: 0,
@@ -31,12 +44,16 @@ const STATUS_ORDER: Record<WarmCaseStatus, number> = {
 
 const CATEGORY_ORDER: Record<WarmCaseCategory, number> = {
   bounce: 0,
-  client_reply: 1,
-  supplier_reply: 2,
-  quote_sent: 3,
-  waiting_supplier: 4,
-  waiting_client: 5,
-  opportunity: 6,
+  auto_reply: 1,
+  payment_admin: 2,
+  payment_received: 2,
+  vendor_logistics: 3,
+  client_reply: 4,
+  supplier_reply: 5,
+  quote_sent: 6,
+  waiting_supplier: 7,
+  waiting_client: 8,
+  opportunity: 9,
 };
 
 export function warmCaseSearchHaystack(row: WarmCaseItem): string {
@@ -97,14 +114,27 @@ export function applyWarmCaseTableView(
   items: WarmCaseItem[],
   filters: WarmCaseTableFilters,
 ): WarmCaseItem[] {
-  return sortWarmCases(filterWarmCases(items, filters), filters.sort);
+  const byPreset = filterWarmCasesByViewPreset(items, filters.preset);
+  return sortWarmCases(filterWarmCases(byPreset, filters), filters.sort);
 }
 
 export function warmFiltersActive(filters: WarmCaseTableFilters): boolean {
   return Boolean(
-    filters.search.trim() || filters.status || filters.category || filters.hideInternalContacts,
+    filters.search.trim() ||
+      filters.status ||
+      filters.category ||
+      filters.preset !== DEFAULT_WARM_VIEW_PRESET ||
+      !filters.hideInternalContacts,
   );
 }
+
+export type { WarmCaseViewPreset } from "./warmCaseViewPreset";
+export {
+  DEFAULT_WARM_VIEW_PRESET,
+  WARM_VIEW_PRESET_LABELS,
+  WARM_VIEW_PRESET_ORDER,
+  matchesWarmCaseViewPreset,
+} from "./warmCaseViewPreset";
 
 export function uniqueWarmStatuses(items: WarmCaseItem[]): WarmCaseStatus[] {
   const set = new Set<WarmCaseStatus>();

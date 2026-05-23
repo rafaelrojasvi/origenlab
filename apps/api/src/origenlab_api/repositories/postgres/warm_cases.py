@@ -147,12 +147,19 @@ class PostgresWarmCaseRepository:
             "limit": cap,
         }
 
-        items: list[WarmCaseItem] = []
+        from origenlab_api.services.warm_case_output_normalize import normalize_warm_case_items
+
+        raw_items: list[WarmCaseItem] = []
         pg = require_psycopg()
         with postgres_connection(self._settings) as conn:
             with conn.cursor(row_factory=pg.rows.dict_row) as cur:
                 cur.execute(_WARM_CASE_SQL, params)
                 for raw in cur.fetchall():
-                    items.append(map_warm_case_row(dict(raw)))
+                    raw_items.append(map_warm_case_row(dict(raw)))
 
+        items = normalize_warm_case_items(
+            raw_items,
+            include_noise=include_noise,
+            category_filter=category_f,
+        )[:cap]
         return items, build_warm_cases_meta(items=items)

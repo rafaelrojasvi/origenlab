@@ -477,6 +477,7 @@ postgres = [
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
+    { name = "psycopg", extra = ["binary"] },
     { name = "pytest" },
 ]
 postgres = [
@@ -497,6 +498,7 @@ provides-extras = ["postgres"]
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx", specifier = ">=0.27" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pytest", specifier = ">=8" },
 ]
 postgres = [{ name = "psycopg", extras = ["binary"], specifier = ">=3.2" }]
@@ -537,7 +539,12 @@ api = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
-dev = [{ name = "pytest", specifier = ">=8" }]
+dev = [
+    { name = "alembic", specifier = ">=1.13" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
+]
 gmail = [
     { name = "google-auth", specifier = ">=2.29" },
     { name = "google-auth-oauthlib", specifier = ">=1.2" },

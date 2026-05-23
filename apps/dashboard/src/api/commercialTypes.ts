@@ -7,7 +7,11 @@ export type WarmCaseCategory =
   | "waiting_supplier"
   | "waiting_client"
   | "bounce"
-  | "opportunity";
+  | "opportunity"
+  | "auto_reply"
+  | "vendor_logistics"
+  | "payment_admin"
+  | "payment_received";
 
 export type WarmCaseStatus = "new" | "open" | "waiting" | "quoted" | "problem";
 

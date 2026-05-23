@@ -44,11 +44,13 @@ export function formatTableCountLabel(args: {
   filtered: boolean;
   noun: string;
   extra?: string;
+  presetLabel?: string;
 }): string {
-  const { visible, loaded, apiTotal, filtered, noun, extra } = args;
+  const { visible, loaded, apiTotal, filtered, noun, extra, presetLabel } = args;
   const apiPart =
     apiTotal != null && apiTotal !== loaded ? ` · API reported ${apiTotal}` : "";
   const filterPart = filtered && visible < loaded ? " · client filters active" : "";
+  const presetPart = presetLabel ? ` · preset: ${presetLabel}` : "";
   const extraPart = extra ? ` · ${extra}` : "";
-  return `Showing ${visible} of ${loaded} loaded ${noun}${apiPart}${filterPart}${extraPart} · read-only`;
+  return `Showing ${visible} of ${loaded} loaded ${noun}${presetPart}${apiPart}${filterPart}${extraPart} · read-only`;
 }

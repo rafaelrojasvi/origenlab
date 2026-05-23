@@ -25,6 +25,18 @@ const WARM_CATEGORY: Record<string, string> = {
   waiting_client: "Esperando cliente",
   bounce: "Rebote",
   opportunity: "Oportunidad",
+  auto_reply: "Respuesta automática",
+  vendor_logistics: "Logística / proveedor admin",
+  payment_admin: "Pago / admin comercial",
+  payment_received: "Pago recibido",
+};
+
+const WARM_NEXT_ACTION: Record<string, string> = {
+  auto_reply: "Ignorar respuesta automática",
+  vendor_logistics: "Revisar logística / importación",
+  payment_admin: "Registrar / confirmar pago",
+  supplier_reply: "Leer propuesta del proveedor",
+  client_reply: "Responder hilo comercial",
 };
 
 const EQUIPMENT_NEXT_ACTION: Record<string, string> = {
@@ -51,7 +63,7 @@ const EQUIPMENT_CATEGORY: Record<string, string> = {
 const TABLES: Record<OperatorLabelKind, Record<string, string>> = {
   warm_status: WARM_STATUS,
   warm_category: WARM_CATEGORY,
-  warm_next_action: {},
+  warm_next_action: WARM_NEXT_ACTION,
   equipment_next_action: EQUIPMENT_NEXT_ACTION,
   equipment_contact_status: EQUIPMENT_CONTACT_STATUS,
   equipment_safe_channel: EQUIPMENT_SAFE_CHANNEL,

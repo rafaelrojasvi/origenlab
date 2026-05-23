@@ -150,6 +150,22 @@ def is_manifest_canonical_queue(manifest: dict[str, Any], csv_path: Path, active
     return rel in canonical
 
 
+def should_promote_equipment_source_as_canonical(
+    manifest: dict[str, Any], csv_path: Path, active_current: Path
+) -> bool:
+    """True when this CSV is the operator active/current equipment queue (dashboard read path).
+
+    Matches manifest ``canonical_files`` or the same path ``resolve_equipment_operator_queue_csv``
+    would pick (including newest ``equipment_first_operator_queue_*.csv`` when manifest is empty).
+    """
+    if csv_path.name in _stale_paths(manifest):
+        return False
+    if is_manifest_canonical_queue(manifest, csv_path, active_current):
+        return True
+    resolved = resolve_equipment_operator_queue_csv(active_current, manifest)
+    return resolved is not None and resolved.resolve() == csv_path.resolve()
+
+
 def resolve_load_context(
     active_current: Path,
     *,
@@ -260,6 +276,9 @@ def preview_load(
         dry_run=True,
     )
     summary["is_manifest_canonical"] = is_manifest_canonical_queue(manifest, resolved, active_current)
+    summary["should_promote_canonical"] = should_promote_equipment_source_as_canonical(
+        manifest, resolved, active_current
+    )
     summary["sample_rows"] = [
         (row.get("codigo_licitacion") or "").strip()
         for row in rows[:3]
@@ -279,13 +298,15 @@ def preview_load(
 
 
 def _set_canonical_for_source(cur: Any, *, date_suffix: str, source_id: int) -> None:
+    """Mark one source canonical for ``api.v_equipment_opportunity``; clear all others."""
+    del date_suffix  # kept for call-site stability; promotion is global per load
     cur.execute(
         """
         UPDATE commercial.equipment_opportunity_source
         SET is_canonical = FALSE
-        WHERE date_suffix = %s AND id <> %s
+        WHERE id <> %s
         """,
-        (date_suffix, source_id),
+        (source_id,),
     )
     cur.execute(
         """
@@ -391,7 +412,7 @@ def apply_load(
 
     sha = summary["file_sha256"]
     mtime = file_mtime_utc(resolved)
-    canonical = is_manifest_canonical_queue(manifest, resolved, active_current)
+    promote_canonical = should_promote_equipment_source_as_canonical(manifest, resolved, active_current)
     csv_path_str = str(resolved)
     pg_url_norm = normalize_postgres_url(pg_url)
 
@@ -399,8 +420,17 @@ def apply_load(
         with conn.cursor() as cur:
             existing_source_id = lookup_existing_source_id(cur, csv_path_str)
             if existing_source_id is not None and not replace_source:
-                summary["error"] = "source_already_loaded"
                 summary["existing_source_id"] = existing_source_id
+                summary["source_id"] = existing_source_id
+                if promote_canonical:
+                    _set_canonical_for_source(
+                        cur, date_suffix=date_suffix, source_id=existing_source_id
+                    )
+                    summary["is_canonical"] = True
+                    summary["idempotent"] = "canonical_source_already_loaded"
+                    conn.commit()
+                    return summary
+                summary["error"] = "source_already_loaded"
                 summary["hint"] = _SOURCE_ALREADY_LOADED_HINT
                 return summary
 
@@ -429,7 +459,7 @@ def apply_load(
                         mtime,
                         sync_run_id,
                         LOADER_VERSION,
-                        canonical,
+                        promote_canonical,
                         source_id,
                     ),
                 )
@@ -450,7 +480,7 @@ def apply_load(
                         len(rows),
                         sha,
                         mtime,
-                        canonical,
+                        promote_canonical,
                         sync_run_id,
                         LOADER_VERSION,
                     ),
@@ -459,7 +489,7 @@ def apply_load(
 
             summary["source_id"] = source_id
 
-            if canonical:
+            if promote_canonical:
                 _set_canonical_for_source(cur, date_suffix=date_suffix, source_id=source_id)
                 summary["is_canonical"] = True
 

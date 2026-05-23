@@ -20,6 +20,27 @@ const row: WarmCaseItem = {
 };
 
 describe("WarmCasesTable", () => {
+  it("shows Clientes reales preset on initial render without mailto links", () => {
+    render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 1 }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Clientes reales" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    screen.getByText(/preset: Clientes reales · read-only/);
+    expect(screen.queryByRole("link", { name: "mailto" })).toBeNull();
+    screen.getByRole("button", { name: "Copy email" });
+    screen.getByRole("button", { name: "buyer@acme.cl" });
+  });
+
   it("renders rows without body fields", () => {
     render(
       <WarmCasesTable
@@ -102,6 +123,7 @@ describe("WarmCasesTable", () => {
         onContactSelect={() => {}}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Todo" }));
     const table = screen.getByRole("table");
     expect(table.textContent).toContain("Oportunidad");
   });
@@ -204,7 +226,7 @@ describe("WarmCasesTable", () => {
     expect(onContactSelect).toHaveBeenCalledWith("buyer@acme.cl");
   });
 
-  it("shows filtered count in footer", () => {
+  it("shows filtered count in footer with active preset", () => {
     render(
       <WarmCasesTable
         backend="sqlite"
@@ -216,6 +238,7 @@ describe("WarmCasesTable", () => {
         onContactSelect={() => {}}
       />,
     );
+    screen.getByText(/preset: Clientes reales/);
     screen.getByText(/Showing 2 of 2 loaded cases/);
     fireEvent.change(screen.getByLabelText("Search warm cases"), {
       target: { value: "buyer@acme" },
@@ -224,7 +247,7 @@ describe("WarmCasesTable", () => {
     screen.getByText(/client filters active/);
   });
 
-  it("hides internal contacts when toggle is enabled", () => {
+  it("hides internal contacts by default; toggle shows them", () => {
     render(
       <WarmCasesTable
         backend="sqlite"
@@ -244,10 +267,186 @@ describe("WarmCasesTable", () => {
         onContactSelect={() => {}}
       />,
     );
-    screen.getByText("contacto@origenlab.cl");
-    fireEvent.click(screen.getByLabelText("Hide internal OrigenLab contacts"));
     expect(screen.queryByText("contacto@origenlab.cl")).toBeNull();
     screen.getByText("buyer@acme.cl");
-    screen.getByText(/client filters active/);
+    fireEvent.click(screen.getByLabelText("Hide internal OrigenLab contacts"));
+    screen.getByText("contacto@origenlab.cl");
+    screen.getByText(/Showing 2 of 2 loaded cases/);
+  });
+
+  const auditRows: WarmCaseItem[] = [
+    {
+      ...row,
+      case_id: "dhl",
+      contact_email: "monica.silva@dhl.com",
+      account_name: "DHL",
+      category: "vendor_logistics",
+      subject: "Import",
+    },
+    {
+      ...row,
+      case_id: "banco",
+      contact_email: "serviciodetransferencias@bancochile.cl",
+      account_name: "Banco Chile",
+      category: "payment_admin",
+      subject: "FACTURA",
+    },
+    {
+      ...row,
+      case_id: "dlab",
+      contact_email: "chloe.yang@dlabsci.com",
+      account_name: "DLAB",
+      category: "supplier_reply",
+    },
+    {
+      ...row,
+      case_id: "ollital",
+      contact_email: "kelly@ollital.com",
+      account_name: "Ollital",
+      category: "supplier_reply",
+    },
+    {
+      ...row,
+      case_id: "ortoalresa",
+      contact_email: "carmen.llorente@ortoalresa.com",
+      account_name: "Ortoalresa",
+      category: "supplier_reply",
+    },
+    {
+      ...row,
+      case_id: "udec",
+      contact_email: "tatiana.beldarrain@udec.cl",
+      account_name: "UdeC",
+      category: "client_reply",
+      subject: "Consulta",
+    },
+    {
+      ...row,
+      case_id: "internal",
+      contact_email: "contacto@origenlab.cl",
+      account_name: "OrigenLab",
+      category: "client_reply",
+    },
+  ];
+
+  function renderAudit() {
+    return render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={auditRows}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: auditRows.length }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+  }
+
+  it("defaults to Clientes reales preset and shows UdeC only from audit set", () => {
+    renderAudit();
+    screen.getByText("tatiana.beldarrain@udec.cl");
+    expect(screen.queryByText("monica.silva@dhl.com")).toBeNull();
+    expect(screen.queryByText("serviciodetransferencias@bancochile.cl")).toBeNull();
+    expect(screen.queryByText("chloe.yang@dlabsci.com")).toBeNull();
+    screen.getByText(/preset: Clientes reales/);
+  });
+
+  it("Logística preset shows DHL not client rows", () => {
+    renderAudit();
+    fireEvent.click(screen.getByRole("button", { name: "Logística" }));
+    screen.getByText("monica.silva@dhl.com");
+    expect(screen.queryByText("tatiana.beldarrain@udec.cl")).toBeNull();
+    screen.getByText(/preset: Logística/);
+  });
+
+  it("Pagos/admin preset shows Banco not client rows", () => {
+    renderAudit();
+    fireEvent.click(screen.getByRole("button", { name: "Pagos/admin" }));
+    screen.getByText("serviciodetransferencias@bancochile.cl");
+    expect(screen.queryByText("tatiana.beldarrain@udec.cl")).toBeNull();
+    screen.getByText(/preset: Pagos\/admin/);
+  });
+
+  it("Pagos/admin preset shows payment_received and transferencia snippet rows", () => {
+    render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={[
+          {
+            ...row,
+            case_id: "pago-recibido",
+            contact_email: "tesoreria@hospital.cl",
+            category: "payment_received",
+            subject: "Comprobante pago",
+          },
+          {
+            ...row,
+            case_id: "transferencia",
+            contact_email: "notify@example.com",
+            category: "opportunity",
+            subject: "Aviso",
+            snippet: "Confirmación de transferencia",
+          },
+          row,
+        ]}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 3 }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Pagos/admin" }));
+    screen.getByText("tesoreria@hospital.cl");
+    screen.getByText("notify@example.com");
+    expect(screen.queryByText("buyer@acme.cl")).toBeNull();
+  });
+
+  it("Clear filters resets search and preset to Clientes reales", () => {
+    render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={[row, { ...row, case_id: "b", contact_email: "x@y.cl" }]}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 2 }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Todo" }));
+    expect(screen.getByRole("button", { name: "Todo" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.change(screen.getByLabelText("Search warm cases"), {
+      target: { value: "buyer@acme" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Clear search and dropdown filters; reset view to Clientes reales",
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Clientes reales" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    screen.getByText(/preset: Clientes reales · read-only/);
+    expect((screen.getByLabelText("Search warm cases") as HTMLInputElement).value).toBe("");
+  });
+
+  it("Proveedores preset shows DLAB, Ollital, Ortoalresa", () => {
+    renderAudit();
+    fireEvent.click(screen.getByRole("button", { name: "Proveedores" }));
+    screen.getByText("chloe.yang@dlabsci.com");
+    screen.getByText("kelly@ollital.com");
+    screen.getByText("carmen.llorente@ortoalresa.com");
+    expect(screen.queryByText("monica.silva@dhl.com")).toBeNull();
+    expect(screen.queryByText("tatiana.beldarrain@udec.cl")).toBeNull();
+  });
+
+  it("Todo preset shows all non-internal rows when hide-internal is on", () => {
+    renderAudit();
+    fireEvent.click(screen.getByRole("button", { name: "Todo" }));
+    screen.getByText("monica.silva@dhl.com");
+    screen.getByText("tatiana.beldarrain@udec.cl");
+    expect(screen.queryByText("contacto@origenlab.cl")).toBeNull();
   });
 });

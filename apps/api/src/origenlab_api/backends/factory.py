@@ -37,9 +37,22 @@ class RepositoryBundle:
 
 def validate_api_settings(settings: Settings) -> None:
     """Fail fast when postgres backend is selected without a DSN."""
+    from origenlab_api.http_security import validate_http_security_settings
+
+    validate_http_security_settings(settings)
     backend = settings.resolved_api_backend()
     if backend == "postgres":
         settings.require_postgres_url()
+    if settings.production_mode() and backend != "postgres":
+        raise ValueError(
+            "ORIGENLAB_ENV=production requires ORIGENLAB_API_BACKEND=postgres "
+            "(SQLite is local-dev only)"
+        )
+    if settings.production_mode() and not settings.parsed_cors_origins():
+        raise ValueError(
+            "ORIGENLAB_ENV=production requires ORIGENLAB_API_CORS_ORIGINS "
+            "(explicit dashboard origin, no wildcard)"
+        )
 
 
 def get_repository_bundle(settings: Settings) -> RepositoryBundle:

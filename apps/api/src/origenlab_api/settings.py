@@ -28,6 +28,21 @@ class Settings(BaseSettings):
     postgres_url: str | None = None
     postgres_statement_timeout_ms: int = 30_000
     postgres_pool_size: int = 5
+    """Comma-separated browser origins for dashboard static site (no wildcards)."""
+    api_cors_origins: str | None = None
+    """When true, hide /docs, /redoc, /openapi.json (also off when ORIGENLAB_ENV=production)."""
+    api_disable_docs: bool = False
+    """Set to production|prod to enable production defaults (docs off, stricter validation)."""
+    env: str | None = None
+
+    def production_mode(self) -> bool:
+        return (self.env or "").strip().lower() in ("production", "prod")
+
+    def parsed_cors_origins(self) -> list[str]:
+        raw = (self.api_cors_origins or "").strip()
+        if not raw:
+            return []
+        return [part.strip() for part in raw.split(",") if part.strip()]
 
     def resolved_api_backend(self) -> ApiBackend:
         raw = (self.api_backend or "sqlite").strip().lower()
