@@ -18,6 +18,8 @@
 
 **Truth model:** Postgres mirror is for **dashboard reads only**. Send/outreach approval remains **local SQLite** + operator scripts.
 
+**Day-to-day mirror refresh (Render live):** [REFRESH_RENDER_DASHBOARD_ONCE.md](REFRESH_RENDER_DASHBOARD_ONCE.md) — incremental SQLite + `refresh_render_dashboard_once.sh` (no mart `--rebuild`, no Gmail by default).
+
 ---
 
 ## Architecture

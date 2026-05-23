@@ -1,0 +1,142 @@
+# Refresh Render dashboard once (manual operator runbook)
+
+**Purpose:** After new Gmail mail arrives, update the **Render Postgres read-model mirror** so the static dashboard at `dashboard.origenlab.cl` shows fresh warm cases and equipment rows.
+
+**Truth model:** Local SQLite (`~/data/origenlab-email/sqlite/emails.sqlite`) remains authoritative. Render Postgres is a **read-only mirror** for the dashboard API. The dashboard SPA is read-only (GET-only API).
+
+---
+
+## Safety scope
+
+| Allowed | Forbidden in this workflow |
+|---------|----------------------------|
+| Read-only Gmail IMAP ingest into local SQLite (optional) | Gmail sends or label/folder mutation |
+| Incremental `build_business_mart.py` (no `--rebuild`) | `build_business_mart.py --rebuild` |
+| Incremental `build_commercial_intel_v1.py` (no `--rebuild`) | `build_commercial_intel_v1.py --rebuild` |
+| `sync_dashboard_postgres_mirror.py` → **Render Postgres only** | Outreach-state writes, `mark_outreach_state`, sends |
+| Read-only verify queries | SQLite upload/copy, SQLite backup, destructive SQL |
+| Operator opens dashboard and clicks **Refresh** | Cron automation, dashboard/API writes |
+
+---
+
+## Prerequisites
+
+1. **Local SQLite** at `~/data/origenlab-email/sqlite/emails.sqlite` (or set `ORIGENLAB_SQLITE_PATH`).
+2. **Render external Postgres URL** in `ORIGENLAB_CLOUD_POSTGRES_URL` (from Render Dashboard → Postgres → External Database URL). Use `postgresql+psycopg://…` form.
+3. **Gmail OAuth** (only if running ingest): `ORIGENLAB_GMAIL_OAUTH_CLIENT_JSON`, `ORIGENLAB_GMAIL_WORKSPACE_USER=contacto@origenlab.cl`, token file per [`docs/ingest/WORKSPACE_GMAIL_IMAP.md`](ingest/WORKSPACE_GMAIL_IMAP.md).
+4. Alembic head already applied on Render Postgres (first-time: see [Phase 1 cloud read path](PHASE1_CLOUD_READ_PATH.md)).
+
+---
+
+## One command (recommended)
+
+From repo root:
+
+```bash
+export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
+export ORIGENLAB_CLOUD_POSTGRES_URL='postgresql+psycopg://USER:PASSWORD@HOST/DB'
+
+# Mirror-only (no new Gmail fetch):
+bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
+
+# With Gmail ingest for new messages (read-only IMAP, last 14 days):
+RUN_GMAIL_INGEST=1 GMAIL_SINCE_DAYS=14 \
+  bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
+```
+
+**Final step (human):** open https://dashboard.origenlab.cl and click **Refresh**.
+
+---
+
+## What the script does
+
+| Step | Command / action | Mutates |
+|------|------------------|---------|
+| 1 | Preflight: SQLite file exists; cloud Postgres URL set | — |
+| 2 | Optional Gmail ingest (`RUN_GMAIL_INGEST=1`) | SQLite `emails` only |
+| 3 | `build_business_mart.py` (incremental, **no** `--rebuild`) | SQLite mart tables |
+| 4 | `build_commercial_intel_v1.py` (incremental, **no** `--rebuild`) | SQLite commercial_* tables |
+| 5 | `sync_dashboard_mirror_to_cloud.sh` | Render Postgres mirror |
+| 6 | `verify_dashboard_postgres_mirror.py --assert-render-dashboard` | — (read-only) |
+
+Gmail ingest flags (when enabled):
+
+```bash
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py \
+  --folder INBOX \
+  --skip-duplicate-message-id \
+  --since-days 14
+
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py \
+  --folder "[Gmail]/Enviados" \
+  --skip-duplicate-message-id \
+  --since-days 14
+```
+
+- **`--skip-duplicate-message-id`** — skip rows already in SQLite (safe re-run).
+- **`--since-days`** — bounds IMAP search (default 14). Increase if mail is older.
+- **No `--replace-source`** — never deletes existing folder rows.
+- Sent folder name is locale-dependent; discover with `--list-folders` if Enviados fails.
+
+**Not run:** `refresh_outbound_safety_memory.py`, `mark_outreach_state`, any send script, mart/commercial `--rebuild`.
+
+---
+
+## Verify expectations (fail-closed)
+
+After sync, assertions require:
+
+| Check | Expected |
+|-------|----------|
+| `archive.emails` | `0` (mirror does not load full archive bodies) |
+| `api.v_warm_case` | `> 0` |
+| `api.v_equipment_opportunity` | `9` (override: `ORIGENLAB_EXPECT_EQUIPMENT_COUNT`) |
+| `reporting.dashboard_sync_run` latest | `status = success`, `finished_at` set |
+
+JSON artifact: `/tmp/render_dashboard_mirror_verify.json`
+
+---
+
+## Manual step-by-step (equivalent)
+
+```bash
+set -eo pipefail
+cd apps/email-pipeline
+export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
+export ORIGENLAB_CLOUD_POSTGRES_URL='postgresql+psycopg://…'
+
+# Optional ingest
+uv sync --group gmail --group dev
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder INBOX --skip-duplicate-message-id --since-days 14
+uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados" --skip-duplicate-message-id --since-days 14
+
+# Incremental derived layers (NOT --rebuild)
+uv sync --group dev
+uv run python scripts/mart/build_business_mart.py
+uv run python scripts/commercial/build_commercial_intel_v1.py
+
+# Mirror + verify
+bash scripts/ops/sync_dashboard_mirror_to_cloud.sh
+uv run python scripts/qa/verify_dashboard_postgres_mirror.py \
+  --assert-render-dashboard \
+  --expect-equipment-count 9
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely fix |
+|---------|------------|
+| `Refusing Postgres dashboard mirror sync: mart table(s) … empty` | Run incremental `build_business_mart.py` once; if mart was never built, operator must run **one-time** `--rebuild` outside this workflow. |
+| Gmail folder select fails | `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders` and set `ORIGENLAB_GMAIL_SENT_FOLDER`. |
+| Equipment count ≠ 9 | Set `ORIGENLAB_EXPECT_EQUIPMENT_COUNT` to current baseline after operator review. |
+| Dashboard stale after green verify | Open dashboard and click **Refresh** (browser cache / SPA poll). |
+
+---
+
+## Related docs
+
+- [Phase 0 local Postgres mirror proof](PHASE0_LOCAL_POSTGRES_MIRROR.md)
+- [Phase 1 cloud read path](PHASE1_CLOUD_READ_PATH.md)
+- [RUNBOOK — canonical dashboard refresh chain](RUNBOOK.md#canonical-dashboard-refresh-chain) (includes full mart `--rebuild` — **not** used here)

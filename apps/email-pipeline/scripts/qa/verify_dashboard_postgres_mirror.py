@@ -16,10 +16,85 @@ if str(REPO) not in sys.path:
 from origenlab_email_pipeline.mart_core_postgres_migrate import resolve_postgres_url  # noqa: E402
 
 
+def evaluate_render_dashboard_assertions(
+    out: dict[str, object],
+    *,
+    min_warm_cases: int = 1,
+    expect_equipment_count: int | None = 9,
+    expect_archive_emails: int = 0,
+) -> list[str]:
+    """Return human-readable assertion failures for Render dashboard mirror checks."""
+    errors: list[str] = []
+
+    archive_emails = out.get("archive_emails")
+    if archive_emails is None:
+        errors.append("archive.emails table missing (expected schema with count 0)")
+    elif archive_emails != expect_archive_emails:
+        errors.append(
+            f"archive.emails count={archive_emails!r}, expected {expect_archive_emails}"
+        )
+
+    warm = out.get("api_v_warm_case")
+    if not isinstance(warm, int) or warm < min_warm_cases:
+        errors.append(
+            f"api.v_warm_case count={warm!r}, expected >= {min_warm_cases}"
+        )
+
+    if expect_equipment_count is not None:
+        equipment = out.get("api_v_equipment_opportunity")
+        if equipment != expect_equipment_count:
+            errors.append(
+                f"api.v_equipment_opportunity count={equipment!r}, "
+                f"expected {expect_equipment_count}"
+            )
+
+    sync_row = out.get("dashboard_sync_run_latest")
+    if not sync_row:
+        errors.append("reporting.dashboard_sync_run has no rows")
+    elif isinstance(sync_row, (list, tuple)):
+        if len(sync_row) < 4:
+            errors.append(f"dashboard_sync_run_latest malformed: {sync_row!r}")
+        else:
+            _run_id, status, _started, finished = sync_row[:4]
+            if status != "success":
+                errors.append(
+                    f"latest dashboard_sync_run status={status!r}, expected 'success'"
+                )
+            if finished is None:
+                errors.append("latest dashboard_sync_run finished_at is NULL")
+    else:
+        errors.append(f"dashboard_sync_run_latest unexpected shape: {sync_row!r}")
+
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify dashboard Postgres mirror row counts.")
     parser.add_argument("--postgres-url", default=None)
     parser.add_argument("--json-out", type=Path, default=None)
+    parser.add_argument(
+        "--assert-render-dashboard",
+        action="store_true",
+        help="Exit 1 when Render dashboard mirror checks fail (warm cases, equipment, sync run).",
+    )
+    parser.add_argument(
+        "--min-warm-cases",
+        type=int,
+        default=1,
+        help="Minimum api.v_warm_case rows when --assert-render-dashboard (default 1).",
+    )
+    parser.add_argument(
+        "--expect-equipment-count",
+        type=int,
+        default=9,
+        help="Expected api.v_equipment_opportunity count when --assert-render-dashboard (default 9).",
+    )
+    parser.add_argument(
+        "--expect-archive-emails",
+        type=int,
+        default=0,
+        help="Expected archive.emails count when --assert-render-dashboard (default 0).",
+    )
     args = parser.parse_args()
 
     try:
@@ -126,10 +201,31 @@ def main() -> int:
                 out["archive_emails"] = None
                 out["archive_emails_with_body"] = "schema_absent"
 
+    if args.assert_render_dashboard:
+        failures = evaluate_render_dashboard_assertions(
+            out,
+            min_warm_cases=args.min_warm_cases,
+            expect_equipment_count=args.expect_equipment_count,
+            expect_archive_emails=args.expect_archive_emails,
+        )
+        out["render_dashboard_assertions"] = {
+            "passed": not failures,
+            "failures": failures,
+        }
+
     text = json.dumps(out, indent=2, default=str)
     print(text)
     if args.json_out:
         args.json_out.write_text(text + "\n", encoding="utf-8")
+
+    if args.assert_render_dashboard:
+        failures = out.get("render_dashboard_assertions", {}).get("failures", [])
+        if failures:
+            print("ASSERT FAILED:", file=sys.stderr)
+            for msg in failures:
+                print(f"  - {msg}", file=sys.stderr)
+            return 1
+        print("ASSERT OK: Render dashboard mirror checks passed.", file=sys.stderr)
     return 0
 
 
