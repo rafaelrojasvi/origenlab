@@ -23,8 +23,7 @@
 # See docs/REFRESH_RENDER_DASHBOARD_ONCE.md
 set -eo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-PIPE="$ROOT/apps/email-pipeline"
+PIPE="$(cd "$(dirname "$0")/../.." && pwd)"
 
 SQLITE_PATH="${ORIGENLAB_SQLITE_PATH:-$HOME/data/origenlab-email/sqlite/emails.sqlite}"
 CLOUD_PG_URL="${ORIGENLAB_CLOUD_POSTGRES_URL:-}"

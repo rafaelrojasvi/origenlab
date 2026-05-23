@@ -3,8 +3,7 @@
 # SAFETY: Read-only SQLite; writes cloud Postgres mirror only. No Gmail ingest, no mart rebuild.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-PIPE="$ROOT/apps/email-pipeline"
+PIPE="$(cd "$(dirname "$0")/../.." && pwd)"
 
 : "${ORIGENLAB_SQLITE_PATH:?Set ORIGENLAB_SQLITE_PATH to local canonical SQLite (not uploaded)}"
 : "${ORIGENLAB_CLOUD_POSTGRES_URL:?Set ORIGENLAB_CLOUD_POSTGRES_URL to cloud external Postgres URL}"
