@@ -113,6 +113,44 @@ def test_normalize_ollital_and_ortoalresa_stay_supplier() -> None:
     assert normalize_warm_case_item(orto).category == "supplier_reply"
 
 
+def test_normalize_google_security_hidden_from_default() -> None:
+    raw = _item(
+        contact_email="no-reply@accounts.google.com",
+        subject="Alerta de seguridad",
+        category="client_reply",
+    )
+    assert normalize_warm_case_item(raw, include_noise=False) is None
+    shown = normalize_warm_case_item(raw, include_noise=True)
+    assert shown is not None
+    assert shown.category == "auto_reply"
+
+
+def test_normalize_eppendorf_registration_supplier() -> None:
+    raw = _item(
+        contact_email="eppendorf@eppendorf.com",
+        subject="Please confirm your registration!",
+        category="client_reply",
+    )
+    out = normalize_warm_case_item(raw)
+    assert out is not None
+    assert out.category == "supplier_reply"
+
+
+def test_normalize_valuenindustrial_sales_supplier() -> None:
+    raw = _item(contact_email="sales@valuenindustrial.com", subject="Promo", category="client_reply")
+    assert resolve_normalized_category(raw) == "supplier_reply"
+
+
+def test_normalize_gzfanbolun_sales_supplier() -> None:
+    raw = _item(contact_email="sales001@gzfanbolun.com", subject="Offer", category="client_reply")
+    assert resolve_normalized_category(raw) == "supplier_reply"
+
+
+def test_normalize_yuanhuai_supplier() -> None:
+    raw = _item(contact_email="jizhendong@yuanhuai.com", subject="YHCHEM line", category="client_reply")
+    assert resolve_normalized_category(raw) == "supplier_reply"
+
+
 def test_quote_sent_preserved_for_outbound_customer_thread() -> None:
     raw = _item(
         contact_email="contacto@origenlab.cl",

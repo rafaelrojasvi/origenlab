@@ -3,6 +3,7 @@ import type { WarmCaseItem } from "../api/commercialTypes";
 import {
   DEFAULT_WARM_VIEW_PRESET,
   filterWarmCasesByViewPreset,
+  isExcludedFromClientesReales,
   matchesWarmCaseViewPreset,
 } from "./warmCaseViewPreset";
 
@@ -174,5 +175,53 @@ describe("warmCaseViewPreset", () => {
 
   it("Todo includes all loaded rows", () => {
     expect(filterWarmCasesByViewPreset(AUDIT_ROWS, "todo")).toHaveLength(AUDIT_ROWS.length);
+  });
+
+  const FALSE_POSITIVE_CLIENT_REPLY: WarmCaseItem[] = [
+    warmRow({
+      case_id: "google-security",
+      contact_email: "no-reply@accounts.google.com",
+      category: "client_reply",
+      subject: "Alerta de seguridad",
+    }),
+    warmRow({
+      case_id: "eppendorf",
+      contact_email: "eppendorf@eppendorf.com",
+      category: "client_reply",
+      subject: "Please confirm your registration!",
+    }),
+    warmRow({
+      case_id: "valuen",
+      contact_email: "sales@valuenindustrial.com",
+      category: "client_reply",
+      subject: "Industrial valves",
+    }),
+    warmRow({
+      case_id: "fanbolun",
+      contact_email: "sales001@gzfanbolun.com",
+      category: "client_reply",
+      subject: "Equipment promo",
+    }),
+    warmRow({
+      case_id: "yuanhuai",
+      contact_email: "jizhendong@yuanhuai.com",
+      category: "client_reply",
+      subject: "YHCHEM offer",
+    }),
+  ];
+
+  it("Clientes reales excludes audit false positives even when mislabeled client_reply", () => {
+    const preset = "clientes_reales" as const;
+    for (const row of FALSE_POSITIVE_CLIENT_REPLY) {
+      expect(isExcludedFromClientesReales(row)).toBe(true);
+      expect(matchesWarmCaseViewPreset(row, preset)).toBe(false);
+    }
+  });
+
+  it("Proveedores includes mislabeled supplier vendor domains under Todo path", () => {
+    const preset = "proveedores" as const;
+    expect(matchesWarmCaseViewPreset(FALSE_POSITIVE_CLIENT_REPLY[2], preset)).toBe(true);
+    expect(matchesWarmCaseViewPreset(FALSE_POSITIVE_CLIENT_REPLY[4], preset)).toBe(true);
+    expect(filterWarmCasesByViewPreset(FALSE_POSITIVE_CLIENT_REPLY, "todo")).toHaveLength(5);
   });
 });

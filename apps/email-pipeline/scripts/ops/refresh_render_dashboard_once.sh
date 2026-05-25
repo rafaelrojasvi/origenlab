@@ -25,6 +25,10 @@ set -eo pipefail
 
 PIPE="$(cd "$(dirname "$0")/../.." && pwd)"
 
+# shellcheck source=scripts/ops/_load_pipeline_dotenv.sh
+source "${PIPE}/scripts/ops/_load_pipeline_dotenv.sh"
+load_pipeline_dotenv "$PIPE"
+
 SQLITE_PATH="${ORIGENLAB_SQLITE_PATH:-$HOME/data/origenlab-email/sqlite/emails.sqlite}"
 CLOUD_PG_URL="${ORIGENLAB_CLOUD_POSTGRES_URL:-}"
 RUN_GMAIL_INGEST="${RUN_GMAIL_INGEST:-0}"
@@ -46,15 +50,17 @@ if [[ -z "$CLOUD_PG_URL" ]]; then
   exit 2
 fi
 
-if [[ "$CLOUD_PG_URL" == *"@127.0.0.1"* ]] || [[ "$CLOUD_PG_URL" == *"localhost"* ]]; then
-  echo "ERROR: ORIGENLAB_CLOUD_POSTGRES_URL looks local — use Render external URL." >&2
-  exit 2
-fi
-
 export ORIGENLAB_SQLITE_PATH="$SQLITE_PATH"
 export ORIGENLAB_CLOUD_POSTGRES_URL="$CLOUD_PG_URL"
 
 cd "$PIPE"
+
+# Fail early on placeholder/invalid URL; export psycopg URL for sync + verify in this shell.
+# shellcheck source=scripts/ops/_cloud_postgres_env.sh
+source "${PIPE}/scripts/ops/_cloud_postgres_env.sh"
+if ! cloud_postgres_prepare_env "$PIPE"; then
+  exit 2
+fi
 
 echo ""
 echo "-- Preflight: SQLite readable --"

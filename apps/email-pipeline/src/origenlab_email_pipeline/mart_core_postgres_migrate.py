@@ -632,13 +632,17 @@ def resolve_sqlite_path(explicit: Path | None) -> Path:
 def resolve_postgres_url(explicit: str | None) -> str:
     if explicit and explicit.strip():
         return normalize_postgres_url(explicit.strip())
-    for key in ("ORIGENLAB_POSTGRES_URL", "ALEMBIC_DATABASE_URL"):
+    for key in (
+        "ORIGENLAB_POSTGRES_URL",
+        "ALEMBIC_DATABASE_URL",
+        "ORIGENLAB_CLOUD_POSTGRES_URL",
+    ):
         v = (os.environ.get(key) or "").strip()
         if v:
             return normalize_postgres_url(v)
     raise ValueError(
-        "Postgres URL required. Pass --postgres-url or set ORIGENLAB_POSTGRES_URL "
-        "or ALEMBIC_DATABASE_URL."
+        "Postgres URL required. Pass --postgres-url or set ORIGENLAB_POSTGRES_URL, "
+        "ALEMBIC_DATABASE_URL, or ORIGENLAB_CLOUD_POSTGRES_URL."
     )
 
 

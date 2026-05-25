@@ -21,27 +21,35 @@
 
 ## Prerequisites
 
-1. **Local SQLite** at `~/data/origenlab-email/sqlite/emails.sqlite` (or set `ORIGENLAB_SQLITE_PATH`).
-2. **Render external Postgres URL** in `ORIGENLAB_CLOUD_POSTGRES_URL` (from Render Dashboard → Postgres → External Database URL). Use `postgresql+psycopg://…` form.
-3. **Gmail OAuth** (only if running ingest): `ORIGENLAB_GMAIL_OAUTH_CLIENT_JSON`, `ORIGENLAB_GMAIL_WORKSPACE_USER=contacto@origenlab.cl`, token file per [`docs/ingest/WORKSPACE_GMAIL_IMAP.md`](ingest/WORKSPACE_GMAIL_IMAP.md).
-4. Alembic head already applied on Render Postgres (first-time: see [Phase 1 cloud read path](PHASE1_CLOUD_READ_PATH.md)).
+1. **Local `.env`** (recommended): `cp apps/email-pipeline/.env.example apps/email-pipeline/.env` and set paths + Render URL once. Ops scripts load it automatically (gitignored; never commit).
+2. **Local SQLite** at `~/data/origenlab-email/sqlite/emails.sqlite` (or `ORIGENLAB_SQLITE_PATH` in `.env`).
+3. **Render external Postgres URL** as `ORIGENLAB_CLOUD_POSTGRES_URL` in `.env` (Render → Postgres → **External Database URL**, not Internal). Render often gives `postgresql://…`; the sync script normalizes to `postgresql+psycopg://…` for Alembic. Logs show `host/db` only.
+4. **Gmail OAuth** (only if `RUN_GMAIL_INGEST=1`): set `ORIGENLAB_GMAIL_*` in `.env` per [`docs/ingest/WORKSPACE_GMAIL_IMAP.md`](ingest/WORKSPACE_GMAIL_IMAP.md).
+5. Alembic head already applied on Render Postgres (first-time: see [Phase 1 cloud read path](PHASE1_CLOUD_READ_PATH.md)).
 
 ---
 
 ## One command (recommended)
 
-From repo root:
+From repo root (with `apps/email-pipeline/.env` filled in — no manual `export` needed):
 
 ```bash
-export ORIGENLAB_SQLITE_PATH="$HOME/data/origenlab-email/sqlite/emails.sqlite"
-export ORIGENLAB_CLOUD_POSTGRES_URL='postgresql+psycopg://USER:PASSWORD@HOST/DB'
-
 # Mirror-only (no new Gmail fetch):
 bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
 
 # With Gmail ingest for new messages (read-only IMAP, last 14 days):
 RUN_GMAIL_INGEST=1 GMAIL_SINCE_DAYS=14 \
   bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
+```
+
+Example `apps/email-pipeline/.env` (secrets stay local):
+
+```bash
+ORIGENLAB_SQLITE_PATH=/home/you/data/origenlab-email/sqlite/emails.sqlite
+ORIGENLAB_CLOUD_POSTGRES_URL=postgresql://admin_origenlab:YOUR_PASSWORD@dpg-d88eqqbtqb8s738acu90-a.oregon-postgres.render.com/origenlab_dashboard_prod
+ORIGENLAB_GMAIL_OAUTH_CLIENT_JSON=/home/you/secrets/google-oauth-desktop.json
+ORIGENLAB_GMAIL_WORKSPACE_USER=contacto@origenlab.cl
+ORIGENLAB_GMAIL_TOKEN_JSON=/home/you/data/origenlab-email/secrets/gmail_workspace_token.json
 ```
 
 **Final step (human):** open https://dashboard.origenlab.cl and click **Refresh**.

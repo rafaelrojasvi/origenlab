@@ -44,7 +44,28 @@ const SUPPLIER_VENDOR_DOMAINS: ReadonlySet<string> = new Set([
   "dlabsci.com",
   "crtopmachine.com",
   "asynt.com",
+  "eppendorf.com",
+  "valuenindustrial.com",
+  "gzfanbolun.com",
+  "yuanhuai.com",
 ]);
+
+/** Defense-in-depth: mislabeled client_reply rows that must not show under Clientes reales. */
+export function isExcludedFromClientesReales(row: WarmCaseItem): boolean {
+  const domain = emailDomain(row.contact_email);
+  const hay = [row.contact_email, row.subject, row.snippet].join(" ").toLowerCase();
+
+  if (domain === "accounts.google.com" || hay.includes("alerta de seguridad")) {
+    return true;
+  }
+  if (SUPPLIER_VENDOR_DOMAINS.has(domain)) {
+    return true;
+  }
+  if (hay.includes("confirm your registration") || hay.includes("please confirm your registration")) {
+    return true;
+  }
+  return false;
+}
 
 const LOGISTICS_DOMAINS: ReadonlySet<string> = new Set(["dhl.com"]);
 
@@ -87,7 +108,7 @@ export function matchesWarmCaseViewPreset(
 
   switch (preset) {
     case "clientes_reales":
-      return CLIENTES_REALES_CATEGORIES.has(category);
+      return CLIENTES_REALES_CATEGORIES.has(category) && !isExcludedFromClientesReales(row);
 
     case "proveedores":
       if (category === "vendor_logistics") {
@@ -96,7 +117,13 @@ export function matchesWarmCaseViewPreset(
       if (category === "supplier_reply") {
         return true;
       }
-      return SUPPLIER_VENDOR_DOMAINS.has(domain);
+      if (SUPPLIER_VENDOR_DOMAINS.has(domain)) {
+        return true;
+      }
+      if (isExcludedFromClientesReales(row) && category === "client_reply") {
+        return true;
+      }
+      return false;
 
     case "pagos_admin":
       return matchesPagosAdminPreset(row);

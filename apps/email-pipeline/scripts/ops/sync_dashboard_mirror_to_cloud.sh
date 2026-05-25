@@ -5,23 +5,23 @@ set -euo pipefail
 
 PIPE="$(cd "$(dirname "$0")/../.." && pwd)"
 
+# shellcheck source=scripts/ops/_load_pipeline_dotenv.sh
+source "${PIPE}/scripts/ops/_load_pipeline_dotenv.sh"
+load_pipeline_dotenv "$PIPE"
+
 : "${ORIGENLAB_SQLITE_PATH:?Set ORIGENLAB_SQLITE_PATH to local canonical SQLite (not uploaded)}"
 : "${ORIGENLAB_CLOUD_POSTGRES_URL:?Set ORIGENLAB_CLOUD_POSTGRES_URL to cloud external Postgres URL}"
 
-if [[ "${ORIGENLAB_CLOUD_POSTGRES_URL}" == *"@127.0.0.1"* ]] || [[ "${ORIGENLAB_CLOUD_POSTGRES_URL}" == *"localhost"* ]]; then
-  echo "ERROR: ORIGENLAB_CLOUD_POSTGRES_URL looks local — use cloud external URL." >&2
-  exit 2
-fi
-
-export ORIGENLAB_POSTGRES_URL="${ORIGENLAB_CLOUD_POSTGRES_URL}"
-export ALEMBIC_DATABASE_URL="${ORIGENLAB_CLOUD_POSTGRES_URL}"
+# shellcheck source=scripts/ops/_cloud_postgres_env.sh
+source "${PIPE}/scripts/ops/_cloud_postgres_env.sh"
+cloud_postgres_prepare_env "$PIPE"
 
 cd "$PIPE"
 uv sync --group dev >/dev/null
 
 echo "== Phase 1 cloud mirror sync =="
 echo "SQLite: ${ORIGENLAB_SQLITE_PATH}"
-echo "Postgres: $(echo "${ORIGENLAB_CLOUD_POSTGRES_URL}" | sed -E 's#://([^:]+):)[^@]+@#://\1:***@#')"
+echo "Postgres: ${HOST_DB}"
 
 uv run alembic -c alembic.ini upgrade head
 

@@ -5,10 +5,14 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from origenlab_email_pipeline.business_mart import emails_in
 from origenlab_email_pipeline.cases_review_queue import (
     commercial_hint_es,
     looks_like_obvious_noise,
+)
+from origenlab_email_pipeline.warm_case_sender_rules import (
+    contact_email_from_sender,
+    looks_like_security_notification,
+    looks_like_supplier_marketing_thread,
 )
 
 WarmCaseCategory = Literal[
@@ -36,18 +40,6 @@ _EQUIPMENT_KEYWORDS = (
     "turrax",
 )
 
-_SUPPLIER_HINTS = (
-    "supplier",
-    "proveedor",
-    "distrib",
-    "hielscher",
-    "ortoalresa",
-    "serva.de",
-    "ollital",
-    "kern",
-    "sartorius",
-)
-
 
 def _bool_signal(value: Any) -> bool:
     if value is None:
@@ -63,11 +55,6 @@ def _bool_signal(value: Any) -> bool:
 def _is_sent_folder(source_file: str | None) -> bool:
     s = (source_file or "").lower()
     return "enviados" in s or "sent mail" in s or "/sent" in s
-
-
-def contact_email_from_sender(sender_preview: str | None) -> str:
-    found = emails_in(sender_preview or "")
-    return found[0] if found else ""
 
 
 def account_name_from_sender(sender_preview: str | None, contact_email: str) -> str:
@@ -101,14 +88,25 @@ def infer_warm_case_category(
 ) -> WarmCaseCategory:
     sender = row.get("sender_preview")
     subject = row.get("subject_preview")
-    if looks_like_obvious_noise(
-        sender if isinstance(sender, str) else None,
-        subject if isinstance(subject, str) else None,
-    ):
+    sender_s = sender if isinstance(sender, str) else None
+    subject_s = subject if isinstance(subject, str) else None
+    contact_email = contact_email_from_sender(sender_s)
+
+    if looks_like_obvious_noise(sender_s, subject_s):
         return "bounce"
 
-    subj_l = (subject or "").lower() if isinstance(subject, str) else ""
-    snd_l = (sender or "").lower() if isinstance(sender, str) else ""
+    if looks_like_security_notification(sender_s, subject_s, contact_email=contact_email):
+        return "bounce"
+
+    if looks_like_supplier_marketing_thread(
+        contact_email=contact_email,
+        sender=sender_s,
+        subject=subject_s,
+    ):
+        return "supplier_reply"
+
+    subj_l = (subject_s or "").lower()
+    snd_l = (sender_s or "").lower()
     source = row.get("source_file")
 
     if _is_sent_folder(source if isinstance(source, str) else None):
@@ -120,9 +118,6 @@ def infer_warm_case_category(
         if any(k in subj_l for k in ("licit", "equipo", "tender", "compra")):
             return "opportunity"
         return "opportunity"
-
-    if any(h in snd_l or h in subj_l for h in _SUPPLIER_HINTS):
-        return "supplier_reply"
 
     if re.match(r"^re:\s", subj_l) or subj_l.startswith("re "):
         if "origenlab" in snd_l:

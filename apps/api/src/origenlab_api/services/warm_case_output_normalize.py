@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-import re
+from origenlab_email_pipeline.warm_case_sender_rules import (
+    SUPPLIER_VENDOR_DOMAINS,
+    email_domain,
+    looks_like_security_notification,
+    looks_like_supplier_admin_signup_subject,
+    looks_like_supplier_marketing_thread,
+)
 
 from origenlab_api.schemas.cases import WarmCaseCategory, WarmCaseItem, WarmCaseStatus
 
@@ -33,17 +39,6 @@ _AUTO_REPLY_SUBJECT_MARKERS: tuple[str, ...] = (
 
 _LOGISTICS_VENDOR_DOMAINS: frozenset[str] = frozenset({"dhl.com"})
 
-_SUPPLIER_VENDOR_DOMAINS: frozenset[str] = frozenset(
-    {
-        "dlabsci.com",
-        "crtopmachine.com",
-        "asynt.com",
-        "ollital.com",
-        "serva.de",
-        "ortoalresa.com",
-    }
-)
-
 _PAYMENT_SENDER_DOMAINS: frozenset[str] = frozenset({"bancochile.cl"})
 
 _PAYMENT_SUBJECT_KEYWORDS: tuple[str, ...] = (
@@ -54,7 +49,7 @@ _PAYMENT_SUBJECT_KEYWORDS: tuple[str, ...] = (
 )
 
 _NEXT_ACTION_BY_CATEGORY: dict[str, str] = {
-    "auto_reply": "Ignorar respuesta automática; no requiere acción comercial.",
+    "auto_reply": "Ignorar alerta automática / registro; no requiere acción comercial.",
     "vendor_logistics": (
         "Revisar gestión logística/cuenta de importación; no cotizar al remitente."
     ),
@@ -73,13 +68,6 @@ _NEXT_ACTION_BY_CATEGORY: dict[str, str] = {
 _PRESERVE_CATEGORIES: frozenset[str] = frozenset({"quote_sent", "waiting_client", "waiting_supplier"})
 
 
-def _email_domain(contact_email: str) -> str:
-    email = (contact_email or "").strip().lower()
-    if "@" not in email:
-        return ""
-    return email.rsplit("@", 1)[-1]
-
-
 def is_auto_reply_subject(subject: str | None) -> bool:
     sub = (subject or "").strip().lower()
     if not sub:
@@ -95,7 +83,7 @@ def _subject_has_payment_signal(subject: str | None) -> bool:
 
 
 def _infer_status(category: WarmCaseCategory, prior: WarmCaseStatus) -> WarmCaseStatus:
-    if category == "auto_reply":
+    if category in ("auto_reply", "bounce"):
         return "problem"
     if category == "payment_admin":
         return "open"
@@ -105,8 +93,6 @@ def _infer_status(category: WarmCaseCategory, prior: WarmCaseStatus) -> WarmCase
         return "quoted"
     if category in ("waiting_supplier", "waiting_client"):
         return "waiting"
-    if category == "bounce":
-        return "problem"
     if category == "supplier_reply" and prior in ("waiting", "quoted"):
         return prior
     return prior if prior in ("open", "waiting", "quoted", "problem") else "new"
@@ -117,11 +103,20 @@ def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
     if item.category in _PRESERVE_CATEGORIES:
         return item.category  # type: ignore[return-value]
 
+    if looks_like_security_notification(None, item.subject, contact_email=item.contact_email):
+        return "auto_reply"
+
     if is_auto_reply_subject(item.subject):
         return "auto_reply"
 
-    domain = _email_domain(item.contact_email)
+    domain = email_domain(item.contact_email)
     subject_l = (item.subject or "").lower()
+
+    if looks_like_supplier_marketing_thread(
+        contact_email=item.contact_email,
+        subject=item.subject,
+    ) or looks_like_supplier_admin_signup_subject(item.subject):
+        return "supplier_reply"
 
     if domain in _PAYMENT_SENDER_DOMAINS or _subject_has_payment_signal(item.subject):
         return "payment_admin"
@@ -129,7 +124,7 @@ def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
     if domain in _LOGISTICS_VENDOR_DOMAINS or "dhl" in subject_l:
         return "vendor_logistics"
 
-    if domain in _SUPPLIER_VENDOR_DOMAINS:
+    if domain in SUPPLIER_VENDOR_DOMAINS:
         return "supplier_reply"
 
     if item.category == "client_reply":

@@ -1,0 +1,89 @@
+"""Regression tests for warm-case sender/subject routing."""
+
+from __future__ import annotations
+
+from origenlab_email_pipeline.warm_case_classification import infer_warm_case_category
+from origenlab_email_pipeline.warm_case_sender_rules import (
+    looks_like_security_notification,
+    looks_like_supplier_marketing_thread,
+)
+
+
+def _row(sender: str, subject: str) -> dict:
+    return {
+        "email_id": 1,
+        "sender_preview": sender,
+        "subject_preview": subject,
+        "source_file": "gmail:contacto@origenlab.cl/INBOX",
+    }
+
+
+def test_google_security_alert_not_client_reply() -> None:
+    sender = "Google <no-reply@accounts.google.com>"
+    subject = "Alerta de seguridad"
+    assert looks_like_security_notification(sender, subject, contact_email="no-reply@accounts.google.com")
+    assert (
+        infer_warm_case_category(_row(sender, subject), enrichment_available=False, include_noise=False)
+        == "bounce"
+    )
+
+
+def test_eppendorf_registration_is_supplier() -> None:
+    sender = "Eppendorf <eppendorf@eppendorf.com>"
+    subject = "Please confirm your registration!"
+    assert looks_like_supplier_marketing_thread(
+        contact_email="eppendorf@eppendorf.com",
+        sender=sender,
+        subject=subject,
+    )
+    assert (
+        infer_warm_case_category(_row(sender, subject), enrichment_available=False, include_noise=False)
+        == "supplier_reply"
+    )
+
+
+def test_valuenindustrial_sales_is_supplier() -> None:
+    assert (
+        infer_warm_case_category(
+            _row("sales@valuenindustrial.com", "Product line 2026"),
+            enrichment_available=False,
+            include_noise=False,
+        )
+        == "supplier_reply"
+    )
+
+
+def test_gzfanbolun_sales_is_supplier() -> None:
+    assert (
+        infer_warm_case_category(
+            _row("sales001@gzfanbolun.com", "Lab equipment promo"),
+            enrichment_available=False,
+            include_noise=False,
+        )
+        == "supplier_reply"
+    )
+
+
+def test_yuanhuai_yhchem_is_supplier() -> None:
+    assert (
+        infer_warm_case_category(
+            _row("jizhendong@yuanhuai.com", "YHCHEM catalog offer"),
+            enrichment_available=False,
+            include_noise=False,
+        )
+        == "supplier_reply"
+    )
+
+
+def test_gmail_cotizacion_stays_waiting_supplier_not_client() -> None:
+    assert (
+        infer_warm_case_category(
+            _row(
+                "aliro.ramirezf@gmail.com",
+                "COTIZACION OSMOMETRO LOSER 16 M EN M.MOLL",
+            ),
+            enrichment_available=False,
+            include_noise=False,
+        )
+        == "waiting_supplier"
+    )
