@@ -268,6 +268,20 @@ describe("warmCaseViewPreset", () => {
     ).toBe(true);
   });
 
+  it("Clientes reales excludes CEAF bank-details thread (Pagos/admin only)", () => {
+    const preset = "clientes_reales" as const;
+    const row = warmRow({
+      contact_email: "lhidalgo@ceaf.cl",
+      category: "client_reply",
+      subject: "Solicita datos Bancarios",
+      snippet: "factura N°06 y proceder al pago",
+    });
+    expect(isExcludedFromClientesReales(row)).toBe(true);
+    expect(matchesWarmCaseViewPreset(row, preset)).toBe(false);
+    expect(matchesWarmCaseViewPreset(row, "pagos_admin")).toBe(true);
+    expect(matchesWarmCaseViewPreset(row, "todo")).toBe(true);
+  });
+
   it("Clientes reales includes CEAF OC threads", () => {
     const preset = "clientes_reales" as const;
     expect(

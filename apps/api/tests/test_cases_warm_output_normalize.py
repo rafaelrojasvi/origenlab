@@ -31,19 +31,22 @@ def _item(
     contact_email: str,
     subject: str,
     category: str = "client_reply",
+    status: str = "new",
+    snippet: str = "",
+    account_name: str = "Test",
 ) -> WarmCaseItem:
     return WarmCaseItem(
         case_id="gmail-contacto-1",
         last_email_id=1,
         last_seen_at="2026-05-22T10:00:00-04:00",
-        account_name="Test",
+        account_name=account_name,
         contact_email=contact_email,
         subject=subject,
         category=category,  # type: ignore[arg-type]
-        status="new",
+        status=status,  # type: ignore[arg-type]
         next_action="old",
         equipment_signal="",
-        snippet="",
+        snippet=snippet,
         gmail_url=None,
     )
 
@@ -190,11 +193,33 @@ def test_ceaf_oc_thread_stays_client_reply() -> None:
     assert out.category == "client_reply"
 
 
-def test_ceaf_bank_details_client_reply() -> None:
-    raw = _item(contact_email="lhidalgo@ceaf.cl", subject="Solicita datos Bancarios", category="waiting_client")
+def test_ceaf_bank_details_payment_admin_open() -> None:
+    raw = _item(
+        contact_email="lhidalgo@ceaf.cl",
+        subject="Solicita datos Bancarios",
+        category="client_reply",
+        status="problem",
+        snippet="factura N°06 y proceder al pago; registrarla en nuestro sistema",
+    )
     out = normalize_warm_case_item(raw)
     assert out is not None
-    assert out.category == "client_reply"
+    assert out.category == "payment_admin"
+    assert out.status == "open"
+    assert "datos bancarios" in out.next_action.lower()
+    assert "no cotizar" in out.next_action.lower()
+
+
+def test_ceaf_bank_details_subject_only_payment_admin() -> None:
+    raw = _item(
+        contact_email="lhidalgo@ceaf.cl",
+        subject="Solicita datos Bancarios",
+        category="waiting_client",
+        status="problem",
+    )
+    out = normalize_warm_case_item(raw)
+    assert out is not None
+    assert out.category == "payment_admin"
+    assert out.status == "open"
 
 
 def test_post_normalize_positive_keeps_payment_and_logistics() -> None:

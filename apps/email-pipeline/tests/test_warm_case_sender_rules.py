@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from origenlab_email_pipeline.warm_case_classification import infer_warm_case_category
 from origenlab_email_pipeline.warm_case_sender_rules import (
+    looks_like_client_oc_post_sale_subject,
+    looks_like_payment_admin_thread,
     looks_like_security_notification,
     looks_like_supplier_marketing_thread,
 )
@@ -72,6 +74,26 @@ def test_yuanhuai_yhchem_is_supplier() -> None:
             include_noise=False,
         )
         == "supplier_reply"
+    )
+
+
+def test_ceaf_bank_details_payment_admin_thread() -> None:
+    assert looks_like_payment_admin_thread(
+        "lhidalgo@ceaf.cl",
+        "Solicita datos Bancarios",
+        snippet="factura N°06 y proceder al pago",
+    )
+
+
+def test_ceaf_oc_not_payment_admin() -> None:
+    assert not looks_like_payment_admin_thread("cgaray@ceaf.cl", "Remite OC N º 26172")
+    assert looks_like_client_oc_post_sale_subject("Remite OC N º 26172")
+
+
+def test_banco_factura_payment_admin_domain() -> None:
+    assert looks_like_payment_admin_thread(
+        "serviciodetransferencias@bancochile.cl",
+        "FACTURA 6",
     )
 
 

@@ -11,6 +11,9 @@ from origenlab_email_pipeline.cases_review_queue import (
 )
 from origenlab_email_pipeline.warm_case_sender_rules import (
     contact_email_from_sender,
+    email_domain,
+    is_real_client_domain,
+    looks_like_client_oc_post_sale_subject,
     looks_like_payment_admin_contact,
     looks_like_security_notification,
     looks_like_supplier_marketing_thread,
@@ -112,6 +115,11 @@ def infer_warm_case_category(
         return "client_reply"
 
     if looks_like_vendor_logistics_contact(contact_email, subject_s):
+        return "client_reply"
+
+    if is_real_client_domain(email_domain(contact_email)) and looks_like_client_oc_post_sale_subject(
+        subject_s
+    ):
         return "client_reply"
 
     subj_l = (subject_s or "").lower()

@@ -70,6 +70,12 @@ export function isExcludedFromClientesReales(row: WarmCaseItem): boolean {
   if (hay.includes("confirm your registration") || hay.includes("please confirm your registration")) {
     return true;
   }
+  if (row.category === "payment_admin" || row.category === "vendor_logistics") {
+    return true;
+  }
+  if (matchesPagosAdminSignals(row)) {
+    return true;
+  }
   return false;
 }
 
@@ -79,12 +85,7 @@ function matchesRealClientPostSale(row: WarmCaseItem): boolean {
     return false;
   }
   const hay = [row.subject, row.snippet].join(" ").toLowerCase();
-  return (
-    hay.includes("remite oc") ||
-    hay.includes("orden de compra") ||
-    hay.includes("datos bancarios") ||
-    hay.includes("solicita datos banc")
-  );
+  return hay.includes("remite oc") || hay.includes("orden de compra");
 }
 
 const LOGISTICS_DOMAINS: ReadonlySet<string> = new Set(["dhl.com"]);
@@ -114,10 +115,20 @@ function pagosAdminTextHaystack(row: WarmCaseItem): string {
 function matchesPagosAdminSignals(row: WarmCaseItem): boolean {
   const hay = pagosAdminTextHaystack(row);
   return (
-    hay.includes("factura") ||
-    hay.includes("transferencia") ||
     hay.includes("datos bancarios") ||
-    hay.includes("solicita datos banc")
+    hay.includes("solicita datos banc") ||
+    hay.includes("cuenta corriente") ||
+    hay.includes("beneficiario") ||
+    hay.includes("factura n°") ||
+    hay.includes("factura nº") ||
+    hay.includes("factura n ") ||
+    hay.includes("proceder al pago") ||
+    hay.includes("comprobante de transferencia") ||
+    hay.includes("transferencia") ||
+    hay.includes("registrarla en nuestro sistema") ||
+    hay.includes("registrar en nuestro sistema") ||
+    hay.includes("factura") ||
+    hay.includes("pago")
   );
 }
 

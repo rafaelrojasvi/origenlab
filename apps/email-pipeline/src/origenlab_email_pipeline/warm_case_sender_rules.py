@@ -86,14 +86,76 @@ def is_real_client_domain(domain: str) -> bool:
     return (domain or "").strip().lower() in REAL_CLIENT_DOMAINS
 
 
-def looks_like_payment_admin_contact(contact_email: str, subject: str | None) -> bool:
-    domain = email_domain(contact_email)
-    sub = (subject or "").lower()
-    if domain in _PAYMENT_ADMIN_DOMAINS:
+PAYMENT_ADMIN_TEXT_MARKERS: tuple[str, ...] = (
+    "datos bancarios",
+    "solicita datos banc",
+    "cuenta corriente",
+    "beneficiario",
+    "factura n°",
+    "factura nº",
+    "factura n ",
+    "factura no",
+    "factura nro",
+    "proceder al pago",
+    "comprobante de transferencia",
+    "transferencia",
+    "registrarla en nuestro sistema",
+    "registrar en nuestro sistema",
+    "factura",
+    "pago",
+)
+
+CLIENT_OC_POST_SALE_MARKERS: tuple[str, ...] = (
+    "remite oc",
+    "orden de compra",
+    "re: remite oc",
+)
+
+
+def payment_admin_text_haystack(
+    *,
+    subject: str | None,
+    snippet: str | None = None,
+    account_name: str | None = None,
+) -> str:
+    return " ".join(
+        [
+            subject or "",
+            snippet or "",
+            account_name or "",
+        ]
+    ).lower()
+
+
+def looks_like_payment_admin_thread(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    account_name: str | None = None,
+) -> bool:
+    if email_domain(contact_email) in _PAYMENT_ADMIN_DOMAINS:
         return True
-    return any(
-        token in sub
-        for token in ("factura", "comprobante de transferencia", "transferencia", "pago")
+    hay = payment_admin_text_haystack(
+        subject=subject,
+        snippet=snippet,
+        account_name=account_name,
+    )
+    return any(marker in hay for marker in PAYMENT_ADMIN_TEXT_MARKERS)
+
+
+def looks_like_payment_admin_contact(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    account_name: str | None = None,
+) -> bool:
+    return looks_like_payment_admin_thread(
+        contact_email,
+        subject,
+        snippet=snippet,
+        account_name=account_name,
     )
 
 
@@ -119,32 +181,42 @@ def should_keep_visible_despite_suppression(
     subject: str | None,
     *,
     category: str,
+    snippet: str | None = None,
 ) -> bool:
     """Payment/logistics/supplier rows must stay in api.v_warm_case (status <> problem-only gate)."""
     if category in ("supplier_reply", "quote_sent", "waiting_supplier", "waiting_client"):
         return True
-    if looks_like_payment_admin_contact(contact_email, subject):
+    if looks_like_payment_admin_contact(contact_email, subject, snippet=snippet):
         return True
     if looks_like_vendor_logistics_contact(contact_email, subject):
         return True
-    if is_real_client_domain(email_domain(contact_email)) and looks_like_client_post_sale_subject(subject):
+    if is_real_client_domain(email_domain(contact_email)) and looks_like_client_oc_post_sale_subject(
+        subject,
+        snippet=snippet,
+    ):
+        return True
+    return False
+
+
+def looks_like_client_oc_post_sale_subject(
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    account_name: str | None = None,
+) -> bool:
+    """CEAF/client OC threads — not bank-registration / payment setup."""
+    hay = payment_admin_text_haystack(
+        subject=subject,
+        snippet=snippet,
+        account_name=account_name,
+    )
+    if any(marker in hay for marker in CLIENT_OC_POST_SALE_MARKERS):
         return True
     return False
 
 
 def looks_like_client_post_sale_subject(subject: str | None) -> bool:
-    sub = (subject or "").lower()
-    return any(
-        token in sub
-        for token in (
-            "remite oc",
-            "orden de compra",
-            "datos bancarios",
-            "solicita datos banc",
-            "factura",
-            "transferencia",
-        )
-    )
+    return looks_like_client_oc_post_sale_subject(subject)
 
 
 def email_domain(contact_email: str) -> str:

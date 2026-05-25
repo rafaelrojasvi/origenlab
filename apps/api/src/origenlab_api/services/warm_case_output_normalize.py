@@ -8,10 +8,12 @@ from origenlab_email_pipeline.warm_case_sender_rules import (
     email_domain,
     is_internal_operator_contact,
     is_real_client_domain,
-    looks_like_client_post_sale_subject,
+    looks_like_client_oc_post_sale_subject,
+    looks_like_payment_admin_thread,
     looks_like_security_notification,
     looks_like_supplier_admin_signup_subject,
     looks_like_supplier_marketing_thread,
+    payment_admin_text_haystack,
 )
 
 from origenlab_api.schemas.cases import WarmCaseCategory, WarmCaseItem, WarmCaseStatus
@@ -57,15 +59,6 @@ _AUTO_REPLY_SUBJECT_MARKERS: tuple[str, ...] = (
 
 _LOGISTICS_VENDOR_DOMAINS: frozenset[str] = frozenset({"dhl.com"})
 
-_PAYMENT_SENDER_DOMAINS: frozenset[str] = frozenset({"bancochile.cl"})
-
-_PAYMENT_SUBJECT_KEYWORDS: tuple[str, ...] = (
-    "factura",
-    "comprobante de transferencia",
-    "transferencia",
-    "pago",
-)
-
 _LOGISTICS_SUBJECT_MARKERS: tuple[str, ...] = (
     "dhl",
     "cuenta importación",
@@ -91,6 +84,15 @@ _NEXT_ACTION_BY_CATEGORY: dict[str, str] = {
     "opportunity": "Priorizar según señal comercial; validar equipo y plazo.",
 }
 
+_PAYMENT_BANK_DETAILS_MARKERS: tuple[str, ...] = (
+    "datos bancarios",
+    "solicita datos banc",
+    "cuenta corriente",
+    "beneficiario",
+    "registrarla en nuestro sistema",
+    "registrar en nuestro sistema",
+)
+
 
 def is_auto_reply_subject(subject: str | None) -> bool:
     sub = (subject or "").strip().lower()
@@ -101,22 +103,32 @@ def is_auto_reply_subject(subject: str | None) -> bool:
     return any(marker in sub for marker in _AUTO_REPLY_SUBJECT_MARKERS)
 
 
-def _subject_has_payment_signal(subject: str | None) -> bool:
-    sub = (subject or "").lower()
-    return any(kw in sub for kw in _PAYMENT_SUBJECT_KEYWORDS)
+def _warm_haystack(item: WarmCaseItem) -> str:
+    return payment_admin_text_haystack(
+        subject=item.subject,
+        snippet=item.snippet,
+        account_name=item.account_name,
+    )
 
 
-def _subject_has_logistics_signal(subject: str | None) -> bool:
-    sub = (subject or "").lower()
-    return any(kw in sub for kw in _LOGISTICS_SUBJECT_MARKERS)
+def _subject_has_logistics_signal(item: WarmCaseItem) -> bool:
+    hay = _warm_haystack(item)
+    return any(kw in hay for kw in _LOGISTICS_SUBJECT_MARKERS)
+
+
+def _payment_admin_next_action(item: WarmCaseItem) -> str:
+    hay = _warm_haystack(item)
+    if any(marker in hay for marker in _PAYMENT_BANK_DETAILS_MARKERS):
+        return (
+            "Registrar/confirmar datos bancarios y asociar a factura/cliente; no cotizar."
+        )
+    return _NEXT_ACTION_BY_CATEGORY["payment_admin"]
 
 
 def _infer_status(category: WarmCaseCategory, prior: WarmCaseStatus) -> WarmCaseStatus:
     if category in ("auto_reply", "bounce"):
         return "problem"
-    if category == "payment_admin":
-        return "open"
-    if category == "vendor_logistics":
+    if category in ("payment_admin", "vendor_logistics"):
         return "open"
     if category == "quote_sent":
         return "quoted"
@@ -128,7 +140,7 @@ def _infer_status(category: WarmCaseCategory, prior: WarmCaseStatus) -> WarmCase
 
 
 def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
-    """Deterministic category override from contact domain and subject."""
+    """Deterministic category override from contact domain and subject/snippet."""
     if is_internal_operator_contact(item.contact_email):
         return "auto_reply"
 
@@ -138,25 +150,32 @@ def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
     if is_auto_reply_subject(item.subject):
         return "auto_reply"
 
-    domain = email_domain(item.contact_email)
-    subject_l = (item.subject or "").lower()
-
     if looks_like_supplier_marketing_thread(
         contact_email=item.contact_email,
         subject=item.subject,
     ) or looks_like_supplier_admin_signup_subject(item.subject):
         return "supplier_reply"
 
-    if domain in _PAYMENT_SENDER_DOMAINS or _subject_has_payment_signal(item.subject):
+    if looks_like_payment_admin_thread(
+        item.contact_email,
+        item.subject,
+        snippet=item.snippet,
+        account_name=item.account_name,
+    ):
         return "payment_admin"
 
-    if domain in _LOGISTICS_VENDOR_DOMAINS or _subject_has_logistics_signal(item.subject):
+    domain = email_domain(item.contact_email)
+    if domain in _LOGISTICS_VENDOR_DOMAINS or _subject_has_logistics_signal(item):
         return "vendor_logistics"
 
     if domain in SUPPLIER_VENDOR_DOMAINS:
         return "supplier_reply"
 
-    if is_real_client_domain(domain) and looks_like_client_post_sale_subject(item.subject):
+    if is_real_client_domain(domain) and looks_like_client_oc_post_sale_subject(
+        item.subject,
+        snippet=item.snippet,
+        account_name=item.account_name,
+    ):
         return "client_reply"
 
     if item.category in ("quote_sent", "waiting_client", "waiting_supplier"):
@@ -184,7 +203,10 @@ def normalize_warm_case_item(
         return None
 
     status = _infer_status(category, item.status)
-    next_action = _NEXT_ACTION_BY_CATEGORY.get(category, item.next_action)
+    if category == "payment_admin":
+        next_action = _payment_admin_next_action(item)
+    else:
+        next_action = _NEXT_ACTION_BY_CATEGORY.get(category, item.next_action)
 
     return item.model_copy(
         update={
