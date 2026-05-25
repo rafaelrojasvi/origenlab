@@ -35,7 +35,7 @@ class WarmCaseRepository(Protocol):
         days: int = 14,
         limit: int = 50,
         category: str | None = None,
-        positive_signal_only: bool = True,
+        positive_signal_only: bool = False,
         include_noise: bool = False,
     ) -> tuple[list[WarmCaseItem], WarmCasesMeta]:
         """Return warm case items and response meta."""

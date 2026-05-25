@@ -139,7 +139,6 @@ def test_postgres_warm_cases_queries_view() -> None:
         items, meta = repo.list_warm_cases(
             days=14,
             limit=10,
-            category="supplier_reply",
             positive_signal_only=True,
             include_noise=False,
         )
@@ -147,9 +146,8 @@ def test_postgres_warm_cases_queries_view() -> None:
     assert cur is not None
     assert "api.v_warm_case" in cur.last_sql
     assert "last_seen_at >= %(cutoff)s" in cur.last_sql
-    assert cur.last_params["category"] == "supplier_reply"
     assert cur.last_params["include_noise"] is False
-    assert "positive_categories" not in cur.last_params
+    assert "category" not in cur.last_params
     assert cur.last_params["limit"] == 40
     assert len(items) == 1
     assert meta.data_source == "postgres_mirror"
@@ -180,7 +178,7 @@ def test_postgres_warm_cases_include_noise_false_excludes_bounce_problem_in_sql(
         cur = conn.last_cursor
     assert cur is not None
     assert "<> 'bounce'" in cur.last_sql
-    assert "<> 'problem'" in cur.last_sql
+    assert "<> 'problem'" not in cur.last_sql
 
 
 def test_utc_cutoff_respects_days_window() -> None:

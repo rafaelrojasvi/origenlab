@@ -17,7 +17,7 @@ class SqliteWarmCaseRepository:
         days: int = 14,
         limit: int = 50,
         category: str | None = None,
-        positive_signal_only: bool = True,
+        positive_signal_only: bool = False,
         include_noise: bool = False,
     ) -> tuple[list[WarmCaseItem], WarmCasesMeta]:
         items, enrichment_available, reduced_mode, note = fetch_warm_cases(

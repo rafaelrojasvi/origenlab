@@ -6,6 +6,10 @@ from origenlab_email_pipeline.business_mart import emails_in
 
 INTERNAL_OPERATOR_DOMAINS: frozenset[str] = frozenset({"origenlab.cl", "labdelivery.cl"})
 
+_PAYMENT_ADMIN_DOMAINS: frozenset[str] = frozenset({"bancochile.cl"})
+
+_LOGISTICS_VENDOR_DOMAINS: frozenset[str] = frozenset({"dhl.com"})
+
 # Existing-client / post-sale threads (not suppliers).
 REAL_CLIENT_DOMAINS: frozenset[str] = frozenset({"ceaf.cl"})
 
@@ -80,6 +84,52 @@ def is_internal_operator_contact(contact_email: str) -> bool:
 
 def is_real_client_domain(domain: str) -> bool:
     return (domain or "").strip().lower() in REAL_CLIENT_DOMAINS
+
+
+def looks_like_payment_admin_contact(contact_email: str, subject: str | None) -> bool:
+    domain = email_domain(contact_email)
+    sub = (subject or "").lower()
+    if domain in _PAYMENT_ADMIN_DOMAINS:
+        return True
+    return any(
+        token in sub
+        for token in ("factura", "comprobante de transferencia", "transferencia", "pago")
+    )
+
+
+def looks_like_vendor_logistics_contact(contact_email: str, subject: str | None) -> bool:
+    domain = email_domain(contact_email)
+    sub = (subject or "").lower()
+    if domain in _LOGISTICS_VENDOR_DOMAINS:
+        return True
+    return any(
+        token in sub
+        for token in (
+            "dhl",
+            "cuenta importación",
+            "cuenta importacion",
+            "propuesta comercial dhl",
+            "solicitud cuenta",
+        )
+    )
+
+
+def should_keep_visible_despite_suppression(
+    contact_email: str,
+    subject: str | None,
+    *,
+    category: str,
+) -> bool:
+    """Payment/logistics/supplier rows must stay in api.v_warm_case (status <> problem-only gate)."""
+    if category in ("supplier_reply", "quote_sent", "waiting_supplier", "waiting_client"):
+        return True
+    if looks_like_payment_admin_contact(contact_email, subject):
+        return True
+    if looks_like_vendor_logistics_contact(contact_email, subject):
+        return True
+    if is_real_client_domain(email_domain(contact_email)) and looks_like_client_post_sale_subject(subject):
+        return True
+    return False
 
 
 def looks_like_client_post_sale_subject(subject: str | None) -> bool:

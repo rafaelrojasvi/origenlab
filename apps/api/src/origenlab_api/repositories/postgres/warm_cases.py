@@ -9,6 +9,7 @@ from origenlab_api.repositories.postgres.common import postgres_connection, requ
 from origenlab_api.schemas.cases import WarmCaseItem, WarmCasesMeta
 from origenlab_api.settings import Settings
 
+# Category filter runs after response-time normalization (mirror stores client_reply, etc.).
 _WARM_CASE_SQL = """
 SELECT
   case_id,
@@ -25,13 +26,9 @@ SELECT
   gmail_url
 FROM api.v_warm_case
 WHERE last_seen_at >= %(cutoff)s
-  AND (%(category)s::text IS NULL OR lower(trim(COALESCE(category, ''))) = %(category)s)
   AND (
     %(include_noise)s::boolean IS TRUE
-    OR (
-      lower(trim(COALESCE(category, ''))) <> 'bounce'
-      AND lower(trim(COALESCE(status, ''))) <> 'problem'
-    )
+    OR lower(trim(COALESCE(category, ''))) <> 'bounce'
   )
 ORDER BY last_seen_at DESC NULLS LAST
 LIMIT %(limit)s
@@ -119,17 +116,16 @@ class PostgresWarmCaseRepository:
         days: int = 14,
         limit: int = 50,
         category: str | None = None,
-        positive_signal_only: bool = True,
+        positive_signal_only: bool = False,
         include_noise: bool = False,
     ) -> tuple[list[WarmCaseItem], WarmCasesMeta]:
         require_psycopg()
         cap = max(1, min(int(limit), 200))
         category_f = (category or "").strip().lower() or None
-        # Over-fetch: SQL category filter runs on pre-normalize mirror labels.
-        fetch_limit = min(cap * 4, 200) if positive_signal_only else cap
+        fetch_limit = min(cap * 4, 200)
+
         params = {
             "cutoff": utc_cutoff(days),
-            "category": category_f,
             "include_noise": include_noise,
             "limit": fetch_limit,
         }

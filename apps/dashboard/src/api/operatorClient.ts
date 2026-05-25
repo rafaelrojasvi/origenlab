@@ -106,12 +106,14 @@ export async function fetchTodayPanel(): Promise<TodayPanelData> {
   return { health, operator };
 }
 
-const DEFAULT_WARM_QUERY: Required<Pick<WarmCasesQuery, "days" | "limit" | "positive_signal_only">> =
-  {
-    days: 14,
-    limit: 30,
-    positive_signal_only: false,
-  };
+/** Dashboard warm queue: load full normalized set for client-side presets (Pagos/admin, Logística). */
+export const DASHBOARD_WARM_CASES_QUERY: Required<
+  Pick<WarmCasesQuery, "days" | "limit" | "positive_signal_only">
+> = {
+  days: 14,
+  limit: 100,
+  positive_signal_only: false,
+};
 
 const DEFAULT_EQUIPMENT_QUERY: Required<
   Pick<EquipmentOpportunitiesQuery, "limit" | "include_account_intelligence">
@@ -122,10 +124,10 @@ const DEFAULT_EQUIPMENT_QUERY: Required<
 
 export function fetchWarmCases(query: WarmCasesQuery = {}): Promise<WarmCasesResponse> {
   const params: Record<string, string | number | boolean> = {
-    days: query.days ?? DEFAULT_WARM_QUERY.days,
-    limit: query.limit ?? DEFAULT_WARM_QUERY.limit,
+    days: query.days ?? DASHBOARD_WARM_CASES_QUERY.days,
+    limit: query.limit ?? DASHBOARD_WARM_CASES_QUERY.limit,
     positive_signal_only:
-      query.positive_signal_only ?? DEFAULT_WARM_QUERY.positive_signal_only,
+      query.positive_signal_only ?? DASHBOARD_WARM_CASES_QUERY.positive_signal_only,
   };
   if (query.category) {
     params.category = query.category;

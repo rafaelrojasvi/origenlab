@@ -20,7 +20,10 @@ def cases_warm(
         None,
         description="Filter by category (client_reply, supplier_reply, quote_sent, …)",
     ),
-    positive_signal_only: bool = Query(True),
+    positive_signal_only: bool = Query(
+        False,
+        description="When true, omit auto-reply/security noise after normalization.",
+    ),
     include_noise: bool = Query(False),
 ) -> WarmCasesResponse:
     if category is not None:

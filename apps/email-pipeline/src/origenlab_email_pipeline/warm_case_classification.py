@@ -11,8 +11,11 @@ from origenlab_email_pipeline.cases_review_queue import (
 )
 from origenlab_email_pipeline.warm_case_sender_rules import (
     contact_email_from_sender,
+    looks_like_payment_admin_contact,
     looks_like_security_notification,
     looks_like_supplier_marketing_thread,
+    looks_like_vendor_logistics_contact,
+    should_keep_visible_despite_suppression,
 )
 
 WarmCaseCategory = Literal[
@@ -105,6 +108,12 @@ def infer_warm_case_category(
     ):
         return "supplier_reply"
 
+    if looks_like_payment_admin_contact(contact_email, subject_s):
+        return "client_reply"
+
+    if looks_like_vendor_logistics_contact(contact_email, subject_s):
+        return "client_reply"
+
     subj_l = (subject_s or "").lower()
     snd_l = (sender_s or "").lower()
     source = row.get("source_file")
@@ -142,6 +151,15 @@ def infer_warm_case_status(category: WarmCaseCategory, row: dict[str, Any]) -> W
     if category == "opportunity":
         return "open"
     if _bool_signal(row.get("has_suppression_signal")):
+        if should_keep_visible_despite_suppression(
+            contact_email_from_sender(
+                row.get("sender_preview") if isinstance(row.get("sender_preview"), str) else None
+            )
+            or "",
+            row.get("subject_preview") if isinstance(row.get("subject_preview"), str) else None,
+            category=category,
+        ):
+            return "open"
         return "problem"
     if _bool_signal(row.get("has_positive_signal")):
         return "open"

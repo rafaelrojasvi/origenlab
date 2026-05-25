@@ -7,6 +7,7 @@ import {
   OperatorApiError,
   fetchEquipmentOpportunities,
   fetchTodayPanel,
+  DASHBOARD_WARM_CASES_QUERY,
   fetchWarmCases,
   getOperatorApiBaseUrl,
 } from "../api/operatorClient";
@@ -89,7 +90,7 @@ export function TodayPage() {
     setWarmLoading(true);
     setWarmError(null);
     try {
-      setWarm(await fetchWarmCases());
+      setWarm(await fetchWarmCases(DASHBOARD_WARM_CASES_QUERY));
     } catch (e) {
       setWarmError(formatLoadError("Warm cases", e));
       setWarm(null);

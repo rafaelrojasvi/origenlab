@@ -14,7 +14,7 @@ def build_warm_cases_response(
     days: int = 14,
     limit: int = 50,
     category: str | None = None,
-    positive_signal_only: bool = True,
+    positive_signal_only: bool = False,
     include_noise: bool = False,
 ) -> WarmCasesResponse:
     bundle = repos or get_repository_bundle(settings)

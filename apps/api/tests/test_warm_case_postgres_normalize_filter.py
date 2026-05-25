@@ -78,6 +78,28 @@ def test_postgres_positive_filter_keeps_payment_admin_after_normalize() -> None:
     assert "monica.silva@dhl.com" in emails
 
 
+def test_postgres_category_payment_admin_after_normalize() -> None:
+    settings = Settings(api_backend="postgres", postgres_url="postgresql://127.0.0.1/db")
+    repo = PostgresWarmCaseRepository(settings)
+    with _fake_conn(
+        [
+            _row(
+                contact_email="serviciodetransferencias@bancochile.cl",
+                subject="FACTURA 6",
+                category="client_reply",
+                status="problem",
+            )
+        ]
+    ):
+        items, _meta = repo.list_warm_cases(
+            limit=10,
+            category="payment_admin",
+            positive_signal_only=False,
+        )
+    assert len(items) == 1
+    assert items[0].category == "payment_admin"
+
+
 def test_postgres_internal_contacto_dropped_by_default() -> None:
     settings = Settings(api_backend="postgres", postgres_url="postgresql://127.0.0.1/db")
     repo = PostgresWarmCaseRepository(settings)

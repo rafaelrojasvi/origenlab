@@ -108,9 +108,10 @@ describe("operator API client", () => {
   it("operatorApiUrl builds warm cases GET path", () => {
     vi.stubEnv("MODE", "production");
     vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "https://api.example.com");
-    const url = operatorApiUrl("/cases/warm", { limit: 30, positive_signal_only: false });
+    const url = operatorApiUrl("/cases/warm", { limit: 100, positive_signal_only: false });
     expect(url).toContain("/cases/warm");
     expect(url).toContain("positive_signal_only=false");
+    expect(url).toContain("limit=100");
   });
 
   it("contactDetailPath URL-encodes email for GET /contacts/{email}", () => {
