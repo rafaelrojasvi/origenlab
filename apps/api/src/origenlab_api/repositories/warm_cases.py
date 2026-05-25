@@ -66,6 +66,7 @@ def fetch_warm_cases(
         raw_items,
         include_noise=include_noise,
         category_filter=category_needle,
+        positive_signal_only=positive_signal_only,
     )[:cap]
 
     return items, result.enrichment_available, reduced_mode, note

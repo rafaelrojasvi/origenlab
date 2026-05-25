@@ -210,6 +210,88 @@ describe("warmCaseViewPreset", () => {
     }),
   ];
 
+  it("Clientes reales excludes internal contacto@origenlab.cl waiting_client", () => {
+    const preset = "clientes_reales" as const;
+    const row = warmRow({
+      contact_email: "contacto@origenlab.cl",
+      category: "waiting_client",
+      subject: "Re: Quotation Request / New adress created",
+    });
+    expect(matchesWarmCaseViewPreset(row, preset)).toBe(false);
+  });
+
+  it("Pagos/admin includes bancochile FACTURA and CEAF bank-details thread", () => {
+    const preset = "pagos_admin" as const;
+    expect(
+      matchesWarmCaseViewPreset(
+        warmRow({
+          contact_email: "serviciodetransferencias@bancochile.cl",
+          category: "payment_admin",
+          subject: "FACTURA 6",
+        }),
+        preset,
+      ),
+    ).toBe(true);
+    expect(
+      matchesWarmCaseViewPreset(
+        warmRow({
+          contact_email: "lhidalgo@ceaf.cl",
+          category: "client_reply",
+          subject: "Solicita datos Bancarios",
+        }),
+        preset,
+      ),
+    ).toBe(true);
+  });
+
+  it("Logística includes DHL vendor_logistics and import-account subject", () => {
+    const preset = "logistica" as const;
+    expect(
+      matchesWarmCaseViewPreset(
+        warmRow({
+          contact_email: "monica.silva@dhl.com",
+          category: "vendor_logistics",
+          subject: "PROPUESTA COMERCIAL DHL",
+        }),
+        preset,
+      ),
+    ).toBe(true);
+    expect(
+      matchesWarmCaseViewPreset(
+        warmRow({
+          contact_email: "monica.silva@dhl.com",
+          category: "client_reply",
+          subject: "Solicitud cuenta importación",
+        }),
+        preset,
+      ),
+    ).toBe(true);
+  });
+
+  it("Clientes reales includes CEAF OC threads", () => {
+    const preset = "clientes_reales" as const;
+    expect(
+      matchesWarmCaseViewPreset(
+        warmRow({
+          contact_email: "cgaray@ceaf.cl",
+          category: "client_reply",
+          subject: "Remite OC N º 26172",
+        }),
+        preset,
+      ),
+    ).toBe(true);
+    expect(
+      matchesWarmCaseViewPreset(
+        warmRow({
+          contact_email: "fgonzalez@ceaf.cl",
+          category: "waiting_supplier",
+          subject: "Re: Remite OC N º 26172",
+        }),
+        preset,
+      ),
+    ).toBe(true);
+  });
+
   it("Clientes reales excludes audit false positives even when mislabeled client_reply", () => {
     const preset = "clientes_reales" as const;
     for (const row of FALSE_POSITIVE_CLIENT_REPLY) {

@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from origenlab_email_pipeline.warm_case_sender_rules import (
+    REAL_CLIENT_DOMAINS,
     SUPPLIER_VENDOR_DOMAINS,
     email_domain,
+    is_internal_operator_contact,
+    is_real_client_domain,
+    looks_like_client_post_sale_subject,
     looks_like_security_notification,
     looks_like_supplier_admin_signup_subject,
     looks_like_supplier_marketing_thread,
@@ -28,6 +32,20 @@ NORMALIZED_WARM_CATEGORIES: frozenset[str] = frozenset(
     }
 )
 
+# Applied after normalization when positive_signal_only=True (Postgres/SQLite repos).
+POST_NORMALIZE_POSITIVE_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "client_reply",
+        "supplier_reply",
+        "quote_sent",
+        "waiting_supplier",
+        "waiting_client",
+        "opportunity",
+        "payment_admin",
+        "vendor_logistics",
+    }
+)
+
 _AUTO_REPLY_SUBJECT_MARKERS: tuple[str, ...] = (
     "automatic reply",
     "auto-reply",
@@ -48,6 +66,14 @@ _PAYMENT_SUBJECT_KEYWORDS: tuple[str, ...] = (
     "pago",
 )
 
+_LOGISTICS_SUBJECT_MARKERS: tuple[str, ...] = (
+    "dhl",
+    "cuenta importación",
+    "cuenta importacion",
+    "propuesta comercial dhl",
+    "solicitud cuenta",
+)
+
 _NEXT_ACTION_BY_CATEGORY: dict[str, str] = {
     "auto_reply": "Ignorar alerta automática / registro; no requiere acción comercial.",
     "vendor_logistics": (
@@ -65,8 +91,6 @@ _NEXT_ACTION_BY_CATEGORY: dict[str, str] = {
     "opportunity": "Priorizar según señal comercial; validar equipo y plazo.",
 }
 
-_PRESERVE_CATEGORIES: frozenset[str] = frozenset({"quote_sent", "waiting_client", "waiting_supplier"})
-
 
 def is_auto_reply_subject(subject: str | None) -> bool:
     sub = (subject or "").strip().lower()
@@ -80,6 +104,11 @@ def is_auto_reply_subject(subject: str | None) -> bool:
 def _subject_has_payment_signal(subject: str | None) -> bool:
     sub = (subject or "").lower()
     return any(kw in sub for kw in _PAYMENT_SUBJECT_KEYWORDS)
+
+
+def _subject_has_logistics_signal(subject: str | None) -> bool:
+    sub = (subject or "").lower()
+    return any(kw in sub for kw in _LOGISTICS_SUBJECT_MARKERS)
 
 
 def _infer_status(category: WarmCaseCategory, prior: WarmCaseStatus) -> WarmCaseStatus:
@@ -100,8 +129,8 @@ def _infer_status(category: WarmCaseCategory, prior: WarmCaseStatus) -> WarmCase
 
 def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
     """Deterministic category override from contact domain and subject."""
-    if item.category in _PRESERVE_CATEGORIES:
-        return item.category  # type: ignore[return-value]
+    if is_internal_operator_contact(item.contact_email):
+        return "auto_reply"
 
     if looks_like_security_notification(None, item.subject, contact_email=item.contact_email):
         return "auto_reply"
@@ -121,11 +150,17 @@ def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
     if domain in _PAYMENT_SENDER_DOMAINS or _subject_has_payment_signal(item.subject):
         return "payment_admin"
 
-    if domain in _LOGISTICS_VENDOR_DOMAINS or "dhl" in subject_l:
+    if domain in _LOGISTICS_VENDOR_DOMAINS or _subject_has_logistics_signal(item.subject):
         return "vendor_logistics"
 
     if domain in SUPPLIER_VENDOR_DOMAINS:
         return "supplier_reply"
+
+    if is_real_client_domain(domain) and looks_like_client_post_sale_subject(item.subject):
+        return "client_reply"
+
+    if item.category in ("quote_sent", "waiting_client", "waiting_supplier"):
+        return item.category  # type: ignore[return-value]
 
     if item.category == "client_reply":
         return "client_reply"
@@ -160,11 +195,17 @@ def normalize_warm_case_item(
     )
 
 
+def filter_positive_normalized_items(items: list[WarmCaseItem]) -> list[WarmCaseItem]:
+    """Keep operator-meaningful categories after response-time normalization."""
+    return [item for item in items if item.category in POST_NORMALIZE_POSITIVE_CATEGORIES]
+
+
 def normalize_warm_case_items(
     items: list[WarmCaseItem],
     *,
     include_noise: bool = False,
     category_filter: str | None = None,
+    positive_signal_only: bool = False,
 ) -> list[WarmCaseItem]:
     """Normalize and optionally filter by post-normalization category."""
     needle = (category_filter or "").strip().lower()
@@ -176,4 +217,6 @@ def normalize_warm_case_items(
         if needle and normalized.category != needle:
             continue
         out.append(normalized)
+    if positive_signal_only:
+        out = filter_positive_normalized_items(out)
     return out

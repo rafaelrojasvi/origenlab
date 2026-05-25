@@ -149,8 +149,8 @@ def test_postgres_warm_cases_queries_view() -> None:
     assert "last_seen_at >= %(cutoff)s" in cur.last_sql
     assert cur.last_params["category"] == "supplier_reply"
     assert cur.last_params["include_noise"] is False
-    assert cur.last_params["positive_signal_only"] is True
-    assert cur.last_params["limit"] == 10
+    assert "positive_categories" not in cur.last_params
+    assert cur.last_params["limit"] == 40
     assert len(items) == 1
     assert meta.data_source == "postgres_mirror"
 

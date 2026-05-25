@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from origenlab_email_pipeline.business_mart import emails_in
 
+INTERNAL_OPERATOR_DOMAINS: frozenset[str] = frozenset({"origenlab.cl", "labdelivery.cl"})
+
+# Existing-client / post-sale threads (not suppliers).
+REAL_CLIENT_DOMAINS: frozenset[str] = frozenset({"ceaf.cl"})
+
 # Domains that should never appear as «Clientes reales» (vendor / industrial suppliers).
 SUPPLIER_VENDOR_DOMAINS: frozenset[str] = frozenset(
     {
@@ -64,6 +69,32 @@ _SUPPLIER_SUBJECT_MARKERS: tuple[str, ...] = (
 def contact_email_from_sender(sender_preview: str | None) -> str:
     found = emails_in(sender_preview or "")
     return found[0].lower() if found else ""
+
+
+def is_internal_operator_contact(contact_email: str) -> bool:
+    email = (contact_email or "").strip().lower()
+    if email == "contacto@origenlab.cl":
+        return True
+    return email_domain(email) in INTERNAL_OPERATOR_DOMAINS
+
+
+def is_real_client_domain(domain: str) -> bool:
+    return (domain or "").strip().lower() in REAL_CLIENT_DOMAINS
+
+
+def looks_like_client_post_sale_subject(subject: str | None) -> bool:
+    sub = (subject or "").lower()
+    return any(
+        token in sub
+        for token in (
+            "remite oc",
+            "orden de compra",
+            "datos bancarios",
+            "solicita datos banc",
+            "factura",
+            "transferencia",
+        )
+    )
 
 
 def email_domain(contact_email: str) -> str:

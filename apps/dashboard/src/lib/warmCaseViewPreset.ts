@@ -50,11 +50,17 @@ const SUPPLIER_VENDOR_DOMAINS: ReadonlySet<string> = new Set([
   "yuanhuai.com",
 ]);
 
-/** Defense-in-depth: mislabeled client_reply rows that must not show under Clientes reales. */
+const REAL_CLIENT_DOMAINS: ReadonlySet<string> = new Set(["ceaf.cl"]);
+
+/** Defense-in-depth: rows that must not show under Clientes reales. */
 export function isExcludedFromClientesReales(row: WarmCaseItem): boolean {
   const domain = emailDomain(row.contact_email);
+  const email = row.contact_email.trim().toLowerCase();
   const hay = [row.contact_email, row.subject, row.snippet].join(" ").toLowerCase();
 
+  if (email === "contacto@origenlab.cl" || domain === "origenlab.cl" || domain === "labdelivery.cl") {
+    return true;
+  }
   if (domain === "accounts.google.com" || hay.includes("alerta de seguridad")) {
     return true;
   }
@@ -67,7 +73,32 @@ export function isExcludedFromClientesReales(row: WarmCaseItem): boolean {
   return false;
 }
 
+function matchesRealClientPostSale(row: WarmCaseItem): boolean {
+  const domain = emailDomain(row.contact_email);
+  if (!REAL_CLIENT_DOMAINS.has(domain)) {
+    return false;
+  }
+  const hay = [row.subject, row.snippet].join(" ").toLowerCase();
+  return (
+    hay.includes("remite oc") ||
+    hay.includes("orden de compra") ||
+    hay.includes("datos bancarios") ||
+    hay.includes("solicita datos banc")
+  );
+}
+
 const LOGISTICS_DOMAINS: ReadonlySet<string> = new Set(["dhl.com"]);
+
+function haystackIncludesLogistics(row: WarmCaseItem): boolean {
+  const hay = [row.subject, row.snippet, row.account_name].join(" ").toLowerCase();
+  return (
+    hay.includes("dhl") ||
+    hay.includes("cuenta importación") ||
+    hay.includes("cuenta importacion") ||
+    hay.includes("propuesta comercial dhl") ||
+    hay.includes("solicitud cuenta")
+  );
+}
 
 const PAYMENT_ADMIN_DOMAINS: ReadonlySet<string> = new Set(["bancochile.cl"]);
 
@@ -82,7 +113,12 @@ function pagosAdminTextHaystack(row: WarmCaseItem): string {
 
 function matchesPagosAdminSignals(row: WarmCaseItem): boolean {
   const hay = pagosAdminTextHaystack(row);
-  return hay.includes("factura") || hay.includes("transferencia");
+  return (
+    hay.includes("factura") ||
+    hay.includes("transferencia") ||
+    hay.includes("datos bancarios") ||
+    hay.includes("solicita datos banc")
+  );
 }
 
 function matchesPagosAdminPreset(row: WarmCaseItem): boolean {
@@ -108,7 +144,13 @@ export function matchesWarmCaseViewPreset(
 
   switch (preset) {
     case "clientes_reales":
-      return CLIENTES_REALES_CATEGORIES.has(category) && !isExcludedFromClientesReales(row);
+      if (isExcludedFromClientesReales(row)) {
+        return false;
+      }
+      if (CLIENTES_REALES_CATEGORIES.has(category)) {
+        return true;
+      }
+      return category === "waiting_supplier" && matchesRealClientPostSale(row);
 
     case "proveedores":
       if (category === "vendor_logistics") {
@@ -129,7 +171,14 @@ export function matchesWarmCaseViewPreset(
       return matchesPagosAdminPreset(row);
 
     case "logistica":
-      return category === "vendor_logistics" || LOGISTICS_DOMAINS.has(domain);
+      if (category === "vendor_logistics" || LOGISTICS_DOMAINS.has(domain)) {
+        return true;
+      }
+      return (
+        haystackIncludesLogistics(row) &&
+        category !== "auto_reply" &&
+        !isExcludedFromClientesReales(row)
+      );
 
     case "con_senal_equipo":
       return Boolean(row.equipment_signal?.trim());

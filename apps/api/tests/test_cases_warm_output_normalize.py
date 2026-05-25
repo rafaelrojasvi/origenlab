@@ -13,8 +13,10 @@ from fastapi.testclient import TestClient
 
 from origenlab_api.main import create_app
 from origenlab_api.services.warm_case_output_normalize import (
+    filter_positive_normalized_items,
     is_auto_reply_subject,
     normalize_warm_case_item,
+    normalize_warm_case_items,
     resolve_normalized_category,
 )
 from origenlab_api.schemas.cases import WarmCaseItem
@@ -151,9 +153,85 @@ def test_normalize_yuanhuai_supplier() -> None:
     assert resolve_normalized_category(raw) == "supplier_reply"
 
 
-def test_quote_sent_preserved_for_outbound_customer_thread() -> None:
+def test_internal_contacto_waiting_client_hidden_by_default() -> None:
     raw = _item(
         contact_email="contacto@origenlab.cl",
+        subject="Re: Quotation Request / New adress created for your compagny 310471",
+        category="waiting_client",
+    )
+    assert normalize_warm_case_item(raw, include_noise=False) is None
+    shown = normalize_warm_case_item(raw, include_noise=True)
+    assert shown is not None
+    assert shown.category == "auto_reply"
+
+
+def test_bancochile_factura_payment_admin() -> None:
+    raw = _item(contact_email="serviciodetransferencias@bancochile.cl", subject="FACTURA 6")
+    out = normalize_warm_case_item(raw)
+    assert out is not None
+    assert out.category == "payment_admin"
+
+
+def test_dhl_import_account_vendor_logistics() -> None:
+    raw = _item(
+        contact_email="monica.silva@dhl.com",
+        subject="Solicitud cuenta importación",
+        category="client_reply",
+    )
+    out = normalize_warm_case_item(raw)
+    assert out is not None
+    assert out.category == "vendor_logistics"
+
+
+def test_ceaf_oc_thread_stays_client_reply() -> None:
+    raw = _item(contact_email="cgaray@ceaf.cl", subject="Remite OC N º 26172", category="waiting_supplier")
+    out = normalize_warm_case_item(raw)
+    assert out is not None
+    assert out.category == "client_reply"
+
+
+def test_ceaf_bank_details_client_reply() -> None:
+    raw = _item(contact_email="lhidalgo@ceaf.cl", subject="Solicita datos Bancarios", category="waiting_client")
+    out = normalize_warm_case_item(raw)
+    assert out is not None
+    assert out.category == "client_reply"
+
+
+def test_post_normalize_positive_keeps_payment_and_logistics() -> None:
+    rows = [
+        _item(contact_email="serviciodetransferencias@bancochile.cl", subject="FACTURA 6"),
+        _item(contact_email="monica.silva@dhl.com", subject="PROPUESTA COMERCIAL DHL"),
+        _item(contact_email="no-reply@accounts.google.com", subject="Alerta de seguridad"),
+    ]
+    normalized = normalize_warm_case_items(rows, positive_signal_only=True)
+    emails = {i.contact_email for i in normalized}
+    assert "serviciodetransferencias@bancochile.cl" in emails
+    assert "monica.silva@dhl.com" in emails
+    assert "no-reply@accounts.google.com" not in emails
+
+
+def test_filter_positive_normalized_items() -> None:
+    banco = normalize_warm_case_item(
+        _item(contact_email="serviciodetransferencias@bancochile.cl", subject="FACTURA 1")
+    )
+    assert banco is not None
+    kept = filter_positive_normalized_items(
+        [
+            banco,
+            _item(
+                contact_email="no-reply@accounts.google.com",
+                subject="Alerta de seguridad",
+                category="bounce",  # type: ignore[arg-type]
+            ),
+        ]
+    )
+    assert len(kept) == 1
+    assert kept[0].category == "payment_admin"
+
+
+def test_quote_sent_preserved_for_external_customer_thread() -> None:
+    raw = _item(
+        contact_email="client@hospital.cl",
         subject="Re: Solicitud de cotización",
         category="quote_sent",
     )
@@ -262,4 +340,4 @@ def test_cases_warm_api_normalizes_audit_samples(tmp_path: Path) -> None:
     assert by_email["serviciodetransferencias@bancochile.cl"]["category"] == "payment_admin"
     assert by_email["kelly@ollital.com"]["category"] == "supplier_reply"
     assert by_email["carmen.llorente@ortoalresa.com"]["category"] == "supplier_reply"
-    assert by_email["contacto@origenlab.cl"]["category"] == "quote_sent"
+    assert "contacto@origenlab.cl" not in by_email
