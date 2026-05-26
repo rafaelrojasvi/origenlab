@@ -67,6 +67,43 @@ def test_cors_allows_configured_dashboard_origin(monkeypatch: pytest.MonkeyPatch
     assert r.headers.get("access-control-allow-origin") == "https://dashboard.origenlab.cl"
 
 
+def test_operator_security_headers_on_json_routes(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("ORIGENLAB_API_BACKEND", "postgres")
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/db")
+    monkeypatch.setenv("ORIGENLAB_API_CORS_ORIGINS", "https://dashboard.origenlab.cl")
+    _clear_settings_cache()
+    client = TestClient(create_app())
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert r.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
+    assert r.headers.get("x-frame-options") == "DENY"
+    assert "no-store" in (r.headers.get("cache-control") or "")
+
+
+def test_cors_preflight_does_not_allow_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("ORIGENLAB_API_BACKEND", "postgres")
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/db")
+    monkeypatch.setenv("ORIGENLAB_API_CORS_ORIGINS", "https://dashboard.origenlab.cl")
+    _clear_settings_cache()
+    client = TestClient(create_app())
+    r = client.options(
+        "/health",
+        headers={
+            "Origin": "https://dashboard.origenlab.cl",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-credentials") is None
+
+
 def test_production_hides_docs_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient

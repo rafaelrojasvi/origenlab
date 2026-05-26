@@ -20,7 +20,7 @@ Runbook for protecting **dashboard.origenlab.cl** and **api.origenlab.cl** with 
 
 ### CORS reminder
 
-After Access is enabled, the dashboard still calls `https://api.origenlab.cl`. Confirm `ORIGENLAB_CORS_ORIGINS` (or equivalent) on the API service includes `https://dashboard.origenlab.cl`.
+After Access is enabled, the dashboard still calls `https://api.origenlab.cl`. Confirm `ORIGENLAB_API_CORS_ORIGINS` on the API service includes `https://dashboard.origenlab.cl`.
 
 ### Raw Render URL exposure
 
