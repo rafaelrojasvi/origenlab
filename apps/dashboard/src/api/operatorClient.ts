@@ -81,7 +81,11 @@ export class OperatorApiError extends Error {
 }
 
 async function fetchJsonGet<T>(url: string): Promise<T> {
-  const res = await fetch(url, { method: "GET", headers: { Accept: "application/json" } });
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new OperatorApiError(text || res.statusText || `HTTP ${res.status}`, res.status);

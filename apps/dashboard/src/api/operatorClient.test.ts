@@ -94,7 +94,33 @@ describe("operator API client", () => {
     const body = await fetchHealth();
     expect(body.backend).toBe("sqlite");
     expect(fetchMock.mock.calls[0][1]).toEqual(
-      expect.objectContaining({ method: "GET" }),
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
+  it("all operator API fetches send credentials include for Cloudflare Access", async () => {
+    vi.stubEnv("MODE", "production");
+    vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "https://api.origenlab.cl");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        verdict: "OK",
+        sqlite_path: "",
+        campaign_mode: null,
+        operator_focus: null,
+        outbound_readiness: "n/a",
+        warnings: [],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchOperatorStatus();
+    expect(fetchMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      }),
     );
   });
 
@@ -138,7 +164,9 @@ describe("operator API client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(fetchContactProfile("x@y.z")).rejects.toBeInstanceOf(OperatorApiError);
-    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: "GET" }));
+    expect(fetchMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
     expect(fetchMock.mock.calls[0][0]).toContain("/contacts/");
   });
 
