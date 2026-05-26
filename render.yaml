@@ -29,6 +29,8 @@ services:
         value: "true"
       - key: ORIGENLAB_API_CORS_ORIGINS
         value: https://dashboard.origenlab.cl
+      - key: ORIGENLAB_API_ALLOWED_HOSTS
+        value: api.origenlab.cl
       - key: ORIGENLAB_POSTGRES_URL
         fromDatabase:
           name: origenlab-dashboard-db

@@ -54,6 +54,7 @@ CI: `tests/test_no_write_policy.py` checks GET-only routes and scans `apps/api/s
 | `ORIGENLAB_API_BACKEND` | `postgres` |
 | `ORIGENLAB_POSTGRES_URL` | Cloud Postgres DSN |
 | `ORIGENLAB_API_CORS_ORIGINS` | `https://dashboard.origenlab.cl` (no `*`) |
+| `ORIGENLAB_API_ALLOWED_HOSTS` | `api.origenlab.cl` (rejects raw `*.onrender.com` Host in production) |
 | `ORIGENLAB_API_DISABLE_DOCS` | `true` (optional; docs also off when `ORIGENLAB_ENV=production`) |
 
 CORS middleware allows **GET, HEAD, OPTIONS** only. See [`../email-pipeline/docs/PHASE1_CLOUD_READ_PATH.md`](../email-pipeline/docs/PHASE1_CLOUD_READ_PATH.md) and [`.env.production.example`](.env.production.example).

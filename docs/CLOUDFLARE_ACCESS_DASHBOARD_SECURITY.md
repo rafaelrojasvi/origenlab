@@ -37,6 +37,7 @@ Runbook and **production record** for protecting **dashboard.origenlab.cl** and 
 |-----------|---------|
 | Dashboard API base | `VITE_ORIGENLAB_API_BASE_URL=https://api.origenlab.cl` |
 | API CORS | `ORIGENLAB_API_CORS_ORIGINS` includes `https://dashboard.origenlab.cl` |
+| API Host allowlist | `ORIGENLAB_API_ALLOWED_HOSTS=api.origenlab.cl` |
 
 ### Verification (production)
 
@@ -55,30 +56,46 @@ After authenticating through Access, `HEAD /health` may return **405 Method Not 
 curl -i -X GET https://api.origenlab.cl/health
 ```
 
-## Remaining hardening (follow-up)
+## API Host allowlist (Render origin hardening)
 
-Cloudflare Access protects **custom domains** on the zone. **Raw Render URLs may still bypass Access** unless separately restricted.
+Cloudflare Access protects **custom domains** only. Traffic to the raw Render hostname can still reach the origin unless the API rejects it.
 
-| URL | Risk | Action |
-|-----|------|--------|
-| `https://origenlab.onrender.com` | API may be reachable without Access | Test in incognito; if public, mitigate |
-| `https://origenlab-dashboard.onrender.com` | Dashboard may be reachable without Access | Test in incognito; if public, mitigate |
-
-**Mitigation options (if raw URLs are still public):**
-
-1. Render **custom domain** settings — prefer `*.origenlab.cl` only; disable or avoid publishing default `*.onrender.com` hostnames where Render allows.
-2. **API host allowlist** — e.g. `ORIGENLAB_ALLOWED_HOSTS=api.origenlab.cl` (rejects wrong `Host`; does not block direct Render hostname unless combined with other controls).
-3. **Cloudflare Access JWT validation** at the API — validate `CF-Access-JWT-Assertion` on origin for defense in depth.
-4. Do not bookmark or document raw Render URLs for operators.
-
-**Test command (unauthenticated):**
+**Render env (production):**
 
 ```bash
-curl -i https://origenlab.onrender.com/health
-curl -i https://origenlab-dashboard.onrender.com/
+ORIGENLAB_API_ALLOWED_HOSTS=api.origenlab.cl
 ```
 
-Document outcome in this file when tested.
+When `ORIGENLAB_ENV=production` and `ORIGENLAB_API_ALLOWED_HOSTS` is set:
+
+- Requests with `Host: api.origenlab.cl` → allowed (after Access at the edge).
+- Requests with `Host: origenlab.onrender.com` → **403** `{"detail":"Forbidden"}` (no route body leak).
+- `localhost` / `127.0.0.1` are **not** auto-allowed in production (loopback only works when not in production mode).
+
+**Verify after deploy:**
+
+```bash
+# Should 302 to Access (custom domain) or 403 (if hitting origin with wrong Host after deploy):
+curl -i https://api.origenlab.cl/health
+
+# Should NOT return 200 JSON health on raw Render host once allowlist is live:
+curl -i -H "Host: origenlab.onrender.com" https://origenlab.onrender.com/health
+curl -i https://origenlab.onrender.com/health
+```
+
+Implementation: `apps/api/src/origenlab_api/http_security.py` (`AllowedHostMiddleware`).
+
+## Remaining hardening (follow-up)
+
+| URL | Mitigation |
+|-----|------------|
+| `https://origenlab.onrender.com` | **API:** `ORIGENLAB_API_ALLOWED_HOSTS` (above) |
+| `https://origenlab-dashboard.onrender.com` | Render custom-domain only; do not publish raw URL |
+
+**Optional later:**
+
+- Cloudflare Access JWT validation at origin (`CF-Access-Jwt-Assertion`).
+- Render private service / disable default `onrender.com` hostname where platform allows.
 
 ## Goals
 

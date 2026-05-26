@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     postgres_pool_size: int = 5
     """Comma-separated browser origins for dashboard static site (no wildcards)."""
     api_cors_origins: str | None = None
+    """Comma-separated Host header values allowed in production (e.g. api.origenlab.cl)."""
+    api_allowed_hosts: str | None = None
     """When true, hide /docs, /redoc, /openapi.json (also off when ORIGENLAB_ENV=production)."""
     api_disable_docs: bool = False
     """Set to production|prod to enable production defaults (docs off, stricter validation)."""
@@ -43,6 +45,24 @@ class Settings(BaseSettings):
         if not raw:
             return []
         return [part.strip() for part in raw.split(",") if part.strip()]
+
+    def parsed_allowed_hosts(self) -> tuple[str, ...]:
+        raw = (self.api_allowed_hosts or "").strip()
+        if not raw:
+            return ()
+        seen: set[str] = set()
+        out: list[str] = []
+        for part in raw.split(","):
+            host = part.strip()
+            if not host:
+                continue
+            if ":" in host:
+                host = host.split(":", 1)[0].strip()
+            normalized = host.lower()
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                out.append(normalized)
+        return tuple(out)
 
     def resolved_api_backend(self) -> ApiBackend:
         raw = (self.api_backend or "sqlite").strip().lower()

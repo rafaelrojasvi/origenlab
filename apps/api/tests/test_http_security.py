@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from origenlab_api.backends.factory import validate_api_settings
-from origenlab_api.http_security import openapi_docs_enabled
+from origenlab_api.http_security import (
+    host_allowlist_enabled,
+    normalize_host_header,
+    openapi_docs_enabled,
+)
 from origenlab_api.main import create_app
 from origenlab_api.settings import Settings, get_settings
 
@@ -104,6 +108,63 @@ def test_cors_preflight_does_not_allow_credentials(monkeypatch: pytest.MonkeyPat
     assert r.headers.get("access-control-allow-credentials") is None
 
 
+def test_normalize_host_strips_port() -> None:
+    assert normalize_host_header("api.origenlab.cl:443") == "api.origenlab.cl"
+    assert normalize_host_header("API.OrigenLab.CL") == "api.origenlab.cl"
+
+
+def _production_client(monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("ORIGENLAB_ENV", "production")
+    monkeypatch.setenv("ORIGENLAB_API_BACKEND", "postgres")
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/db")
+    monkeypatch.setenv("ORIGENLAB_API_CORS_ORIGINS", "https://dashboard.origenlab.cl")
+    monkeypatch.setenv("ORIGENLAB_API_ALLOWED_HOSTS", "api.origenlab.cl")
+    _clear_settings_cache()
+    return TestClient(create_app())
+
+
+def test_production_allowed_host_permits_health(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _production_client(monkeypatch)
+    r = client.get("/health", headers={"Host": "api.origenlab.cl"})
+    assert r.status_code == 200
+
+
+def test_production_render_host_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _production_client(monkeypatch)
+    r = client.get("/health", headers={"Host": "origenlab.onrender.com"})
+    assert r.status_code == 403
+    assert r.json() == {"detail": "Forbidden"}
+
+
+def test_production_missing_host_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _production_client(monkeypatch)
+    r = client.get("/health", headers={"Host": ""})
+    assert r.status_code == 403
+
+
+def test_dev_mode_allows_render_host_without_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("ORIGENLAB_API_BACKEND", "postgres")
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/db")
+    monkeypatch.setenv("ORIGENLAB_API_CORS_ORIGINS", "https://dashboard.origenlab.cl")
+    monkeypatch.delenv("ORIGENLAB_ENV", raising=False)
+    monkeypatch.delenv("ORIGENLAB_API_ALLOWED_HOSTS", raising=False)
+    _clear_settings_cache()
+    client = TestClient(create_app())
+    r = client.get("/health", headers={"Host": "origenlab.onrender.com"})
+    assert r.status_code == 200
+
+
+def test_host_allowlist_disabled_without_env_hosts() -> None:
+    settings = Settings(env="production", api_allowed_hosts=None)
+    assert host_allowlist_enabled(settings) is False
+
+
 def test_production_hides_docs_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
@@ -112,6 +173,7 @@ def test_production_hides_docs_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ORIGENLAB_API_BACKEND", "postgres")
     monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/db")
     monkeypatch.setenv("ORIGENLAB_API_CORS_ORIGINS", "https://dashboard.origenlab.cl")
+    monkeypatch.delenv("ORIGENLAB_API_ALLOWED_HOSTS", raising=False)
     _clear_settings_cache()
     client = TestClient(create_app())
     assert client.get("/docs").status_code == 404

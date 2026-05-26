@@ -6,17 +6,69 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from origenlab_api.settings import Settings
 
 _OPERATOR_CACHE_CONTROL = "no-store, private"
+_HOST_REJECT_STATUS = 403
+_HOST_REJECT_BODY = b'{"detail":"Forbidden"}'
 _SECURITY_RESPONSE_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-Frame-Options": "DENY",
     "Cache-Control": _OPERATOR_CACHE_CONTROL,
 }
+
+
+def normalize_host_header(host: str | None) -> str | None:
+    """Strip port and lowercase for exact Host allowlist matching."""
+    if host is None:
+        return None
+    value = host.strip()
+    if not value:
+        return None
+    # Use first token if a proxy forwarded multiple values.
+    value = value.split(",", 1)[0].strip()
+    if ":" in value:
+        value = value.rsplit(":", 1)[0].strip()
+    return value.lower() if value else None
+
+
+def host_allowlist_enabled(settings: Settings) -> bool:
+    return settings.production_mode() and bool(settings.parsed_allowed_hosts())
+
+
+def request_host_allowed(request: Request, settings: Settings) -> bool:
+    if not host_allowlist_enabled(settings):
+        return True
+    allowed = frozenset(settings.parsed_allowed_hosts())
+    host = normalize_host_header(request.headers.get("host"))
+    if host is None:
+        return False
+    return host in allowed
+
+
+class AllowedHostMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose Host is not in ORIGENLAB_API_ALLOWED_HOSTS (production only)."""
+
+    def __init__(self, app, settings: Settings) -> None:
+        super().__init__(app)
+        self._settings = settings
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        if not request_host_allowed(request, self._settings):
+            return JSONResponse(
+                status_code=_HOST_REJECT_STATUS,
+                content={"detail": "Forbidden"},
+                headers={"Cache-Control": _OPERATOR_CACHE_CONTROL},
+            )
+        return await call_next(request)
 
 
 class OperatorSecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -43,7 +95,15 @@ def openapi_docs_enabled(settings: Settings) -> bool:
 
 
 def validate_http_security_settings(settings: Settings) -> None:
-    """Fail fast on unsafe production CORS configuration."""
+    """Fail fast on unsafe production CORS / Host configuration."""
+    for host in settings.parsed_allowed_hosts():
+        if host in ("*", "localhost", "127.0.0.1"):
+            raise ValueError(
+                f"Invalid ORIGENLAB_API_ALLOWED_HOSTS entry {host!r}: "
+                "use the public API hostname only (not * or loopback)"
+            )
+        if "/" in host or " " in host:
+            raise ValueError(f"Invalid ORIGENLAB_API_ALLOWED_HOSTS entry {host!r}")
     for origin in settings.parsed_cors_origins():
         if origin == "*":
             raise ValueError(
@@ -58,6 +118,8 @@ def validate_http_security_settings(settings: Settings) -> None:
 
 def configure_http_security(app: FastAPI, settings: Settings) -> None:
     validate_http_security_settings(settings)
+    if host_allowlist_enabled(settings):
+        app.add_middleware(AllowedHostMiddleware, settings=settings)
     app.add_middleware(OperatorSecurityHeadersMiddleware)
     origins = settings.parsed_cors_origins()
     if not origins:
