@@ -107,8 +107,8 @@ def validate_http_security_settings(settings: Settings) -> None:
     for origin in settings.parsed_cors_origins():
         if origin == "*":
             raise ValueError(
-                "ORIGENLAB_API_CORS_ORIGINS must not include '*' in production "
-                "(list explicit dashboard origins only)"
+                "ORIGENLAB_API_CORS_ORIGINS must not include '*' "
+                "(credentialed CORS requires explicit dashboard origins)"
             )
         if not origin.startswith(("https://", "http://")):
             raise ValueError(
@@ -127,7 +127,7 @@ def configure_http_security(app: FastAPI, settings: Settings) -> None:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_credentials=False,
+        allow_credentials=True,
         allow_methods=["GET", "HEAD", "OPTIONS"],
         allow_headers=["*"],
         expose_headers=[],

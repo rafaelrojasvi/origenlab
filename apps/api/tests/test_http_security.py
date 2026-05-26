@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import sqlite3
+
 import pytest
 
 from origenlab_api.backends.factory import validate_api_settings
@@ -50,7 +53,7 @@ def test_production_rejects_wildcard_cors() -> None:
         validate_api_settings(settings)
 
 
-def test_cors_allows_configured_dashboard_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+def _dev_cors_client(monkeypatch: pytest.MonkeyPatch):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
@@ -59,7 +62,11 @@ def test_cors_allows_configured_dashboard_origin(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("ORIGENLAB_API_CORS_ORIGINS", "https://dashboard.origenlab.cl")
     monkeypatch.delenv("ORIGENLAB_ENV", raising=False)
     _clear_settings_cache()
-    client = TestClient(create_app())
+    return TestClient(create_app())
+
+
+def test_cors_allows_configured_dashboard_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _dev_cors_client(monkeypatch)
     r = client.options(
         "/health",
         headers={
@@ -69,6 +76,7 @@ def test_cors_allows_configured_dashboard_origin(monkeypatch: pytest.MonkeyPatch
     )
     assert r.status_code == 200
     assert r.headers.get("access-control-allow-origin") == "https://dashboard.origenlab.cl"
+    assert r.headers.get("access-control-allow-credentials") == "true"
 
 
 def test_operator_security_headers_on_json_routes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,24 +96,61 @@ def test_operator_security_headers_on_json_routes(monkeypatch: pytest.MonkeyPatc
     assert "no-store" in (r.headers.get("cache-control") or "")
 
 
-def test_cors_preflight_does_not_allow_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cors_get_health_includes_allow_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _dev_cors_client(monkeypatch)
+    r = client.get(
+        "/health",
+        headers={"Origin": "https://dashboard.origenlab.cl"},
+    )
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") == "https://dashboard.origenlab.cl"
+    assert r.headers.get("access-control-allow-credentials") == "true"
+
+
+def test_cors_get_operator_status_includes_allow_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    monkeypatch.setenv("ORIGENLAB_API_BACKEND", "postgres")
-    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/db")
+    db = tmp_path / "emails.sqlite"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE emails (id INTEGER PRIMARY KEY, date_iso TEXT, source_file TEXT, folder TEXT)"
+    )
+    conn.commit()
+    conn.close()
+    active = tmp_path / "current"
+    active.mkdir()
+    (active / "manifest.json").write_text(
+        json.dumps({"known_warnings": [], "canonical_files": []}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ORIGENLAB_API_BACKEND", "sqlite")
+    monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(db))
+    monkeypatch.setenv("ORIGENLAB_ACTIVE_CURRENT", str(active))
     monkeypatch.setenv("ORIGENLAB_API_CORS_ORIGINS", "https://dashboard.origenlab.cl")
+    monkeypatch.delenv("ORIGENLAB_ENV", raising=False)
     _clear_settings_cache()
     client = TestClient(create_app())
-    r = client.options(
-        "/health",
-        headers={
-            "Origin": "https://dashboard.origenlab.cl",
-            "Access-Control-Request-Method": "GET",
-        },
+    r = client.get(
+        "/operator/status",
+        headers={"Origin": "https://dashboard.origenlab.cl"},
     )
     assert r.status_code == 200
-    assert r.headers.get("access-control-allow-credentials") is None
+    assert r.headers.get("access-control-allow-origin") == "https://dashboard.origenlab.cl"
+    assert r.headers.get("access-control-allow-credentials") == "true"
+
+
+def test_cors_disallowed_origin_not_reflected(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _dev_cors_client(monkeypatch)
+    r = client.get(
+        "/health",
+        headers={"Origin": "https://evil.example.com"},
+    )
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") is None
 
 
 def test_normalize_host_strips_port() -> None:
