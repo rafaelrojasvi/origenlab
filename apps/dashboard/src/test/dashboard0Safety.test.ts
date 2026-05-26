@@ -81,6 +81,11 @@ const FORBIDDEN_UI_PATTERNS = [
 ];
 
 describe("Dashboard-2 safety (mounted Today)", () => {
+  it("App.tsx gates TodayPage behind production host allowlist", () => {
+    expect(appSource).toContain("isDashboardHostAllowed");
+    expect(appSource).toContain("PrivateDashboardPlaceholder");
+  });
+
   it("App.tsx mounts TodayPage only (no legacy commercial panels)", () => {
     expect(appSource).toContain("TodayPage");
     for (const symbol of LEGACY_PANEL_IMPORTS) {
