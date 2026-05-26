@@ -4,15 +4,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
+from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from origenlab_email_pipeline.commercial.commercial_deal_schema import (
     COMMERCIAL_DEAL_SCHEMA_VERSION,
+    COMMERCIAL_DEAL_TABLE_NAMES,
     DEAL_STATUSES,
+    _FORBIDDEN_BODY_COLUMN_SUBSTRINGS,
+    commercial_deal_tables_exist,
     decimal_to_minor,
+    ensure_commercial_deal_tables,
+    foreign_key_check_ok,
+    table_column_names,
 )
 from origenlab_email_pipeline.commercial.serva_ceaf_deal_confirmed import (
     CLIENT_IVA_AMOUNT_CLP,
@@ -781,7 +789,839 @@ def validate_apply_args(
     return None
 
 
-APPLY_NOT_IMPLEMENTED_MSG = (
-    "SQLite apply for commercial_deal promotion is not implemented until operator approval. "
-    "Use dry-run (default) and review the JSON plan output."
+_SAFE_DB_DIR_NAMES: frozenset[str] = frozenset(
+    {
+        "backup",
+        "backups",
+        "dev",
+        "scratch",
+        "fixture",
+        "fixtures",
+        "pytest-of",
+    }
 )
+
+_PRODUCTION_DB_BASENAMES: frozenset[str] = frozenset(
+    {"emails.sqlite", "email.sqlite", "origenlab.sqlite"}
+)
+
+
+def _sqlite_path_is_ephemeral_or_dev(resolved: Path) -> bool:
+    parts_lower = [p.lower() for p in resolved.parts]
+    return any(part in _SAFE_DB_DIR_NAMES for part in parts_lower)
+
+
+def _looks_like_production_layout(resolved: Path) -> bool:
+    if resolved.name.lower() not in _PRODUCTION_DB_BASENAMES:
+        return False
+    if _sqlite_path_is_ephemeral_or_dev(resolved):
+        return False
+    parts_lower = [p.lower() for p in resolved.parts]
+    if len(parts_lower) >= 2 and parts_lower[-2] == "sqlite":
+        return True
+    return True
+
+
+def connect_sqlite_rw(db_path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(str(db_path.expanduser().resolve()))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
+def _resolved_production_sqlite_paths() -> list[Path]:
+    paths: list[Path] = []
+    env = (os.environ.get("ORIGENLAB_SQLITE_PATH") or "").strip()
+    if env:
+        paths.append(Path(env).expanduser().resolve())
+    try:
+        from origenlab_email_pipeline.config import load_settings
+
+        paths.append(load_settings().resolved_sqlite_path().expanduser().resolve())
+    except Exception:
+        pass
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for p in paths:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def validate_sqlite_apply_target(
+    sqlite_db: Path,
+    *,
+    allow_production: bool = False,
+) -> str | None:
+    """Refuse production-like SQLite paths unless allow_production is set."""
+    if allow_production:
+        return None
+    resolved = sqlite_db.expanduser().resolve()
+    if not resolved.parent.is_dir():
+        return f"parent directory missing: {resolved.parent}"
+    for prod in _resolved_production_sqlite_paths():
+        if resolved == prod:
+            return f"refusing to write production SQLite: {resolved}"
+    if _looks_like_production_layout(resolved):
+        return f"refusing path that looks like production SQLite: {resolved}"
+    return None
+
+
+def _column_names_cached(conn: sqlite3.Connection) -> dict[str, set[str]]:
+    return {name: set(table_column_names(conn, name)) for name in COMMERCIAL_DEAL_TABLE_NAMES}
+
+
+def _filter_db_columns(columns: dict[str, Any], allowed: set[str]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in columns.items():
+        if key in _FORBIDDEN_ROW_KEYS:
+            raise ValueError(f"forbidden column in apply row: {key}")
+        if any(sub in key for sub in _FORBIDDEN_BODY_COLUMN_SUBSTRINGS):
+            raise ValueError(f"forbidden body-like column in apply row: {key}")
+        if key not in allowed:
+            continue
+        out[key] = value
+    return out
+
+
+def _product_id_by_ref(conn: sqlite3.Connection, ref_code: str) -> int | None:
+    row = conn.execute(
+        "SELECT id FROM commercial_product WHERE ref_code = ? LIMIT 1",
+        (ref_code,),
+    ).fetchone()
+    return int(row[0]) if row else None
+
+
+@dataclass
+class DealPromotionApplyResult:
+    deal_id: int
+    deal_key: str
+    deal_action: str
+    inserted: dict[str, int]
+    updated: dict[str, int]
+    row_counts: dict[str, int]
+    foreign_key_check_ok: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "deal_id": self.deal_id,
+            "deal_key": self.deal_key,
+            "deal_action": self.deal_action,
+            "inserted": dict(self.inserted),
+            "updated": dict(self.updated),
+            "row_counts": dict(self.row_counts),
+            "foreign_key_check_ok": self.foreign_key_check_ok,
+        }
+
+
+def _upsert_product(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    allowed: set[str],
+    ref_ids: dict[str, int],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = _filter_db_columns(row["columns"], allowed)
+    ref_code = str(cols["ref_code"])
+    existing = _product_id_by_ref(conn, ref_code)
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_product ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        pid = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        inserted["commercial_product"] += 1
+    else:
+        upd = {k: v for k, v in cols.items() if k not in ("ref_code", "created_at")}
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_product SET {set_clause} WHERE id=?",
+            (*upd.values(), existing),
+        )
+        pid = existing
+        updated["commercial_product"] += 1
+    ref_ids[row["ref"]] = pid
+    ref_ids[f"product:{ref_code}"] = pid
+
+
+def _upsert_product_alias(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    allowed: set[str],
+    ref_ids: dict[str, int],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = dict(row["columns"])
+    product_ref = str(cols.pop("product_ref", ""))
+    product_id = ref_ids.get(f"product:{product_ref}") or _product_id_by_ref(conn, product_ref)
+    if product_id is None:
+        raise ValueError(f"product_ref not found for alias: {product_ref!r}")
+    cols["product_id"] = product_id
+    cols = _filter_db_columns(cols, allowed)
+    existing = conn.execute(
+        """
+        SELECT id FROM commercial_product_alias
+        WHERE alias_source = ? AND alias_code = ?
+        LIMIT 1
+        """,
+        (cols["alias_source"], cols["alias_code"]),
+    ).fetchone()
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_product_alias ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        inserted["commercial_product_alias"] += 1
+    else:
+        conn.execute(
+            "UPDATE commercial_product_alias SET product_id = ? WHERE id = ?",
+            (product_id, int(existing[0])),
+        )
+        updated["commercial_product_alias"] += 1
+
+
+def _upsert_deal(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    allowed: set[str],
+    ref_ids: dict[str, int],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> tuple[int, str]:
+    cols = _filter_db_columns(row["columns"], allowed)
+    deal_key = str(cols["deal_key"])
+    existing = _existing_deal_id(conn, deal_key)
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_deal ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        deal_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        inserted["commercial_deal"] += 1
+        action = "insert"
+    else:
+        upd = {k: v for k, v in cols.items() if k not in ("deal_key", "created_at")}
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_deal SET {set_clause} WHERE id=?",
+            (*upd.values(), existing),
+        )
+        deal_id = existing
+        updated["commercial_deal"] += 1
+        action = "update"
+    ref_ids[row["ref"]] = deal_id
+    ref_ids["deal"] = deal_id
+    ref_ids[f"deal:{deal_key}"] = deal_id
+    return deal_id, action
+
+
+def _resolve_evidence_id(
+    conn: sqlite3.Connection,
+    deal_id: int,
+    cols: dict[str, Any],
+) -> int | None:
+    kind = cols.get("evidence_kind")
+    if kind == "preview_json":
+        row = conn.execute(
+            """
+            SELECT id FROM commercial_deal_evidence
+            WHERE deal_id = ? AND evidence_kind = 'preview_json' AND source_path = ?
+            LIMIT 1
+            """,
+            (deal_id, cols.get("source_path")),
+        ).fetchone()
+    elif kind == "email" and cols.get("email_id") is not None:
+        row = conn.execute(
+            """
+            SELECT id FROM commercial_deal_evidence
+            WHERE deal_id = ? AND evidence_kind = 'email' AND email_id = ?
+            LIMIT 1
+            """,
+            (deal_id, cols["email_id"]),
+        ).fetchone()
+    elif kind == "attachment" and cols.get("attachment_id") is not None:
+        row = conn.execute(
+            """
+            SELECT id FROM commercial_deal_evidence
+            WHERE deal_id = ? AND evidence_kind = 'attachment' AND attachment_id = ?
+            LIMIT 1
+            """,
+            (deal_id, cols["attachment_id"]),
+        ).fetchone()
+    else:
+        row = None
+    return int(row[0]) if row else None
+
+
+def _upsert_evidence(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    deal_id: int,
+    allowed: set[str],
+    ref_ids: dict[str, int],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = dict(row["columns"])
+    cols.pop("deal_key", None)
+    cols["deal_id"] = deal_id
+    cols = _filter_db_columns(cols, allowed)
+    existing_id = _resolve_evidence_id(conn, deal_id, cols)
+    if existing_id is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_deal_evidence ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        eid = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        inserted["commercial_deal_evidence"] += 1
+    else:
+        upd = {k: v for k, v in cols.items() if k not in ("deal_id", "created_at")}
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_deal_evidence SET {set_clause} WHERE id=?",
+            (*upd.values(), existing_id),
+        )
+        eid = existing_id
+        updated["commercial_deal_evidence"] += 1
+    ref_ids[row["ref"]] = eid
+
+
+def _evidence_id_from_ref(ref_ids: dict[str, int], ref: str | None) -> int | None:
+    if not ref:
+        return None
+    return ref_ids.get(ref)
+
+
+def _upsert_document(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    deal_id: int,
+    allowed: set[str],
+    ref_ids: dict[str, int],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = dict(row["columns"])
+    evidence_ref = cols.pop("evidence_ref", None)
+    cols.pop("deal_key", None)
+    evidence_id = _evidence_id_from_ref(ref_ids, evidence_ref)
+    if evidence_id is not None:
+        cols["evidence_id"] = evidence_id
+    cols["deal_id"] = deal_id
+    cols = _filter_db_columns(cols, allowed)
+    existing = conn.execute(
+        """
+        SELECT id FROM commercial_deal_document
+        WHERE deal_id = ? AND document_type = ? AND doc_number IS ?
+        LIMIT 1
+        """,
+        (deal_id, cols["document_type"], cols.get("doc_number")),
+    ).fetchone()
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_deal_document ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        did = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        inserted["commercial_deal_document"] += 1
+    else:
+        upd = {k: v for k, v in cols.items() if k not in ("deal_id", "document_type", "doc_number", "created_at")}
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_deal_document SET {set_clause} WHERE id=?",
+            (*upd.values(), int(existing[0])),
+        )
+        did = int(existing[0])
+        updated["commercial_deal_document"] += 1
+    ref_ids[row["ref"]] = did
+
+
+def _upsert_payment(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    deal_id: int,
+    allowed: set[str],
+    ref_ids: dict[str, int],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = dict(row["columns"])
+    evidence_ref = cols.pop("evidence_ref", None)
+    cols.pop("deal_key", None)
+    evidence_id = _evidence_id_from_ref(ref_ids, evidence_ref)
+    if evidence_id is not None:
+        cols["evidence_id"] = evidence_id
+    cols["deal_id"] = deal_id
+    cols = _filter_db_columns(cols, allowed)
+    existing = conn.execute(
+        """
+        SELECT id FROM commercial_deal_payment
+        WHERE deal_id = ? AND direction = ? AND payment_method IS ? AND paid_at IS ?
+        LIMIT 1
+        """,
+        (deal_id, cols["direction"], cols.get("payment_method"), cols.get("paid_at")),
+    ).fetchone()
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_deal_payment ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        pid = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        inserted["commercial_deal_payment"] += 1
+    else:
+        upd = {
+            k: v
+            for k, v in cols.items()
+            if k
+            not in ("deal_id", "direction", "payment_method", "paid_at", "created_at")
+        }
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_deal_payment SET {set_clause} WHERE id=?",
+            (*upd.values(), int(existing[0])),
+        )
+        pid = int(existing[0])
+        updated["commercial_deal_payment"] += 1
+    ref_ids[row["ref"]] = pid
+
+
+def _upsert_line(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    deal_id: int,
+    allowed: set[str],
+    ref_ids: dict[str, int],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = dict(row["columns"])
+    evidence_ref = cols.pop("evidence_ref", None)
+    cols.pop("deal_key", None)
+    product_ref = cols.pop("product_ref", None)
+    if product_ref:
+        pid = ref_ids.get(f"product:{product_ref}") or _product_id_by_ref(conn, str(product_ref))
+        if pid is not None:
+            cols["product_id"] = pid
+    evidence_id = _evidence_id_from_ref(ref_ids, evidence_ref)
+    if evidence_id is not None:
+        cols["evidence_id"] = evidence_id
+    cols["deal_id"] = deal_id
+    cols = _filter_db_columns(cols, allowed)
+    existing = conn.execute(
+        """
+        SELECT id FROM commercial_deal_line
+        WHERE deal_id = ? AND side = ? AND line_number = ?
+        LIMIT 1
+        """,
+        (deal_id, cols["side"], cols["line_number"]),
+    ).fetchone()
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_deal_line ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        inserted["commercial_deal_line"] += 1
+    else:
+        upd = {
+            k: v
+            for k, v in cols.items()
+            if k not in ("deal_id", "side", "line_number", "created_at")
+        }
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_deal_line SET {set_clause} WHERE id=?",
+            (*upd.values(), int(existing[0])),
+        )
+        updated["commercial_deal_line"] += 1
+
+
+def _upsert_cost(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    deal_id: int,
+    allowed: set[str],
+    ref_ids: dict[str, int],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = dict(row["columns"])
+    evidence_ref = cols.pop("evidence_ref", None)
+    cols.pop("deal_key", None)
+    doc_ref = cols.pop("document_ref", None)
+    pay_ref = cols.pop("payment_ref", None)
+    if doc_ref:
+        doc_id = ref_ids.get(str(doc_ref))
+        if doc_id is not None:
+            cols["document_id"] = doc_id
+    if pay_ref:
+        pay_id = ref_ids.get(str(pay_ref))
+        if pay_id is not None:
+            cols["payment_id"] = pay_id
+    evidence_id = _evidence_id_from_ref(ref_ids, evidence_ref)
+    if evidence_id is not None:
+        cols["evidence_id"] = evidence_id
+    cols["deal_id"] = deal_id
+    cols = _filter_db_columns(cols, allowed)
+    existing = conn.execute(
+        """
+        SELECT id FROM commercial_deal_cost
+        WHERE deal_id = ? AND cost_kind = ?
+        LIMIT 1
+        """,
+        (deal_id, cols["cost_kind"]),
+    ).fetchone()
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_deal_cost ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        inserted["commercial_deal_cost"] += 1
+    else:
+        upd = {k: v for k, v in cols.items() if k not in ("deal_id", "cost_kind", "created_at")}
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_deal_cost SET {set_clause} WHERE id=?",
+            (*upd.values(), int(existing[0])),
+        )
+        updated["commercial_deal_cost"] += 1
+
+
+def _upsert_event(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    deal_id: int,
+    allowed: set[str],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = dict(row["columns"])
+    cols.pop("deal_key", None)
+    cols["deal_id"] = deal_id
+    cols = _filter_db_columns(cols, allowed)
+    existing = conn.execute(
+        """
+        SELECT id FROM commercial_deal_event
+        WHERE deal_id = ? AND event_type = ? AND event_at = ?
+        LIMIT 1
+        """,
+        (deal_id, cols["event_type"], cols["event_at"]),
+    ).fetchone()
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_deal_event ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        inserted["commercial_deal_event"] += 1
+    else:
+        upd = {
+            k: v
+            for k, v in cols.items()
+            if k not in ("deal_id", "event_type", "event_at", "created_at")
+        }
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_deal_event SET {set_clause} WHERE id=?",
+            (*upd.values(), int(existing[0])),
+        )
+        updated["commercial_deal_event"] += 1
+
+
+def _upsert_field_evidence(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    deal_id: int,
+    allowed: set[str],
+    ref_ids: dict[str, int],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = dict(row["columns"])
+    evidence_ref = cols.pop("evidence_ref", None)
+    cols.pop("deal_key", None)
+    cols.pop("entity_key", None)
+    entity_table = cols.get("entity_table")
+    if entity_table == "commercial_deal":
+        cols["entity_id"] = deal_id
+    evidence_id = _evidence_id_from_ref(ref_ids, evidence_ref)
+    if evidence_id is not None:
+        cols["evidence_id"] = evidence_id
+    cols["deal_id"] = deal_id
+    cols = _filter_db_columns(cols, allowed)
+    existing = conn.execute(
+        """
+        SELECT id FROM commercial_deal_field_evidence
+        WHERE deal_id = ? AND entity_table = ? AND entity_id = ? AND field_name = ?
+        LIMIT 1
+        """,
+        (deal_id, cols["entity_table"], cols["entity_id"], cols["field_name"]),
+    ).fetchone()
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_deal_field_evidence ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        inserted["commercial_deal_field_evidence"] += 1
+    else:
+        upd = {
+            k: v
+            for k, v in cols.items()
+            if k
+            not in ("deal_id", "entity_table", "entity_id", "field_name", "created_at")
+        }
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_deal_field_evidence SET {set_clause} WHERE id=?",
+            (*upd.values(), int(existing[0])),
+        )
+        updated["commercial_deal_field_evidence"] += 1
+
+
+def _upsert_review(
+    conn: sqlite3.Connection,
+    row: dict[str, Any],
+    *,
+    deal_id: int,
+    allowed: set[str],
+    inserted: dict[str, int],
+    updated: dict[str, int],
+) -> None:
+    cols = dict(row["columns"])
+    cols.pop("deal_key", None)
+    cols["deal_id"] = deal_id
+    outcome = cols.get("outcome")
+    cols = _filter_db_columns(cols, allowed)
+    existing = conn.execute(
+        """
+        SELECT id FROM commercial_deal_review
+        WHERE deal_id = ? AND outcome = ?
+        LIMIT 1
+        """,
+        (deal_id, outcome),
+    ).fetchone()
+    if existing is None:
+        keys = list(cols.keys())
+        conn.execute(
+            f"INSERT INTO commercial_deal_review ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+            tuple(cols[k] for k in keys),
+        )
+        inserted["commercial_deal_review"] += 1
+    else:
+        upd = {k: v for k, v in cols.items() if k not in ("deal_id", "outcome", "created_at")}
+        set_clause = ", ".join(f"{k}=?" for k in upd)
+        conn.execute(
+            f"UPDATE commercial_deal_review SET {set_clause} WHERE id=?",
+            (*upd.values(), int(existing[0])),
+        )
+        updated["commercial_deal_review"] += 1
+
+
+def _deal_row_counts(conn: sqlite3.Connection, deal_id: int) -> dict[str, int]:
+    counts: dict[str, int] = {"commercial_deal": 1}
+    child_tables = [
+        "commercial_deal_evidence",
+        "commercial_deal_document",
+        "commercial_deal_payment",
+        "commercial_deal_line",
+        "commercial_deal_cost",
+        "commercial_deal_event",
+        "commercial_deal_field_evidence",
+        "commercial_deal_review",
+    ]
+    for table in child_tables:
+        row = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE deal_id = ?", (deal_id,)).fetchone()
+        counts[table] = int(row[0]) if row else 0
+    product_refs = conn.execute(
+        """
+        SELECT DISTINCT p.ref_code
+        FROM commercial_deal_line l
+        JOIN commercial_product p ON p.id = l.product_id
+        WHERE l.deal_id = ?
+        """,
+        (deal_id,),
+    ).fetchall()
+    ref_codes = [str(r[0]) for r in product_refs]
+    if ref_codes:
+        placeholders = ", ".join("?" * len(ref_codes))
+        prow = conn.execute(
+            f"SELECT COUNT(*) FROM commercial_product WHERE ref_code IN ({placeholders})",
+            ref_codes,
+        ).fetchone()
+        counts["commercial_product"] = int(prow[0]) if prow else 0
+        arow = conn.execute(
+            f"""
+            SELECT COUNT(*) FROM commercial_product_alias a
+            JOIN commercial_product p ON p.id = a.product_id
+            WHERE p.ref_code IN ({placeholders})
+            """,
+            ref_codes,
+        ).fetchone()
+        counts["commercial_product_alias"] = int(arow[0]) if arow else 0
+    else:
+        counts["commercial_product"] = 0
+        counts["commercial_product_alias"] = 0
+    return counts
+
+
+def apply_deal_promotion_plan(conn: sqlite3.Connection, plan: DealPromotionPlan) -> DealPromotionApplyResult:
+    """Apply plan rows to SQLite inside a single transaction (idempotent upsert)."""
+    if plan.commercial_deal is None:
+        raise ValueError("plan missing commercial_deal row")
+    ensure_commercial_deal_tables(conn)
+    if not commercial_deal_tables_exist(conn):
+        raise RuntimeError("commercial_deal tables missing after ensure")
+
+    colmap = _column_names_cached(conn)
+    ref_ids: dict[str, int] = {}
+    inserted: dict[str, int] = defaultdict(int)
+    updated: dict[str, int] = defaultdict(int)
+
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for row in plan.commercial_product:
+            _upsert_product(
+                conn,
+                row,
+                allowed=colmap["commercial_product"],
+                ref_ids=ref_ids,
+                inserted=inserted,
+                updated=updated,
+            )
+        for row in plan.commercial_product_alias:
+            _upsert_product_alias(
+                conn,
+                row,
+                allowed=colmap["commercial_product_alias"],
+                ref_ids=ref_ids,
+                inserted=inserted,
+                updated=updated,
+            )
+        deal_id, deal_action = _upsert_deal(
+            conn,
+            plan.commercial_deal,
+            allowed=colmap["commercial_deal"],
+            ref_ids=ref_ids,
+            inserted=inserted,
+            updated=updated,
+        )
+        for row in plan.commercial_deal_evidence:
+            _upsert_evidence(
+                conn,
+                row,
+                deal_id=deal_id,
+                allowed=colmap["commercial_deal_evidence"],
+                ref_ids=ref_ids,
+                inserted=inserted,
+                updated=updated,
+            )
+        for row in plan.commercial_deal_document:
+            _upsert_document(
+                conn,
+                row,
+                deal_id=deal_id,
+                allowed=colmap["commercial_deal_document"],
+                ref_ids=ref_ids,
+                inserted=inserted,
+                updated=updated,
+            )
+        for row in plan.commercial_deal_payment:
+            _upsert_payment(
+                conn,
+                row,
+                deal_id=deal_id,
+                allowed=colmap["commercial_deal_payment"],
+                ref_ids=ref_ids,
+                inserted=inserted,
+                updated=updated,
+            )
+        for row in plan.commercial_deal_line:
+            _upsert_line(
+                conn,
+                row,
+                deal_id=deal_id,
+                allowed=colmap["commercial_deal_line"],
+                ref_ids=ref_ids,
+                inserted=inserted,
+                updated=updated,
+            )
+        for row in plan.commercial_deal_cost:
+            _upsert_cost(
+                conn,
+                row,
+                deal_id=deal_id,
+                allowed=colmap["commercial_deal_cost"],
+                ref_ids=ref_ids,
+                inserted=inserted,
+                updated=updated,
+            )
+        for row in plan.commercial_deal_event:
+            _upsert_event(
+                conn,
+                row,
+                deal_id=deal_id,
+                allowed=colmap["commercial_deal_event"],
+                inserted=inserted,
+                updated=updated,
+            )
+        if plan.commercial_deal_review is not None:
+            _upsert_review(
+                conn,
+                plan.commercial_deal_review,
+                deal_id=deal_id,
+                allowed=colmap["commercial_deal_review"],
+                inserted=inserted,
+                updated=updated,
+            )
+        for row in plan.commercial_deal_field_evidence:
+            _upsert_field_evidence(
+                conn,
+                row,
+                deal_id=deal_id,
+                allowed=colmap["commercial_deal_field_evidence"],
+                ref_ids=ref_ids,
+                inserted=inserted,
+                updated=updated,
+            )
+        fk_ok = foreign_key_check_ok(conn)
+        if not fk_ok:
+            raise RuntimeError("PRAGMA foreign_key_check reported violations after apply")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+    row_counts = _deal_row_counts(conn, deal_id)
+    row_counts["commercial_product"] = len(plan.commercial_product)
+    row_counts["commercial_product_alias"] = len(plan.commercial_product_alias)
+
+    return DealPromotionApplyResult(
+        deal_id=deal_id,
+        deal_key=plan.deal_key,
+        deal_action=deal_action,
+        inserted=dict(inserted),
+        updated=dict(updated),
+        row_counts=row_counts,
+        foreign_key_check_ok=fk_ok,
+    )

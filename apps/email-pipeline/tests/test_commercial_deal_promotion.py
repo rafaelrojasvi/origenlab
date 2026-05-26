@@ -11,16 +11,19 @@ from pathlib import Path
 import pytest
 
 from origenlab_email_pipeline.commercial.commercial_deal_promotion import (
-    APPLY_NOT_IMPLEMENTED_MSG,
+    apply_deal_promotion_plan,
     build_plan_for_deal_key,
     build_serva_ceaf_plan_from_default_preview,
     default_preview_path,
     iter_plan_entity_rows,
     plan_contains_forbidden_columns,
     validate_apply_args,
+    validate_sqlite_apply_target,
 )
 from origenlab_email_pipeline.commercial.commercial_deal_schema import (
+    _FORBIDDEN_BODY_COLUMN_SUBSTRINGS,
     ensure_commercial_deal_tables,
+    foreign_key_check_ok,
 )
 from origenlab_email_pipeline.commercial.serva_ceaf_deal_confirmed import (
     DEAL_KEY,
@@ -33,6 +36,20 @@ from origenlab_email_pipeline.timeutil import now_iso
 _REPO = Path(__file__).resolve().parents[1]
 _PREVIEW = _REPO / "reports/out/active/current/commercial_deals_preview/serva-ceaf-oc-26172-po-174-26.json"
 _SCRIPT = _REPO / "scripts/commercial/promote_deal_from_preview.py"
+
+_SERVA_CEAF_EXPECTED_COUNTS = {
+    "commercial_product": 2,
+    "commercial_product_alias": 4,
+    "commercial_deal": 1,
+    "commercial_deal_evidence": 15,
+    "commercial_deal_document": 4,
+    "commercial_deal_payment": 2,
+    "commercial_deal_line": 3,
+    "commercial_deal_cost": 3,
+    "commercial_deal_event": 7,
+    "commercial_deal_field_evidence": 7,
+    "commercial_deal_review": 1,
+}
 
 _ENTITY_GROUPS = (
     "commercial_deal",
@@ -53,6 +70,73 @@ _ENTITY_GROUPS = (
 def serva_preview_exists() -> None:
     if not _PREVIEW.is_file():
         pytest.skip(f"preview fixture missing: {_PREVIEW}")
+
+
+def test_cli_dry_run_stdout_is_valid_json_only(serva_preview_exists: None) -> None:
+    r = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--deal-key", DEAL_KEY],
+        cwd=str(_REPO),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip(), "stdout must not be empty"
+    assert "DRY-RUN" not in r.stdout
+    payload = json.loads(r.stdout)
+    assert payload["deal_key"] == DEAL_KEY
+    assert payload["counts"] == _SERVA_CEAF_EXPECTED_COUNTS
+
+    r_summary = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--deal-key", DEAL_KEY, "--summary"],
+        cwd=str(_REPO),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert r_summary.returncode == 0, r_summary.stderr
+    payload_summary = json.loads(r_summary.stdout)
+    assert payload_summary["counts"] == _SERVA_CEAF_EXPECTED_COUNTS
+    assert "DRY-RUN" in r_summary.stderr
+    assert "counts=" in r_summary.stderr
+
+
+def test_cli_dry_run_compact_json(serva_preview_exists: None) -> None:
+    r = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--deal-key", DEAL_KEY, "--no-pretty-json"],
+        cwd=str(_REPO),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "\n  " not in r.stdout
+    payload = json.loads(r.stdout)
+    assert payload["counts"]["commercial_deal_payment"] == 2
+
+
+def test_cli_json_out_writes_file_and_empty_stdout(serva_preview_exists: None, tmp_path: Path) -> None:
+    out_path = tmp_path / "plan.json"
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--deal-key",
+            DEAL_KEY,
+            "--json-out",
+            str(out_path),
+        ],
+        cwd=str(_REPO),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == ""
+    assert out_path.is_file()
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["counts"] == _SERVA_CEAF_EXPECTED_COUNTS
+    assert "Wrote" in r.stderr
 
 
 def test_dry_run_includes_all_entity_groups(serva_preview_exists: None) -> None:
@@ -175,7 +259,7 @@ def test_default_mode_no_sqlite_writes(tmp_path: Path, serva_preview_exists: Non
         timeout=60,
     )
     assert r.returncode == 0, r.stderr
-    assert "DRY-RUN" in r.stdout
+    json.loads(r.stdout)
 
     conn = sqlite3.connect(str(db))
     count = conn.execute("SELECT COUNT(*) FROM commercial_deal").fetchone()[0]
@@ -206,9 +290,112 @@ def test_apply_fails_without_guard(serva_preview_exists: None, tmp_path: Path) -
     assert "i-understand-this-writes-sqlite" in r.stderr.lower() or "--i-understand" in r.stderr
 
 
-def test_apply_not_implemented_when_guarded(serva_preview_exists: None, tmp_path: Path) -> None:
+def _memory_db_with_schema() -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:")
+    conn.execute("PRAGMA foreign_keys=ON")
+    ensure_commercial_deal_tables(conn)
+    return conn
+
+
+def _forbidden_values_in_db(conn: sqlite3.Connection) -> list[str]:
+    hits: list[str] = []
+    tables = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'commercial_%'"
+    ).fetchall()
+    for (table,) in tables:
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        for col in cols:
+            if not any(sub in col for sub in _FORBIDDEN_BODY_COLUMN_SUBSTRINGS):
+                continue
+            row = conn.execute(
+                f"SELECT {col} FROM {table} WHERE {col} IS NOT NULL AND TRIM({col}) != '' LIMIT 1"
+            ).fetchone()
+            if row and row[0]:
+                hits.append(f"{table}.{col}")
+    return hits
+
+
+def test_apply_to_memory_db(serva_preview_exists: None) -> None:
+    conn = _memory_db_with_schema()
+    plan = build_serva_ceaf_plan_from_default_preview(pipeline_root=_REPO)
+    result = apply_deal_promotion_plan(conn, plan)
+    assert result.deal_key == DEAL_KEY
+    assert result.deal_id > 0
+    assert result.foreign_key_check_ok is True
+    assert foreign_key_check_ok(conn) is True
+    row = conn.execute("SELECT id FROM commercial_deal WHERE deal_key = ?", (DEAL_KEY,)).fetchone()
+    assert row is not None
+    pay_count = conn.execute(
+        "SELECT COUNT(*) FROM commercial_deal_payment WHERE deal_id = ?",
+        (result.deal_id,),
+    ).fetchone()[0]
+    assert pay_count == 2
+    fe_count = conn.execute(
+        "SELECT COUNT(*) FROM commercial_deal_field_evidence WHERE deal_id = ?",
+        (result.deal_id,),
+    ).fetchone()[0]
+    assert fe_count == 7
+    assert _forbidden_values_in_db(conn) == []
+    conn.close()
+
+
+def test_second_apply_is_idempotent(serva_preview_exists: None) -> None:
+    conn = _memory_db_with_schema()
+    plan = build_serva_ceaf_plan_from_default_preview(pipeline_root=_REPO)
+    first = apply_deal_promotion_plan(conn, plan)
+    second = apply_deal_promotion_plan(conn, plan)
+    assert second.deal_action == "update"
+    assert second.deal_id == first.deal_id
+    assert second.row_counts == first.row_counts
+    for table, count in first.row_counts.items():
+        if table == "commercial_deal":
+            continue
+        total = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        if table in ("commercial_product", "commercial_product_alias"):
+            assert total == count
+        else:
+            scoped = conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE deal_id = ?",
+                (first.deal_id,),
+            ).fetchone()[0]
+            assert scoped == count
+    conn.close()
+
+
+def test_apply_cli_to_backup_db(serva_preview_exists: None, tmp_path: Path) -> None:
+    db = tmp_path / "backup" / "ledger-dev.sqlite"
+    db.parent.mkdir(parents=True)
+    sqlite3.connect(str(db)).close()
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--deal-key",
+            DEAL_KEY,
+            "--apply",
+            "--sqlite-db",
+            str(db),
+            "--i-understand-this-writes-sqlite",
+            "--summary",
+        ],
+        cwd=str(_REPO),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == ""
+    assert "APPLIED" in r.stderr
+    assert "row_counts=" in r.stderr
+    conn = sqlite3.connect(str(db))
+    assert conn.execute("SELECT COUNT(*) FROM commercial_deal").fetchone()[0] == 1
+    conn.close()
+
+
+def test_apply_refuses_production_like_path(serva_preview_exists: None, tmp_path: Path) -> None:
     db = tmp_path / "emails.sqlite"
     sqlite3.connect(str(db)).close()
+    assert validate_sqlite_apply_target(db) is not None
     r = subprocess.run(
         [
             sys.executable,
@@ -225,8 +412,10 @@ def test_apply_not_implemented_when_guarded(serva_preview_exists: None, tmp_path
         text=True,
         timeout=60,
     )
-    assert r.returncode == 3
-    assert APPLY_NOT_IMPLEMENTED_MSG.split(".")[0] in r.stderr
+    assert r.returncode == 4
+    conn = sqlite3.connect(str(db))
+    assert conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='commercial_deal'").fetchone()[0] == 0
+    conn.close()
 
 
 def test_validate_apply_args_matrix() -> None:
