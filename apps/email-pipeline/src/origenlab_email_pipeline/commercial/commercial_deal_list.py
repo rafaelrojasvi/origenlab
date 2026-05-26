@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from origenlab_email_pipeline.commercial.commercial_deal_inspector import connect_readonly
+from origenlab_email_pipeline.commercial.commercial_deal_margin import margin_pct_from_notes
 
 _FORBIDDEN_JSON_KEYS: frozenset[str] = frozenset(
     {
@@ -44,6 +45,8 @@ SELECT
   supplier_amount_paid_minor,
   freight_status,
   reconciliation_status,
+  margin_net_clp,
+  margin_notes,
   updated_at
 FROM commercial_deal
 """
@@ -71,6 +74,9 @@ def _sanitize_deal_row(row: dict[str, Any]) -> dict[str, Any]:
         if any(sub in key.lower() for sub in _FORBIDDEN_KEY_SUBSTRINGS):
             continue
         out[key] = value
+    if "margin_notes" in out:
+        out["margin_pct"] = margin_pct_from_notes(out.get("margin_notes"))
+        del out["margin_notes"]
     return out
 
 
@@ -147,23 +153,26 @@ def format_deal_list_human(deals: list[dict[str, Any]]) -> str:
     lines: list[str] = []
     header = (
         f"{'deal_key':<36}  {'client':<22}  {'supplier':<22}  "
-        f"{'status':<18}  {'margin':<14}  {'net CLP':>10}  {'gross CLP':>10}  "
-        f"{'paid EUR':<10}  {'freight':<28}  {'updated_at'}"
+        f"{'status':<18}  {'margin':<14}  {'mgn net':>10}  {'mgn %':>7}  "
+        f"{'net CLP':>10}  {'gross CLP':>10}  {'paid EUR':<10}  {'updated_at'}"
     )
     lines.append(header)
     lines.append("-" * len(header))
     for d in deals:
         gross = d.get("client_payment_received_clp") or d.get("client_sale_gross_clp")
+        pct = d.get("margin_pct")
+        pct_str = f"{float(pct) * 100:.1f}" if pct is not None else "—"
         lines.append(
             f"{str(d.get('deal_key') or ''):<36}  "
             f"{_truncate(str(d.get('client_org_name') or '—'), 22):<22}  "
             f"{_truncate(str(d.get('supplier_org_name') or '—'), 22):<22}  "
             f"{str(d.get('deal_status') or '—'):<18}  "
             f"{str(d.get('margin_status') or '—'):<14}  "
+            f"{_fmt_clp(d.get('margin_net_clp')):>10}  "
+            f"{pct_str:>7}  "
             f"{_fmt_clp(d.get('client_sale_net_clp')):>10}  "
             f"{_fmt_clp(gross):>10}  "
             f"{_fmt_supplier_paid(d.get('supplier_amount_paid_decimal'), d.get('supplier_amount_paid_minor')):<10}  "
-            f"{_truncate(str(d.get('freight_status') or '—'), 28):<28}  "
             f"{str(d.get('updated_at') or '—')}"
         )
     lines.append(f"\n({len(deals)} deal(s))")

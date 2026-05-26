@@ -102,6 +102,7 @@ def fetch_deal_header(conn: sqlite3.Connection, deal_key: str) -> dict[str, Any]
             supplier_invoice_total_decimal, supplier_invoice_total_minor,
             supplier_amount_paid_decimal, supplier_amount_paid_minor,
             schema_version, confidence, notes_json,
+            margin_net_clp, margin_computed_at, margin_notes,
             created_at, updated_at
         FROM commercial_deal
         WHERE deal_key = ?
@@ -264,10 +265,21 @@ def margin_blocker_explanation(margin_status: str) -> str:
 
 
 def build_deal_report(conn: sqlite3.Connection, deal_key: str) -> dict[str, Any]:
+    from origenlab_email_pipeline.commercial.commercial_deal_margin import (
+        margin_blockers_for_deal,
+        margin_pct_from_notes,
+    )
+
     header = fetch_deal_header(conn, deal_key)
     if header is None:
         raise KeyError(f"deal not found: {deal_key!r}")
     deal_id = int(header["id"])
+    margin_status = str(header.get("margin_status") or "")
+    margin_notes = header.get("margin_notes")
+    margin_pct = margin_pct_from_notes(margin_notes)
+    remaining_blockers: list[str] = []
+    if margin_status != "computed":
+        remaining_blockers = margin_blockers_for_deal(conn, deal_key)
     return {
         "deal_key": deal_key,
         "header": header,
@@ -278,7 +290,14 @@ def build_deal_report(conn: sqlite3.Connection, deal_key: str) -> dict[str, Any]
         "field_evidence": fetch_field_evidence(conn, deal_id),
         "documents": fetch_documents(conn, deal_id),
         "review": fetch_review(conn, deal_id),
-        "margin_blocker_explanation": margin_blocker_explanation(str(header.get("margin_status", ""))),
+        "margin": {
+            "status": margin_status,
+            "margin_net_clp": header.get("margin_net_clp"),
+            "margin_pct": margin_pct,
+            "margin_computed_at": header.get("margin_computed_at"),
+            "remaining_blockers": remaining_blockers,
+        },
+        "margin_blocker_explanation": margin_blocker_explanation(margin_status),
     }
 
 
@@ -465,15 +484,28 @@ def format_deal_report(report: dict[str, Any]) -> str:
         a(f"  Reason text        : {review.get('reason_text')}")
         a(f"  Created            : {review.get('created_at')}")
 
-    margin_status = str(h.get("margin_status") or "")
-    if margin_status in ("needs_review", "not_computed", "blocked"):
-        a("")
-        a("── MARGIN BLOCKERS " + "─" * 53)
-        a(f"  Status: {margin_status}")
-        for part in report.get("margin_blocker_explanation", "").split("."):
-            part = part.strip()
-            if part:
-                a(f"  {part}.")
+    margin = report.get("margin") or {}
+    margin_status = str(margin.get("status") or h.get("margin_status") or "")
+    a("")
+    a("── MARGIN " + "─" * 63)
+    a(f"  Status             : {margin_status}")
+    if margin_status == "computed":
+        a(f"  Net margin         : {_fmt_clp(margin.get('margin_net_clp'))}")
+        pct = margin.get("margin_pct")
+        if pct is not None:
+            a(f"  Margin %           : {float(pct) * 100:.2f}% (on net sale ex-IVA)")
+        a(f"  Computed at        : {margin.get('margin_computed_at') or '—'}")
+    else:
+        blockers = margin.get("remaining_blockers") or []
+        if blockers:
+            a("  Remaining blockers :")
+            for b in blockers:
+                a(f"    - {b}")
+        else:
+            for part in report.get("margin_blocker_explanation", "").split("."):
+                part = part.strip()
+                if part:
+                    a(f"  {part}.")
 
     a("")
     a(_sep(72, "═"))
