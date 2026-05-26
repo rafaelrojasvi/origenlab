@@ -727,16 +727,97 @@ See **§13 Phase 1 implementation plan** for file-level deliverables.
 
 See §11.
 
-### Phase 4 — Postgres mirror (explicit approval)
+### Phase 4 — Postgres mirror (read-only, redacted)
 
-1. Alembic `commercial.deal_*` tables mirroring SQLite.
-2. `sync_commercial_deal_to_postgres.py` (pattern: `commercial_purchase_postgres_mirror.py`).
-3. Still **no** email bodies.
+**Source of truth:** SQLite `commercial_deal*` (operator ledger). **Postgres** holds a **denormalized read model** only — never used for sends, outreach, or write-back.
 
-### Phase 5 — Dashboard / API (Cloudflare Access)
+#### 4.1 Postgres read model: `commercial.deal`
 
-1. `GET /mirror/commercial/deals` → redacted DTO only.
-2. Operator UI behind Access; local Streamlit may use full SQLite.
+Single table (not a full copy of all 11 SQLite tables). Populated by `commercial_deal_postgres_mirror.sync_commercial_deals` (opt-in).
+
+| Column | Type | Source |
+|--------|------|--------|
+| `deal_key` | TEXT PK | `commercial_deal.deal_key` |
+| `sync_run_id` | BIGINT | `reporting.dashboard_sync_run.id` when run via orchestrator |
+| `client_org_name` | TEXT | header |
+| `supplier_org_name` | TEXT | header |
+| `deal_status` | TEXT | header |
+| `margin_status` | TEXT | header |
+| `reconciliation_status` | TEXT | header |
+| `freight_status` | TEXT | header |
+| `client_sale_net_clp` | BIGINT | header |
+| `client_iva_amount_clp` | BIGINT | header |
+| `client_sale_gross_clp` | BIGINT | header |
+| `client_payment_received_clp` | BIGINT | header |
+| `supplier_invoice_total_decimal` | TEXT | header |
+| `supplier_invoice_total_minor` | INTEGER | header |
+| `supplier_amount_paid_decimal` | TEXT | header |
+| `supplier_amount_paid_minor` | INTEGER | header |
+| `margin_net_clp` | BIGINT | header (NULL unless computed) |
+| `margin_pct` | DOUBLE PRECISION | derived from `margin_notes` JSON at sync; **`margin_notes` never stored** |
+| `updated_at` | TEXT | header |
+| `product_line_summaries` | JSONB | aggregated from `commercial_deal_line` + `commercial_product` |
+| `cost_summaries_by_type` | JSONB | aggregated from `commercial_deal_cost` (totals by `cost_kind` + `currency`) |
+| `payment_summaries_masked` | JSONB | from `commercial_deal_payment` (amounts only; IDs/emails omitted) |
+| `margin_blockers` | JSONB | `remaining_margin_blockers` when `margin_status != 'computed'` |
+| `synced_at` | TIMESTAMPTZ | write timestamp |
+
+**Indexes:** `deal_key` (PK), `updated_at DESC`, `margin_status`.
+
+#### 4.2 Redaction invariants (sync + API)
+
+Never read from SQLite or expose in Postgres/API:
+
+- Raw email bodies, full attachment text, `extract_snippet`, `operator_note` on evidence
+- `transfer_id`, `operation_id`, bank account numbers, RUTs (full)
+- `source_preview_path`, `source_preview_sha256`, `notes_json`, `operator_private_json`, `legacy_purchase_event_id`
+- Gmail URLs, `source_path`, `source_file`, `source_email_id`, `source_attachment_id`
+- `client_contact_email`, `supplier_contact_email`, domains, PO/invoice numbers (dashboard-safe rollup only)
+- Cost `description` (may contain operator notes); payment `subject`, `counterparty_email`
+- Product `ref_code`, line `description` (identifiers / free text)
+
+**Product line summary JSON** (per line): `side`, `line_kind`, `product_name`, `category`, `quantity`, `unit`, `currency`, `line_net_amount` (CLP client lines only).
+
+**Cost summary JSON** (per `cost_kind` + `currency`): `cost_kind`, `currency`, `total_amount_integer`, `total_amount_decimal`, `total_amount_minor`, `row_count`.
+
+**Payment summary JSON** (per payment): `direction`, `payment_method`, `paid_at`, `currency`, amount fields; no transfer/operation IDs.
+
+#### 4.3 Sync (explicit opt-in)
+
+| Entry | Command |
+|-------|---------|
+| Standalone | `uv run python scripts/sync/sync_commercial_deals_postgres_mirror.py --sqlite-db … --postgres-url …` |
+| Dashboard orchestrator | `sync_dashboard_postgres_mirror.py --include-commercial-deals` (default **off**) |
+| Dry-run | `--dry-run` on either script |
+| Verify | `uv run python scripts/qa/verify_commercial_deals_postgres_mirror.py` |
+
+Sync semantics: `DELETE FROM commercial.deal` then insert all safe rows from SQLite (full replace per run). Skips when SQLite ledger tables missing or empty.
+
+Alembic: `20260526_0018_commercial_deal_mirror.py` (`upgrade head` before sync).
+
+#### 4.4 API contract (Phase 4b — mirror only)
+
+| Route | Response |
+|-------|----------|
+| `GET /mirror/commercial/deals?limit=1–100` | `{ table_available, items[], total, limit, disclaimer }` |
+| `GET /mirror/commercial/deals/{deal_key}` | `{ table_available, deal \| null, disclaimer }` |
+
+DTO keys match `commercial.deal` safe columns only. `data_source: postgres_mirror`, `read_only: true`. Cloudflare Access on dashboard does **not** relax redaction.
+
+### Phase 5 — Dashboard UI (read-only mirror list)
+
+**Route:** `GET /mirror/commercial/deals` only (via `apps/dashboard/src/api/mirrorCommercialClient.ts`). Do **not** use `GET /mirror/commercial/purchase-events` or deal detail in Today UI.
+
+**UI:** `CommercialDealsTable` on Today — allowlisted scalar fields, labels *Postgres mirror · Read-only · Redacted commercial view*, empty state when `table_available=false` or `items=[]`.
+
+**Production order (before operators expect rows):**
+
+1. `alembic upgrade head` (`20260526_0018`)
+2. Explicit sync: `sync_commercial_deals_postgres_mirror.py` or `sync_dashboard_postgres_mirror.py --include-commercial-deals` (default **off**)
+3. `verify_commercial_deals_postgres_mirror.py --scan-jsonb`
+4. Deploy API + dashboard when approved
+
+Operator full ledger remains SQLite CLI (`inspect_commercial_deal`, `list_commercial_deals`).
 
 ---
 

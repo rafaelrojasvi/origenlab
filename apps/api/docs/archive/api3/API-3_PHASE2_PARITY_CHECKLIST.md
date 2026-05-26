@@ -25,8 +25,10 @@
 | 11 | `/outbound/suppressions/emails` | `/mirror/outbound/suppressions/emails` | pagination | 1D |
 | 12 | `/outbound/contact-state` | `/mirror/outbound/contact-state` | pagination | 1D |
 | 13 | `/outbound/readiness` | `/mirror/outbound/readiness` | `max_staleness_days` (read-only report) | 1C |
+| 14 | `/commercial/deals` | `/mirror/commercial/deals` | `limit` 1–100; redacted deal ledger (Postgres mirror) | 4 |
+| 15 | `/commercial/deals/{deal_key}` | `/mirror/commercial/deals/{deal_key}` | Redacted deal detail by `deal_key` | 4 |
 
-**Total legacy read routes mirrored:** 13 pairs (14 path patterns including commercial detail).
+**Total legacy read routes mirrored:** 15 pairs (16 path patterns including commercial purchase + deal detail).
 
 ---
 

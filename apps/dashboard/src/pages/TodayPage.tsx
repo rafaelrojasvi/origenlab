@@ -12,6 +12,9 @@ import {
   getOperatorApiBaseUrl,
 } from "../api/operatorClient";
 import type { TodayPanelData } from "../api/operatorTypes";
+import type { CommercialDealsListUi } from "../api/commercialDealsTypes";
+import { fetchCommercialDealsMirror } from "../api/mirrorCommercialClient";
+import { CommercialDealsTable } from "../components/commercial/CommercialDealsTable";
 import { ContactProfilePanel } from "../components/commercial/ContactProfilePanel";
 import { EquipmentOpportunitiesTable } from "../components/commercial/EquipmentOpportunitiesTable";
 import { WarmCasesTable } from "../components/commercial/WarmCasesTable";
@@ -71,6 +74,10 @@ export function TodayPage() {
   const [equipmentLoading, setEquipmentLoading] = useState(true);
   const [equipmentError, setEquipmentError] = useState<string | null>(null);
 
+  const [commercialDeals, setCommercialDeals] = useState<CommercialDealsListUi | null>(null);
+  const [commercialDealsLoading, setCommercialDealsLoading] = useState(true);
+  const [commercialDealsError, setCommercialDealsError] = useState<string | null>(null);
+
   const [contactEmail, setContactEmail] = useState<string | null>(null);
 
   const loadPanel = useCallback(async () => {
@@ -112,9 +119,22 @@ export function TodayPage() {
     }
   }, []);
 
+  const loadCommercialDeals = useCallback(async () => {
+    setCommercialDealsLoading(true);
+    setCommercialDealsError(null);
+    try {
+      setCommercialDeals(await fetchCommercialDealsMirror());
+    } catch (e) {
+      setCommercialDealsError(formatLoadError("Commercial deals mirror", e));
+      setCommercialDeals(null);
+    } finally {
+      setCommercialDealsLoading(false);
+    }
+  }, []);
+
   const loadAll = useCallback(() => {
-    void Promise.all([loadPanel(), loadWarm(), loadEquipment()]);
-  }, [loadPanel, loadWarm, loadEquipment]);
+    void Promise.all([loadPanel(), loadWarm(), loadEquipment(), loadCommercialDeals()]);
+  }, [loadPanel, loadWarm, loadEquipment, loadCommercialDeals]);
 
   useEffect(() => {
     loadAll();
@@ -131,7 +151,8 @@ export function TodayPage() {
   const tone = data ? verdictTone(data.operator.verdict) : null;
   const warnings = data?.operator.warnings ?? [];
   const warningsMore = Math.max(0, warnings.length - WARNINGS_PREVIEW);
-  const refreshing = panelLoading || warmLoading || equipmentLoading;
+  const refreshing =
+    panelLoading || warmLoading || equipmentLoading || commercialDealsLoading;
 
   return (
     <div className="min-h-screen">
@@ -143,7 +164,8 @@ export function TodayPage() {
             </p>
             <h1 className="mt-1 text-2xl font-semibold text-brand-900 sm:text-3xl">Today</h1>
             <p className="mt-2 text-sm text-[var(--color-muted)]">
-              Operator status · warm cases · equipment · read-only · apps/api
+              Operator status · warm cases · equipment · commercial deals mirror · read-only ·
+              apps/api
             </p>
           </div>
           {data ? (
@@ -284,9 +306,16 @@ export function TodayPage() {
           onContactSelect={setContactEmail}
         />
 
+        <CommercialDealsTable
+          data={commercialDeals}
+          loading={commercialDealsLoading}
+          error={commercialDealsError}
+          onRetry={() => void loadCommercialDeals()}
+        />
+
         <footer className="border-t border-[var(--color-border)] pt-6 text-xs text-[var(--color-muted)]">
           Dashboard v1 · Today · GET /health · /operator/status · /cases/warm ·
-          /opportunities/equipment · /contacts/{"{email}"}
+          /opportunities/equipment · /mirror/commercial/deals · /contacts/{"{email}"}
         </footer>
       </main>
 

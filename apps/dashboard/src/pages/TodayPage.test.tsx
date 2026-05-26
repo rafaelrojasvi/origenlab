@@ -90,12 +90,17 @@ vi.mock("../api/operatorClient", async (importOriginal) => {
   };
 });
 
+vi.mock("../api/mirrorCommercialClient", () => ({
+  fetchCommercialDealsMirror: vi.fn(),
+}));
+
 import {
   fetchContactProfile,
   fetchEquipmentOpportunities,
   fetchTodayPanel,
   fetchWarmCases,
 } from "../api/operatorClient";
+import { fetchCommercialDealsMirror } from "../api/mirrorCommercialClient";
 
 describe("TodayPage", () => {
   beforeEach(() => {
@@ -112,6 +117,32 @@ describe("TodayPage", () => {
     vi.mocked(fetchTodayPanel).mockResolvedValue(panelSqlite);
     vi.mocked(fetchWarmCases).mockResolvedValue(warmPayload);
     vi.mocked(fetchEquipmentOpportunities).mockResolvedValue(equipmentPayload);
+    vi.mocked(fetchCommercialDealsMirror).mockResolvedValue({
+      table_available: true,
+      read_only: true,
+      data_source: "postgres_mirror",
+      total: 1,
+      limit: 20,
+      items: [
+        {
+          client_org_name: "CEAF",
+          supplier_org_name: "SERVA",
+          deal_status: "logistics_pending",
+          margin_status: "needs_review",
+          reconciliation_status: "reconciled",
+          freight_status: "pending",
+          client_sale_net_clp: 1_260_000,
+          client_sale_gross_clp: 1_499_400,
+          client_payment_received_clp: 1_499_400,
+          supplier_invoice_total_decimal: "363.00",
+          supplier_amount_paid_decimal: "218.00",
+          margin_net_clp: null,
+          margin_pct: null,
+          margin_blockers: [],
+          updated_at: "2026-05-22T12:00:00+00:00",
+        },
+      ],
+    });
   }
 
   it("shows legacy :8000 dev warning when env points at wrong port", () => {
@@ -134,6 +165,9 @@ describe("TodayPage", () => {
     screen.getByText("SQLite");
     screen.getByText(/Casos tibios \/ Warm cases/);
     screen.getByText(/Oportunidades de equipos/);
+    screen.getByText(/Commercial deals/);
+    screen.getByText("CEAF");
+    screen.getByText("SERVA");
     screen.getByText("buyer@acme.cl");
     screen.getByText("Hospital Regional");
     expect(screen.queryByText(/\/tmp\/emails\.sqlite/)).toBeNull();
@@ -232,6 +266,25 @@ describe("TodayPage", () => {
       screen.getByText("Buyer");
     });
     expect(screen.queryByText(/sqlite_path|source_path|body_preview/i)).toBeNull();
+  });
+
+  it("shows commercial deals empty state when mirror is not synced", async () => {
+    mockAllOk();
+    vi.mocked(fetchCommercialDealsMirror).mockResolvedValue({
+      table_available: false,
+      read_only: true,
+      data_source: "postgres_mirror",
+      total: 0,
+      limit: 20,
+      items: [],
+    });
+
+    render(<TodayPage />);
+
+    await waitFor(() => {
+      screen.getByText("Commercial deals mirror not synced yet.");
+    });
+    expect(vi.mocked(fetchCommercialDealsMirror)).toHaveBeenCalled();
   });
 
   it("opens contact profile from equipment row when email exists", async () => {

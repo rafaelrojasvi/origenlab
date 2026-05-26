@@ -16,6 +16,12 @@ LEGACY_TO_MIRROR_ROUTE_PAIRS: tuple[tuple[str, str, str], ...] = (
         "/mirror/commercial/purchase-events/{event_id}",
         "Path param renamed event_id on mirror; same semantics",
     ),
+    ("/commercial/deals", "/mirror/commercial/deals", "limit 1–100; redacted deal ledger"),
+    (
+        "/commercial/deals/{deal_key}",
+        "/mirror/commercial/deals/{deal_key}",
+        "Redacted commercial deal detail by deal_key",
+    ),
     ("/contacts", "/mirror/contacts", "Paginated mart list; not operator detail"),
     ("/organizations", "/mirror/organizations", "Paginated mart list"),
     ("/outbound/suppressions/emails", "/mirror/outbound/suppressions/emails", "Email suppressions"),

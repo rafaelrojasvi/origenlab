@@ -15,7 +15,14 @@ _MIRROR_SMOKE = _REPO_ROOT / "apps" / "dashboard" / "scripts" / "mirror-smoke.mj
 _DASHBOARD_PKG = _REPO_ROOT / "apps" / "dashboard" / "package.json"
 _DASHBOARD_ACTIVE = (
     _REPO_ROOT / "apps" / "dashboard" / "src" / "api" / "operatorClient.ts",
+    _REPO_ROOT / "apps" / "dashboard" / "src" / "api" / "mirrorCommercialClient.ts",
     _REPO_ROOT / "apps" / "dashboard" / "src" / "pages" / "TodayPage.tsx",
+)
+_COMMERCIAL_DEALS_MIRROR_LIST = "/mirror/commercial/deals"
+_FORBIDDEN_DASHBOARD_MIRROR_PATHS = (
+    "/mirror/commercial/purchase-events",
+    "/mirror/commercial/deals/{deal_key}",
+    "/mirror/commercial/deals/",
 )
 
 
@@ -58,6 +65,10 @@ def test_legacy_api_tree_removed_phase6() -> None:
     assert not _LEGACY_API_ROOT.exists()
 
 
-def test_active_dashboard_still_no_mirror_calls() -> None:
+def test_active_dashboard_mirror_limited_to_commercial_deals_list() -> None:
     for path in _DASHBOARD_ACTIVE:
-        assert "/mirror/" not in path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
+        for forbidden in _FORBIDDEN_DASHBOARD_MIRROR_PATHS:
+            assert forbidden not in text, f"{path.name} must not reference {forbidden}"
+        if "/mirror/" in text:
+            assert _COMMERCIAL_DEALS_MIRROR_LIST in text

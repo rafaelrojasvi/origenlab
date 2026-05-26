@@ -180,6 +180,89 @@ class CommercialPurchaseEventDetailResponse(BaseModel):
     disclaimer: str = COMMERCIAL_PURCHASE_DISCLAIMER
 
 
+class CommercialDealProductLineSummary(BaseModel):
+    side: str | None = None
+    line_kind: str | None = None
+    product_name: str | None = None
+    category: str | None = None
+    quantity: str | None = None
+    unit: str | None = None
+    currency: str | None = None
+    line_net_amount: int | None = None
+
+
+class CommercialDealCostSummaryByType(BaseModel):
+    cost_kind: str
+    currency: str
+    total_amount_integer: int = 0
+    row_count: int = 0
+
+
+class CommercialDealPaymentSummaryMasked(BaseModel):
+    direction: str | None = None
+    payment_method: str | None = None
+    paid_at: str | None = None
+    currency: str | None = None
+    amount_gross_integer: int | None = None
+    amount_net_integer: int | None = None
+    iva_amount_integer: int | None = None
+    amount_decimal: str | None = None
+    amount_minor: int | None = None
+    secondary_currency: str | None = None
+    secondary_amount_decimal: str | None = None
+    secondary_amount_minor: int | None = None
+
+
+class CommercialDealRow(BaseModel):
+    deal_key: str
+    client_org_name: str
+    supplier_org_name: str
+    deal_status: str
+    margin_status: str
+    reconciliation_status: str | None = None
+    freight_status: str | None = None
+    client_sale_net_clp: int | None = None
+    client_iva_amount_clp: int | None = None
+    client_sale_gross_clp: int | None = None
+    client_payment_received_clp: int | None = None
+    supplier_invoice_total_decimal: str | None = None
+    supplier_invoice_total_minor: int | None = None
+    supplier_amount_paid_decimal: str | None = None
+    supplier_amount_paid_minor: int | None = None
+    margin_net_clp: int | None = None
+    margin_pct: float | None = None
+    updated_at: str | None = None
+    product_line_summaries: list[CommercialDealProductLineSummary] = Field(default_factory=list)
+    cost_summaries_by_type: list[CommercialDealCostSummaryByType] = Field(default_factory=list)
+    payment_summaries_masked: list[CommercialDealPaymentSummaryMasked] = Field(default_factory=list)
+    margin_blockers: list[str] = Field(default_factory=list)
+
+
+COMMERCIAL_DEAL_DISCLAIMER: str = (
+    "Espejo Postgres redactado del ledger comercial SQLite. "
+    "No incluye cuerpos de correo, IDs de transferencia completos ni rutas locales. "
+    "SQLite sigue siendo la fuente operativa."
+)
+
+
+class CommercialDealsListResponse(BaseModel):
+    table_available: bool = False
+    items: list[CommercialDealRow] = Field(default_factory=list)
+    total: int = 0
+    limit: int = 20
+    data_source: Literal["postgres_mirror"] = "postgres_mirror"
+    read_only: bool = True
+    disclaimer: str = COMMERCIAL_DEAL_DISCLAIMER
+
+
+class CommercialDealDetailResponse(BaseModel):
+    table_available: bool = False
+    deal: CommercialDealRow | None = None
+    data_source: Literal["postgres_mirror"] = "postgres_mirror"
+    read_only: bool = True
+    disclaimer: str = COMMERCIAL_DEAL_DISCLAIMER
+
+
 class DependencyStatus(BaseModel):
     name: str
     status: Literal["ok", "error", "skipped"]

@@ -18,6 +18,9 @@ from urllib.parse import urlparse, urlunparse
 from origenlab_email_pipeline.classification_postgres_mirror import (
     sync_email_classification_canonical,
 )
+from origenlab_email_pipeline.commercial_deal_postgres_mirror import (
+    sync_commercial_deals,
+)
 from origenlab_email_pipeline.commercial_purchase_postgres_mirror import (
     sync_commercial_purchase_events,
 )
@@ -47,7 +50,7 @@ except ImportError as exc:  # pragma: no cover
 else:
     _PSYCOPG_IMPORT_ERROR = None
 
-EXPECTED_ALEMBIC_HEAD = "20260519_0016"
+EXPECTED_ALEMBIC_HEAD = "20260526_0018"
 DASHBOARD_SYNC_KV_KEY = "dashboard_postgres_mirror_last_sync"
 
 OUTBOUND_SCRIPT = "scripts/migrate/sqlite_outbound_sidecars_to_postgres.py"
@@ -280,6 +283,7 @@ def collect_mirror_counts(pg_url: str) -> dict[str, int]:
         "outreach_state_count": "outbound.outreach_contact_state",
         "commercial_purchase_event_count": "commercial.purchase_event",
         "commercial_purchase_event_item_count": "commercial.purchase_event_item",
+        "commercial_deal_count": "commercial.deal",
     }
     out: dict[str, int] = {}
     with psycopg.connect(pg_url) as conn:
@@ -659,6 +663,7 @@ def format_summary_text(result: dict[str, Any]) -> str:
         "  commercial:",
         f"    purchase_events: {c.get('commercial_purchase_event_count')}",
         f"    purchase_event_items: {c.get('commercial_purchase_event_item_count')}",
+        f"    deals: {c.get('commercial_deal_count')}",
     ]
     if result.get("sync_run_id") is not None:
         lines.append(f"  sync_run_id: {result.get('sync_run_id')}")
@@ -712,6 +717,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-warm-cases",
         action="store_true",
         help="After mirror loaders, promote SQLite warm review queue to Postgres (DB-2B).",
+    )
+    p.add_argument(
+        "--include-commercial-deals",
+        action="store_true",
+        help=(
+            "After purchase_events sync, mirror redacted commercial_deal ledger "
+            "to commercial.deal (opt-in; requires Alembic 20260526_0018)."
+        ),
     )
     p.add_argument(
         "--updated-by",
@@ -912,12 +925,24 @@ def run_dashboard_mirror_sync(
         )
         result["commercial_purchase_sync"] = purchase_sync
 
+        deals_sync: dict[str, Any] | None = None
+        if args.include_commercial_deals:
+            deals_sync = sync_commercial_deals(
+                pg_url,
+                sqlite_path,
+                sync_run_id=sync_id,
+                dry_run=False,
+            )
+            result["commercial_deals_sync"] = deals_sync
+
         details: dict[str, Any] = {
             "loader_steps": result["loader_steps"],
             "alembic_version": alembic_version,
             "classification_sync": classification_sync,
             "commercial_purchase_sync": purchase_sync,
         }
+        if deals_sync is not None:
+            details["commercial_deals_sync"] = deals_sync
         equipment_summary: dict[str, Any] | None = None
         warm_summary: dict[str, Any] | None = None
         if args.include_equipment_opportunities or args.include_warm_cases:

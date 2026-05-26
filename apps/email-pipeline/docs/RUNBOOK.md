@@ -478,11 +478,18 @@ curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary?scope=archive' | jq '.s
 | `RPROMPT: parameter not set` after `set -u` | zsh / VS Code prompt vs nounset | Use `set -eo pipefail` only, or fix theme; do not use `set -euo pipefail` in integrated zsh |
 | Confused daily vs dashboard | Wrong section | Daily: [Daily outbound](#m-eprun-daily-outbound); React: this section only |
 
-**Read-only mirror routes (preferred, `apps/api` :8001):** `GET /mirror/health/dependencies`, `GET /mirror/meta/dashboard-sync`, `GET /mirror/dashboard/summary`, `GET /mirror/contacts`, `GET /mirror/organizations`, `GET /mirror/classification/summary`, `GET /mirror/classification/recent`, `GET /mirror/classification/actions`, `GET /mirror/commercial/purchase-events`, `GET /mirror/commercial/purchase-events/{event_id}`, `GET /mirror/outbound/suppressions/emails`, `GET /mirror/outbound/contact-state`, `GET /mirror/outbound/readiness`.
+**Read-only mirror routes (preferred, `apps/api` :8001):** `GET /mirror/health/dependencies`, `GET /mirror/meta/dashboard-sync`, `GET /mirror/dashboard/summary`, `GET /mirror/contacts`, `GET /mirror/organizations`, `GET /mirror/classification/summary`, `GET /mirror/classification/recent`, `GET /mirror/classification/actions`, `GET /mirror/commercial/purchase-events`, `GET /mirror/commercial/purchase-events/{event_id}`, `GET /mirror/commercial/deals`, `GET /mirror/commercial/deals/{deal_key}`, `GET /mirror/outbound/suppressions/emails`, `GET /mirror/outbound/contact-state`, `GET /mirror/outbound/readiness`.
 
 `/mirror/outbound/readiness` reflects **Postgres mirrors only** (not full SQLite Sent-folder gates). OpenAPI: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs).
 
-**Dashboard v1 Today** uses operator routes on :8001 only (`/health`, `/operator/status`, `/cases/warm`, `/opportunities/equipment`, `/contacts/{email}`) — **not** `/mirror/*`.
+**Dashboard v1 Today** uses operator routes on :8001 (`/health`, `/operator/status`, `/cases/warm`, `/opportunities/equipment`, `/contacts/{email}`) plus **one** mirror route for commercial deals: `GET /mirror/commercial/deals` (redacted Postgres mirror). Do **not** use `GET /mirror/commercial/purchase-events` for deal UI — buyer emails and legacy purchase rows.
+
+**Commercial deals mirror (production order, explicit opt-in):**
+
+1. `cd apps/email-pipeline && uv run alembic upgrade head` (requires `20260526_0018` for `commercial.deal`)
+2. `uv run python scripts/sync/sync_commercial_deals_postgres_mirror.py` **or** `sync_dashboard_postgres_mirror.py --include-commercial-deals` (default orchestrator sync does **not** include deals)
+3. `uv run python scripts/qa/verify_commercial_deals_postgres_mirror.py --scan-jsonb`
+4. Deploy `apps/api` + `apps/dashboard` when approved (empty table → dashboard shows *Commercial deals mirror not synced yet.*)
 
 **References:** [`architecture/POSTGRES_API_DASHBOARD_PLAN.md`](architecture/POSTGRES_API_DASHBOARD_PLAN.md) · [`OPERATOR_CHEAT_SHEET.md`](OPERATOR_CHEAT_SHEET.md#m-opsheet-dashboard-gmail-to-react) · [`dashboard_stack_simplification_design_20260519.md`](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md)
 

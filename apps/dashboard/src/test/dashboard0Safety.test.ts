@@ -12,6 +12,12 @@ const operatorClientSource = import.meta.glob("../api/operatorClient.ts", {
   eager: true,
 })["../api/operatorClient.ts"] as string;
 
+const mirrorCommercialClientSource = import.meta.glob("../api/mirrorCommercialClient.ts", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+})["../api/mirrorCommercialClient.ts"] as string;
+
 const todayPageSource = import.meta.glob("../pages/TodayPage.tsx", {
   query: "?raw",
   import: "default",
@@ -19,11 +25,14 @@ const todayPageSource = import.meta.glob("../pages/TodayPage.tsx", {
 })["../pages/TodayPage.tsx"] as string;
 
 const commercialMountedSources = Object.entries(
-  import.meta.glob("../{pages/TodayPage,components/commercial,components/operator}/**/*.{ts,tsx}", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }),
+  import.meta.glob(
+    "../{pages/TodayPage,api/mirrorCommercialClient,api/commercialDealsParse,components/commercial,components/operator}/**/*.{ts,tsx}",
+    {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    },
+  ),
 )
   .filter(([path]) => !path.includes(".test."))
   .map(([, src]) => src as string);
@@ -122,8 +131,19 @@ describe("Dashboard-2 safety (mounted Today)", () => {
     expect(todayPageSource).not.toMatch(/from\s+["'][^"']*api\/client["']/);
     expect(todayPageSource).not.toMatch(/api\/client/);
     expect(todayPageSource).toMatch(/fetchWarmCases|fetchEquipmentOpportunities/);
+    expect(todayPageSource).toMatch(/fetchCommercialDealsMirror/);
+    expect(todayPageSource).not.toMatch(/\/mirror\/commercial\/purchase-events/);
+    expect(todayPageSource).not.toMatch(/fetchPurchase/);
     expect(todayPageSource).toMatch(/ContactProfilePanel/);
     expect(commercialMountedSources.join("\n")).toMatch(/Read-only contact profile/);
+  });
+
+  it("mirrorCommercialClient uses only GET /mirror/commercial/deals", () => {
+    expect(mirrorCommercialClientSource).toContain("/mirror/commercial/deals");
+    expect(mirrorCommercialClientSource).not.toMatch(/\/mirror\/commercial\/purchase-events/);
+    expect(mirrorCommercialClientSource).not.toMatch(/operatorApiUrl\([^)]*purchase/);
+    expect(mirrorCommercialClientSource).toMatch(/credentials:\s*["']include["']/);
+    expect(mirrorCommercialClientSource).toMatch(/method:\s*["']GET["']/);
   });
 
   it("operatorClient uses GET fetch only", () => {
@@ -179,8 +199,28 @@ describe("Dashboard-2 safety (mounted Today)", () => {
     expect(viteConfigSource).toMatch(/["']\/cases["']/);
     expect(viteConfigSource).toMatch(/["']\/opportunities["']/);
     expect(viteConfigSource).toMatch(/["']\/contacts["']/);
+    expect(viteConfigSource).toMatch(/["']\/mirror["']/);
     expect(viteConfigSource).not.toMatch(/["']\/dashboard["']/);
     expect(viteConfigSource).not.toMatch(/["']\/classification["']/);
     expect(viteConfigSource).not.toMatch(/["']\/commercial["']/);
+  });
+
+  it("CommercialDealsTable has no drill-down or outbound action hooks", () => {
+    const tableSource = import.meta.glob("../components/commercial/CommercialDealsTable.tsx", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    })["../components/commercial/CommercialDealsTable.tsx"] as string;
+    expect(tableSource).not.toMatch(/<a\s|href=|mailto:|gmail|fetchCommercialDeal|deal_key|purchase-events/);
+    expect(tableSource).not.toMatch(/onContactSelect|ContactProfilePanel|fetchContactProfile/);
+    expect(tableSource).not.toMatch(/onClick|MailtoEmailLink|ContactEmailButton|window\.open/);
+  });
+
+  it("commercial deals UI does not reference purchase-events mirror", () => {
+    const blob = [todayPageSource, mirrorCommercialClientSource, commercialMountedSources.join("\n")].join(
+      "\n",
+    );
+    expect(blob).not.toMatch(/\/mirror\/commercial\/purchase-events/);
+    expect(blob).not.toMatch(/fetchPurchase|purchase-events["']/);
   });
 });

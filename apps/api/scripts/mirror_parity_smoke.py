@@ -26,6 +26,7 @@ _MIRROR_ROUTES: tuple[tuple[str, dict[str, str | int]], ...] = (
     ("/mirror/classification/recent", {"limit": 5}),
     ("/mirror/classification/actions", {}),
     ("/mirror/commercial/purchase-events", {"limit": 5}),
+    ("/mirror/commercial/deals", {"limit": 5}),
     ("/mirror/contacts", {"limit": 5, "offset": 0}),
     ("/mirror/organizations", {"limit": 5, "offset": 0}),
     ("/mirror/outbound/suppressions/emails", {"limit": 5}),

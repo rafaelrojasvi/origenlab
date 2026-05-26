@@ -9,6 +9,10 @@ from origenlab_email_pipeline.postgres_dashboard_api.classification import (
     classification_recent,
     classification_summary,
 )
+from origenlab_email_pipeline.postgres_dashboard_api.commercial_deals import (
+    get_commercial_deal,
+    list_commercial_deals,
+)
 from origenlab_email_pipeline.postgres_dashboard_api.commercial_purchase import (
     get_commercial_purchase_event,
     list_commercial_purchase_events,
@@ -28,6 +32,10 @@ from origenlab_email_pipeline.postgres_dashboard_api.schemas import (
     ClassificationEmailRow,
     ClassificationRecentResponse,
     ClassificationSummaryResponse,
+    COMMERCIAL_DEAL_DISCLAIMER,
+    CommercialDealDetailResponse,
+    CommercialDealRow,
+    CommercialDealsListResponse,
     CommercialPurchaseEventDetailResponse,
     CommercialPurchaseEventItemRow,
     CommercialPurchaseEventRow,
@@ -52,6 +60,10 @@ __all__ = [
     "ClassificationEmailRow",
     "ClassificationRecentResponse",
     "ClassificationSummaryResponse",
+    "COMMERCIAL_DEAL_DISCLAIMER",
+    "CommercialDealDetailResponse",
+    "CommercialDealRow",
+    "CommercialDealsListResponse",
     "CommercialPurchaseEventDetailResponse",
     "CommercialPurchaseEventItemRow",
     "CommercialPurchaseEventRow",
@@ -70,7 +82,9 @@ __all__ = [
     "classification_recent",
     "classification_summary",
     "dashboard_summary",
+    "get_commercial_deal",
     "get_commercial_purchase_event",
+    "list_commercial_deals",
     "list_commercial_purchase_events",
     "list_email_suppressions",
     "list_outreach_contact_state",

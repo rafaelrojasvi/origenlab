@@ -41,6 +41,7 @@ _PATCH_CLASSIFY = (
 _PATCH_PURCHASE = (
     "origenlab_email_pipeline.dashboard_postgres_sync.sync_commercial_purchase_events"
 )
+_PATCH_DEALS = "origenlab_email_pipeline.dashboard_postgres_sync.sync_commercial_deals"
 _PATCH_OPTIONAL = (
     "origenlab_email_pipeline.dashboard_postgres_sync.run_optional_db2_loaders"
 )
@@ -615,6 +616,36 @@ def test_include_warm_cases_flag_calls_optional_loader(
     assert result["details"]["warm_case_linked_email_count"] == 4
 
 
+def test_include_commercial_deals_flag_calls_deals_sync(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    deals_called = {"n": 0}
+
+    def _deals(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        deals_called["n"] += 1
+        assert kwargs.get("dry_run") is False
+        return {"deals_built": 1, "deals_written": 1}
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(_PATCH_WM, return_value=3), patch(_PATCH_CLASSIFY, return_value={}), patch(
+        _PATCH_PURCHASE, return_value={}
+    ), patch(_PATCH_DEALS, side_effect=_deals):
+        result = run_dashboard_mirror_sync(
+            ["--sqlite-db", str(db), "--include-commercial-deals"],
+            repo_root=REPO,
+            loader_runner=lambda _c, _r: 0,
+        )
+
+    assert result["ok"] is True
+    assert deals_called["n"] == 1
+    assert result["commercial_deals_sync"]["deals_written"] == 1
+
+
 def test_optional_loader_failure_surfaces_in_errors(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -690,6 +721,8 @@ def test_alembic_migration_defines_email_classification_canonical() -> None:
 
 
 def test_alembic_head_matches_db1_api_read_model_chain() -> None:
-    path = REPO / "alembic" / "versions" / "20260519_0016_api_readonly_grants.py"
+    path = REPO / "alembic" / "versions" / "20260526_0018_commercial_deal_mirror.py"
     assert path.is_file()
-    assert EXPECTED_ALEMBIC_HEAD == "20260519_0016"
+    assert EXPECTED_ALEMBIC_HEAD == "20260526_0018"
+    text = path.read_text(encoding="utf-8")
+    assert "commercial.deal" in text

@@ -17,9 +17,23 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 _LEGACY_API_ROOT = _REPO_ROOT / "apps" / "email-pipeline" / "src" / "origenlab_api"
 _DASHBOARD_ACTIVE_SOURCES = (
     _REPO_ROOT / "apps" / "dashboard" / "src" / "api" / "operatorClient.ts",
+    _REPO_ROOT / "apps" / "dashboard" / "src" / "api" / "mirrorCommercialClient.ts",
     _REPO_ROOT / "apps" / "dashboard" / "src" / "pages" / "TodayPage.tsx",
     _REPO_ROOT / "apps" / "dashboard" / "src" / "App.tsx",
     _REPO_ROOT / "apps" / "dashboard" / "vite.config.ts",
+)
+_COMMERCIAL_DEALS_MIRROR_LIST = "/mirror/commercial/deals"
+_FORBIDDEN_DASHBOARD_MIRROR_PATHS = (
+    "/mirror/commercial/purchase-events",
+    "/mirror/commercial/deals/{deal_key}",
+    "/mirror/commercial/deals/",
+    "/mirror/dashboard",
+    "/mirror/contacts",
+    "/mirror/organizations",
+    "/mirror/classification",
+    "/mirror/outbound",
+    "/mirror/meta",
+    "/mirror/health",
 )
 
 
@@ -65,17 +79,24 @@ def test_operator_today_routes_remain_in_openapi() -> None:
     assert missing == [], f"operator Today paths missing: {missing}"
 
 
-def test_active_dashboard_sources_do_not_call_mirror_routes() -> None:
-    hits: list[str] = []
+def test_active_dashboard_mirror_limited_to_commercial_deals_list() -> None:
+    """Today may call GET /mirror/commercial/deals only — not purchase-events or other mirror routes."""
     for path in _DASHBOARD_ACTIVE_SOURCES:
         text = path.read_text(encoding="utf-8")
+        for forbidden in _FORBIDDEN_DASHBOARD_MIRROR_PATHS:
+            assert forbidden not in text, f"{path.name} must not reference {forbidden}"
         if "/mirror/" in text or '"/mirror"' in text:
-            hits.append(str(path.relative_to(_REPO_ROOT)))
-    assert hits == [], f"active dashboard must not reference /mirror/*: {hits}"
+            if path.name == "vite.config.ts":
+                assert '"/mirror"' in text
+                assert "/mirror/commercial/purchase-events" not in text
+                continue
+            assert _COMMERCIAL_DEALS_MIRROR_LIST in text, (
+                f"{path.name} references /mirror/* but not the commercial deals list route"
+            )
 
 
 def test_parity_route_pair_count_matches_phase2_checklist() -> None:
-    assert len(LEGACY_TO_MIRROR_ROUTE_PAIRS) == 13
+    assert len(LEGACY_TO_MIRROR_ROUTE_PAIRS) == 15
 
 
 def test_phase6_legacy_removal_doc_exists() -> None:
