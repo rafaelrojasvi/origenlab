@@ -27,6 +27,15 @@ from origenlab_email_pipeline.mart_core_postgres_migrate import (  # noqa: E402
 )
 
 
+def resolve_verify_sqlite_path(sqlite_db: Path | None) -> Path:
+    """Resolve SQLite path for verify CLI (Path args + ORIGENLAB_SQLITE_PATH env string)."""
+    sqlite_arg = sqlite_db
+    if sqlite_arg is None:
+        env_sqlite = os.environ.get("ORIGENLAB_SQLITE_PATH")
+        sqlite_arg = Path(env_sqlite) if env_sqlite else None
+    return resolve_sqlite_path(sqlite_arg)
+
+
 def _scan_jsonb_forbidden(cur, schema: str, table: str) -> list[str]:
     errors: list[str] = []
     cols = (
@@ -68,7 +77,7 @@ def main() -> int:
         print("ERROR: psycopg missing — run: uv sync --group dev", file=sys.stderr)
         return 2
 
-    sqlite_path = resolve_sqlite_path(args.sqlite_db or os.environ.get("ORIGENLAB_SQLITE_PATH"))
+    sqlite_path = resolve_verify_sqlite_path(args.sqlite_db)
     pg_url = resolve_postgres_url(args.postgres_url or os.environ.get("ORIGENLAB_POSTGRES_URL"))
 
     sqlite_conn = connect_sqlite_readonly(sqlite_path)

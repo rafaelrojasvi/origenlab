@@ -59,6 +59,7 @@ def sync_commercial_deals(
 
     schema, table = COMMERCIAL_DEAL_TABLE
     conn = connect_sqlite_readonly(sqlite_path)
+    conn.row_factory = sqlite3.Row
     try:
         rows = load_all_safe_deal_mirror_rows(conn, deal_key_filter=deal_key_filter)
     finally:

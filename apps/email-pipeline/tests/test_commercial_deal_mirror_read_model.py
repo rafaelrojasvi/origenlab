@@ -24,6 +24,8 @@ from origenlab_email_pipeline.commercial.commercial_deal_schema import (
 from origenlab_email_pipeline.commercial.serva_ceaf_deal_confirmed import (
     DEAL_KEY,
 )
+from origenlab_email_pipeline.commercial_deal_postgres_mirror import sync_commercial_deals
+from origenlab_email_pipeline.mart_core_postgres_migrate import connect_sqlite_readonly
 
 _REPO = Path(__file__).resolve().parents[1]
 _PREVIEW = _REPO / "reports/out/active/current/commercial_deals_preview/serva-ceaf-oc-26172-po-174-26.json"
@@ -104,3 +106,28 @@ def test_load_all_safe_rows_count(serva_db: Path) -> None:
     conn.close()
     assert len(rows) == 1
     assert_mirror_payload_safe(rows[0])
+
+
+def test_readonly_sqlite_connection_returns_tuples_until_row_factory_set(serva_db: Path) -> None:
+    """connect_sqlite_readonly does not set Row; mirror sync must assign it."""
+    conn = connect_sqlite_readonly(serva_db)
+    try:
+        row = conn.execute("SELECT deal_key FROM commercial_deal LIMIT 1").fetchone()
+        assert isinstance(row, tuple)
+        conn.row_factory = sqlite3.Row
+        rows = load_all_safe_deal_mirror_rows(conn)
+    finally:
+        conn.close()
+    assert len(rows) == 1
+    assert rows[0]["deal_key"] == DEAL_KEY
+
+
+def test_sync_commercial_deals_dry_run_with_readonly_sqlite_connection(serva_db: Path) -> None:
+    result = sync_commercial_deals(
+        "postgresql://u:p@127.0.0.1:5432/scratch",
+        serva_db,
+        dry_run=True,
+    )
+    assert result["skipped"] is True
+    assert result["deals_built"] == 1
+    assert result["deals_written"] == 0
