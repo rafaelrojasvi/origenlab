@@ -491,6 +491,8 @@ curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary?scope=archive' | jq '.s
 3. `uv run python scripts/qa/verify_commercial_deals_postgres_mirror.py --scan-jsonb`
 4. Deploy `apps/api` + `apps/dashboard` when approved (empty table → dashboard shows *Commercial deals mirror not synced yet.*)
 
+**One-shot Render refresh (Gmail optional → incremental mart → dashboard mirror → optional commercial.deal):** [`REFRESH_RENDER_DASHBOARD_ONCE.md`](REFRESH_RENDER_DASHBOARD_ONCE.md) — `scripts/ops/refresh_render_dashboard_once.sh`. Default: no Gmail ingest, no commercial deal mirror. Set `RUN_GMAIL_INGEST=1` for read-only IMAP; set `RUN_COMMERCIAL_DEAL_MIRROR=1` to run `sync_commercial_deals_postgres_mirror.py` + `verify_commercial_deals_postgres_mirror.py --scan-jsonb` after dashboard mirror verify (no `--rebuild`, no sends, no deploy).
+
 **References:** [`architecture/POSTGRES_API_DASHBOARD_PLAN.md`](architecture/POSTGRES_API_DASHBOARD_PLAN.md) · [`OPERATOR_CHEAT_SHEET.md`](OPERATOR_CHEAT_SHEET.md#m-opsheet-dashboard-gmail-to-react) · [`dashboard_stack_simplification_design_20260519.md`](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md)
 
 ---

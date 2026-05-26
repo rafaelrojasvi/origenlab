@@ -40,6 +40,10 @@ bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
 # With Gmail ingest for new messages (read-only IMAP, last 14 days):
 RUN_GMAIL_INGEST=1 GMAIL_SINCE_DAYS=14 \
   bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
+
+# Dashboard mirror + commercial.deal mirror (read-only SQLite → Postgres commercial.deal):
+RUN_COMMERCIAL_DEAL_MIRROR=1 \
+  bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
 ```
 
 Example `apps/email-pipeline/.env` (secrets stay local):
@@ -66,6 +70,7 @@ ORIGENLAB_GMAIL_TOKEN_JSON=/home/you/data/origenlab-email/secrets/gmail_workspac
 | 4 | `build_commercial_intel_v1.py` (incremental, **no** `--rebuild`) | SQLite commercial_* tables |
 | 5 | `sync_dashboard_mirror_to_cloud.sh` | Render Postgres mirror |
 | 6 | `verify_dashboard_postgres_mirror.py --assert-render-dashboard` | — (read-only) |
+| 7 (opt-in) | `RUN_COMMERCIAL_DEAL_MIRROR=1`: commercial deal dry-run → sync → `verify_commercial_deals_postgres_mirror.py --scan-jsonb` | Postgres `commercial.deal` only |
 
 Gmail ingest flags (when enabled):
 
@@ -86,7 +91,23 @@ uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py \
 - **No `--replace-source`** — never deletes existing folder rows.
 - Sent folder name is locale-dependent; discover with `--list-folders` if Enviados fails.
 
-**Not run:** `refresh_outbound_safety_memory.py`, `mark_outreach_state`, any send script, mart/commercial `--rebuild`.
+**Not run:** `refresh_outbound_safety_memory.py`, `mark_outreach_state`, any send script, mart/commercial `--rebuild`, commercial ledger promotion/apply, Render deploy.
+
+### Commercial deal mirror (opt-in, `RUN_COMMERCIAL_DEAL_MIRROR=1`)
+
+Runs **only after** step 6 (dashboard mirror verify) succeeds. Does **not** use `GET /mirror/commercial/purchase-events` or dashboard purchase-event tables.
+
+| Sub-step | Command | Notes |
+|----------|---------|--------|
+| Dry-run | `sync_commercial_deals_postgres_mirror.py --dry-run` | No Postgres writes |
+| Sync | `sync_commercial_deals_postgres_mirror.py` | Read-only SQLite; writes `commercial.deal` |
+| Verify | `verify_commercial_deals_postgres_mirror.py --scan-jsonb` | JSON: `/tmp/commercial_deals_mirror_verify.json` |
+
+If commercial verify fails, the script exits non-zero with:
+
+`Commercial deal mirror verify failed. Dashboard normal mirror may still be fresh, but commercial deal data should not be trusted.`
+
+Warm cases / equipment in the dashboard may still be current; do not trust the **Commercial deals** table until verify passes.
 
 ---
 
@@ -102,6 +123,15 @@ After sync, assertions require:
 | `reporting.dashboard_sync_run` latest | `status = success`, `finished_at` set |
 
 JSON artifact: `/tmp/render_dashboard_mirror_verify.json`
+
+### Commercial deal mirror (when `RUN_COMMERCIAL_DEAL_MIRROR=1`)
+
+| Check | Expected |
+|-------|----------|
+| `commercial.deal` row count | Matches SQLite `commercial_deal` count |
+| JSONB columns | No forbidden keys (`--scan-jsonb`) |
+
+JSON artifact: `/tmp/commercial_deals_mirror_verify.json`
 
 ---
 
