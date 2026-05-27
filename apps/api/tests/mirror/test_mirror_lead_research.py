@@ -52,6 +52,23 @@ def lead_mirror_client(
     get_settings.cache_clear()
 
 
+def _assert_lead_disclaimer_spacing(disclaimer: str) -> None:
+    assert "OrigenLab. Revisión" in disclaimer
+    assert "OrigenLab.Revisión" not in disclaimer
+
+
+def test_mirror_list_prospects_disclaimer_spacing(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get("/mirror/leads/prospects", params={"limit": 50})
+    assert r.status_code == 200
+    _assert_lead_disclaimer_spacing(r.json()["disclaimer"])
+
+
+def test_mirror_summary_disclaimer_spacing(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get("/mirror/leads/summary")
+    assert r.status_code == 200
+    _assert_lead_disclaimer_spacing(r.json()["disclaimer"])
+
+
 def test_mirror_list_prospects_shape(lead_mirror_client: TestClient) -> None:
     r = lead_mirror_client.get("/mirror/leads/prospects", params={"limit": 50})
     assert r.status_code == 200
@@ -59,6 +76,7 @@ def test_mirror_list_prospects_shape(lead_mirror_client: TestClient) -> None:
     assert body["table_available"] is True
     assert body["read_only"] is True
     assert body["data_source"] == "postgres_mirror"
+    _assert_lead_disclaimer_spacing(body["disclaimer"])
     assert "revisión humana" in body["disclaimer"].lower()
     assert body["total"] == 3
     assert len(body["items"]) == 3

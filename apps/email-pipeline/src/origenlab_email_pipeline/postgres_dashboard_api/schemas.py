@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Literal
 
@@ -468,6 +469,19 @@ LEAD_RESEARCH_DISCLAIMER: str = (
     "Prospectos generados desde investigación y deduplicados contra historial OrigenLab. "
     "Revisión humana requerida antes de cualquier contacto."
 )
+# Canonical operator-facing text (single sentence break; avoid split-literal join bugs).
+assert "OrigenLab. Revisión" in LEAD_RESEARCH_DISCLAIMER
+assert "OrigenLab.Revisión" not in LEAD_RESEARCH_DISCLAIMER
+
+# Regression guard: implicit multi-line concat must not yield "OrigenLab.Revisión".
+_LEAD_DISCLAIMER_JOINED_ORIGENLAB_RE = re.compile(r"OrigenLab\.Revisión", re.IGNORECASE)
+
+
+def prepare_lead_research_disclaimer(value: object) -> object:
+    """Ensure sentence break after OrigenLab before API/dashboard render."""
+    if not isinstance(value, str):
+        return value
+    return _LEAD_DISCLAIMER_JOINED_ORIGENLAB_RE.sub("OrigenLab. Revisión", value)
 
 
 class LeadProspectListItem(BaseModel):
@@ -548,6 +562,11 @@ class LeadProspectsListResponse(BaseModel):
     read_only: bool = True
     disclaimer: str = LEAD_RESEARCH_DISCLAIMER
 
+    @field_validator("disclaimer", mode="before")
+    @classmethod
+    def _prepare_disclaimer(cls, value: object) -> object:
+        return prepare_lead_research_disclaimer(value)
+
 
 class LeadProspectDetailResponse(BaseModel):
     table_available: bool = False
@@ -558,6 +577,11 @@ class LeadProspectDetailResponse(BaseModel):
     data_source: Literal["postgres_mirror"] = "postgres_mirror"
     read_only: bool = True
     disclaimer: str = LEAD_RESEARCH_DISCLAIMER
+
+    @field_validator("disclaimer", mode="before")
+    @classmethod
+    def _prepare_disclaimer(cls, value: object) -> object:
+        return prepare_lead_research_disclaimer(value)
 
 
 class LeadResearchSummaryResponse(BaseModel):
@@ -573,6 +597,11 @@ class LeadResearchSummaryResponse(BaseModel):
     data_source: Literal["postgres_mirror"] = "postgres_mirror"
     read_only: bool = True
     disclaimer: str = LEAD_RESEARCH_DISCLAIMER
+
+    @field_validator("disclaimer", mode="before")
+    @classmethod
+    def _prepare_disclaimer(cls, value: object) -> object:
+        return prepare_lead_research_disclaimer(value)
 
 
 class DependencyStatus(BaseModel):

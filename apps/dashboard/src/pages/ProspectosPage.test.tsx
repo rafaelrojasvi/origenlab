@@ -47,6 +47,14 @@ describe("ProspectosPage", () => {
     expect(screen.queryByRole("button", { name: /enviar/i })).toBeNull();
   });
 
+  it("shows disclaimer with space after OrigenLab before Revisión", async () => {
+    render(<ProspectosPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/historial OrigenLab\. Revisión humana/i)).toBeTruthy();
+    });
+    expect(screen.queryByText(/OrigenLab\.Revisión/i)).toBeNull();
+  });
+
   it("opens drawer with No contactar for blocked prospect", async () => {
     render(<ProspectosPage />);
     await waitFor(() => expect(screen.getByText("Blocked Co")).toBeTruthy());

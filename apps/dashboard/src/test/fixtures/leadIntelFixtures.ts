@@ -16,7 +16,8 @@ export function leadSummaryFixture(): LeadResearchSummaryUi {
     research_needed: 0,
     data_source: "postgres_mirror",
     read_only: true,
-    disclaimer: "Revisión humana requerida.",
+    disclaimer:
+      "Prospectos generados desde investigación y deduplicados contra historial OrigenLab. Revisión humana requerida antes de cualquier contacto.",
   };
 }
 
@@ -26,7 +27,8 @@ export function leadListFixture(): LeadProspectsListUi {
     total: 2,
     data_source: "postgres_mirror",
     read_only: true,
-    disclaimer: "Revisión humana requerida.",
+    disclaimer:
+      "Prospectos generados desde investigación y deduplicados contra historial OrigenLab. Revisión humana requerida antes de cualquier contacto.",
     items: [
       {
         prospect_key: "acme",
