@@ -1,0 +1,311 @@
+{
+  "seed_version": "1.0.0",
+  "categories": [
+    {
+      "category_key": "electrophoresis_reagent",
+      "display_name": "Reactivo de electroforesis",
+      "equipment_class": null
+    },
+    {
+      "category_key": "heating_accessory",
+      "display_name": "Accesorio de calentamiento",
+      "equipment_class": null
+    },
+    {
+      "category_key": "lab_reactor",
+      "display_name": "Reactor de laboratorio",
+      "equipment_class": "reactor"
+    },
+    {
+      "category_key": "ultrasonic_processor",
+      "display_name": "Procesador ultrasónico",
+      "equipment_class": "sonicator"
+    },
+    {
+      "category_key": "microcentrifuge",
+      "display_name": "Microcentrífuga",
+      "equipment_class": "centrifuge"
+    },
+    {
+      "category_key": "analytical_balance",
+      "display_name": "Balanza analítica",
+      "equipment_class": "balance"
+    }
+  ],
+  "products": [
+    {
+      "product_key": "serva-blueslick-250ml",
+      "display_name": "BlueSlick™ 250 ml",
+      "brand": "SERVA",
+      "manufacturer_name": "SERVA Electrophoresis GmbH",
+      "product_kind": "reagent",
+      "equipment_class": null,
+      "model_number": null,
+      "default_unit": "ea",
+      "website_slug": "blueslick-42500",
+      "website_product_id": "serva-blueslick-42500",
+      "public_summary": "Reactivo SERVA para tratamiento de placas en electroforesis; cotización y disponibilidad sujetas a confirmación.",
+      "confidence": "website_editorial",
+      "category_keys": ["electrophoresis_reagent"],
+      "aliases": [
+        {"alias_code": "42500", "alias_source": "serva", "alias_kind": "legacy_web_sku"},
+        {"alias_code": "4250001", "alias_source": "serva", "alias_kind": "sku"},
+        {"alias_code": "004250001", "alias_source": "serva", "alias_kind": "sku"}
+      ],
+      "commercial_links": [
+        {"link_kind": "website_product", "link_ref": "web:blueslick-42500", "confidence": "website_editorial"},
+        {"link_kind": "commercial_deal_line", "link_ref": "deal:serva-ceaf-oc-26172-po-174-26:line:1", "confidence": "operator_confirmed"}
+      ]
+    },
+    {
+      "product_key": "serva-temed-25ml",
+      "display_name": "TEMED 25 ml",
+      "brand": "SERVA",
+      "manufacturer_name": "SERVA Electrophoresis GmbH",
+      "product_kind": "reagent",
+      "equipment_class": null,
+      "model_number": null,
+      "default_unit": "ea",
+      "website_slug": "temed-25ml",
+      "website_product_id": "serva-temed-25ml",
+      "public_summary": "Reactivo SERVA TEMED 25 ml para formulaciones de laboratorio; cotización según disponibilidad.",
+      "confidence": "website_editorial",
+      "category_keys": ["electrophoresis_reagent"],
+      "aliases": [
+        {"alias_code": "3593002", "alias_source": "serva", "alias_kind": "sku"},
+        {"alias_code": "003593002", "alias_source": "serva", "alias_kind": "sku"}
+      ],
+      "commercial_links": [
+        {"link_kind": "website_product", "link_ref": "web:temed-25ml", "confidence": "website_editorial"},
+        {"link_kind": "commercial_deal_line", "link_ref": "deal:serva-ceaf-oc-26172-po-174-26:line:2", "confidence": "operator_confirmed"}
+      ]
+    },
+    {
+      "product_key": "ika-rv10-70-vapor-tube",
+      "display_name": "IKA RV10.70 vapor tube",
+      "brand": "IKA",
+      "manufacturer_name": "IKA",
+      "product_kind": "accessory",
+      "equipment_class": null,
+      "model_number": "RV10.70",
+      "default_unit": "ea",
+      "website_slug": null,
+      "website_product_id": null,
+      "public_summary": "Tubo de vapor IKA RV10.70 solicitado por cliente (RG Energía); cotización proveedor pendiente de confirmar moneda.",
+      "confidence": "extracted_needs_review",
+      "category_keys": ["heating_accessory"],
+      "aliases": [
+        {"alias_code": "3812200", "alias_source": "ika", "alias_kind": "part_no"},
+        {"alias_code": "0003812200", "alias_source": "ika", "alias_kind": "part_no"},
+        {"alias_code": "RV10.70", "alias_source": "ika", "alias_kind": "model_number"}
+      ],
+      "supplier_offers": [
+        {
+          "offer_key": "ika-rv10-70-rg-energia-quote",
+          "supplier_org_name": "IKA",
+          "supplier_domain": "ika.net.br",
+          "offer_status": "needs_review",
+          "currency": null,
+          "quantity_offered": "3",
+          "availability_note": "Stock available per supplier reply; confirm currency before client quote.",
+          "confidence": "extracted_needs_review"
+        }
+      ],
+      "price_snapshots": [
+        {
+          "snapshot_key": "ika-rv10-70-price-ambiguous",
+          "snapshot_kind": "supplier_quote",
+          "supplier_offer_key": "ika-rv10-70-rg-energia-quote",
+          "amount_decimal": "112.00",
+          "currency": null,
+          "quantity": "3",
+          "unit": "ea",
+          "price_notes": "Currency ambiguous; confirm before quoting client.",
+          "confidence": "extracted_needs_review",
+          "observed_at": "2026-05-27T00:00:00Z"
+        }
+      ],
+      "commercial_links": [
+        {"link_kind": "warm_case", "link_ref": "warm_case:rg-energia-ika-rv10.70-3812200", "confidence": "operator_confirmed"}
+      ]
+    },
+    {
+      "product_key": "crtop-olt-hp-5l",
+      "display_name": "CRTOP Lab Reactor OLT-HP-5L",
+      "brand": "CRTOP",
+      "manufacturer_name": "CRTOP",
+      "product_kind": "equipment",
+      "equipment_class": "reactor",
+      "model_number": "OLT-HP-5L",
+      "default_unit": "ea",
+      "website_slug": null,
+      "website_product_id": null,
+      "public_summary": "Reactor de laboratorio CRTOP OLT-HP-5L; cotización proveedor EXW USD 10,600 — confirmar flete e importación antes de cotizar al cliente.",
+      "confidence": "operator_confirmed",
+      "category_keys": ["lab_reactor"],
+      "aliases": [
+        {"alias_code": "OLT-HP-5L", "alias_source": "crtop", "alias_kind": "model_number"}
+      ],
+      "specs": [
+        {"spec_group": "dimensions", "spec_key": "volume_l", "spec_value": "5 L", "spec_value_numeric": 5, "spec_unit": "L", "source": "supplier_quote", "confidence": "operator_confirmed"},
+        {"spec_group": "operation", "spec_key": "operation_temp_c", "spec_value": "170–190 °C", "source": "supplier_quote", "confidence": "operator_confirmed"},
+        {"spec_group": "design", "spec_key": "design_temp_c", "spec_value": "200 °C", "spec_value_numeric": 200, "spec_unit": "°C", "source": "supplier_quote", "confidence": "operator_confirmed"},
+        {"spec_group": "operation", "spec_key": "operation_pressure_mpa", "spec_value": "0.8–1.6 MPa", "source": "supplier_quote", "confidence": "operator_confirmed"},
+        {"spec_group": "design", "spec_key": "design_pressure_mpa", "spec_value": "6 MPa", "spec_value_numeric": 6, "spec_unit": "MPa", "source": "supplier_quote", "confidence": "operator_confirmed"},
+        {"spec_group": "material", "spec_key": "material", "spec_value": "316L stainless steel", "source": "supplier_quote", "confidence": "operator_confirmed"},
+        {"spec_group": "electrical", "spec_key": "power_w", "spec_value": "1600 W", "spec_value_numeric": 1600, "spec_unit": "W", "source": "supplier_quote", "confidence": "operator_confirmed"},
+        {"spec_group": "electrical", "spec_key": "supply_voltage", "spec_value": "AC 108–240 V 50/60 Hz", "source": "supplier_quote", "confidence": "operator_confirmed"}
+      ],
+      "supplier_offers": [
+        {
+          "offer_key": "crtop-olt-hp-5l-quote",
+          "supplier_org_name": "CRTOP",
+          "supplier_domain": "crtopmachine.com",
+          "offer_status": "valid",
+          "incoterm": "EXW",
+          "currency": "USD",
+          "quantity_offered": "1",
+          "payment_terms": "T/T 100% prepaid",
+          "delivery_terms": "25–30 working days after prepayment",
+          "valid_until": "60 days from quote",
+          "confidence": "operator_confirmed"
+        }
+      ],
+      "price_snapshots": [
+        {
+          "snapshot_key": "crtop-olt-hp-5l-exw-usd",
+          "snapshot_kind": "supplier_quote",
+          "supplier_offer_key": "crtop-olt-hp-5l-quote",
+          "amount_decimal": "10600.00",
+          "amount_minor": 1060000,
+          "currency": "USD",
+          "quantity": "1",
+          "unit": "ea",
+          "incoterm": "EXW",
+          "confidence": "operator_confirmed",
+          "observed_at": "2026-05-27T00:00:00Z"
+        }
+      ],
+      "commercial_links": [
+        {"link_kind": "warm_case", "link_ref": "warm_case:crtop-olt-hp-5l-reactor", "confidence": "operator_confirmed"}
+      ]
+    },
+    {
+      "product_key": "ollital-reactor-5l",
+      "display_name": "Ollital 5 L reactor",
+      "brand": "Ollital",
+      "manufacturer_name": "Ollital",
+      "product_kind": "equipment",
+      "equipment_class": "reactor",
+      "model_number": null,
+      "default_unit": "ea",
+      "website_slug": null,
+      "website_product_id": null,
+      "public_summary": "Reactor Ollital 5 L — seguimiento de cotización proveedor; confirmar modelo y condiciones comerciales.",
+      "confidence": "extracted_needs_review",
+      "category_keys": ["lab_reactor"],
+      "aliases": [
+        {"alias_code": "5L", "alias_source": "ollital", "alias_kind": "description_token"}
+      ],
+      "commercial_links": [
+        {"link_kind": "warm_case", "link_ref": "warm_case:ollital-reactor-5l", "confidence": "extracted_needs_review"}
+      ]
+    },
+    {
+      "product_key": "hielscher-up100h",
+      "display_name": "Hielscher UP100H",
+      "brand": "Hielscher",
+      "manufacturer_name": "Hielscher Ultrasonics",
+      "product_kind": "equipment",
+      "equipment_class": "sonicator",
+      "model_number": "UP100H",
+      "default_unit": "ea",
+      "website_slug": null,
+      "website_product_id": null,
+      "public_summary": "Procesador ultrasónico Hielscher UP100H; cotización y especificaciones según confirmación comercial.",
+      "confidence": "extracted_needs_review",
+      "category_keys": ["ultrasonic_processor"],
+      "aliases": [
+        {"alias_code": "UP100H", "alias_source": "hielscher", "alias_kind": "model_number"}
+      ]
+    },
+    {
+      "product_key": "ortoalresa-biocen-22",
+      "display_name": "Ortoalresa Biocen 22",
+      "brand": "Ortoalresa",
+      "manufacturer_name": "Álvarez Redondo S.A.",
+      "product_kind": "equipment",
+      "equipment_class": "centrifuge",
+      "model_number": "Biocen 22",
+      "default_unit": "ea",
+      "website_slug": "biocen-22",
+      "website_product_id": "ortoalresa-biocen-22",
+      "public_summary": "Microcentrífuga ventilada Ortoalresa Biocen 22; especificaciones según ficha del fabricante; cotización por OrigenLab.",
+      "confidence": "website_editorial",
+      "category_keys": ["microcentrifuge"],
+      "aliases": [
+        {"alias_code": "biocen-22", "alias_source": "origenlab", "alias_kind": "website_slug"}
+      ],
+      "specs": [
+        {"spec_group": "capacity", "spec_key": "max_capacity", "spec_value": "24 × 2 ml", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "operation", "spec_key": "max_speed", "spec_value": "15.000 RPM / 21.885 ×g", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "operation", "spec_key": "version", "spec_value": "Ventilada", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "material", "spec_key": "chamber", "spec_value": "Acero inoxidable", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "electrical", "spec_key": "supply_ce146", "spec_value": "220-230 V, 50-60 Hz, 220 W", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "dimensions", "spec_key": "dimensions_ce146", "spec_value": "270 × 380 × 270 mm", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "dimensions", "spec_key": "net_weight", "spec_value": "16 kg", "spec_value_numeric": 16, "spec_unit": "kg", "source": "website_editorial", "confidence": "website_editorial"}
+      ],
+      "commercial_links": [
+        {"link_kind": "website_product", "link_ref": "web:biocen-22", "confidence": "website_editorial"}
+      ]
+    },
+    {
+      "product_key": "ortoalresa-digicen-22-r",
+      "display_name": "Ortoalresa Digicen 22 R",
+      "brand": "Ortoalresa",
+      "manufacturer_name": "Álvarez Redondo S.A.",
+      "product_kind": "equipment",
+      "equipment_class": "centrifuge",
+      "model_number": "Digicen 22 R",
+      "default_unit": "ea",
+      "website_slug": "digicen-22-r",
+      "website_product_id": "ortoalresa-digicen-22-r",
+      "public_summary": "Centrífuga universal refrigerada Ortoalresa Digicen 22 R; especificaciones según ficha del fabricante.",
+      "confidence": "website_editorial",
+      "category_keys": ["microcentrifuge"],
+      "aliases": [
+        {"alias_code": "digicen-22-r", "alias_source": "origenlab", "alias_kind": "website_slug"}
+      ],
+      "specs": [
+        {"spec_group": "capacity", "spec_key": "max_capacity", "spec_value": "4 × 100 ml", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "operation", "spec_key": "max_speed", "spec_value": "16.500 RPM / 26.480 ×g", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "operation", "spec_key": "temperature_range", "spec_value": "Regulable de -20 °C a 40 °C", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "operation", "spec_key": "version", "spec_value": "Refrigerada", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "electrical", "spec_key": "supply_ce259", "spec_value": "220-230 V, 50 Hz, 700 W", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "dimensions", "spec_key": "dimensions_ce259", "spec_value": "590 × 620 × 320 mm", "source": "website_editorial", "confidence": "website_editorial"},
+        {"spec_group": "dimensions", "spec_key": "net_weight", "spec_value": "65 kg", "spec_value_numeric": 65, "spec_unit": "kg", "source": "website_editorial", "confidence": "website_editorial"}
+      ],
+      "commercial_links": [
+        {"link_kind": "website_product", "link_ref": "web:digicen-22-r", "confidence": "website_editorial"}
+      ]
+    },
+    {
+      "product_key": "balance-analytical-generic",
+      "display_name": "Balanza analítica (genérico)",
+      "brand": null,
+      "manufacturer_name": null,
+      "product_kind": "equipment",
+      "equipment_class": "balance",
+      "model_number": null,
+      "default_unit": "ea",
+      "website_slug": null,
+      "website_product_id": null,
+      "public_summary": "Categoría genérica para oportunidades de balanza analítica (licitaciones y consultas); sin SKU único en catálogo v1.",
+      "confidence": "extracted_needs_review",
+      "category_keys": ["analytical_balance"],
+      "commercial_links": [
+        {"link_kind": "equipment_opportunity", "link_ref": "equipment:category:balance", "confidence": "extracted_needs_review"}
+      ]
+    }
+  ]
+}
