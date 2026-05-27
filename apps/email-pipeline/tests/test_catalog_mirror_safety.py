@@ -73,6 +73,23 @@ def test_prepare_catalog_mirror_text_preserves_good_spanish() -> None:
     assert prepare_catalog_mirror_text(good, field="test") == good
 
 
+@pytest.mark.parametrize(
+    "word",
+    [
+        "oportunidades",
+        "modelo",
+        "disponibilidad",
+        "proveedor",
+        "cotización",
+        "categoría",
+    ],
+)
+def test_repair_does_not_break_common_spanish_words(word: str) -> None:
+    sample = f"Texto con {word} para el catálogo operador."
+    assert repair_catalog_prose_spacing(sample) == sample
+    assert prepare_catalog_mirror_text(sample, field="test") == sample
+
+
 def test_prepare_catalog_disclaimer_repairs_legacy_joined_constant() -> None:
     from origenlab_email_pipeline.postgres_dashboard_api.schemas import CATALOG_DISCLAIMER
 

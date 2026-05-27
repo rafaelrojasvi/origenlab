@@ -2,11 +2,15 @@ import type { ReactNode } from "react";
 import type { CatalogProductDetailUi } from "../../api/catalogTypes";
 import {
   catalogConfidenceLabel,
-  catalogCurrencyLabel,
   catalogEquipmentClassLabel,
   catalogProductKindLabel,
-  formatCatalogAmount,
+  catalogWebsiteHref,
+  formatCatalogDate,
+  formatCatalogMoney,
+  formatCatalogQuantity,
   formatCommercialLinkRef,
+  groupCatalogSpecs,
+  primaryCategoryLabel,
   supplierPriceVisibilityLabel,
 } from "../../lib/catalogFormat";
 
@@ -42,12 +46,15 @@ export function CatalogProductDrawer({
     return null;
   }
 
+  const specGroups = product ? groupCatalogSpecs(product.specs) : [];
+  const websiteHref = catalogWebsiteHref(product?.website_slug);
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="presentation">
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/30"
-        aria-label="Cerrar detalle del producto"
+        aria-label="Cerrar ficha del producto"
         onClick={onClose}
       />
       <aside
@@ -59,7 +66,7 @@ export function CatalogProductDrawer({
         <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-              Catálogo · solo lectura
+              Ficha del producto · solo lectura
             </p>
             <h2 id="catalog-product-heading" className="mt-1 text-lg font-semibold text-brand-900">
               {product?.display_name ?? "Cargando producto…"}
@@ -80,7 +87,7 @@ export function CatalogProductDrawer({
         <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
           {loading ? (
             <p className="text-sm text-[var(--color-muted)]" role="status">
-              Cargando detalle del producto…
+              Cargando ficha del producto…
             </p>
           ) : null}
 
@@ -104,6 +111,9 @@ export function CatalogProductDrawer({
                     {product.brand}
                   </span>
                 ) : null}
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                  {primaryCategoryLabel(product)}
+                </span>
               </div>
 
               <DetailSection title="Resumen">
@@ -138,6 +148,49 @@ export function CatalogProductDrawer({
                 </dl>
               </DetailSection>
 
+              <DetailSection title="Ficha técnica">
+                {websiteHref ? (
+                  <p className="mb-2">
+                    <a
+                      href={websiteHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-brand-700 hover:underline"
+                    >
+                      Ver ficha web
+                    </a>
+                  </p>
+                ) : null}
+                {specGroups.length === 0 ? (
+                  <p className="text-sm text-[var(--color-muted)]">
+                    Sin ficha técnica estructurada todavía.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {specGroups.map((group) => (
+                      <div key={group.label}>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                          {group.label}
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {group.items.map((spec) => (
+                            <li
+                              key={`${spec.spec_group ?? "g"}-${spec.spec_key}`}
+                              className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
+                            >
+                              <span className="font-medium text-slate-800">{spec.spec_value}</span>
+                              <span className="ml-2 text-xs text-[var(--color-muted)]">
+                                {spec.spec_key}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </DetailSection>
+
               <DetailSection title="Alias / códigos">
                 {product.aliases.length === 0 ? (
                   <p className="text-sm text-[var(--color-muted)]">Sin alias registrados.</p>
@@ -159,27 +212,6 @@ export function CatalogProductDrawer({
                 )}
               </DetailSection>
 
-              <DetailSection title="Especificaciones">
-                {product.specs.length === 0 ? (
-                  <p className="text-sm text-[var(--color-muted)]">Sin especificaciones registradas.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {product.specs.map((spec) => (
-                      <li
-                        key={`${spec.spec_group ?? "g"}-${spec.spec_key}`}
-                        className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm"
-                      >
-                        <p className="font-medium text-slate-800">{spec.spec_value}</p>
-                        <p className="text-xs text-[var(--color-muted)]">
-                          {spec.spec_key}
-                          {spec.spec_group ? ` · ${spec.spec_group}` : ""}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </DetailSection>
-
               <DetailSection title="Ofertas de proveedor">
                 {product.supplier_offers.length === 0 ? (
                   <p className="text-sm text-[var(--color-muted)]">Sin ofertas de proveedor.</p>
@@ -195,9 +227,24 @@ export function CatalogProductDrawer({
                         </p>
                         <p className="text-xs text-[var(--color-muted)]">
                           Estado: {offer.offer_status}
-                          {offer.incoterm ? ` · ${offer.incoterm}` : ""}
-                          {offer.currency ? ` · ${offer.currency}` : ""}
+                          {offer.incoterm ? ` · Incoterm: ${offer.incoterm}` : ""}
                         </p>
+                        {offer.quantity_offered ? (
+                          <p className="mt-1 text-slate-700">
+                            Cantidad ofertada:{" "}
+                            {formatCatalogQuantity(offer.quantity_offered, product.default_unit)}
+                          </p>
+                        ) : null}
+                        {offer.quoted_at ? (
+                          <p className="text-xs text-[var(--color-muted)]">
+                            Cotizada: {formatCatalogDate(offer.quoted_at)}
+                          </p>
+                        ) : null}
+                        {offer.valid_until ? (
+                          <p className="text-xs text-[var(--color-muted)]">
+                            {formatCatalogDate(offer.valid_until) ?? `Validez: ${offer.valid_until}`}
+                          </p>
+                        ) : null}
                         {offer.availability_note ? (
                           <p className="mt-2 text-slate-700">{offer.availability_note}</p>
                         ) : null}
@@ -228,22 +275,55 @@ export function CatalogProductDrawer({
                         className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-3 text-sm"
                       >
                         <p className="font-semibold text-amber-950">
-                          {formatCatalogAmount(snap.amount_decimal, snap.currency)}
+                          {formatCatalogMoney(snap.amount_decimal, snap.currency)}
                         </p>
                         <p className="text-xs font-medium text-amber-900">
                           {supplierPriceVisibilityLabel(snap.is_public_safe)}
                         </p>
-                        <p className="mt-1 text-xs text-amber-900/80">
-                          {catalogCurrencyLabel(snap.currency)}
-                          {snap.incoterm ? ` · ${snap.incoterm}` : ""}
-                          {snap.quantity ? ` · cantidad ${snap.quantity}` : ""}
-                        </p>
+                        {product.product_key === "crtop-olt-hp-5l" ? (
+                          <ul className="mt-2 list-inside list-disc text-slate-800">
+                            <li>
+                              Cantidad ofertada:{" "}
+                              {formatCatalogQuantity(snap.quantity, snap.unit)}
+                            </li>
+                            <li>
+                              Precio proveedor:{" "}
+                              {formatCatalogMoney(snap.amount_decimal, snap.currency)}
+                            </li>
+                            {snap.incoterm ? <li>Incoterm: {snap.incoterm}</li> : null}
+                          </ul>
+                        ) : null}
+                        {product.product_key === "ika-rv10-70-vapor-tube" ? (
+                          <ul className="mt-2 list-inside list-disc text-slate-800">
+                            <li>
+                              Solicitud cliente:{" "}
+                              {formatCatalogQuantity(snap.quantity, snap.unit)}
+                            </li>
+                            <li>
+                              Monto {formatCatalogMoney(snap.amount_decimal, null)} registrado como
+                              posible precio unitario
+                            </li>
+                            <li>Moneda pendiente</li>
+                          </ul>
+                        ) : null}
+                        {product.product_key !== "crtop-olt-hp-5l" &&
+                        product.product_key !== "ika-rv10-70-vapor-tube" ? (
+                          <p className="mt-1 text-xs text-amber-900/80">
+                            {snap.currency ? formatCatalogMoney(snap.amount_decimal, snap.currency) : "Moneda pendiente"}
+                            {snap.incoterm ? ` · Incoterm: ${snap.incoterm}` : ""}
+                            {snap.quantity
+                              ? ` · ${formatCatalogQuantity(snap.quantity, snap.unit)}`
+                              : ""}
+                          </p>
+                        ) : null}
                         {snap.price_notes ? (
                           <p className="mt-2 text-slate-800">{snap.price_notes}</p>
                         ) : null}
                         <p className="mt-1 text-xs text-[var(--color-muted)]">
                           {catalogConfidenceLabel(snap.confidence)}
-                          {snap.observed_at ? ` · ${snap.observed_at}` : ""}
+                          {snap.observed_at
+                            ? ` · ${formatCatalogDate(snap.observed_at) ?? ""}`
+                            : ""}
                         </p>
                       </li>
                     ))}

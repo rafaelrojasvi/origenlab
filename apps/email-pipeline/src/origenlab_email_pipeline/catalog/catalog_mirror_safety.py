@@ -7,39 +7,38 @@ from typing import Any
 
 # Legacy bug: alias-style sanitizer removed spaces before lowercase letters/digits.
 _BROKEN_PROSE_JOIN_RE = re.compile(r"\s+(?=[a-z\d])")
-# Inverse: re-insert " de " where a word tail was glued to "de<word>".
-_DE_GLUE_RE = re.compile(r"([a-záéíóúñ]{2,})de([a-záéíóúñ])", re.I)
-_TITLE_DE_GLUE_RE = re.compile(r"([A-Z][a-záéíóúñ]+)de([a-záéíóúñ])")
-_TITLE_DE_SPACE_GLUE_RE = re.compile(r"([A-Z][a-záéíóúñ]+)de\s+")
 
-# Targeted repairs for legacy alias-style prose joins (Postgres rows synced before fix).
+# Targeted repairs for known legacy joined-word prose only (no generic "de" re-glue).
 # Order matters: longer / compound patterns before shorter ones.
 _PROSE_JOIN_REPAIRS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"cotizacióny", re.I), "cotización y"),
     (re.compile(r"porcliente", re.I), "por cliente"),
     (re.compile(r"cantidad(\d)", re.I), r"cantidad \1"),
     (re.compile(r"antesdecotizar", re.I), "antes de cotizar"),
-    (re.compile(r"antesde\b", re.I), "antes de"),
+    (re.compile(r"\bantesde\b", re.I), "antes de"),
     (re.compile(r"antes decotizar", re.I), "antes de cotizar"),
     (re.compile(r"\bdecotizar\b", re.I), "de cotizar"),
     (re.compile(r"montoes\b", re.I), "monto es"),
     (re.compile(r"Monto(\d)", re.I), r"Monto \1"),
     (re.compile(r"cuerpos decorreo", re.I), "cuerpos de correo"),
+    (re.compile(r"cuerposdecorreo", re.I), "cuerpos de correo"),
     (re.compile(r"\bdecorreo\b", re.I), "de correo"),
     (re.compile(r"espejoPostgres", re.I), "espejo Postgres"),
+    (re.compile(r"Postgresredactado", re.I), "Postgres redactado"),
     (re.compile(r"siguesiendolafuente", re.I), "sigue siendo la fuente"),
-    (re.compile(r"lafuente", re.I), "la fuente"),
+    (re.compile(r"\blafuente\b", re.I), "la fuente"),
+    (re.compile(r"Accesoriodecalentamiento", re.I), "Accesorio de calentamiento"),
     (re.compile(r"decalentamiento", re.I), "de calentamiento"),
+    (re.compile(r"Tubodevapor", re.I), "Tubo de vapor"),
     (re.compile(r"vaporIKA", re.I), "vapor IKA"),
     (re.compile(r"Catálogooperador", re.I), "Catálogo operador"),
-    (re.compile(r"Postgres([a-z])", re.I), r"Postgres \1"),
     (re.compile(r"SQLite([a-z])", re.I), r"SQLite \1"),
     (re.compile(r"noincluye", re.I), "no incluye"),
     (re.compile(r"incluyecuerpos", re.I), "incluye cuerpos"),
     (re.compile(r"correonidatos", re.I), "correo ni datos"),
-    (re.compile(r"fuente([a-z]{4,})", re.I), r"fuente \1"),
-    (re.compile(r"([a-záéíóúñ]{4,})son([a-záéíóúñ])", re.I), r"\1 son \2"),
-    (re.compile(r"datos([a-záéíóúñ]{4,})", re.I), r"datos \1"),
+    (re.compile(r"Preciosdeproveedor", re.I), "Precios de proveedor"),
+    (re.compile(r"proveedorsondatosinternos", re.I), "proveedor son datos internos"),
+    (re.compile(r"nidatosbancarios", re.I), "ni datos bancarios"),
 )
 
 # Substrings that must not appear in operator-facing prose after repair.
@@ -57,6 +56,7 @@ FORBIDDEN_JOINED_PROSE_ARTIFACTS: tuple[str, ...] = (
     "espejoPostgres",
     "lafuente",
     "cuerpos decorreo",
+    "oportunida de s",
 )
 
 # Fields that must keep human-readable Spanish spacing (never alias-collapse).
@@ -123,13 +123,6 @@ def repair_catalog_prose_spacing(value: str) -> str:
     out = value
     for pattern, replacement in _PROSE_JOIN_REPAIRS:
         out = pattern.sub(replacement, out)
-    out = _TITLE_DE_GLUE_RE.sub(r"\1 de \2", out)
-    out = _TITLE_DE_SPACE_GLUE_RE.sub(r"\1 de ", out)
-    for _ in range(12):
-        next_out = _DE_GLUE_RE.sub(r"\1 de \2", out)
-        if next_out == out:
-            break
-        out = next_out
     return out
 
 

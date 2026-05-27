@@ -46,6 +46,7 @@ export const CATALOG_FORBIDDEN_PROSE_ARTIFACTS = [
   "espejoPostgres",
   "lafuente",
   "cuerpos decorreo",
+  "oportunida de s",
 ] as const;
 
 const FORBIDDEN_VALUE_PATTERNS: RegExp[] = [
