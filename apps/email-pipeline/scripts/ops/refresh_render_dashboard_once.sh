@@ -17,6 +17,7 @@
 # Optional env:
 #   RUN_GMAIL_INGEST=1             run Gmail ingest before sync (default 0)
 #   RUN_COMMERCIAL_DEAL_MIRROR=1   sync+verify commercial.deal after dashboard mirror (default 0)
+#   RUN_CATALOG_MIRROR=1           build SQLite catalog + sync+verify catalog.* (default 0)
 #   DASHBOARD_FAST=1               fast daily mode (canonical/recent rows + dashboard-only mirror sync)
 #   GMAIL_SINCE_DAYS=14            bound IMAP fetch when ingest runs
 #   ORIGENLAB_GMAIL_SENT_FOLDER    default "[Gmail]/Enviados"
@@ -36,12 +37,14 @@ SQLITE_PATH="${ORIGENLAB_SQLITE_PATH:-$HOME/data/origenlab-email/sqlite/emails.s
 CLOUD_PG_URL="${ORIGENLAB_CLOUD_POSTGRES_URL:-}"
 RUN_GMAIL_INGEST="${RUN_GMAIL_INGEST:-0}"
 RUN_COMMERCIAL_DEAL_MIRROR="${RUN_COMMERCIAL_DEAL_MIRROR:-0}"
+RUN_CATALOG_MIRROR="${RUN_CATALOG_MIRROR:-0}"
 DASHBOARD_FAST="${DASHBOARD_FAST:-0}"
 GMAIL_SINCE_DAYS="${GMAIL_SINCE_DAYS:-14}"
 GMAIL_SENT_FOLDER="${ORIGENLAB_GMAIL_SENT_FOLDER:-[Gmail]/Enviados}"
 EXPECT_EQUIPMENT="${ORIGENLAB_EXPECT_EQUIPMENT_COUNT:-9}"
 DASHBOARD_VERIFY_JSON="/tmp/render_dashboard_mirror_verify.json"
 COMMERCIAL_VERIFY_JSON="/tmp/commercial_deals_mirror_verify.json"
+CATALOG_VERIFY_JSON="/tmp/catalog_postgres_mirror_verify.json"
 
 _canonical_gmail_count_sql() {
   sqlite3 "$SQLITE_PATH" \
@@ -169,10 +172,13 @@ uv run python scripts/qa/verify_dashboard_postgres_mirror.py \
   --json-out "$DASHBOARD_VERIFY_JSON"
 
 COMMERCIAL_MIRROR_STATUS="skipped"
+CATALOG_MIRROR_STATUS="skipped"
 GMAIL_INGEST_LABEL="off"
 COMMERCIAL_MIRROR_LABEL="off"
+CATALOG_MIRROR_LABEL="off"
 [[ "$RUN_GMAIL_INGEST" == "1" ]] && GMAIL_INGEST_LABEL="on"
 [[ "$RUN_COMMERCIAL_DEAL_MIRROR" == "1" ]] && COMMERCIAL_MIRROR_LABEL="on"
+[[ "$RUN_CATALOG_MIRROR" == "1" ]] && CATALOG_MIRROR_LABEL="on"
 
 if [[ "$RUN_COMMERCIAL_DEAL_MIRROR" == "1" ]]; then
   # shellcheck source=scripts/ops/_refresh_commercial_deal_mirror.sh
@@ -181,6 +187,19 @@ if [[ "$RUN_COMMERCIAL_DEAL_MIRROR" == "1" ]]; then
     COMMERCIAL_MIRROR_STATUS="ok"
   else
     COMMERCIAL_MIRROR_STATUS="failed"
+    echo "ERROR: Refresh stopped — commercial deal mirror verify failed (dashboard mirror may still be OK)." >&2
+    exit 1
+  fi
+fi
+
+if [[ "$RUN_CATALOG_MIRROR" == "1" ]]; then
+  # shellcheck source=scripts/ops/_refresh_catalog_mirror.sh
+  source "${PIPE}/scripts/ops/_refresh_catalog_mirror.sh"
+  if run_catalog_mirror_refresh "$PIPE" "$CATALOG_VERIFY_JSON"; then
+    CATALOG_MIRROR_STATUS="ok"
+  else
+    CATALOG_MIRROR_STATUS="failed"
+    echo "ERROR: Refresh stopped — catalog mirror verify failed (dashboard mirror may still be OK)." >&2
     exit 1
   fi
 fi
@@ -198,6 +217,20 @@ echo "  Dashboard mirror verify:   $DASHBOARD_VERIFY_JSON"
 echo "  Commercial deal mirror:    $COMMERCIAL_MIRROR_LABEL ($COMMERCIAL_MIRROR_STATUS)"
 if [[ "$RUN_COMMERCIAL_DEAL_MIRROR" == "1" ]]; then
   echo "  Commercial verify JSON:    $COMMERCIAL_VERIFY_JSON"
+fi
+echo "  Catalog mirror:            $CATALOG_MIRROR_LABEL ($CATALOG_MIRROR_STATUS)"
+if [[ "$RUN_CATALOG_MIRROR" == "1" ]]; then
+  echo "  Catalog verify JSON:       $CATALOG_VERIFY_JSON"
+  if [[ "$CATALOG_MIRROR_STATUS" == "ok" && -f "$CATALOG_VERIFY_JSON" ]]; then
+    echo "  Catalog Postgres counts:"
+    uv run python -c "
+import json, sys
+payload = json.load(open(sys.argv[1]))
+counts = payload.get('postgres_counts') or {}
+for key in ('products', 'supplier_offers', 'price_snapshots', 'commercial_history'):
+    print(f'    {key}: {counts.get(key, \"—\")}')
+" "$CATALOG_VERIFY_JSON"
+  fi
 fi
 echo "  Sends / outreach / deploy: not run (read-only refresh)"
 echo ""

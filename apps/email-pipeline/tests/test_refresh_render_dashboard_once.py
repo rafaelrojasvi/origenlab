@@ -12,6 +12,7 @@ import pytest
 _REPO = Path(__file__).resolve().parents[1]
 _REFRESH = _REPO / "scripts/ops/refresh_render_dashboard_once.sh"
 _COMMERCIAL_HELPER = _REPO / "scripts/ops/_refresh_commercial_deal_mirror.sh"
+_CATALOG_HELPER = _REPO / "scripts/ops/_refresh_catalog_mirror.sh"
 _FORBIDDEN_INVOCATIONS = (
     "send_inline_html",
     "mark_sent_batch",
@@ -30,9 +31,12 @@ def _script_text(path: Path) -> str:
 def test_refresh_script_default_commercial_mirror_off() -> None:
     text = _script_text(_REFRESH)
     assert 'RUN_COMMERCIAL_DEAL_MIRROR="${RUN_COMMERCIAL_DEAL_MIRROR:-0}"' in text
+    assert 'RUN_CATALOG_MIRROR="${RUN_CATALOG_MIRROR:-0}"' in text
     assert 'DASHBOARD_FAST="${DASHBOARD_FAST:-0}"' in text
     assert 'RUN_COMMERCIAL_DEAL_MIRROR" == "1"' in text
     assert "COMMERCIAL_MIRROR_STATUS=\"skipped\"" in text or 'COMMERCIAL_MIRROR_STATUS="skipped"' in text
+    assert "CATALOG_MIRROR_STATUS=\"skipped\"" in text or 'CATALOG_MIRROR_STATUS="skipped"' in text
+    assert "build_catalog_sqlite.py" not in text.split("RUN_CATALOG_MIRROR")[0]
 
 
 def test_refresh_script_when_commercial_enabled_runs_dry_run_sync_verify() -> None:
@@ -85,14 +89,94 @@ def test_refresh_script_default_path_keeps_standard_sync_script() -> None:
 
 
 def test_refresh_script_syntax_check() -> None:
+    for script in (_REFRESH, _CATALOG_HELPER):
+        cp = subprocess.run(
+            ["bash", "-n", str(script)],
+            cwd=str(_REPO),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert cp.returncode == 0, cp.stderr
+
+
+def test_refresh_script_when_catalog_enabled_runs_build_sync_verify() -> None:
+    text = _script_text(_REFRESH) + _script_text(_CATALOG_HELPER)
+    assert 'RUN_CATALOG_MIRROR" == "1"' in text
+    assert "build_catalog_sqlite.py" in text
+    assert "sync_catalog_postgres_mirror.py --dry-run" in text
+    assert "sync_catalog_postgres_mirror.py" in text
+    assert "verify_catalog_postgres_mirror.py" in text
+    assert "--scan-text" in text
+    assert "/tmp/catalog_postgres_mirror_verify.json" in text
+
+
+def test_catalog_helper_verify_failure_message_and_exit() -> None:
+    text = _script_text(_CATALOG_HELPER)
+    assert "Catalog mirror verify failed" in text
+    assert "Catálogo / catalog API data should not be trusted" in text
+    assert "return 1" in text
+
+
+def test_refresh_script_summary_includes_catalog_mirror_status() -> None:
+    text = _script_text(_REFRESH)
+    assert "Catalog mirror:" in text
+    assert "CATALOG_MIRROR_LABEL" in text
+    assert "CATALOG_MIRROR_STATUS" in text
+    assert "Catalog verify JSON:" in text
+    assert "commercial_history" in text
+
+
+def test_catalog_helper_failure_stops_with_nonzero_exit(tmp_path: Path) -> None:
+    """Stub uv so catalog verify fails; sourced helper must return 1."""
+    stub_bin = tmp_path / "bin"
+    stub_bin.mkdir()
+    uv_stub = stub_bin / "uv"
+    uv_stub.write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            set -eo pipefail
+            if [[ "$1" == "run" && "$2" == "python" ]]; then
+              script="${3:-}"
+              if [[ "$script" == *verify_catalog_postgres_mirror.py* ]]; then
+                exit 1
+              fi
+            fi
+            exit 0
+            """
+        ),
+        encoding="utf-8",
+    )
+    uv_stub.chmod(0o755)
+
+    runner = tmp_path / "run_catalog.sh"
+    runner.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env bash
+            set -eo pipefail
+            export PATH="{stub_bin}:$PATH"
+            export ORIGENLAB_SQLITE_PATH="{tmp_path / 'emails.sqlite'}"
+            # shellcheck source=scripts/ops/_refresh_catalog_mirror.sh
+            source "{_CATALOG_HELPER}"
+            run_catalog_mirror_refresh "{_REPO}" "{tmp_path / 'verify.json'}"
+            """
+        ),
+        encoding="utf-8",
+    )
+    runner.chmod(0o755)
+
     cp = subprocess.run(
-        ["bash", "-n", str(_REFRESH)],
+        ["bash", str(runner)],
         cwd=str(_REPO),
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=30,
+        env={**os.environ, "PATH": f"{stub_bin}:{os.environ.get('PATH', '')}"},
     )
-    assert cp.returncode == 0, cp.stderr
+    assert cp.returncode == 1
+    assert "Catalog mirror verify failed" in cp.stderr
 
 
 def test_commercial_helper_failure_stops_with_nonzero_exit(tmp_path: Path) -> None:

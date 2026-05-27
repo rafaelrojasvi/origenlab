@@ -44,6 +44,10 @@ RUN_GMAIL_INGEST=1 GMAIL_SINCE_DAYS=14 \
 # Dashboard mirror + commercial.deal mirror (read-only SQLite → Postgres commercial.deal):
 RUN_COMMERCIAL_DEAL_MIRROR=1 \
   bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
+
+# Full operator refresh (fast dashboard + deals + catalog for Catálogo tab):
+DASHBOARD_FAST=1 RUN_GMAIL_INGEST=1 RUN_COMMERCIAL_DEAL_MIRROR=1 RUN_CATALOG_MIRROR=1 \
+  bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
 ```
 
 Example `apps/email-pipeline/.env` (secrets stay local):
@@ -71,6 +75,7 @@ ORIGENLAB_GMAIL_TOKEN_JSON=/home/you/data/origenlab-email/secrets/gmail_workspac
 | 5 | `sync_dashboard_mirror_to_cloud.sh` | Render Postgres mirror |
 | 6 | `verify_dashboard_postgres_mirror.py --assert-render-dashboard` | — (read-only) |
 | 7 (opt-in) | `RUN_COMMERCIAL_DEAL_MIRROR=1`: commercial deal dry-run → sync → `verify_commercial_deals_postgres_mirror.py --scan-jsonb` | Postgres `commercial.deal` only |
+| 8 (opt-in) | `RUN_CATALOG_MIRROR=1`: `build_catalog_sqlite.py` → catalog sync dry-run → sync → `verify_catalog_postgres_mirror.py --scan-text` | SQLite `catalog_*` + Postgres `catalog.*` |
 
 Gmail ingest flags (when enabled):
 
@@ -109,6 +114,24 @@ If commercial verify fails, the script exits non-zero with:
 
 Warm cases / equipment in the dashboard may still be current; do not trust the **Commercial deals** table until verify passes.
 
+### Catalog mirror (opt-in, `RUN_CATALOG_MIRROR=1`)
+
+Runs **only after** step 6 (dashboard mirror verify) and **after** the commercial deal block when that flag is also set. Does **not** run during default refresh.
+
+| Sub-step | Command | Notes |
+|----------|---------|--------|
+| Alembic | `alembic upgrade head` | Ensures `catalog.*` tables exist on Render Postgres |
+| Build | `build_catalog_sqlite.py` | Writes/updates SQLite `catalog_*` from seed (opt-in only) |
+| Dry-run | `sync_catalog_postgres_mirror.py --dry-run` | No Postgres writes |
+| Sync | `sync_catalog_postgres_mirror.py` | Read-only SQLite; writes `catalog.*` |
+| Verify | `verify_catalog_postgres_mirror.py --scan-text` | JSON: `/tmp/catalog_postgres_mirror_verify.json` |
+
+If catalog verify fails, the script exits non-zero with:
+
+`Catalog mirror verify failed. Dashboard mirror may still be fresh, but Catálogo / catalog API data should not be trusted.`
+
+Summary prints Postgres counts when verify passes: `products`, `supplier_offers`, `price_snapshots`, `commercial_history`.
+
 ---
 
 ## Verify expectations (fail-closed)
@@ -132,6 +155,15 @@ JSON artifact: `/tmp/render_dashboard_mirror_verify.json`
 | JSONB columns | No forbidden keys (`--scan-jsonb`) |
 
 JSON artifact: `/tmp/commercial_deals_mirror_verify.json`
+
+### Catalog mirror (when `RUN_CATALOG_MIRROR=1`)
+
+| Check | Expected |
+|-------|----------|
+| SQLite vs Postgres row counts | Match per table (`products`, `supplier_offers`, etc.) |
+| Text columns | No forbidden terms (`--scan-text`) |
+
+JSON artifact: `/tmp/catalog_postgres_mirror_verify.json`
 
 ---
 
