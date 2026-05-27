@@ -35,9 +35,9 @@ describe("WarmCasesTable", () => {
     expect(screen.getByRole("button", { name: "Clientes reales" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
-    screen.getByText(/preset: Clientes reales · read-only/);
+    screen.getByText(/vista: Clientes reales · solo lectura/);
     expect(screen.queryByRole("link", { name: "mailto" })).toBeNull();
-    screen.getByRole("button", { name: "Copy email" });
+    screen.getByRole("button", { name: "Copiar correo" });
     screen.getByRole("button", { name: "buyer@acme.cl" });
   });
 
@@ -93,7 +93,7 @@ describe("WarmCasesTable", () => {
       />,
     );
     screen.getByText("Warm cases failed");
-    screen.getByRole("button", { name: "Retry" });
+    screen.getByRole("button", { name: "Reintentar" });
   });
 
   it("renders sparse row without crashing", () => {
@@ -145,8 +145,8 @@ describe("WarmCasesTable", () => {
         onContactSelect={() => {}}
       />,
     );
-    screen.getByText(/No warm cases returned from the API/);
-    screen.getByText(/Postgres mirror/);
+    screen.getByText(/No hay casos tibios desde la API/);
+    screen.getByText(/Espejo Postgres/);
   });
 
   it("calls onContactSelect when contact email is clicked", () => {
@@ -191,10 +191,10 @@ describe("WarmCasesTable", () => {
         onContactSelect={() => {}}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Search warm cases"), {
+    fireEvent.change(screen.getByLabelText("Buscar casos tibios"), {
       target: { value: "zzznomatch" },
     });
-    screen.getByText(/No warm cases match the current search or filters/);
+    screen.getByText(/Ningún caso coincide con la búsqueda o los filtros/);
     expect(screen.queryByText("other@elsewhere.cl")).toBeNull();
   });
 
@@ -219,7 +219,7 @@ describe("WarmCasesTable", () => {
         onContactSelect={onContactSelect}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Search warm cases"), {
+    fireEvent.change(screen.getByLabelText("Buscar casos tibios"), {
       target: { value: "acme" },
     });
     fireEvent.click(screen.getByRole("button", { name: "buyer@acme.cl" }));
@@ -238,13 +238,13 @@ describe("WarmCasesTable", () => {
         onContactSelect={() => {}}
       />,
     );
-    screen.getByText(/preset: Clientes reales/);
-    screen.getByText(/Showing 2 of 2 loaded cases/);
-    fireEvent.change(screen.getByLabelText("Search warm cases"), {
+    screen.getByText(/vista: Clientes reales/);
+    screen.getByText(/Mostrando 2 de 2 casos cargados/);
+    fireEvent.change(screen.getByLabelText("Buscar casos tibios"), {
       target: { value: "buyer@acme" },
     });
-    screen.getByText(/Showing 1 of 2 loaded cases/);
-    screen.getByText(/client filters active/);
+    screen.getByText(/Mostrando 1 de 2 casos cargados/);
+    screen.getByText(/filtros activos/);
   });
 
   it("hides internal contacts by default; toggle shows them", () => {
@@ -270,9 +270,9 @@ describe("WarmCasesTable", () => {
     );
     expect(screen.queryByText("contacto@origenlab.cl")).toBeNull();
     screen.getByText("buyer@acme.cl");
-    fireEvent.click(screen.getByLabelText("Hide internal OrigenLab contacts"));
+    fireEvent.click(screen.getByLabelText("Ocultar contactos internos de OrigenLab"));
     screen.getByText("contacto@origenlab.cl");
-    screen.getByText(/Showing 2 of 2 loaded cases/);
+    screen.getByText(/Mostrando 2 de 2 casos cargados/);
   });
 
   const auditRows: WarmCaseItem[] = [
@@ -350,7 +350,7 @@ describe("WarmCasesTable", () => {
     expect(screen.queryByText("monica.silva@dhl.com")).toBeNull();
     expect(screen.queryByText("serviciodetransferencias@bancochile.cl")).toBeNull();
     expect(screen.queryByText("chloe.yang@dlabsci.com")).toBeNull();
-    screen.getByText(/preset: Clientes reales/);
+    screen.getByText(/vista: Clientes reales/);
   });
 
   it("Logística preset shows DHL not client rows", () => {
@@ -358,7 +358,7 @@ describe("WarmCasesTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Logística" }));
     screen.getByText("monica.silva@dhl.com");
     expect(screen.queryByText("tatiana.beldarrain@udec.cl")).toBeNull();
-    screen.getByText(/preset: Logística/);
+    screen.getByText(/vista: Logística/);
   });
 
   it("Pagos/admin preset shows Banco not client rows", () => {
@@ -366,7 +366,7 @@ describe("WarmCasesTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pagos/admin" }));
     screen.getByText("serviciodetransferencias@bancochile.cl");
     expect(screen.queryByText("tatiana.beldarrain@udec.cl")).toBeNull();
-    screen.getByText(/preset: Pagos\/admin/);
+    screen.getByText(/vista: Pagos\/admin/);
   });
 
   it("Pagos/admin preset shows payment_received and transferencia snippet rows", () => {
@@ -418,19 +418,19 @@ describe("WarmCasesTable", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Todo" }));
     expect(screen.getByRole("button", { name: "Todo" }).getAttribute("aria-pressed")).toBe("true");
-    fireEvent.change(screen.getByLabelText("Search warm cases"), {
+    fireEvent.change(screen.getByLabelText("Buscar casos tibios"), {
       target: { value: "buyer@acme" },
     });
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Clear search and dropdown filters; reset view to Clientes reales",
+        name: "Limpiar filtros y volver a Clientes reales",
       }),
     );
     expect(screen.getByRole("button", { name: "Clientes reales" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
-    screen.getByText(/preset: Clientes reales · read-only/);
-    expect((screen.getByLabelText("Search warm cases") as HTMLInputElement).value).toBe("");
+    screen.getByText(/vista: Clientes reales · solo lectura/);
+    expect((screen.getByLabelText("Buscar casos tibios") as HTMLInputElement).value).toBe("");
   });
 
   it("Proveedores preset shows DLAB, Ollital, Ortoalresa", () => {

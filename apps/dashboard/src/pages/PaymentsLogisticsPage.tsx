@@ -1,29 +1,70 @@
 import { useMemo } from "react";
 import { useDashboardData } from "../context/DashboardDataContext";
-import { filterPaymentsLogisticsWarmCases } from "../lib/warmCaseSectionFilters";
+import {
+  filterLogisticsAdminWarmCases,
+  filterPaymentAdminWarmCases,
+  filterPaymentsLogisticsWarmCases,
+} from "../lib/warmCaseSectionFilters";
 import { WarmCasesTable } from "../components/commercial/WarmCasesTable";
 
 export function PaymentsLogisticsPage() {
   const { backend, warm, warmLoading, warmError, loadWarm, setContactEmail } = useDashboardData();
 
-  const adminItems = useMemo(
+  const allAdmin = useMemo(
     () => filterPaymentsLogisticsWarmCases(warm?.items ?? []),
     [warm?.items],
   );
+  const paymentItems = useMemo(() => filterPaymentAdminWarmCases(allAdmin), [allAdmin]);
+  const logisticsItems = useMemo(() => filterLogisticsAdminWarmCases(allAdmin), [allAdmin]);
+
+  const meta = warm?.meta ?? null;
+
+  if (warmLoading || warmError) {
+    return (
+      <WarmCasesTable
+        backend={backend}
+        items={allAdmin}
+        meta={meta}
+        loading={warmLoading}
+        error={warmError}
+        onRetry={() => void loadWarm()}
+        onContactSelect={setContactEmail}
+        title="Pagos y logística"
+        subtitle="Cargando hilos administrativos…"
+        showViewPresets={false}
+        initialFilters={{ preset: "todo", hideInternalContacts: false }}
+      />
+    );
+  }
 
   return (
-    <WarmCasesTable
-      backend={backend}
-      items={adminItems}
-      meta={warm?.meta ?? null}
-      loading={warmLoading}
-      error={warmError}
-      onRetry={() => void loadWarm()}
-      onContactSelect={setContactEmail}
-      title="Payments & logistics"
-      subtitle="Bank, Wise, DHL, and import-account admin threads."
-      showViewPresets={false}
-      initialFilters={{ preset: "todo", hideInternalContacts: false }}
-    />
+    <div className="space-y-8">
+      <WarmCasesTable
+        backend={backend}
+        items={paymentItems}
+        meta={meta}
+        loading={false}
+        error={null}
+        onRetry={() => void loadWarm()}
+        onContactSelect={setContactEmail}
+        title="Pagos"
+        subtitle="Transferencias, facturas y confirmación de pago · no son cotizaciones a clientes."
+        showViewPresets={false}
+        initialFilters={{ preset: "todo", hideInternalContacts: false }}
+      />
+      <WarmCasesTable
+        backend={backend}
+        items={logisticsItems}
+        meta={meta}
+        loading={false}
+        error={null}
+        onRetry={() => void loadWarm()}
+        onContactSelect={setContactEmail}
+        title="Logística"
+        subtitle="DHL, cuentas de importación y flete."
+        showViewPresets={false}
+        initialFilters={{ preset: "todo", hideInternalContacts: false }}
+      />
+    </div>
   );
 }

@@ -8,32 +8,32 @@ export function verdictTone(verdict: string): {
     return {
       banner: "border-emerald-200 bg-emerald-50 text-emerald-950",
       badge: "bg-emerald-600 text-white",
-      label: "READY",
+      label: "LISTO",
     };
   }
   if (v === "CAUTION") {
     return {
       banner: "border-amber-200 bg-amber-50 text-amber-950",
       badge: "bg-amber-600 text-white",
-      label: "CAUTION",
+      label: "PRECAUCIÓN",
     };
   }
   if (v === "BLOCKED") {
     return {
       banner: "border-red-200 bg-red-50 text-red-950",
       badge: "bg-red-700 text-white",
-      label: "BLOCKED",
+      label: "BLOQUEADO",
     };
   }
   return {
     banner: "border-slate-200 bg-slate-50 text-slate-900",
     badge: "bg-slate-600 text-white",
-    label: verdict || "UNKNOWN",
+    label: verdict || "SIN ESTADO",
   };
 }
 
 export function backendLabel(backend: string): string {
-  return backend === "postgres" ? "Postgres mirror" : "SQLite";
+  return backend === "postgres" ? "Espejo Postgres" : "SQLite local";
 }
 
 export function backendChipClass(backend: string): string {

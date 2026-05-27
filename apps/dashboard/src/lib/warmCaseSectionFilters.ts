@@ -40,3 +40,22 @@ export function filterPaymentsLogisticsWarmCases(items: WarmCaseItem[]): WarmCas
 export function isClientOpportunityWarmCase(row: WarmCaseItem): boolean {
   return CLIENT_OPPORTUNITY_CATEGORIES.has(row.category);
 }
+
+export function filterPaymentAdminWarmCases(items: WarmCaseItem[]): WarmCaseItem[] {
+  return items.filter(
+    (row) =>
+      row.category === "payment_admin" ||
+      row.category === "payment_received" ||
+      matchesWarmCaseViewPreset(row, "pagos_admin"),
+  );
+}
+
+export function filterLogisticsAdminWarmCases(items: WarmCaseItem[]): WarmCaseItem[] {
+  return items.filter(
+    (row) =>
+      row.category === "logistics_admin" ||
+      row.category === "vendor_logistics" ||
+      (matchesWarmCaseViewPreset(row, "logistica") &&
+        !matchesWarmCaseViewPreset(row, "pagos_admin")),
+  );
+}

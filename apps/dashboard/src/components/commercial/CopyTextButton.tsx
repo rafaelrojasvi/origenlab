@@ -27,7 +27,7 @@ export function CopyTextButton({
         });
       }}
     >
-      {copied ? "Copied" : label}
+      {copied ? "Copiado" : label}
     </button>
   );
 }

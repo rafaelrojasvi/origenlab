@@ -1,3 +1,4 @@
+import { OrigenLabStaticLogo } from "../brand/OrigenLabStaticLogo";
 import { DASHBOARD_NAV_ITEMS, type DashboardSection } from "../../lib/dashboardNav";
 
 export function DashboardSidebar({
@@ -8,17 +9,15 @@ export function DashboardSidebar({
   onNavigate: (section: DashboardSection) => void;
 }) {
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-card)]">
-      <div className="border-b border-[var(--color-border)] px-4 py-5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">OrigenLab</p>
-        <p className="mt-1 text-sm font-semibold text-brand-900">Operator dashboard</p>
-        <p className="mt-1 text-xs text-[var(--color-muted)]">Read-only · GET only</p>
+    <aside className="flex w-60 shrink-0 flex-col border-r border-brand-900/30 bg-brand-950 text-brand-50 shadow-lg">
+      <div className="border-b border-brand-900/40 px-4 py-5">
+        <OrigenLabStaticLogo />
+        <p className="mt-3 text-[11px] uppercase tracking-wide text-teal-200/70">
+          Solo lectura · no envía correos
+        </p>
       </div>
-      <nav
-        className="flex-1 overflow-y-auto px-2 py-3"
-        aria-label="Dashboard navigation"
-      >
-        <ul className="space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="Navegación del panel">
+        <ul className="space-y-1">
           {DASHBOARD_NAV_ITEMS.map((item) => {
             const isActive = item.id === active;
             return (
@@ -31,10 +30,10 @@ export function DashboardSidebar({
                   }}
                   aria-current={isActive ? "page" : undefined}
                   title={item.description}
-                  className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                     isActive
-                      ? "bg-brand-600 text-white"
-                      : "text-slate-700 hover:bg-slate-100"
+                      ? "bg-brand-600 text-white shadow-sm ring-1 ring-brand-700/50"
+                      : "text-teal-100/90 hover:bg-brand-900/80 hover:text-white"
                   }`}
                 >
                   {item.label}
@@ -44,6 +43,9 @@ export function DashboardSidebar({
           })}
         </ul>
       </nav>
+      <footer className="border-t border-brand-900/40 px-4 py-3 text-[11px] text-teal-200/60">
+        OrigenLab · Chile · equipos de laboratorio
+      </footer>
     </aside>
   );
 }

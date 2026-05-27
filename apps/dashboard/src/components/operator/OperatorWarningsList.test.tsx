@@ -16,6 +16,6 @@ describe("OperatorWarningsList", () => {
     fireEvent.click(btn);
     expect(onSelect).toHaveBeenCalledWith("jorgepc@quiteca.cl");
     expect(screen.queryByRole("link", { name: /mailto/i })).toBeNull();
-    expect(screen.getByText(/read-only contact profile/i)).toBeTruthy();
+    expect(screen.getByText(/perfil de solo lectura/i)).toBeTruthy();
   });
 });

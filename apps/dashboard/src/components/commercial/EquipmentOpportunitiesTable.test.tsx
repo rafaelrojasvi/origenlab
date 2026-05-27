@@ -108,7 +108,7 @@ describe("EquipmentOpportunitiesTable", () => {
         onContactSelect={() => {}}
       />,
     );
-    screen.getByText(/No equipment opportunities returned from the API/);
+    screen.getByText(/No hay oportunidades de equipos desde la API/);
   });
 
   it("opens contact drilldown when contact email is present", () => {
@@ -155,7 +155,7 @@ describe("EquipmentOpportunitiesTable", () => {
     fireEvent.change(screen.getByLabelText("Search equipment opportunities"), {
       target: { value: "zzznomatch" },
     });
-    screen.getByText(/No equipment opportunities match the current search/);
+    screen.getByText(/Ninguna oportunidad coincide con la búsqueda actual/);
     expect(screen.queryByText("Universidad Ejemplo")).toBeNull();
   });
 

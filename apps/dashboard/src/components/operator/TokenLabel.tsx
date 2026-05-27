@@ -15,7 +15,7 @@ export function TokenLabel({
     return <span className="text-slate-500">—</span>;
   }
   return (
-    <span className={className} title={raw}>
+    <span className={className} title={label}>
       {label}
     </span>
   );

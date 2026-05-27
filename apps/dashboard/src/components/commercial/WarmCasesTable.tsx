@@ -32,8 +32,8 @@ export function WarmCasesTable({
   error,
   onRetry,
   onContactSelect,
-  title = "Casos tibios / Warm cases",
-  subtitle = "Read-only queue · subject/snippet previews only (no email bodies).",
+  title = "Casos tibios",
+  subtitle = "Cola de solo lectura · solo asunto y vista previa (sin cuerpo del correo).",
   initialFilters,
   showViewPresets = true,
 }: {
@@ -76,7 +76,7 @@ export function WarmCasesTable({
     <div
       className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-border)] bg-slate-50/80 px-3 py-3"
       role="group"
-      aria-label="Warm queue view preset"
+      aria-label="Vista de la cola tibia"
     >
       <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         Vista
@@ -104,26 +104,26 @@ export function WarmCasesTable({
 
   const toolbar = (
     <TableListToolbar>
-      <ToolbarField label="Search" className="min-w-[12rem] flex-1">
+      <ToolbarField label="Buscar" className="min-w-[12rem] flex-1">
         <input
           type="search"
           className={toolbarInputClass()}
-          placeholder="Contact, domain, org, subject, snippet…"
+          placeholder="Contacto, dominio, organización, asunto…"
           value={filters.search}
           onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-          aria-label="Search warm cases"
+          aria-label="Buscar casos tibios"
         />
       </ToolbarField>
-      <ToolbarField label="Status">
+      <ToolbarField label="Estado">
         <select
           className={toolbarSelectClass()}
           value={filters.status}
           onChange={(e) =>
             setFilters((f) => ({ ...f, status: e.target.value as WarmCaseStatus | "" }))
           }
-          aria-label="Filter by status"
+          aria-label="Filtrar por estado"
         >
-          <option value="">All</option>
+          <option value="">Todos</option>
           {statusOptions.map((s) => (
             <option key={s} value={s} title={s}>
               {formatOperatorToken(s, "warm_status").label}
@@ -131,16 +131,16 @@ export function WarmCasesTable({
           ))}
         </select>
       </ToolbarField>
-      <ToolbarField label="Category">
+      <ToolbarField label="Categoría">
         <select
           className={toolbarSelectClass()}
           value={filters.category}
           onChange={(e) =>
             setFilters((f) => ({ ...f, category: e.target.value as WarmCaseCategory | "" }))
           }
-          aria-label="Filter by category"
+          aria-label="Filtrar por categoría"
         >
-          <option value="">All</option>
+          <option value="">Todas</option>
           {categoryOptions.map((c) => (
             <option key={c} value={c} title={c}>
               {formatOperatorToken(c, "warm_category").label}
@@ -148,20 +148,20 @@ export function WarmCasesTable({
           ))}
         </select>
       </ToolbarField>
-      <ToolbarField label="Sort">
+      <ToolbarField label="Orden">
         <select
           className={toolbarSelectClass()}
           value={filters.sort}
           onChange={(e) =>
             setFilters((f) => ({ ...f, sort: e.target.value as WarmCaseSortKey }))
           }
-          aria-label="Sort warm cases"
+          aria-label="Ordenar casos tibios"
         >
-          <option value="last_seen_desc">Last seen (newest)</option>
-          <option value="last_seen_asc">Last seen (oldest)</option>
-          <option value="status">Status</option>
-          <option value="category">Category</option>
-          <option value="contact">Contact email</option>
+          <option value="last_seen_desc">Última actividad (más reciente)</option>
+          <option value="last_seen_asc">Última actividad (más antigua)</option>
+          <option value="status">Estado</option>
+          <option value="category">Categoría</option>
+          <option value="contact">Correo de contacto</option>
         </select>
       </ToolbarField>
       <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
@@ -171,10 +171,10 @@ export function WarmCasesTable({
           onChange={(e) =>
             setFilters((f) => ({ ...f, hideInternalContacts: e.target.checked }))
           }
-          aria-label="Hide internal OrigenLab contacts"
+          aria-label="Ocultar contactos internos de OrigenLab"
         />
-        <span title="Hides @origenlab.cl and @labdelivery.cl in the loaded table only (client-side).">
-          Hide internal OrigenLab contacts
+        <span title="Oculta @origenlab.cl y @labdelivery.cl solo en esta tabla (filtro local).">
+          Ocultar contactos internos
         </span>
       </label>
       {filtersActive ? (
@@ -182,10 +182,10 @@ export function WarmCasesTable({
           type="button"
           className="rounded-md border border-[var(--color-border)] bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
           onClick={() => setFilters(clearWarmCaseTableFilters())}
-          aria-label="Clear search and dropdown filters; reset view to Clientes reales"
-          title="Clears search, status, and category filters and resets the view preset to Clientes reales."
+          aria-label="Limpiar filtros y volver a Clientes reales"
+          title="Limpia búsqueda, estado y categoría; restablece la vista Clientes reales."
         >
-          Clear filters
+          Limpiar filtros
         </button>
       ) : null}
     </TableListToolbar>
@@ -200,14 +200,14 @@ export function WarmCasesTable({
       error={error}
       onRetry={onRetry}
       empty={!loading && !error && loadedCount === 0}
-      emptyMessage="No warm cases returned from the API."
+      emptyMessage="No hay casos tibios desde la API."
       filterEmpty={!loading && !error && loadedCount > 0 && visibleRows.length === 0}
-      filterEmptyMessage="No warm cases match the current search or filters."
+      filterEmptyMessage="Ningún caso coincide con la búsqueda o los filtros."
       reducedNote={
         meta?.reduced_mode && meta.note
-          ? `Reduced mode: ${meta.note}`
-          : meta?.reduced_mode
-            ? "Reduced mode: enrichment or data unavailable."
+            ? `Modo reducido: ${meta.note}`
+            : meta?.reduced_mode
+            ? "Modo reducido: enriquecimiento o datos no disponibles."
             : undefined
       }
       toolbar={
@@ -223,14 +223,14 @@ export function WarmCasesTable({
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--color-muted)]">
             <tr>
-              <th className="px-3 py-2 font-medium">Contact</th>
-              <th className="px-3 py-2 font-medium">Organization</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Category</th>
-              <th className="px-3 py-2 font-medium">Last seen</th>
-              <th className="px-3 py-2 font-medium">Equipment</th>
-              <th className="px-3 py-2 font-medium">Subject / snippet</th>
-              <th className="px-3 py-2 font-medium">Next action</th>
+              <th className="px-3 py-2 font-medium">Contacto</th>
+              <th className="px-3 py-2 font-medium">Organización</th>
+              <th className="px-3 py-2 font-medium">Estado</th>
+              <th className="px-3 py-2 font-medium">Categoría</th>
+              <th className="px-3 py-2 font-medium">Última actividad</th>
+              <th className="px-3 py-2 font-medium">Equipo</th>
+              <th className="px-3 py-2 font-medium">Asunto / vista previa</th>
+              <th className="px-3 py-2 font-medium">Próxima acción</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
@@ -247,12 +247,12 @@ export function WarmCasesTable({
                 }}
                 tabIndex={0}
                 role="button"
-                aria-label={`Open case summary for ${row.contact_email}`}
+                aria-label={`Abrir resumen del caso ${row.contact_email}`}
               >
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   <ContactEmailButton email={row.contact_email} onSelect={onContactSelect} />
                   <div className="mt-1">
-                    <CopyTextButton label="Copy email" value={row.contact_email} />
+                    <CopyTextButton label="Copiar correo" value={row.contact_email} />
                   </div>
                 </td>
                 <td className="px-3 py-2 text-slate-800">{row.account_name || "—"}</td>
@@ -278,7 +278,7 @@ export function WarmCasesTable({
                   </div>
                   {row.snippet ? (
                     <p className="mt-1 text-xs text-[var(--color-muted)]">
-                      <span className="font-medium text-slate-600">Preview:</span>{" "}
+                      <span className="font-medium text-slate-600">Vista previa:</span>{" "}
                       {truncate(row.snippet, 120)}
                     </p>
                   ) : null}
@@ -300,7 +300,7 @@ export function WarmCasesTable({
             loaded: loadedCount,
             apiTotal: apiCount,
             filtered: filtersActive,
-            noun: "cases",
+            noun: "casos",
             presetLabel,
           })}
         </p>

@@ -33,7 +33,7 @@ export function CaseDetailDrawer({
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/30"
-        aria-label="Close case detail"
+        aria-label="Cerrar detalle del caso"
         onClick={onClose}
       />
       <aside
@@ -45,7 +45,7 @@ export function CaseDetailDrawer({
         <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-              Warm case · read-only
+              Caso tibio · solo lectura
             </p>
             <h2 id="case-detail-heading" className="mt-1 text-lg font-semibold text-brand-900">
               {detail.caseTitle}
@@ -56,7 +56,7 @@ export function CaseDetailDrawer({
             onClick={onClose}
             className="shrink-0 rounded-md border border-[var(--color-border)] px-2 py-1 text-sm text-slate-700 hover:bg-slate-50"
           >
-            Close
+            Cerrar
           </button>
         </header>
 
@@ -67,65 +67,67 @@ export function CaseDetailDrawer({
           </div>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-800">Contact</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Contacto</h3>
             <div className="flex flex-wrap items-center gap-2">
               <ContactEmailButton email={item.contact_email} onSelect={onContactSelect} />
-              <CopyTextButton label="Copy email" value={item.contact_email} />
+              <CopyTextButton label="Copiar correo" value={item.contact_email} />
             </div>
             <p className="text-sm text-slate-700">
-              <span className="text-[var(--color-muted)]">Organization:</span>{" "}
+              <span className="text-[var(--color-muted)]">Organización:</span>{" "}
               {item.account_name?.trim() || "—"}
             </p>
             {item.last_seen_at ? (
-              <p className="text-xs text-[var(--color-muted)]">Last seen: {item.last_seen_at}</p>
+              <p className="text-xs text-[var(--color-muted)]">
+                Última actividad: {item.last_seen_at}
+              </p>
             ) : null}
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-800">Preview</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Contexto</h3>
             <p className="text-sm font-medium text-slate-800">{detail.safeSubject}</p>
             {detail.safeSnippet ? (
               <p className="text-sm text-[var(--color-muted)]">{detail.safeSnippet}</p>
             ) : (
-              <p className="text-sm text-[var(--color-muted)]">No snippet preview.</p>
+              <p className="text-sm text-[var(--color-muted)]">Sin vista previa disponible.</p>
             )}
             <p className="text-sm text-slate-700">
-              <span className="text-[var(--color-muted)]">Equipment signal:</span>{" "}
+              <span className="text-[var(--color-muted)]">Señal de equipo:</span>{" "}
               {detail.equipmentSignal}
             </p>
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
-            <h3 className="text-sm font-semibold text-slate-900">What happened</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Qué pasó</h3>
             <p className="text-sm text-slate-800">{detail.inferredSummary}</p>
           </section>
 
           <section className="rounded-lg border border-brand-200 bg-brand-50/60 px-3 py-3 space-y-2">
-            <h3 className="text-sm font-semibold text-brand-900">Recommended strategy</h3>
+            <h3 className="text-sm font-semibold text-brand-900">Estrategia recomendada</h3>
             <p className="text-sm text-slate-800">{detail.recommendedStrategy}</p>
           </section>
 
           <section className="space-y-1">
-            <h3 className="text-sm font-semibold text-slate-800">Next action</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Próxima acción</h3>
             <p className="text-sm text-slate-800">{detail.nextActionLabel}</p>
           </section>
 
           {detail.linkedSection && detail.linkedSectionLabel ? (
             <section className="space-y-2">
-              <h3 className="text-sm font-semibold text-slate-800">Suggested section</h3>
+              <h3 className="text-sm font-semibold text-slate-800">Sección sugerida</h3>
               <button
                 type="button"
                 className="rounded-md border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-800 hover:bg-brand-50"
                 onClick={() => goToSection(detail.linkedSection!)}
               >
-                Open {detail.linkedSectionLabel}
+                Ir a {detail.linkedSectionLabel}
               </button>
             </section>
           ) : null}
         </div>
 
         <footer className="border-t border-[var(--color-border)] px-4 py-3 text-xs text-[var(--color-muted)]">
-          Read-only case summary · no Gmail · no send · previews redacted
+          Resumen de solo lectura · no envía correos · vistas previas redactadas
         </footer>
       </aside>
     </div>

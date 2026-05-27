@@ -10,17 +10,17 @@ import { contactDataSourceLabel } from "../../lib/dataSourceLabel";
 function formatContactError(e: unknown): string {
   if (e instanceof OperatorApiError) {
     if (e.status === 404) {
-      return "Contact not found.";
+      return "Contacto no encontrado.";
     }
     if (e.status === 422) {
-      return "Invalid email address.";
+      return "Correo inválido.";
     }
     return `API ${e.status}: ${e.message}`;
   }
   if (e instanceof Error) {
     return e.message;
   }
-  return "Could not load contact profile.";
+  return "No se pudo cargar el perfil del contacto.";
 }
 
 function OutreachTruthGuide({ profile }: { profile: ContactProfileUi }) {
@@ -42,26 +42,26 @@ function OutreachTruthGuide({ profile }: { profile: ContactProfileUi }) {
       className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-800 space-y-2"
       role="note"
     >
-      <p className="font-semibold text-slate-900">How to read outreach fields (read-only)</p>
+      <p className="font-semibold text-slate-900">Cómo leer los campos de contacto (solo lectura)</p>
       <ul className="list-disc pl-4 space-y-1">
         <li>
-          <strong>Do not repeat / suppression</strong> — safety memory flag in SQLite; not approval
-          to send from this dashboard.
+          <strong>No repetir / supresión</strong> — bandera de seguridad en SQLite; no autoriza
+          envíos desde este panel.
         </li>
         <li>
-          <strong>Sent history</strong> — summary from Gmail Sent backfill; evidence only, does not
-          write outreach sidecar state.
+          <strong>Historial de envíos</strong> — resumen desde Gmail Enviados; solo evidencia, no
+          escribe el estado lateral.
         </li>
         <li>
-          <strong>Outreach state</strong> — manual sidecar when present; empty means no row or not
-          set in the pipeline (not the same as “never contacted”).
+          <strong>Estado de contacto</strong> — registro manual cuando existe; vacío significa sin
+          fila o no definido en el pipeline (no es lo mismo que “nunca contactado”).
         </li>
       </ul>
       {outreach.do_not_repeat && !hasState ? (
         <p className="text-slate-700">
           {hasSent
-            ? "Do not repeat is set but outreach state is empty — Sent history shows prior outbound; update sidecar truth only via pipeline scripts."
-            : "Do not repeat is set but outreach state is empty — treat the flag as a safety memory; confirm in pipeline before outreach."}
+            ? "«No repetir» activo pero el estado está vacío — el historial muestra envíos previos; actualice la verdad operativa solo vía scripts del pipeline."
+            : "«No repetir» activo pero el estado está vacío — trátelo como memoria de seguridad; confirme en el pipeline antes de contactar."}
         </p>
       ) : null}
     </div>
@@ -72,13 +72,13 @@ function SuppressionBanner({ profile }: { profile: ContactProfileUi }) {
   const { outreach } = profile;
   const flags: string[] = [];
   if (outreach.do_not_repeat) {
-    flags.push("Do not repeat");
+    flags.push("No repetir");
   }
   if (outreach.suppressed_email) {
-    flags.push("Email suppressed");
+    flags.push("Correo suprimido");
   }
   if (outreach.suppressed_domain) {
-    flags.push("Domain suppressed");
+    flags.push("Dominio suprimido");
   }
   if (flags.length === 0) {
     return null;
@@ -88,15 +88,15 @@ function SuppressionBanner({ profile }: { profile: ContactProfileUi }) {
       className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-950"
       role="alert"
     >
-      <p className="font-semibold">Outreach restriction — read-only</p>
+      <p className="font-semibold">Restricción de contacto — solo lectura</p>
       <ul className="mt-1 list-disc pl-5">
         {flags.map((f) => (
           <li key={f}>{f}</li>
         ))}
       </ul>
       <p className="mt-2 text-xs text-red-900">
-        No write actions from this dashboard. Update send/outreach truth in the SQLite pipeline
-        and operator scripts.
+        Sin acciones de escritura desde este panel. Actualice la verdad de envío en el pipeline
+        SQLite y scripts del operador.
       </p>
     </div>
   );
@@ -152,7 +152,7 @@ export function ContactProfilePanel({
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/30"
-        aria-label="Close contact profile"
+        aria-label="Cerrar perfil de contacto"
         onClick={onClose}
       />
       <aside
@@ -164,7 +164,7 @@ export function ContactProfilePanel({
         <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-4">
           <div>
             <h2 id="contact-profile-heading" className="text-lg font-semibold text-brand-900">
-              Read-only contact profile
+              Perfil de contacto · solo lectura
             </h2>
             <p className="mt-1 text-xs text-[var(--color-muted)] break-all">{email}</p>
           </div>
@@ -173,14 +173,14 @@ export function ContactProfilePanel({
             onClick={onClose}
             className="rounded-md border border-[var(--color-border)] px-2 py-1 text-sm text-slate-700 hover:bg-slate-50"
           >
-            Close
+            Cerrar
           </button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {showMirrorNote ? (
             <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
-              Postgres mirror is not send/outreach truth.
+              El espejo Postgres no define envíos ni el estado de contacto.
             </p>
           ) : null}
 
@@ -196,14 +196,14 @@ export function ContactProfilePanel({
               className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
               role="alert"
             >
-              <p className="font-medium">Could not load contact profile</p>
+              <p className="font-medium">No se pudo cargar el perfil</p>
               <p className="mt-1">{error}</p>
               <button
                 type="button"
                 onClick={() => void load(email)}
                 className="mt-3 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-50"
               >
-                Retry
+                Reintentar
               </button>
             </div>
           ) : null}
@@ -211,8 +211,8 @@ export function ContactProfilePanel({
           {!loading && !error && profile ? (
             <>
               <p className="text-xs text-[var(--color-muted)]">
-                Data: {contactDataSourceLabel(backend, profile.meta.data_source)}
-                {profile.meta.reduced_mode ? " · reduced mode" : ""}
+                Fuente: {contactDataSourceLabel(backend, profile.meta.data_source)}
+                {profile.meta.reduced_mode ? " · modo reducido" : ""}
               </p>
 
               <SuppressionBanner profile={profile} />
@@ -226,41 +226,41 @@ export function ContactProfilePanel({
               ) : null}
 
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-800">Identity</h3>
+                <h3 className="text-sm font-semibold text-slate-800">Identidad</h3>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                  <dt className="text-[var(--color-muted)]">Email</dt>
+                  <dt className="text-[var(--color-muted)]">Correo</dt>
                   <dd className="break-all">{profile.contact.normalized_email || profile.contact.email}</dd>
                   {profile.contact.name ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">Name</dt>
+                      <dt className="text-[var(--color-muted)]">Nombre</dt>
                       <dd>{profile.contact.name}</dd>
                     </>
                   ) : null}
                   {profile.contact.organization_name ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">Organization</dt>
+                      <dt className="text-[var(--color-muted)]">Organización</dt>
                       <dd>{profile.contact.organization_name}</dd>
                     </>
                   ) : null}
                   {profile.contact.domain || profile.contact.organization_domain ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">Domain</dt>
+                      <dt className="text-[var(--color-muted)]">Dominio</dt>
                       <dd>
                         {profile.contact.organization_domain || profile.contact.domain}
                       </dd>
                     </>
                   ) : null}
-                  <dt className="text-[var(--color-muted)]">Messages</dt>
+                  <dt className="text-[var(--color-muted)]">Mensajes</dt>
                   <dd>{profile.contact.message_count}</dd>
                   {profile.contact.first_seen_at ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">First seen</dt>
+                      <dt className="text-[var(--color-muted)]">Primera vez visto</dt>
                       <dd>{profile.contact.first_seen_at}</dd>
                     </>
                   ) : null}
                   {profile.contact.last_seen_at ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">Last seen</dt>
+                      <dt className="text-[var(--color-muted)]">Última actividad</dt>
                       <dd>{profile.contact.last_seen_at}</dd>
                     </>
                   ) : null}
@@ -268,27 +268,27 @@ export function ContactProfilePanel({
               </section>
 
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-800">Outreach state</h3>
+                <h3 className="text-sm font-semibold text-slate-800">Estado de contacto</h3>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                  <dt className="text-[var(--color-muted)]">State</dt>
+                  <dt className="text-[var(--color-muted)]">Estado</dt>
                   <dd>
-                    {profile.outreach.state?.trim() ? profile.outreach.state : "— (no sidecar row)"}
+                    {profile.outreach.state?.trim() ? profile.outreach.state : "— (sin registro lateral)"}
                   </dd>
                   {profile.outreach.last_contacted_at ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">Last contacted</dt>
+                      <dt className="text-[var(--color-muted)]">Último contacto</dt>
                       <dd>{profile.outreach.last_contacted_at}</dd>
                     </>
                   ) : null}
                   {profile.outreach.source ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">Source</dt>
+                      <dt className="text-[var(--color-muted)]">Fuente</dt>
                       <dd>{profile.outreach.source}</dd>
                     </>
                   ) : null}
                   {profile.outreach.notes ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">Notes</dt>
+                      <dt className="text-[var(--color-muted)]">Notas</dt>
                       <dd className="text-slate-800">{profile.outreach.notes}</dd>
                     </>
                   ) : null}
@@ -296,19 +296,19 @@ export function ContactProfilePanel({
               </section>
 
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-800">Sent history (summary)</h3>
+                <h3 className="text-sm font-semibold text-slate-800">Historial de envíos (resumen)</h3>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                  <dt className="text-[var(--color-muted)]">Sent count</dt>
+                  <dt className="text-[var(--color-muted)]">Cantidad enviados</dt>
                   <dd>{profile.sent_history.sent_count}</dd>
                   {profile.sent_history.latest_sent_at ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">Latest sent</dt>
+                      <dt className="text-[var(--color-muted)]">Último envío</dt>
                       <dd>{profile.sent_history.latest_sent_at}</dd>
                     </>
                   ) : null}
                   {profile.sent_history.latest_subject ? (
                     <>
-                      <dt className="text-[var(--color-muted)]">Latest subject</dt>
+                      <dt className="text-[var(--color-muted)]">Último asunto</dt>
                       <dd>{profile.sent_history.latest_subject}</dd>
                     </>
                   ) : null}
@@ -317,7 +317,7 @@ export function ContactProfilePanel({
 
               {profile.warnings.length > 0 ? (
                 <section className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-3">
-                  <h3 className="text-sm font-semibold text-amber-950">Warnings</h3>
+                  <h3 className="text-sm font-semibold text-amber-950">Advertencias</h3>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-950">
                     {profile.warnings.map((w) => (
                       <li key={w}>{w}</li>
@@ -330,7 +330,7 @@ export function ContactProfilePanel({
               !profile.outreach.state &&
               profile.sent_history.sent_count === 0 ? (
                 <p className="text-sm text-[var(--color-muted)]" role="status">
-                  Limited profile data for this address (valid email, minimal intelligence).
+                  Datos limitados para esta dirección (correo válido, poca información).
                 </p>
               ) : null}
             </>
@@ -338,7 +338,7 @@ export function ContactProfilePanel({
         </div>
 
         <footer className="border-t border-[var(--color-border)] px-4 py-3 text-xs text-[var(--color-muted)]">
-          GET /contacts/… only · no send/draft/archive actions
+          Solo GET /contacts/… · sin enviar, redactar ni archivar
         </footer>
       </aside>
     </div>

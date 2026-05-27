@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useDashboardData } from "../context/DashboardDataContext";
 import { filterSupplierWarmCases } from "../lib/warmCaseSectionFilters";
-import { WarmCasesTable } from "../components/commercial/WarmCasesTable";
+import { SupplierEntityGroups } from "../components/commercial/SupplierEntityGroups";
 
 export function SuppliersPage() {
   const { backend, warm, warmLoading, warmError, loadWarm, setContactEmail } = useDashboardData();
@@ -12,18 +12,14 @@ export function SuppliersPage() {
   );
 
   return (
-    <WarmCasesTable
+    <SupplierEntityGroups
       backend={backend}
-      items={supplierItems}
+      allItems={supplierItems}
       meta={warm?.meta ?? null}
       loading={warmLoading}
       error={warmError}
       onRetry={() => void loadWarm()}
       onContactSelect={setContactEmail}
-      title="Suppliers"
-      subtitle="Supplier quotes and follow-ups · excludes client opportunities."
-      showViewPresets={false}
-      initialFilters={{ preset: "todo", hideInternalContacts: false }}
     />
   );
 }

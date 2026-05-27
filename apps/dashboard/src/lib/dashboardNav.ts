@@ -1,4 +1,4 @@
-/** Top-level dashboard sections (Phase 7B.1). */
+/** Secciones principales del panel operador (Phase 7B). */
 
 export type DashboardSection =
   | "today"
@@ -18,15 +18,19 @@ export interface DashboardNavItem {
 }
 
 export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
-  { id: "today", label: "Today", description: "Operator verdict and summary counts" },
-  { id: "inbox", label: "Inbox triage", description: "Warm cases with role filters" },
-  { id: "opportunities", label: "Opportunities", description: "Equipment opportunity queue" },
-  { id: "deals", label: "Deals", description: "Commercial deals mirror" },
-  { id: "suppliers", label: "Suppliers", description: "Supplier quotes and follow-ups" },
-  { id: "tenders", label: "Tenders", description: "Public procurement signals" },
-  { id: "payments-logistics", label: "Payments & logistics", description: "Bank, Wise, DHL, import admin" },
-  { id: "contacts", label: "Contacts", description: "Read-only contact profiles" },
-  { id: "system", label: "System", description: "API health and read-only policy" },
+  { id: "today", label: "Hoy", description: "Resumen del día y conteos" },
+  { id: "inbox", label: "Bandeja de revisión", description: "Correos tibios con filtros por rol" },
+  { id: "opportunities", label: "Oportunidades", description: "Cola de equipos y señales" },
+  { id: "deals", label: "Negocios", description: "Espejo de negocios comerciales" },
+  { id: "suppliers", label: "Proveedores", description: "Cotizaciones y seguimientos de proveedores" },
+  { id: "tenders", label: "Licitaciones", description: "Señales de compras públicas" },
+  {
+    id: "payments-logistics",
+    label: "Pagos y logística",
+    description: "Banco, transferencias, DHL e importación",
+  },
+  { id: "contacts", label: "Contactos", description: "Perfiles de contacto en solo lectura" },
+  { id: "system", label: "Sistema", description: "Estado del servicio y política de lectura" },
 ];
 
 export const DEFAULT_DASHBOARD_SECTION: DashboardSection = "today";

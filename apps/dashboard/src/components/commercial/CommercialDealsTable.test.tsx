@@ -36,8 +36,8 @@ describe("CommercialDealsTable", () => {
       <CommercialDealsTable data={sampleDeal} loading={false} error={null} onRetry={() => {}} />,
     );
 
-    screen.getByText("Commercial deals");
-    expect(screen.getAllByText(/Postgres mirror · Read-only · Redacted commercial view/).length).toBeGreaterThan(0);
+    screen.getByText("Negocios comerciales");
+    expect(screen.getAllByText(/Espejo Postgres · solo lectura · vista redactada/).length).toBeGreaterThan(0);
     screen.getByText("Centro de Estudios Avanzados en Fruticultura CEAF");
     screen.getByText("SERVA Electrophoresis GmbH");
     expect(screen.getAllByText("needs_review").length).toBeGreaterThan(0);
@@ -62,7 +62,7 @@ describe("CommercialDealsTable", () => {
       />,
     );
 
-    screen.getByText("Commercial deals mirror not synced yet.");
+    screen.getByText("El espejo de negocios aún no está sincronizado.");
     expect(screen.queryByRole("table")).toBeNull();
   });
 
@@ -83,7 +83,7 @@ describe("CommercialDealsTable", () => {
       />,
     );
 
-    screen.getByText("Commercial deals mirror not synced yet.");
+    screen.getByText("El espejo de negocios aún no está sincronizado.");
   });
 
   it("has no row links or action buttons beyond section retry", () => {

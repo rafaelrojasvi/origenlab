@@ -38,7 +38,7 @@ export function TableSection({
         {subtitle ? <p className="mt-1 text-sm text-[var(--color-muted)]">{subtitle}</p> : null}
         {dataSourceLabel ? (
           <p className="mt-2 text-xs text-[var(--color-muted)]">
-            <span className="font-medium text-slate-700">Data source:</span> {dataSourceLabel}
+            <span className="font-medium text-slate-700">Fuente de datos:</span> {dataSourceLabel}
           </p>
         ) : null}
       </div>
@@ -58,7 +58,7 @@ export function TableSection({
             onClick={onRetry}
             className="mt-2 rounded-md border border-red-300 bg-white px-3 py-1 text-sm font-medium text-red-800 hover:bg-red-50"
           >
-            Retry
+            Reintentar
           </button>
         </div>
       ) : null}
@@ -79,7 +79,7 @@ export function TableSection({
 
       {!loading && !error && !empty && filterEmpty ? (
         <p className="text-sm text-[var(--color-muted)]" role="status">
-          {filterEmptyMessage ?? "No rows match the current filters."}
+          {filterEmptyMessage ?? "Ningún registro coincide con los filtros actuales."}
         </p>
       ) : null}
 

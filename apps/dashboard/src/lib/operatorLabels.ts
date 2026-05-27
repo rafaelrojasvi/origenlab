@@ -1,4 +1,4 @@
-/** Human-readable labels for API token strings (read-only display). */
+/** Etiquetas en español para tokens de la API (solo lectura). */
 
 export type OperatorLabelKind =
   | "warm_status"
@@ -18,48 +18,54 @@ const WARM_STATUS: Record<string, string> = {
 };
 
 const WARM_CATEGORY: Record<string, string> = {
-  client_opportunity: "Oportunidad cliente",
-  client_response: "Respuesta cliente",
-  supplier_quote_received: "Cotización proveedor",
-  supplier_followup: "Seguimiento proveedor",
-  logistics_admin: "Logística admin",
-  internal_admin: "Admin interno",
-  system_noise: "Ruido sistema",
-  bounce_problem: "Problema rebote",
-  deal_evidence_candidate: "Evidencia deal",
-  client_reply: "Respuesta cliente",
-  supplier_reply: "Respuesta proveedor",
+  client_opportunity: "Oportunidad de cliente",
+  client_response: "Respuesta de cliente",
+  supplier_quote_received: "Cotización de proveedor recibida",
+  supplier_followup: "Seguimiento de proveedor",
+  payment_admin: "Pago / administración",
+  logistics_admin: "Logística",
+  internal_admin: "Interno / administrativo",
+  system_noise: "Sistema / ruido",
+  bounce_problem: "Problema de entrega",
+  deal_evidence_candidate: "Evidencia de negocio",
+  client_reply: "Respuesta de cliente",
+  supplier_reply: "Respuesta de proveedor",
   quote_sent: "Cotización enviada",
   waiting_supplier: "Esperando proveedor",
   waiting_client: "Esperando cliente",
   bounce: "Rebote",
   opportunity: "Oportunidad",
   auto_reply: "Respuesta automática",
-  vendor_logistics: "Logística / proveedor admin",
-  payment_admin: "Pago / admin comercial",
+  vendor_logistics: "Logística",
   payment_received: "Pago recibido",
 };
 
 const WARM_NEXT_ACTION: Record<string, string> = {
   auto_reply: "Ignorar respuesta automática",
-  vendor_logistics: "Revisar logística / importación",
-  payment_admin: "Registrar / confirmar pago",
-  supplier_reply: "Leer propuesta del proveedor",
-  client_reply: "Responder hilo comercial",
+  vendor_logistics: "Revisar logística o importación",
+  payment_admin: "Registrar o confirmar pago",
+  supplier_reply: "Revisar propuesta del proveedor",
+  client_reply: "Responder al cliente",
+  reply: "Responder",
+  wait: "Esperar",
+  review: "Revisar",
+  follow: "Dar seguimiento",
 };
 
 const EQUIPMENT_NEXT_ACTION: Record<string, string> = {
   quote_now: "Cotizar ahora",
-  needs_supplier_quote: "Requiere cotización proveedor",
+  needs_supplier_quote: "Requiere cotización de proveedor",
+  monitor: "Monitorear",
 };
 
 const EQUIPMENT_CONTACT_STATUS: Record<string, string> = {
-  no_verified_buyer_email: "Sin email verificado",
+  no_verified_buyer_email: "Sin correo verificado del comprador",
+  pending: "Pendiente",
 };
 
 const EQUIPMENT_SAFE_CHANNEL: Record<string, string> = {
   mercado_publico_bid: "Mercado Público",
-  supplier_quote_request: "Cotización proveedor",
+  supplier_quote_request: "Cotización a proveedor",
 };
 
 const EQUIPMENT_CATEGORY: Record<string, string> = {
@@ -83,7 +89,7 @@ function normalizeToken(raw: string): string {
   return raw.trim().toLowerCase().replace(/\s+/g, "_");
 }
 
-/** Returns display label and raw token for tooltips. */
+/** Etiqueta visible; no expone el token técnico en la UI. */
 export function formatOperatorToken(
   raw: string | null | undefined,
   kind: OperatorLabelKind,
@@ -93,6 +99,6 @@ export function formatOperatorToken(
     return { label: "—", raw: "" };
   }
   const table = TABLES[kind];
-  const label = table[token] ?? token.replace(/_/g, " ");
+  const label = table[token] ?? "Sin clasificar";
   return { label, raw: token };
 }

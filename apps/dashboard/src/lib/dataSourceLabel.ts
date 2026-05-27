@@ -4,9 +4,9 @@ import type { EquipmentDataSource } from "../api/commercialTypes";
 
 export function operatorBackendSourceLabel(backend: ApiBackend): string {
   if (backend === "postgres") {
-    return "Postgres mirror (read-only) — not send/outreach truth";
+    return "Espejo Postgres (solo lectura) — no define envíos ni contactos";
   }
-  return "SQLite live operator read model (via API)";
+  return "SQLite operativo en vivo (vía API)";
 }
 
 export function warmCasesSourceLabel(
@@ -14,9 +14,9 @@ export function warmCasesSourceLabel(
   metaSource: "sqlite" | "postgres_mirror",
 ): string {
   if (backend === "postgres" || metaSource === "postgres_mirror") {
-    return "Postgres mirror — previews only, not send/outreach truth";
+    return "Espejo Postgres — solo vistas previas, no autoriza envíos";
   }
-  return "SQLite live read model via API";
+  return "SQLite en vivo vía API";
 }
 
 export function contactDataSourceLabel(
@@ -24,9 +24,9 @@ export function contactDataSourceLabel(
   metaSource: ContactDataSource,
 ): string {
   if (backend === "postgres" || metaSource === "postgres_mirror") {
-    return "Postgres mirror contact intelligence — not send/outreach truth";
+    return "Contacto desde espejo Postgres — no autoriza envíos";
   }
-  return "SQLite contact intelligence via API";
+  return "Contacto desde SQLite vía API";
 }
 
 export function equipmentSourceLabel(
@@ -34,7 +34,7 @@ export function equipmentSourceLabel(
   metaSource: EquipmentDataSource,
 ): string {
   if (backend === "postgres" || metaSource === "postgres_mirror") {
-    return "Postgres mirror queue — read-only, not send/outreach truth";
+    return "Cola desde espejo Postgres — solo lectura";
   }
-  return "Active workspace queue via API (canonical CSV manifest)";
+  return "Cola activa del workspace vía API";
 }

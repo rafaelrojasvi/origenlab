@@ -95,15 +95,15 @@ export function EquipmentOpportunitiesTable({
   return (
     <TableSection
       title="Oportunidades de equipos"
-      subtitle="Equipment-first operator queue · manifest-driven read model."
+      subtitle="Cola de licitaciones y equipos · solo lectura desde manifiesto."
       dataSourceLabel={sourceLabel}
       loading={loading}
       error={error}
       onRetry={onRetry}
       empty={!loading && !error && loadedCount === 0}
-      emptyMessage="No equipment opportunities returned from the API."
+      emptyMessage="No hay oportunidades de equipos desde la API."
       filterEmpty={!loading && !error && loadedCount > 0 && visibleRows.length === 0}
-      filterEmptyMessage="No equipment opportunities match the current search."
+      filterEmptyMessage="Ninguna oportunidad coincide con la búsqueda actual."
       reducedNote={
         meta?.reduced_mode && meta.note
           ? `Reduced mode: ${meta.note}`

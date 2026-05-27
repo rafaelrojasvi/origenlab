@@ -42,10 +42,10 @@ export function OperatorWarningsList({
 
   return (
     <section className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-4">
-      <h2 className="text-sm font-semibold text-amber-950">Warnings</h2>
+      <h2 className="text-sm font-semibold text-amber-950">Advertencias</h2>
       <p className="mt-1 text-xs text-amber-900">
-        Email addresses open a read-only contact profile (GET only). No send or mailto from
-        warnings.
+        Los correos abren un perfil de solo lectura (solo GET). Sin enviar ni enlaces mailto desde
+        las advertencias.
       </p>
       <ul className="mt-2 list-disc space-y-1 pl-5">
         {warnings.map((w) => (
@@ -53,7 +53,7 @@ export function OperatorWarningsList({
         ))}
       </ul>
       {moreCount > 0 ? (
-        <p className="mt-2 text-xs text-amber-900">+{moreCount} more warnings</p>
+        <p className="mt-2 text-xs text-amber-900">+{moreCount} advertencias más</p>
       ) : null}
     </section>
   );

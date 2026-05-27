@@ -10,10 +10,10 @@ describe("operatorLabels", () => {
 
   it("maps equipment action and contact status tokens", () => {
     expect(formatOperatorToken("needs_supplier_quote", "equipment_next_action").label).toBe(
-      "Requiere cotización proveedor",
+      "Requiere cotización de proveedor",
     );
     expect(formatOperatorToken("no_verified_buyer_email", "equipment_contact_status").label).toBe(
-      "Sin email verificado",
+      "Sin correo verificado del comprador",
     );
   });
 
@@ -25,9 +25,9 @@ describe("operatorLabels", () => {
     expect(formatOperatorToken("payment_admin", "warm_next_action").label).toContain("pago");
   });
 
-  it("falls back to spaced raw token for unknown values", () => {
+  it("falls back to Sin clasificar for unknown values", () => {
     const out = formatOperatorToken("custom_token", "warm_status");
     expect(out.raw).toBe("custom_token");
-    expect(out.label).toBe("custom token");
+    expect(out.label).toBe("Sin clasificar");
   });
 });

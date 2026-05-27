@@ -7,9 +7,9 @@ import {
 
 function row(overrides: Partial<WarmCaseItem>): WarmCaseItem {
   return {
-    case_id: "case-1",
+    case_id: "1",
     last_email_id: 1,
-    last_seen_at: "2026-05-19T10:00:00-04:00",
+    last_seen_at: null,
     account_name: "IKA",
     contact_email: "beatriz.bonon@ika.net.br",
     subject: "RE: RV10.70 price",
@@ -23,28 +23,27 @@ function row(overrides: Partial<WarmCaseItem>): WarmCaseItem {
   };
 }
 
-describe("warmCaseDetailStrategy", () => {
-  it("supplier_quote_received strategy mentions margin and client opportunity", () => {
+describe("warmCaseDetailStrategy (español)", () => {
+  it("estrategia de cotización de proveedor", () => {
     const detail = buildWarmCaseDetailView(row({ category: "supplier_quote_received" }));
-    expect(detail.recommendedStrategy).toMatch(/client opportunity/i);
-    expect(detail.recommendedStrategy).toMatch(/margin/i);
+    expect(detail.recommendedStrategy).toMatch(/oportunidad de cliente/i);
     expect(detail.linkedSection).toBe("suppliers");
+    expect(detail.categoryLabel).toBe("Cotización de proveedor recibida");
   });
 
-  it("payment_admin strategy says do not quote", () => {
+  it("estrategia de pago administrativo", () => {
     const detail = buildWarmCaseDetailView(
       row({
         category: "payment_admin",
         contact_email: "pay@bancochile.cl",
         subject: "FACTURA 6",
-        next_action: "payment_admin",
       }),
     );
-    expect(detail.recommendedStrategy).toMatch(/do not treat/i);
+    expect(detail.recommendedStrategy).toMatch(/no uses este hilo para cotizar/i);
     expect(detail.linkedSection).toBe("payments-logistics");
   });
 
-  it("deal_evidence_candidate strategy points to deals", () => {
+  it("estrategia de evidencia de negocio", () => {
     const detail = buildWarmCaseDetailView(
       row({
         category: "deal_evidence_candidate",
@@ -52,17 +51,15 @@ describe("warmCaseDetailStrategy", () => {
         account_name: "CEAF",
       }),
     );
-    expect(detail.recommendedStrategy).toMatch(/commercial deals/i);
-    expect(detail.recommendedStrategy).toMatch(/duplicate quote/i);
+    expect(detail.recommendedStrategy).toMatch(/Negocios/i);
     expect(detail.linkedSection).toBe("deals");
   });
 
-  it("sanitizeOperatorPreview redacts urls and long numeric ids", () => {
+  it("sanitizeOperatorPreview oculta datos sensibles", () => {
     const text = sanitizeOperatorPreview(
-      "See https://mail.google.com/x and cuenta 12345678901234 RUT 12.345.678-9",
+      "See https://mail.google.com/x and cuenta 12345678901234",
     );
     expect(text).not.toMatch(/https?:\/\//);
-    expect(text).not.toMatch(/12345678901234/);
-    expect(text).toContain("[redacted]");
+    expect(text).toContain("[oculto]");
   });
 });

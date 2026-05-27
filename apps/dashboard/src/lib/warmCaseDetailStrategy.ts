@@ -30,11 +30,11 @@ const SENSITIVE_PATTERNS: RegExp[] = [
   /\b(?:rut|beneficiario|titular)\s*[:#]?\s*[\d.\-kK]+/gi,
 ];
 
-/** Redact URLs, IDs, and bank-like fragments from operator previews. */
+/** Oculta URLs, IDs y datos bancarios en vistas previas. */
 export function sanitizeOperatorPreview(text: string, maxLen = 280): string {
   let cleaned = safePreviewText(text, maxLen + 40);
   for (const pattern of SENSITIVE_PATTERNS) {
-    cleaned = cleaned.replace(pattern, "[redacted]");
+    cleaned = cleaned.replace(pattern, "[oculto]");
   }
   return truncate(cleaned.trim(), maxLen);
 }
@@ -61,12 +61,6 @@ function linkedSectionForCategory(category: WarmCaseCategory): DashboardSection 
     case "waiting_client":
     case "waiting_supplier":
       return "inbox";
-    case "internal_admin":
-    case "system_noise":
-    case "bounce_problem":
-    case "bounce":
-    case "auto_reply":
-      return "inbox";
     default:
       return "inbox";
   }
@@ -77,94 +71,94 @@ function strategyForCategory(category: WarmCaseCategory): { summary: string; str
     case "supplier_quote_received":
       return {
         summary:
-          "Supplier pricing or availability arrived. Tie it to the active client opportunity before quoting.",
+          "Llegó un precio o disponibilidad del proveedor. Conéctalo con la oportunidad de cliente activa antes de cotizar.",
         strategy:
-          "Link this supplier price to the matching client opportunity. Confirm specs, margin, shipping, and lead time. Prepare the client quote only after numbers are reconciled — do not send from the dashboard.",
+          "Relaciona este precio con la oportunidad de cliente correspondiente. Confirma especificaciones, margen, flete y plazo. Prepara la cotización al cliente solo cuando los números estén claros — no se envía correo desde este panel.",
       };
     case "supplier_followup":
     case "supplier_reply":
       return {
-        summary: "Supplier thread needs a read and reconciliation with the client side.",
+        summary: "El proveedor respondió y hay que leer y cuadrar con el lado cliente.",
         strategy:
-          "Read the supplier response, close any missing technical or commercial gaps, and update the client quote or internal notes. Keep supplier traffic out of the client inbox view.",
+          "Lee la respuesta del proveedor, cierra datos técnicos o comerciales faltantes y actualiza la cotización o notas internas. Mantén este hilo fuera de la vista de clientes.",
       };
     case "payment_admin":
     case "payment_received":
       return {
-        summary: "Payment or banking admin thread — operational, not a sales quote.",
+        summary: "Hilo de pago o datos bancarios — operativo, no es una cotización comercial.",
         strategy:
-          "Register or confirm the payment / bank detail in your operational workflow. Link to the commercial deal if one exists. Do not treat this as a quoting thread and do not originate client outreach here.",
+          "Registra o confirma el pago en tu flujo operativo. Si existe, vincúlalo al negocio comercial. No uses este hilo para cotizar ni para contactar al cliente.",
       };
     case "logistics_admin":
     case "vendor_logistics":
       return {
-        summary: "Logistics / import / carrier admin — unblock freight or account setup.",
+        summary: "Logística, importación o transporte — desbloquear flete o cuenta.",
         strategy:
-          "Resolve the DHL, import account, or freight blocker and link progress to the deal timeline. This is not a client opportunity — keep it in payments & logistics until cleared.",
+          "Resuelve el bloqueo con DHL, cuenta de importación o flete y registra el avance en la línea de tiempo del negocio. No es una oportunidad de venta.",
       };
     case "deal_evidence_candidate":
       return {
-        summary: "Thread looks like purchase-order or deal evidence, not a new lead.",
+        summary: "Parece orden de compra o evidencia de un negocio ya en curso, no un lead nuevo.",
         strategy:
-          "Open the commercial deals mirror and align this thread to the existing deal timeline. Do not open a duplicate quote or parallel opportunity.",
+          "Abre Negocios y alinea este hilo con el negocio existente. No abras una cotización duplicada ni una oportunidad paralela.",
       };
     case "client_opportunity":
     case "opportunity":
       return {
-        summary: "Client-side opportunity signal — validate before quoting.",
+        summary: "Señal de oportunidad del lado cliente — validar antes de cotizar.",
         strategy:
-          "Validate specifications, target price band, and supplier availability. Gather supplier quotes if needed, then prepare the client quote offline — read-only here.",
+          "Valida especificaciones, rango de precio y disponibilidad de proveedor. Pide cotizaciones a proveedores si hace falta y prepara la oferta al cliente fuera de este panel.",
       };
     case "client_response":
     case "client_reply":
       return {
-        summary: "Client is waiting on a response or clarification.",
+        summary: "El cliente espera respuesta o aclaración.",
         strategy:
-          "Respond to the client with status and any missing specs. Check whether supplier quotes or internal margin review are still open before committing dates.",
+          "Responde con estado y datos que falten. Revisa si aún hay cotizaciones de proveedor o revisión de margen antes de comprometer plazos.",
       };
     case "quote_sent":
       return {
-        summary: "Quote already sent — monitor client follow-up.",
+        summary: "La cotización ya se envió — monitorear respuesta del cliente.",
         strategy:
-          "Track client reply and supplier lead times. Nudge internally if the quote window is stalling; no resend from this dashboard.",
+          "Sigue la respuesta del cliente y los plazos del proveedor. Si se estanca el plazo acordado, coordina internamente — no reenvíes desde aquí.",
       };
     case "waiting_supplier":
       return {
-        summary: "Ball is with the supplier.",
+        summary: "La pelota está con el proveedor.",
         strategy:
-          "Follow up with the supplier for missing price, lead time, or stock. Update the client only when you have firm numbers.",
+          "Insiste al proveedor por precio, plazo o stock faltante. Avisa al cliente solo con números firmes.",
       };
     case "waiting_client":
       return {
-        summary: "Ball is with the client.",
+        summary: "La pelota está con el cliente.",
         strategy:
-          "Wait for client confirmation or data. Light follow-up only if the agreed window passed.",
+          "Espera confirmación o datos del cliente. Seguimiento suave solo si pasó el plazo acordado.",
       };
     case "bounce_problem":
     case "bounce":
       return {
-        summary: "Delivery problem — fix addressing before outreach.",
+        summary: "Problema de entrega — corregir dirección antes de insistir.",
         strategy:
-          "Verify the contact email and suppression state. Do not retry outreach until the address is confirmed in the pipeline.",
+          "Verifica el correo y el estado de supresión en el pipeline. No reintentes contacto hasta confirmar la dirección.",
       };
     case "system_noise":
     case "auto_reply":
       return {
-        summary: "Automated or low-value noise — no commercial action.",
+        summary: "Ruido automático o de bajo valor — sin acción comercial.",
         strategy:
-          "No operator action required unless it masks a real client thread. Keep hidden from client queues.",
+          "No requiere acción salvo que oculte un hilo real de cliente. Mantén fuera de las colas de clientes.",
       };
     case "internal_admin":
       return {
-        summary: "Internal operator note — not client-facing.",
+        summary: "Nota interna de operación — no es frente al cliente.",
         strategy:
-          "Handle in internal admin context only. Do not classify as client response or opportunity.",
+          "Trátalo solo como administración interna. No lo clasifiques como respuesta u oportunidad de cliente.",
       };
     default:
       return {
-        summary: "Warm thread needs triage by role category.",
+        summary: "Hilo tibio que requiere clasificación por rol.",
         strategy:
-          "Review the role category and move work to the matching sidebar section. All actions remain outside this read-only dashboard.",
+          "Revisa la categoría y muévelo a la sección correcta del menú. Todas las acciones quedan fuera de este panel de solo lectura.",
       };
   }
 }
@@ -173,7 +167,7 @@ export function buildWarmCaseDetailView(row: WarmCaseItem): WarmCaseDetailView {
   const category = row.category;
   const { summary, strategy } = strategyForCategory(category);
   const org = row.account_name?.trim() || row.contact_email;
-  const subjectBit = row.subject?.trim() ? sanitizeOperatorPreview(row.subject, 72) : "Warm thread";
+  const subjectBit = row.subject?.trim() ? sanitizeOperatorPreview(row.subject, 72) : "Hilo tibio";
   const caseTitle = `${org}: ${subjectBit}`;
   const linkedSection = linkedSectionForCategory(category);
   const equipment = row.equipment_signal?.trim()
@@ -182,10 +176,10 @@ export function buildWarmCaseDetailView(row: WarmCaseItem): WarmCaseDetailView {
 
   let inferredSummary = summary;
   if (equipment) {
-    inferredSummary = `${summary} Equipment signal: ${equipment}.`;
+    inferredSummary = `${summary} Señal de equipo: ${equipment}.`;
   }
   if (row.status === "problem") {
-    inferredSummary = `${inferredSummary} Status flagged as problem — prioritize resolution.`;
+    inferredSummary = `${inferredSummary} Estado marcado como problema — priorizar resolución.`;
   }
 
   return {

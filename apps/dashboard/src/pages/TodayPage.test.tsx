@@ -94,6 +94,10 @@ vi.mock("../api/mirrorCommercialClient", () => ({
   fetchCommercialDealsMirror: vi.fn(),
 }));
 
+vi.mock("../lib/logo/threeBodyCanvasRunner", () => ({
+  startThreeBodyCanvas: vi.fn(() => () => {}),
+}));
+
 import {
   fetchContactProfile,
   fetchEquipmentOpportunities,
@@ -133,18 +137,18 @@ describe("DashboardApp (legacy TodayPage tests)", () => {
     vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000");
     mockAllOk();
     render(<DashboardApp />);
-    screen.getByText(/Local dev misconfiguration/);
+    screen.getByText(/Configuración local incorrecta/);
   });
 
   it("does not expose sqlite paths or raw body fields", async () => {
     mockAllOk();
     render(<DashboardApp />);
-    await waitFor(() => screen.getByText("READY"));
+    await waitFor(() => screen.getByText("LISTO"));
     expect(screen.queryByText(/\/tmp\/emails\.sqlite/)).toBeNull();
     expect(screen.queryByText(/body_preview/)).toBeNull();
 
-    const nav = screen.getByRole("navigation", { name: "Dashboard navigation" });
-    fireEvent.click(within(nav).getByRole("link", { name: "Opportunities" }));
+    const nav = screen.getByRole("navigation", { name: "Navegación del panel" });
+    fireEvent.click(within(nav).getByRole("link", { name: "Oportunidades" }));
     await waitFor(() => screen.getByText("Hospital Regional"));
     expect(screen.queryByText(/\/secret\/path/)).toBeNull();
   });
@@ -183,7 +187,7 @@ describe("DashboardApp (legacy TodayPage tests)", () => {
     render(<DashboardApp />);
 
     await waitFor(() => {
-      screen.getByText("Postgres mirror");
+      screen.getByText("Espejo Postgres");
     });
   });
 
@@ -216,16 +220,16 @@ describe("DashboardApp (legacy TodayPage tests)", () => {
     });
 
     render(<DashboardApp />);
-    await waitFor(() => screen.getByText("READY"));
+    await waitFor(() => screen.getByText("LISTO"));
 
-    const nav = screen.getByRole("navigation", { name: "Dashboard navigation" });
-    fireEvent.click(within(nav).getByRole("link", { name: "Inbox triage" }));
+    const nav = screen.getByRole("navigation", { name: "Navegación del panel" });
+    fireEvent.click(within(nav).getByRole("link", { name: "Bandeja de revisión" }));
     await waitFor(() => screen.getByText("buyer@acme.cl"));
 
     fireEvent.click(screen.getByRole("button", { name: "buyer@acme.cl" }));
 
     await waitFor(() => {
-      screen.getByText("Read-only contact profile");
+      screen.getByText("Perfil de contacto · solo lectura");
       screen.getByText("Buyer");
     });
   });

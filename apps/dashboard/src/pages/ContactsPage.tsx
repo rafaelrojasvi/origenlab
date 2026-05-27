@@ -22,13 +22,13 @@ export function ContactsPage() {
 
   return (
     <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-5 py-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-brand-900">Contacts</h2>
+      <h2 className="text-lg font-semibold text-brand-900">Contactos</h2>
       <p className="mt-1 text-sm text-[var(--color-muted)]">
-        Read-only profiles from loaded warm cases and equipment rows. No compose or send actions.
+        Perfiles de solo lectura desde casos tibios y licitaciones cargados. Sin redactar ni enviar.
       </p>
       {contactEmails.length === 0 ? (
         <p className="mt-4 text-sm text-[var(--color-muted)]" role="status">
-          No contact emails in the current load. Refresh after mirror sync.
+          No hay correos en la carga actual. Actualice después de sincronizar el espejo.
         </p>
       ) : (
         <ul className="mt-4 divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">

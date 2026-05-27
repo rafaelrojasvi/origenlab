@@ -144,7 +144,7 @@ describe("Dashboard-2 safety (mounted Today)", () => {
     expect(dataLayer).not.toMatch(/\/mirror\/commercial\/purchase-events/);
     expect(dataLayer).not.toMatch(/fetchPurchase/);
     expect(dashboardAppSource).toMatch(/ContactProfilePanel|ContactsPage/);
-    expect(commercialMountedSources.join("\n")).toMatch(/Read-only contact profile/);
+    expect(commercialMountedSources.join("\n")).toMatch(/Perfil de contacto · solo lectura/);
   });
 
   it("mirrorCommercialClient uses only GET /mirror/commercial/deals", () => {
@@ -182,7 +182,7 @@ describe("Dashboard-2 safety (mounted Today)", () => {
       eager: true,
     })["../components/commercial/CaseDetailDrawer.tsx"] as string;
     expect(drawerSource).not.toMatch(/gmail_url|mailto:|window\.open/);
-    expect(drawerSource).toMatch(/Read-only case summary/);
+    expect(drawerSource).toMatch(/Caso tibio · solo lectura/);
     expect(drawerSource).not.toMatch(/method:\s*["']POST/i);
   });
 

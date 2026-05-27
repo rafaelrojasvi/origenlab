@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { useDashboardData } from "../context/DashboardDataContext";
+import { dashboardSectionToHash } from "../lib/dashboardHashRoute";
+import type { DashboardSection } from "../lib/dashboardNav";
 import { computeTodaySummaryCounts } from "../lib/todaySummaryCounts";
 import { verdictTone } from "../lib/verdictStyles";
 import { OperatorWarningsList } from "../components/operator/OperatorWarningsList";
@@ -16,29 +18,49 @@ function MirrorReadinessNote({
   if (!mirrorBackend) {
     return (
       <p className="text-sm text-[var(--color-muted)]">
-        Outbound readiness: <span className="font-medium text-slate-800">{readiness}</span>
+        Preparación de salida: <span className="font-medium text-slate-800">{readiness}</span>
       </p>
     );
   }
   return (
     <p className="text-sm text-[var(--color-muted)]">
-      Mirror freshness: <span className="font-medium text-slate-800">{readiness}</span>
+      Frescura del espejo: <span className="font-medium text-slate-800">{readiness}</span>
       <span className="mt-1 block text-xs text-sky-800">
-        Label reflects Postgres mirror sync, not SQLite send approval.
+        Refleja la última sincronización al espejo Postgres, no la aprobación de envío en SQLite.
       </span>
     </p>
   );
 }
 
-function SummaryCard({ label, value, hint }: { label: string; value: number; hint?: string }) {
+function navigateToSection(section: DashboardSection) {
+  window.location.hash = dashboardSectionToHash(section);
+}
+
+function SummaryCard({
+  label,
+  value,
+  hint,
+  section,
+}: {
+  label: string;
+  value: number;
+  hint?: string;
+  section: DashboardSection;
+}) {
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-4 shadow-sm">
+    <button
+      type="button"
+      onClick={() => navigateToSection(section)}
+      className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-4 text-left shadow-sm transition-all hover:border-brand-600/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      aria-label={`${label}: ${value}. Abrir sección.`}
+    >
       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         {label}
       </p>
       <p className="mt-2 text-3xl font-semibold text-brand-900">{value}</p>
       {hint ? <p className="mt-1 text-xs text-[var(--color-muted)]">{hint}</p> : null}
-    </div>
+      <p className="mt-2 text-xs font-medium text-brand-700">Ver sección →</p>
+    </button>
   );
 }
 
@@ -83,14 +105,14 @@ export function TodaySummaryPage() {
           className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
           role="alert"
         >
-          <p className="font-medium">Could not load operator status</p>
+          <p className="font-medium">No se pudo cargar el estado del operador</p>
           <p className="mt-1 break-words">{panelError}</p>
           <button
             type="button"
             onClick={() => void loadPanel()}
             className="mt-3 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-50"
           >
-            Retry
+            Reintentar
           </button>
         </div>
       ) : null}
@@ -108,26 +130,26 @@ export function TodaySummaryPage() {
               >
                 {tone.label}
               </span>
-              <span className="text-sm font-medium">Operator verdict</span>
+              <span className="text-sm font-medium">Estado del operador</span>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <p className="text-sm">
-                <span className="text-[var(--color-muted)]">Service mode:</span>{" "}
+                <span className="text-[var(--color-muted)]">Modo del servicio:</span>{" "}
                 <code className="text-xs">{data.health.mode}</code>
               </p>
               <p className="text-sm">
-                <span className="text-[var(--color-muted)]">Health:</span>{" "}
-                {data.health.ok ? "ok" : "degraded"}
+                <span className="text-[var(--color-muted)]">Salud:</span>{" "}
+                {data.health.ok ? "ok" : "degradado"}
               </p>
               {data.operator.campaign_mode ? (
                 <p className="text-sm">
-                  <span className="text-[var(--color-muted)]">Campaign:</span>{" "}
+                  <span className="text-[var(--color-muted)]">Campaña:</span>{" "}
                   <span className="font-medium">{data.operator.campaign_mode}</span>
                 </p>
               ) : null}
               {data.operator.operator_focus ? (
                 <p className="text-sm">
-                  <span className="text-[var(--color-muted)]">Focus:</span>{" "}
+                  <span className="text-[var(--color-muted)]">Foco:</span>{" "}
                   <span className="font-medium">{data.operator.operator_focus}</span>
                 </p>
               ) : null}
@@ -148,13 +170,13 @@ export function TodaySummaryPage() {
             />
           ) : (
             <p className="text-sm text-[var(--color-muted)]" role="status">
-              No warnings from operator status.
+              Sin alertas del estado del operador.
             </p>
           )}
 
           {data.health.backend === "sqlite" ? (
             <p className="text-sm text-[var(--color-muted)]" role="status">
-              SQLite runtime configured on API server (path not shown in dashboard).
+              El servidor usa SQLite local (la ruta no se muestra en el panel).
             </p>
           ) : null}
         </>
@@ -162,41 +184,48 @@ export function TodaySummaryPage() {
 
       <section aria-labelledby="today-summary-heading">
         <h2 id="today-summary-heading" className="text-lg font-semibold text-brand-900">
-          Queue summary
+          Resumen de colas
         </h2>
         <p className="mt-1 text-sm text-[var(--color-muted)]">
-          Counts from loaded warm cases, equipment opportunities, and commercial deals mirror.
+          Conteos según los datos cargados: correos tibios, oportunidades de equipos y negocios
+          comerciales.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <SummaryCard
-            label="Client opportunities"
+            label="Oportunidades de clientes"
             value={counts.clientOpportunities}
-            hint="client_opportunity · client_response"
+            hint="Oportunidad o respuesta de cliente"
+            section="inbox"
           />
           <SummaryCard
-            label="Supplier quotes / follow-ups"
+            label="Cotizaciones y seguimientos de proveedores"
             value={counts.supplierQuotesFollowups}
-            hint="supplier_quote_received · supplier_followup"
+            hint="Cotización recibida o seguimiento"
+            section="suppliers"
           />
           <SummaryCard
-            label="Payments & logistics"
+            label="Pagos y logística"
             value={counts.paymentsLogistics}
-            hint="payment_admin · logistics_admin"
+            hint="Administración de pago o transporte"
+            section="payments-logistics"
           />
           <SummaryCard
-            label="Deal evidence (warm)"
+            label="Evidencia de negocio"
             value={counts.dealEvidence}
-            hint="deal_evidence_candidate"
+            hint="Hilos ligados a un negocio en curso"
+            section="deals"
           />
           <SummaryCard
-            label="Deal margin blockers"
+            label="Bloqueos de margen"
             value={counts.dealBlockers}
-            hint="Commercial deals mirror"
+            hint="Espejo de negocios comerciales"
+            section="deals"
           />
           <SummaryCard
-            label="Tenders / equipment"
+            label="Licitaciones / equipos"
             value={counts.tendersEquipment}
-            hint="Equipment opportunities queue"
+            hint="Cola de oportunidades de equipos"
+            section="tenders"
           />
         </div>
       </section>

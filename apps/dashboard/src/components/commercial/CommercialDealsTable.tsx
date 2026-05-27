@@ -68,38 +68,38 @@ export function CommercialDealsTable({
 
   return (
     <TableSection
-      title="Commercial deals"
-      subtitle="Redacted commercial view · Postgres mirror only."
-      dataSourceLabel="Postgres mirror · Read-only · Redacted commercial view"
+      title="Negocios comerciales"
+      subtitle="Vista comercial redactada · solo espejo Postgres."
+      dataSourceLabel="Espejo Postgres · solo lectura · vista redactada"
       loading={loading}
       error={error}
       onRetry={onRetry}
       empty={showEmpty}
-      emptyMessage="Commercial deals mirror not synced yet."
+      emptyMessage="El espejo de negocios aún no está sincronizado."
       reducedNote={
         data?.read_only
-          ? "Summary amounts only. No payment IDs, contact emails, PO numbers, evidence, or local paths."
+          ? "Solo montos resumidos. Sin IDs de pago, correos, órdenes de compra, evidencia ni rutas locales."
           : undefined
       }
     >
       {showTable ? (
         <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm">
           <p className="border-b border-[var(--color-border)] px-3 py-2 text-xs text-sky-900">
-            Postgres mirror · Read-only · Redacted commercial view
+            Espejo Postgres · solo lectura · vista redactada
             {data && data.total > items.length
-              ? ` · showing ${items.length} of ${data.total}`
+              ? ` · mostrando ${items.length} de ${data.total}`
               : data
-                ? ` · ${data.total} deal(s)`
+                ? ` · ${data.total} negocio(s)`
                 : null}
           </p>
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--color-muted)]">
               <tr>
-                <th className="px-3 py-2 font-medium">Client</th>
-                <th className="px-3 py-2 font-medium">Supplier</th>
-                <th className="px-3 py-2 font-medium">Deal</th>
-                <th className="px-3 py-2 font-medium">Margin</th>
-                <th className="px-3 py-2 font-medium">Recon / freight</th>
+                <th className="px-3 py-2 font-medium">Cliente</th>
+                <th className="px-3 py-2 font-medium">Proveedor</th>
+                <th className="px-3 py-2 font-medium">Negocio</th>
+                <th className="px-3 py-2 font-medium">Margen</th>
+                <th className="px-3 py-2 font-medium">Concil. / flete</th>
                 <th className="px-3 py-2 text-right font-medium">Net CLP</th>
                 <th className="px-3 py-2 text-right font-medium">Gross CLP</th>
                 <th className="px-3 py-2 text-right font-medium">Received CLP</th>
@@ -107,8 +107,8 @@ export function CommercialDealsTable({
                 <th className="px-3 py-2 text-right font-medium">Paid EUR</th>
                 <th className="px-3 py-2 text-right font-medium">Margin net</th>
                 <th className="px-3 py-2 text-right font-medium">Margin %</th>
-                <th className="px-3 py-2 font-medium">Blockers</th>
-                <th className="px-3 py-2 font-medium">Updated</th>
+                <th className="px-3 py-2 font-medium">Bloqueos</th>
+                <th className="px-3 py-2 font-medium">Actualizado</th>
               </tr>
             </thead>
             <tbody>

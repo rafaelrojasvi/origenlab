@@ -13,8 +13,8 @@ export function InboxTriagePage() {
       error={warmError}
       onRetry={() => void loadWarm()}
       onContactSelect={setContactEmail}
-      title="Inbox triage"
-      subtitle="All warm threads · use view presets and filters by role category."
+      title="Bandeja de revisión"
+      subtitle="Todos los hilos tibios · use las vistas y filtros por rol."
       initialFilters={{ preset: "todo", hideInternalContacts: false }}
     />
   );

@@ -26,7 +26,7 @@ export function ContactEmailButton({
         className ??
         "text-left font-medium text-brand-700 underline decoration-brand-300 underline-offset-2 hover:text-brand-900 hover:decoration-brand-500"
       }
-      title="View read-only contact profile"
+      title="Ver perfil de contacto (solo lectura)"
     >
       {display}
     </button>

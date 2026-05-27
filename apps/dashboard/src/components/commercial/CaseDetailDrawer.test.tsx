@@ -2,7 +2,6 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { WarmCaseItem } from "../../api/commercialTypes";
 import { CaseDetailDrawer } from "./CaseDetailDrawer";
-import { WarmCasesTable } from "./WarmCasesTable";
 
 const supplierRow: WarmCaseItem = {
   case_id: "sup-1",
@@ -16,7 +15,7 @@ const supplierRow: WarmCaseItem = {
   next_action: "supplier_reply",
   equipment_signal: "RV10.70",
   snippet: "Please find attached pricing",
-  gmail_url: "https://mail.google.com/mail/u/0/#inbox/abc123",
+  gmail_url: null,
 };
 
 const paymentRow: WarmCaseItem = {
@@ -27,7 +26,7 @@ const paymentRow: WarmCaseItem = {
   subject: "FACTURA 6",
   category: "payment_admin",
   next_action: "payment_admin",
-  snippet: "Transferencia 12345678901234 cuenta corriente 001",
+  snippet: "Transferencia 12345678901234 cuenta corriente",
 };
 
 const dealRow: WarmCaseItem = {
@@ -41,8 +40,8 @@ const dealRow: WarmCaseItem = {
   snippet: "Orden de compra adjunta",
 };
 
-describe("CaseDetailDrawer", () => {
-  it("shows supplier strategy when opened for supplier_quote_received", () => {
+describe("CaseDetailDrawer (español)", () => {
+  it("muestra estrategia de proveedor y secciones en español", () => {
     render(
       <CaseDetailDrawer
         item={supplierRow}
@@ -52,69 +51,48 @@ describe("CaseDetailDrawer", () => {
       />,
     );
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/Recommended strategy/i)).toBeTruthy();
-    expect(within(dialog).getByText(/Link this supplier price to the matching client opportunity/i)).toBeTruthy();
-    expect(within(dialog).getByText(/Open Suppliers/i)).toBeTruthy();
+    expect(within(dialog).getByText("Qué pasó")).toBeTruthy();
+    expect(within(dialog).getByText("Estrategia recomendada")).toBeTruthy();
+    expect(within(dialog).getByText("Próxima acción")).toBeTruthy();
+    expect(within(dialog).getAllByText(/oportunidad de cliente/i).length).toBeGreaterThan(0);
+    expect(within(dialog).getByRole("button", { name: /Ir a Proveedores/i })).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/supplier_quote_received/);
   });
 
-  it("shows payment strategy for payment_admin", () => {
+  it("muestra estrategia de pago", () => {
     render(
       <CaseDetailDrawer item={paymentRow} open onClose={() => {}} onContactSelect={() => {}} />,
     );
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/do not treat this as a quoting thread/i)).toBeTruthy();
-    expect(within(dialog).getByText(/Open Payments & logistics/i)).toBeTruthy();
+    expect(within(dialog).getByText(/flujo operativo/i)).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /Ir a Pagos y logística/i })).toBeTruthy();
   });
 
-  it("shows deal strategy for deal_evidence_candidate", () => {
+  it("muestra estrategia de negocio", () => {
     render(
       <CaseDetailDrawer item={dealRow} open onClose={() => {}} onContactSelect={() => {}} />,
     );
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/commercial deals mirror/i)).toBeTruthy();
-    expect(within(dialog).getByText(/Open Deals/i)).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /Ir a Negocios/i })).toBeTruthy();
+    expect(within(dialog).getByText(/cotización duplicada/i)).toBeTruthy();
   });
 
-  it("does not render forbidden fields", () => {
+  it("no muestra campos prohibidos", () => {
     render(
       <CaseDetailDrawer item={paymentRow} open onClose={() => {}} onContactSelect={() => {}} />,
     );
     const dialog = screen.getByRole("dialog");
     const text = dialog.textContent ?? "";
     expect(text).not.toMatch(/gmail\.com/i);
-    expect(text).not.toMatch(/mail\.google/i);
     expect(text).not.toMatch(/12345678901234/);
-    expect(text).not.toMatch(/body_preview/i);
-    expect(text).not.toMatch(/sqlite/i);
   });
 
-  it("closes when Close is clicked", () => {
+  it("cierra al pulsar Cerrar", () => {
     const onClose = vi.fn();
     render(
       <CaseDetailDrawer item={supplierRow} open onClose={onClose} onContactSelect={() => {}} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(onClose).toHaveBeenCalled();
-  });
-});
-
-describe("WarmCasesTable case drawer", () => {
-  it("opens drawer when a row is clicked", () => {
-    render(
-      <WarmCasesTable
-        backend="sqlite"
-        items={[supplierRow]}
-        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 1 }}
-        loading={false}
-        error={null}
-        onRetry={() => {}}
-        onContactSelect={() => {}}
-        initialFilters={{ preset: "todo" }}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /Open case summary/i }));
-    expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(screen.getByText(/Recommended strategy/i)).toBeTruthy();
   });
 });

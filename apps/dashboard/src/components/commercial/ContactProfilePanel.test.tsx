@@ -55,7 +55,7 @@ describe("ContactProfilePanel", () => {
       />,
     );
 
-    expect(screen.getByText("Read-only contact profile")).toBeTruthy();
+    expect(screen.getByText("Perfil de contacto · solo lectura")).toBeTruthy();
     await waitFor(() => {
       expect(screen.getByText("Buyer")).toBeTruthy();
     });
@@ -78,7 +78,7 @@ describe("ContactProfilePanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Contact not found.")).toBeTruthy();
+      expect(screen.getByText("Contacto no encontrado.")).toBeTruthy();
     });
 
     vi.mocked(fetchContactProfile).mockResolvedValue({
@@ -107,7 +107,7 @@ describe("ContactProfilePanel", () => {
       warnings: [],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await waitFor(() => {
       expect(fetchContactProfile).toHaveBeenCalledTimes(2);
     });
@@ -151,7 +151,7 @@ describe("ContactProfilePanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Postgres mirror is not send\/outreach truth/)).toBeTruthy();
+      expect(screen.getByText(/espejo Postgres no define envíos/i)).toBeTruthy();
     });
   });
 
@@ -193,7 +193,7 @@ describe("ContactProfilePanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Do not repeat")).toBeTruthy();
+      expect(screen.getByText("No repetir")).toBeTruthy();
     });
     expect(screen.queryByRole("button", { name: /send|draft|archive|mark contacted/i })).toBeNull();
   });
@@ -240,12 +240,12 @@ describe("ContactProfilePanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/How to read outreach fields/i)).toBeTruthy();
+      expect(screen.getByText(/Cómo leer los campos de contacto/i)).toBeTruthy();
     });
-    expect(screen.getByText(/safety memory flag/i)).toBeTruthy();
-    expect(screen.getByText(/Gmail Sent backfill/i)).toBeTruthy();
-    expect(screen.getByText(/manual sidecar/i)).toBeTruthy();
-    expect(screen.getByText(/— \(no sidecar row\)/)).toBeTruthy();
-    expect(screen.getByText(/Sent history shows prior outbound/i)).toBeTruthy();
+    expect(screen.getByText(/bandera de seguridad/i)).toBeTruthy();
+    expect(screen.getByText(/Gmail Enviados/i)).toBeTruthy();
+    expect(screen.getByText(/registro manual/i)).toBeTruthy();
+    expect(screen.getByText(/sin registro lateral/i)).toBeTruthy();
+    expect(screen.getByText(/historial muestra envíos previos/i)).toBeTruthy();
   });
 });

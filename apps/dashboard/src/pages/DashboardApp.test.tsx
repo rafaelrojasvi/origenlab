@@ -136,6 +136,10 @@ vi.mock("../api/mirrorCommercialClient", () => ({
   fetchCommercialDealsMirror: vi.fn(),
 }));
 
+vi.mock("../lib/logo/threeBodyCanvasRunner", () => ({
+  startThreeBodyCanvas: vi.fn(() => () => {}),
+}));
+
 import {
   fetchEquipmentOpportunities,
   fetchTodayPanel,
@@ -176,7 +180,7 @@ function mockAllOk() {
 }
 
 async function navigateTo(label: string) {
-  const nav = screen.getByRole("navigation", { name: "Dashboard navigation" });
+  const nav = screen.getByRole("navigation", { name: "Navegación del panel" });
   fireEvent.click(within(nav).getByRole("link", { name: label }));
   await waitFor(() => {
     expect(screen.getByRole("heading", { level: 1, name: label })).toBeTruthy();
@@ -199,19 +203,19 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
 
   it("sidebar renders all sections", async () => {
     render(<DashboardApp />);
-    await waitFor(() => screen.getByText("READY"));
+    await waitFor(() => screen.getByText("LISTO"));
 
-    const nav = screen.getByRole("navigation", { name: "Dashboard navigation" });
+    const nav = screen.getByRole("navigation", { name: "Navegación del panel" });
     for (const label of [
-      "Today",
-      "Inbox triage",
-      "Opportunities",
-      "Deals",
-      "Suppliers",
-      "Tenders",
-      "Payments & logistics",
-      "Contacts",
-      "System",
+      "Hoy",
+      "Bandeja de revisión",
+      "Oportunidades",
+      "Negocios",
+      "Proveedores",
+      "Licitaciones",
+      "Pagos y logística",
+      "Contactos",
+      "Sistema",
     ]) {
       expect(within(nav).getByRole("link", { name: label })).toBeTruthy();
     }
@@ -219,22 +223,21 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
 
   it("Today summary renders queue count cards", async () => {
     render(<DashboardApp />);
-    await waitFor(() => screen.getByText("READY"));
+    await waitFor(() => screen.getByText("LISTO"));
 
-    screen.getByText("Queue summary");
-    screen.getByText("Client opportunities");
-    screen.getByText("Supplier quotes / follow-ups");
-    screen.getByText("Deal evidence (warm)");
-    screen.getByText("Deal evidence (warm)");
-    screen.getByText("Tenders / equipment");
+    screen.getByText("Resumen de colas");
+    screen.getByText("Oportunidades de clientes");
+    screen.getByText("Cotizaciones y seguimientos de proveedores");
+    screen.getByText("Evidencia de negocio");
+    screen.getByText("Licitaciones / equipos");
     expect(screen.queryByText(/Casos tibios \/ Warm cases/)).toBeNull();
   });
 
   it("Inbox page contains warm cases table", async () => {
     render(<DashboardApp />);
-    await waitFor(() => screen.getByText("READY"));
+    await waitFor(() => screen.getByText("LISTO"));
 
-    await navigateTo("Inbox triage");
+    await navigateTo("Bandeja de revisión");
     await waitFor(() => {
       screen.getByText("buyer@acme.cl");
     });
@@ -242,9 +245,13 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
 
   it("Suppliers page excludes client opportunities", async () => {
     render(<DashboardApp />);
-    await waitFor(() => screen.getByText("READY"));
+    await waitFor(() => screen.getByText("LISTO"));
 
-    await navigateTo("Suppliers");
+    await navigateTo("Proveedores");
+    await waitFor(() => {
+      screen.getByText("IKA");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /IKA, 1 cotización/i }));
     await waitFor(() => {
       screen.getByText("beatriz.bonon@ika.net.br");
     });
@@ -253,9 +260,9 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
 
   it("Payments & logistics excludes supplier and client rows", async () => {
     render(<DashboardApp />);
-    await waitFor(() => screen.getByText("READY"));
+    await waitFor(() => screen.getByText("LISTO"));
 
-    await navigateTo("Payments & logistics");
+    await navigateTo("Pagos y logística");
     await waitFor(() => {
       screen.getByText("serviciodetransferencias@bancochile.cl");
       screen.getByText("monica.silva@dhl.com");
@@ -266,11 +273,11 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
 
   it("Deals page renders commercial deal table", async () => {
     render(<DashboardApp />);
-    await waitFor(() => screen.getByText("READY"));
+    await waitFor(() => screen.getByText("LISTO"));
 
-    await navigateTo("Deals");
+    await navigateTo("Negocios");
     await waitFor(() => {
-      screen.getByText("Commercial deals");
+      screen.getByText("Negocios comerciales");
       screen.getByText("CEAF");
       screen.getByText("SERVA");
     });
@@ -278,10 +285,10 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
 
   it("global Refresh button reloads data", async () => {
     render(<DashboardApp />);
-    await waitFor(() => screen.getByText("READY"));
+    await waitFor(() => screen.getByText("LISTO"));
 
     vi.mocked(fetchTodayPanel).mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
 
     await waitFor(() => {
       expect(fetchTodayPanel).toHaveBeenCalled();
