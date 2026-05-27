@@ -7,6 +7,7 @@ import {
   crtopDetailFixture,
   ikaDetailFixture,
   servaBlueslickDetailFixture,
+  servaTemedDetailFixture,
 } from "../test/fixtures/catalogMirrorFixtures";
 
 vi.mock("../api/mirrorCatalogClient", () => ({
@@ -33,6 +34,9 @@ function mockDetailByKey() {
     }
     if (key === "serva-blueslick-250ml") {
       return servaBlueslickDetailFixture();
+    }
+    if (key === "serva-temed-25ml") {
+      return servaTemedDetailFixture();
     }
     return {
       table_available: true,
@@ -145,6 +149,28 @@ describe("CatalogPage", () => {
     expect(within(dialog).getByText(/Solicitud cliente: 3 unidades/)).toBeTruthy();
     expect(within(dialog).getByText(/posible precio unitario/i)).toBeTruthy();
     expect(within(dialog).getByText(/antes de cotizar/i)).toBeTruthy();
+  });
+
+  it("opens SERVA drawer with Historial comercial and formatted CLP/EUR", async () => {
+    render(<CatalogPage />);
+    await waitFor(() => screen.getByText("BlueSlick™ 250 ml"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Abrir ficha de BlueSlick/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByText("Historial comercial")).toBeTruthy();
+    expect(within(dialog).getByText("CEAF × SERVA")).toBeTruthy();
+    expect(within(dialog).getByText("Vendido a cliente")).toBeTruthy();
+    expect(within(dialog).getByText("Costo proveedor")).toBeTruthy();
+    expect(
+      within(dialog).getAllByText((_, el) => (el?.textContent ?? "").includes("$695.000")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(dialog).getAllByText((_, el) => (el?.textContent ?? "").includes("117,00")).length,
+    ).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText(/Precio interno \/ no público/).length).toBeGreaterThan(0);
+    expect(within(dialog).queryByText(/handling/i)).toBeNull();
+    expect(within(dialog).queryByText(/freight/i)).toBeNull();
   });
 
   it("rendered UI preserves common Spanish words and blocks artifacts", async () => {

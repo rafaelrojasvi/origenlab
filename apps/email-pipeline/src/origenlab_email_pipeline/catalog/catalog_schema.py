@@ -48,6 +48,17 @@ LINK_KINDS: tuple[str, ...] = (
     "purchase_event_item",
 )
 
+COMMERCIAL_HISTORY_LINE_SIDES: tuple[str, ...] = ("client", "supplier")
+
+COMMERCIAL_HISTORY_LINE_KINDS: tuple[str, ...] = (
+    "product",
+    "shipping",
+    "handling",
+    "freight",
+    "discount",
+    "other",
+)
+
 CATALOG_TABLE_NAMES: tuple[str, ...] = (
     "catalog_product",
     "catalog_product_alias",
@@ -57,6 +68,7 @@ CATALOG_TABLE_NAMES: tuple[str, ...] = (
     "catalog_supplier_offer",
     "catalog_price_snapshot",
     "catalog_product_commercial_link",
+    "catalog_product_commercial_history",
 )
 
 CATALOG_DDL = """
@@ -185,6 +197,38 @@ CREATE TABLE IF NOT EXISTS catalog_product_commercial_link (
   UNIQUE(link_kind, link_ref)
 );
 CREATE INDEX IF NOT EXISTS idx_catalog_commercial_link_product ON catalog_product_commercial_link(product_id);
+
+CREATE TABLE IF NOT EXISTS catalog_product_commercial_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  history_key TEXT NOT NULL UNIQUE,
+  product_id INTEGER NOT NULL REFERENCES catalog_product(id) ON DELETE CASCADE,
+  deal_key TEXT NOT NULL,
+  deal_label TEXT NOT NULL,
+  client_org_name TEXT,
+  supplier_org_name TEXT,
+  line_side TEXT NOT NULL CHECK (line_side IN ('client', 'supplier')),
+  line_kind TEXT NOT NULL CHECK (line_kind IN (
+    'product', 'shipping', 'handling', 'freight', 'discount', 'other'
+  )),
+  quantity TEXT,
+  unit TEXT,
+  currency TEXT,
+  amount_net_clp INTEGER,
+  amount_decimal TEXT,
+  amount_minor INTEGER,
+  unit_price_decimal TEXT,
+  total_price_decimal TEXT,
+  margin_status TEXT,
+  deal_status TEXT,
+  is_public_safe INTEGER NOT NULL DEFAULT 0 CHECK (is_public_safe IN (0, 1)),
+  source_summary TEXT,
+  confidence TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_catalog_commercial_history_product
+  ON catalog_product_commercial_history(product_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_commercial_history_deal
+  ON catalog_product_commercial_history(deal_key);
 """
 
 

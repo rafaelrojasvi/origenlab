@@ -38,6 +38,7 @@ def _build_catalog_fixture() -> dict[str, Any]:
     offers: list[dict[str, Any]] = []
     snapshots: list[dict[str, Any]] = []
     links: list[dict[str, Any]] = []
+    commercial_history: list[dict[str, Any]] = []
 
     for prod in seed["products"]:
         pk = prod["product_key"]
@@ -102,6 +103,8 @@ def _build_catalog_fixture() -> dict[str, Any]:
             )
         for link in prod.get("commercial_links") or []:
             links.append({"product_key": pk, **link})
+        for hist in prod.get("commercial_history") or []:
+            commercial_history.append({"product_key": pk, **hist})
 
     return {
         "products": products,
@@ -112,6 +115,7 @@ def _build_catalog_fixture() -> dict[str, Any]:
         "offers": offers,
         "snapshots": snapshots,
         "links": links,
+        "commercial_history": commercial_history,
     }
 
 
@@ -129,6 +133,7 @@ class CatalogFakeConn(MirrorFakeConn):
         self.tables[("catalog", "supplier_offer")] = True
         self.tables[("catalog", "price_snapshot")] = True
         self.tables[("catalog", "product_commercial_link")] = True
+        self.tables[("catalog", "product_commercial_history")] = True
         self.products: list[dict[str, Any]] = fx["products"]
         self.categories: list[dict[str, Any]] = fx["categories"]
         self.aliases: list[dict[str, Any]] = fx["aliases"]
@@ -137,6 +142,7 @@ class CatalogFakeConn(MirrorFakeConn):
         self.offers: list[dict[str, Any]] = fx["offers"]
         self.snapshots: list[dict[str, Any]] = fx["snapshots"]
         self.links: list[dict[str, Any]] = fx["links"]
+        self.commercial_history: list[dict[str, Any]] = fx["commercial_history"]
         if broken_prose:
             self._apply_legacy_broken_prose_fixture()
 
@@ -287,6 +293,19 @@ class CatalogFakeConn(MirrorFakeConn):
         if "from catalog.product_commercial_link" in s:
             key = str(p[0])
             rows = [r for r in self.links if r["product_key"] == key]
+            return _FakeCursor(rows)
+
+        if "from catalog.product_commercial_history" in s:
+            key = str(p[0])
+            rows = [r for r in self.commercial_history if r["product_key"] == key]
+            rows.sort(
+                key=lambda r: (
+                    r.get("deal_key") or "",
+                    0 if (r.get("line_side") or "") == "supplier" else 1,
+                    r.get("line_kind") or "",
+                    r.get("history_key") or "",
+                )
+            )
             return _FakeCursor(rows)
 
         if "from catalog.product where" in s:

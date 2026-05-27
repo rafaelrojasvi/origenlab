@@ -61,6 +61,13 @@ _TEXT_COLUMNS_BY_TABLE: dict[str, tuple[str, ...]] = {
     ),
     "price_snapshot": ("price_notes", "amount_decimal"),
     "product_commercial_link": ("link_ref",),
+    "product_commercial_history": (
+        "deal_label",
+        "source_summary",
+        "client_org_name",
+        "supplier_org_name",
+        "amount_decimal",
+    ),
 }
 
 

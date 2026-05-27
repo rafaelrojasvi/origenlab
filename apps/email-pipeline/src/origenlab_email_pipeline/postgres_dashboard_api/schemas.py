@@ -366,6 +366,40 @@ class CatalogCommercialLinkRow(BaseModel):
     confidence: str
 
 
+class CatalogProductCommercialHistoryRow(BaseModel):
+    history_key: str
+    deal_key: str
+    deal_label: str
+    client_org_name: str | None = None
+    supplier_org_name: str | None = None
+    line_side: str
+    line_kind: str
+    quantity: str | None = None
+    unit: str | None = None
+    currency: str | None = None
+    amount_net_clp: int | None = None
+    amount_decimal: str | None = None
+    amount_minor: int | None = None
+    unit_price_decimal: str | None = None
+    total_price_decimal: str | None = None
+    margin_status: str | None = None
+    deal_status: str | None = None
+    is_public_safe: bool = False
+    source_summary: str | None = None
+    confidence: str
+
+    @field_validator(
+        "deal_label",
+        "source_summary",
+        "client_org_name",
+        "supplier_org_name",
+        mode="before",
+    )
+    @classmethod
+    def _prepare_history_prose(cls, value: object, info) -> object:
+        return validate_catalog_prose_field(value, field=f"commercial_history.{info.field_name}")
+
+
 class CatalogProductDetail(BaseModel):
     product_key: str
     display_name: str
@@ -386,6 +420,7 @@ class CatalogProductDetail(BaseModel):
     supplier_offers: list[CatalogSupplierOfferRow] = Field(default_factory=list)
     price_snapshots: list[CatalogPriceSnapshotRow] = Field(default_factory=list)
     commercial_links: list[CatalogCommercialLinkRow] = Field(default_factory=list)
+    commercial_history: list[CatalogProductCommercialHistoryRow] = Field(default_factory=list)
 
     @field_validator("display_name", "public_summary", "manufacturer_name", mode="before")
     @classmethod

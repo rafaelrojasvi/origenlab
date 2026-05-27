@@ -5,6 +5,7 @@
 
 import type {
   CatalogCommercialLinkUi,
+  CatalogProductCommercialHistoryUi,
   CatalogPriceSnapshotUi,
   CatalogProductAliasUi,
   CatalogProductCategoryUi,
@@ -205,6 +206,35 @@ export function parseCatalogCommercialLink(raw: unknown): CatalogCommercialLinkU
   };
 }
 
+export function parseCatalogCommercialHistory(
+  raw: unknown,
+): CatalogProductCommercialHistoryUi {
+  const r = asRecord(raw);
+  stripForbiddenKeys(r);
+  return {
+    history_key: sanitizeCatalogText(r.history_key, 160) || "history",
+    deal_key: sanitizeCatalogText(r.deal_key, 120) || "deal",
+    deal_label: sanitizeCatalogText(r.deal_label, 120) || "Negocio",
+    client_org_name: optionalStr(r.client_org_name, 120),
+    supplier_org_name: optionalStr(r.supplier_org_name, 160),
+    line_side: sanitizeCatalogText(r.line_side, 20) || "client",
+    line_kind: sanitizeCatalogText(r.line_kind, 40) || "product",
+    quantity: optionalStr(r.quantity, 40),
+    unit: optionalStr(r.unit, 40),
+    currency: optionalStr(r.currency, 12),
+    amount_net_clp: optionalNum(r.amount_net_clp),
+    amount_decimal: optionalStr(r.amount_decimal, 40),
+    amount_minor: optionalNum(r.amount_minor),
+    unit_price_decimal: optionalStr(r.unit_price_decimal, 40),
+    total_price_decimal: optionalStr(r.total_price_decimal, 40),
+    margin_status: optionalStr(r.margin_status, 80),
+    deal_status: optionalStr(r.deal_status, 120),
+    is_public_safe: optionalBool(r.is_public_safe),
+    source_summary: optionalStr(r.source_summary, 300),
+    confidence: sanitizeCatalogText(r.confidence, 80) || "unknown",
+  };
+}
+
 export function parseCatalogProductDetail(raw: unknown): CatalogProductDetailUi {
   const r = asRecord(raw);
   stripForbiddenKeys(r);
@@ -219,6 +249,9 @@ export function parseCatalogProductDetail(raw: unknown): CatalogProductDetailUi 
     : [];
   const commercial_links = Array.isArray(r.commercial_links)
     ? r.commercial_links.map(parseCatalogCommercialLink)
+    : [];
+  const commercial_history = Array.isArray(r.commercial_history)
+    ? r.commercial_history.map(parseCatalogCommercialHistory)
     : [];
 
   return {
@@ -241,6 +274,7 @@ export function parseCatalogProductDetail(raw: unknown): CatalogProductDetailUi 
     supplier_offers,
     price_snapshots,
     commercial_links,
+    commercial_history,
   };
 }
 

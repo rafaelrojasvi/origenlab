@@ -31,6 +31,7 @@ CATALOG_PG_TABLES: tuple[tuple[str, str], ...] = (
     ("catalog", "supplier_offer"),
     ("catalog", "price_snapshot"),
     ("catalog", "product_commercial_link"),
+    ("catalog", "product_commercial_history"),
 )
 
 # Delete order: children first.
@@ -282,6 +283,47 @@ def sync_catalog_postgres_mirror(
                 )
             result["written_counts"]["commercial_links"] = len(payload["commercial_links"])
 
+            for row in payload["commercial_history"]:
+                cur.execute(
+                    """
+                    INSERT INTO catalog.product_commercial_history (
+                      history_key, product_key, deal_key, deal_label,
+                      client_org_name, supplier_org_name, line_side, line_kind,
+                      quantity, unit, currency, amount_net_clp, amount_decimal,
+                      amount_minor, unit_price_decimal, total_price_decimal,
+                      margin_status, deal_status, is_public_safe, source_summary,
+                      confidence, synced_at
+                    ) VALUES (
+                      %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    """,
+                    (
+                        row["history_key"],
+                        row["product_key"],
+                        row["deal_key"],
+                        row["deal_label"],
+                        row.get("client_org_name"),
+                        row.get("supplier_org_name"),
+                        row["line_side"],
+                        row["line_kind"],
+                        row.get("quantity"),
+                        row.get("unit"),
+                        row.get("currency"),
+                        row.get("amount_net_clp"),
+                        row.get("amount_decimal"),
+                        row.get("amount_minor"),
+                        row.get("unit_price_decimal"),
+                        row.get("total_price_decimal"),
+                        row.get("margin_status"),
+                        row.get("deal_status"),
+                        False,
+                        row.get("source_summary"),
+                        row["confidence"],
+                        synced_at,
+                    ),
+                )
+            result["written_counts"]["commercial_history"] = len(payload["commercial_history"])
+
         pg_conn.commit()
 
     return result
@@ -301,6 +343,7 @@ def postgres_catalog_counts(pg_url: str) -> dict[str, int]:
         "supplier_offers": ("catalog", "supplier_offer"),
         "price_snapshots": ("catalog", "price_snapshot"),
         "commercial_links": ("catalog", "product_commercial_link"),
+        "commercial_history": ("catalog", "product_commercial_history"),
     }
     out: dict[str, int] = {}
     with psycopg.connect(pg_url) as conn:

@@ -295,6 +295,40 @@ def test_mirror_catalog_spanish_prose_spacing(catalog_mirror_client: TestClient)
     assert "antes de cotizar" in (crtop["public_summary"] or "")
 
 
+def test_mirror_detail_serva_commercial_history(
+    catalog_mirror_client: TestClient,
+) -> None:
+    blueslick = catalog_mirror_client.get(
+        "/mirror/catalog/products/serva-blueslick-250ml"
+    ).json()["product"]
+    assert blueslick is not None
+    history = blueslick["commercial_history"]
+    assert len(history) == 2
+    client_line = next(h for h in history if h["line_side"] == "client")
+    supplier_line = next(h for h in history if h["line_side"] == "supplier")
+    assert client_line["amount_net_clp"] == 695000
+    assert client_line["line_kind"] == "product"
+    assert supplier_line["amount_decimal"] == "117.00"
+    assert supplier_line["currency"] == "EUR"
+    assert supplier_line["is_public_safe"] is False
+    assert client_line["deal_label"] == "CEAF × SERVA"
+    assert client_line["deal_key"] == "serva-ceaf-oc-26172-po-174-26"
+    blob = json.dumps(blueslick, ensure_ascii=False).lower()
+    assert "transfer_id" not in blob
+    assert "evidence" not in blob or "evidence_email_id" not in blob
+
+    temed = catalog_mirror_client.get("/mirror/catalog/products/serva-temed-25ml").json()[
+        "product"
+    ]
+    assert temed is not None
+    temed_client = next(h for h in temed["commercial_history"] if h["line_side"] == "client")
+    temed_supplier = next(h for h in temed["commercial_history"] if h["line_side"] == "supplier")
+    assert temed_client["amount_net_clp"] == 545000
+    assert temed_supplier["amount_decimal"] == "31.00"
+    kinds = {h["line_kind"] for h in temed["commercial_history"]}
+    assert kinds == {"product"}
+
+
 def test_mirror_detail_ika_ambiguous_currency(
     catalog_mirror_client: TestClient,
 ) -> None:

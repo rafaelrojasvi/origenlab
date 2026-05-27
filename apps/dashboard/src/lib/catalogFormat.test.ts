@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   buildListOfferSummary,
+  formatCommercialHistoryAmount,
   formatCatalogDate,
   formatCatalogMoney,
   formatCatalogQuantity,
 } from "./catalogFormat";
-import { crtopDetailFixture, ikaDetailFixture } from "../test/fixtures/catalogMirrorFixtures";
+import {
+  crtopDetailFixture,
+  ikaDetailFixture,
+  servaBlueslickDetailFixture,
+} from "../test/fixtures/catalogMirrorFixtures";
 
 describe("catalogFormat", () => {
   it("formats USD with thousands separator", () => {
@@ -30,6 +35,14 @@ describe("catalogFormat", () => {
     expect(buildListOfferSummary(detail)).toContain("USD 10.600,00");
     expect(buildListOfferSummary(detail)).toContain("EXW");
     expect(buildListOfferSummary(detail)).toContain("1 unidad");
+  });
+
+  it("formats CLP and EUR commercial history amounts", () => {
+    const detail = servaBlueslickDetailFixture().product!;
+    const client = detail.commercial_history.find((h) => h.line_side === "client")!;
+    const supplier = detail.commercial_history.find((h) => h.line_side === "supplier")!;
+    expect(formatCommercialHistoryAmount(client)).toBe("$695.000");
+    expect(formatCommercialHistoryAmount(supplier)).toBe("EUR 117,00");
   });
 
   it("builds IKA list offer summary", () => {

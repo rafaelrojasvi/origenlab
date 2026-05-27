@@ -2,6 +2,7 @@
 
 import type {
   CatalogCommercialLinkUi,
+  CatalogProductCommercialHistoryUi,
   CatalogPriceSnapshotUi,
   CatalogProductDetailUi,
   CatalogProductListItemUi,
@@ -342,6 +343,63 @@ export function buildListOfferSummary(detail: CatalogProductDetailUi | null): st
     return note.length > 72 ? `${note.slice(0, 72)}…` : note;
   }
   return "Sin oferta registrada";
+}
+
+export function catalogMarginStatusLabel(status: string | null | undefined): string {
+  const key = (status ?? "").trim().toLowerCase();
+  const labels: Record<string, string> = {
+    needs_review: "Margen pendiente de revisión",
+    computed: "Margen calculado",
+    not_computed: "Margen no calculado",
+    blocked: "Margen bloqueado",
+  };
+  return labels[key] ?? status ?? "—";
+}
+
+export function commercialHistorySideLabel(line: CatalogProductCommercialHistoryUi): string {
+  if (line.line_side === "client" && line.line_kind === "product") {
+    return "Vendido a cliente";
+  }
+  if (line.line_side === "supplier" && line.line_kind === "product") {
+    return "Costo proveedor";
+  }
+  if (line.line_side === "client") {
+    return "Venta al cliente";
+  }
+  return "Costo proveedor";
+}
+
+export function formatCommercialHistoryAmount(line: CatalogProductCommercialHistoryUi): string {
+  if (line.line_side === "client" && line.amount_net_clp != null) {
+    return formatCatalogMoney(String(line.amount_net_clp), "CLP");
+  }
+  if (line.amount_decimal) {
+    return formatCatalogMoney(line.amount_decimal, line.currency);
+  }
+  return "—";
+}
+
+export function groupCommercialHistoryByDeal(
+  rows: CatalogProductCommercialHistoryUi[],
+): { dealLabel: string; dealKey: string; lines: CatalogProductCommercialHistoryUi[] }[] {
+  const order: string[] = [];
+  const buckets = new Map<string, CatalogProductCommercialHistoryUi[]>();
+  for (const row of rows) {
+    const key = row.deal_key;
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
+      order.push(key);
+    }
+    buckets.get(key)!.push(row);
+  }
+  return order.map((dealKey) => {
+    const lines = buckets.get(dealKey) ?? [];
+    return {
+      dealKey,
+      dealLabel: lines[0]?.deal_label ?? dealKey,
+      lines,
+    };
+  });
 }
 
 export function buildListLinksSummary(detail: CatalogProductDetailUi | null): string {

@@ -73,6 +73,29 @@ export interface CatalogCommercialLinkUi {
   confidence: string;
 }
 
+export interface CatalogProductCommercialHistoryUi {
+  history_key: string;
+  deal_key: string;
+  deal_label: string;
+  client_org_name: string | null;
+  supplier_org_name: string | null;
+  line_side: string;
+  line_kind: string;
+  quantity: string | null;
+  unit: string | null;
+  currency: string | null;
+  amount_net_clp: number | null;
+  amount_decimal: string | null;
+  amount_minor: number | null;
+  unit_price_decimal: string | null;
+  total_price_decimal: string | null;
+  margin_status: string | null;
+  deal_status: string | null;
+  is_public_safe: boolean;
+  source_summary: string | null;
+  confidence: string;
+}
+
 export interface CatalogProductDetailUi {
   product_key: string;
   display_name: string;
@@ -93,6 +116,7 @@ export interface CatalogProductDetailUi {
   supplier_offers: CatalogSupplierOfferUi[];
   price_snapshots: CatalogPriceSnapshotUi[];
   commercial_links: CatalogCommercialLinkUi[];
+  commercial_history: CatalogProductCommercialHistoryUi[];
 }
 
 export interface CatalogProductsListUi {

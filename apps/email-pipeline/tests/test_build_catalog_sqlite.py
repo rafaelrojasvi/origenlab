@@ -163,6 +163,34 @@ def test_serva_aliases_normalized_distinct(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_serva_commercial_history_rows(tmp_path: Path) -> None:
+    conn = _memory_conn()
+    build_catalog_from_seed_file(conn, _SEED, dry_run=False)
+    rows = conn.execute(
+        """
+        SELECT p.product_key, h.line_side, h.line_kind, h.amount_net_clp, h.amount_decimal
+        FROM catalog_product_commercial_history h
+        JOIN catalog_product p ON p.id = h.product_id
+        ORDER BY p.product_key, h.line_side
+        """
+    ).fetchall()
+    assert len(rows) == 4
+    blueslick_client = next(
+        r for r in rows if r[0] == "serva-blueslick-250ml" and r[1] == "client"
+    )
+    assert blueslick_client[3] == 695000
+    blueslick_supplier = next(
+        r for r in rows if r[0] == "serva-blueslick-250ml" and r[1] == "supplier"
+    )
+    assert blueslick_supplier[4] == "117.00"
+    temed_client = next(r for r in rows if r[0] == "serva-temed-25ml" and r[1] == "client")
+    assert temed_client[3] == 545000
+    temed_supplier = next(r for r in rows if r[0] == "serva-temed-25ml" and r[1] == "supplier")
+    assert temed_supplier[4] == "31.00"
+    assert all(r[2] == "product" for r in rows)
+    conn.close()
+
+
 def test_commercial_links_no_orphans(tmp_path: Path) -> None:
     conn = _memory_conn()
     build_catalog_from_seed_file(conn, _SEED, dry_run=False)

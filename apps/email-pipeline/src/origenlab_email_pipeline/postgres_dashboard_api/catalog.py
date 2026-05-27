@@ -16,6 +16,7 @@ from origenlab_email_pipeline.postgres_dashboard_api.outbound_lists import DEFAU
 from origenlab_email_pipeline.postgres_dashboard_api.schemas import (
     CATALOG_DISCLAIMER,
     CatalogCommercialLinkRow,
+    CatalogProductCommercialHistoryRow,
     CatalogPriceSnapshotRow,
     CatalogProductAliasRow,
     CatalogProductCategoryRow,
@@ -39,6 +40,12 @@ _SUPPLIER_OFFER_PROSE_FIELDS = (
 )
 _PRICE_SNAPSHOT_PROSE_FIELDS = ("price_notes",)
 _SPEC_PROSE_FIELDS = ("spec_value", "spec_key")
+_COMMERCIAL_HISTORY_PROSE_FIELDS = (
+    "deal_label",
+    "source_summary",
+    "client_org_name",
+    "supplier_org_name",
+)
 
 _PRODUCT_LIST_SELECT = """
 SELECT
@@ -120,6 +127,17 @@ def _map_spec_row(row: Any) -> CatalogProductSpecRow:
     return CatalogProductSpecRow.model_validate(payload)
 
 
+def _map_commercial_history_row(row: Any) -> CatalogProductCommercialHistoryRow:
+    payload = _mutable_row(row)
+    payload["is_public_safe"] = bool(payload.get("is_public_safe"))
+    _prepare_row_prose_fields(
+        payload,
+        prefix="commercial_history",
+        prose_fields=_COMMERCIAL_HISTORY_PROSE_FIELDS,
+    )
+    return CatalogProductCommercialHistoryRow.model_validate(payload)
+
+
 def _map_category_row(row: Any) -> CatalogProductCategoryRow:
     payload = _mutable_row(row)
     payload["is_primary"] = bool(payload.get("is_primary"))
@@ -149,6 +167,10 @@ def _repair_catalog_product_detail(detail: CatalogProductDetail) -> CatalogProdu
         _prepare_row_prose_fields(spec, prefix="spec", prose_fields=_SPEC_PROSE_FIELDS)
     for category in payload.get("categories") or []:
         _prepare_row_prose_fields(category, prefix="category", prose_fields=_CATEGORY_PROSE_FIELDS)
+    for hist in payload.get("commercial_history") or []:
+        _prepare_row_prose_fields(
+            hist, prefix="commercial_history", prose_fields=_COMMERCIAL_HISTORY_PROSE_FIELDS
+        )
     return CatalogProductDetail.model_validate(payload)
 
 
@@ -312,6 +334,26 @@ def _load_price_snapshots(conn: Connection, product_key: str) -> list[CatalogPri
     return [_map_price_snapshot_row(row) for row in rows]
 
 
+def _load_commercial_history(
+    conn: Connection, product_key: str
+) -> list[CatalogProductCommercialHistoryRow]:
+    rows = fetch_all(
+        conn,
+        """
+        SELECT
+          history_key, deal_key, deal_label, client_org_name, supplier_org_name,
+          line_side, line_kind, quantity, unit, currency, amount_net_clp,
+          amount_decimal, amount_minor, unit_price_decimal, total_price_decimal,
+          margin_status, deal_status, is_public_safe, source_summary, confidence
+        FROM catalog.product_commercial_history
+        WHERE product_key = %s
+        ORDER BY deal_key, line_side DESC, line_kind, history_key
+        """,
+        (product_key,),
+    )
+    return [_map_commercial_history_row(row) for row in rows]
+
+
 def _load_commercial_links(conn: Connection, product_key: str) -> list[CatalogCommercialLinkRow]:
     rows = fetch_all(
         conn,
@@ -356,6 +398,7 @@ def get_catalog_product(
         supplier_offers=_load_supplier_offers(conn, key),
         price_snapshots=_load_price_snapshots(conn, key),
         commercial_links=_load_commercial_links(conn, key),
+        commercial_history=_load_commercial_history(conn, key),
     )
     return CatalogProductDetailResponse(
         table_available=True,

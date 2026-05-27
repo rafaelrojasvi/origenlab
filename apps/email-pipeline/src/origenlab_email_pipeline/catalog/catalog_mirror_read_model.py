@@ -33,6 +33,7 @@ def load_catalog_mirror_payload(conn: sqlite3.Connection) -> dict[str, list[dict
             "supplier_offers": [],
             "price_snapshots": [],
             "commercial_links": [],
+            "commercial_history": [],
         }
 
     products: list[dict[str, Any]] = []
@@ -156,6 +157,30 @@ def load_catalog_mirror_payload(conn: sqlite3.Connection) -> dict[str, list[dict
         assert_mirror_row_safe(d, table="product_commercial_link")
         commercial_links.append(d)
 
+    commercial_history: list[dict[str, Any]] = []
+    for row in conn.execute(
+        """
+        SELECT
+          h.history_key, p.product_key, h.deal_key, h.deal_label,
+          h.client_org_name, h.supplier_org_name, h.line_side, h.line_kind,
+          h.quantity, h.unit, h.currency, h.amount_net_clp, h.amount_decimal,
+          h.amount_minor, h.unit_price_decimal, h.total_price_decimal,
+          h.margin_status, h.deal_status, h.is_public_safe, h.source_summary,
+          h.confidence
+        FROM catalog_product_commercial_history h
+        JOIN catalog_product p ON p.id = h.product_id
+        ORDER BY h.deal_key, h.line_side, h.line_kind, h.history_key
+        """
+    ):
+        d = _row_dict(row)
+        d["is_public_safe"] = _bool_from_sqlite(d.get("is_public_safe"))
+        assert_mirror_row_safe(d, table="product_commercial_history")
+        if d["is_public_safe"] and d.get("line_side") == "supplier":
+            raise CatalogMirrorSafetyError(
+                f"commercial_history {d['history_key']}: supplier rows must not be public_safe"
+            )
+        commercial_history.append(d)
+
     return {
         "products": products,
         "categories": categories,
@@ -165,6 +190,7 @@ def load_catalog_mirror_payload(conn: sqlite3.Connection) -> dict[str, list[dict
         "supplier_offers": supplier_offers,
         "price_snapshots": price_snapshots,
         "commercial_links": commercial_links,
+        "commercial_history": commercial_history,
     }
 
 
@@ -179,6 +205,7 @@ def sqlite_catalog_counts(conn: sqlite3.Connection) -> dict[str, int]:
             "supplier_offers",
             "price_snapshots",
             "commercial_links",
+            "commercial_history",
         )}
     mapping = {
         "products": "catalog_product",
@@ -189,5 +216,6 @@ def sqlite_catalog_counts(conn: sqlite3.Connection) -> dict[str, int]:
         "supplier_offers": "catalog_supplier_offer",
         "price_snapshots": "catalog_price_snapshot",
         "commercial_links": "catalog_product_commercial_link",
+        "commercial_history": "catalog_product_commercial_history",
     }
     return {k: int(conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]) for k, t in mapping.items()}

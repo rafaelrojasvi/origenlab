@@ -29,6 +29,7 @@ class CatalogBuildSummary:
     supplier_offers: int = 0
     price_snapshots: int = 0
     commercial_links: int = 0
+    commercial_history: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -41,6 +42,7 @@ class CatalogBuildSummary:
             "supplier_offers": self.supplier_offers,
             "price_snapshots": self.price_snapshots,
             "commercial_links": self.commercial_links,
+            "commercial_history": self.commercial_history,
         }
 
 
@@ -63,6 +65,7 @@ def build_catalog_from_seed(
             summary.supplier_offers += len(prod.get("supplier_offers") or [])
             summary.price_snapshots += len(prod.get("price_snapshots") or [])
             summary.commercial_links += len(prod.get("commercial_links") or [])
+            summary.commercial_history += len(prod.get("commercial_history") or [])
         return summary
 
     ensure_catalog_tables(conn)
@@ -346,6 +349,69 @@ def build_catalog_from_seed(
                 ),
             )
             summary.commercial_links += 1
+
+        conn.execute(
+            "DELETE FROM catalog_product_commercial_history WHERE product_id = ?",
+            (product_id,),
+        )
+        for hist in prod.get("commercial_history") or []:
+            conn.execute(
+                """
+                INSERT INTO catalog_product_commercial_history (
+                  history_key, product_id, deal_key, deal_label,
+                  client_org_name, supplier_org_name, line_side, line_kind,
+                  quantity, unit, currency, amount_net_clp, amount_decimal, amount_minor,
+                  unit_price_decimal, total_price_decimal, margin_status, deal_status,
+                  is_public_safe, source_summary, confidence, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(history_key) DO UPDATE SET
+                  product_id = excluded.product_id,
+                  deal_key = excluded.deal_key,
+                  deal_label = excluded.deal_label,
+                  client_org_name = excluded.client_org_name,
+                  supplier_org_name = excluded.supplier_org_name,
+                  line_side = excluded.line_side,
+                  line_kind = excluded.line_kind,
+                  quantity = excluded.quantity,
+                  unit = excluded.unit,
+                  currency = excluded.currency,
+                  amount_net_clp = excluded.amount_net_clp,
+                  amount_decimal = excluded.amount_decimal,
+                  amount_minor = excluded.amount_minor,
+                  unit_price_decimal = excluded.unit_price_decimal,
+                  total_price_decimal = excluded.total_price_decimal,
+                  margin_status = excluded.margin_status,
+                  deal_status = excluded.deal_status,
+                  is_public_safe = excluded.is_public_safe,
+                  source_summary = excluded.source_summary,
+                  confidence = excluded.confidence
+                """,
+                (
+                    str(hist["history_key"]),
+                    product_id,
+                    str(hist["deal_key"]),
+                    str(hist["deal_label"]),
+                    hist.get("client_org_name"),
+                    hist.get("supplier_org_name"),
+                    str(hist["line_side"]),
+                    str(hist["line_kind"]),
+                    hist.get("quantity"),
+                    hist.get("unit"),
+                    hist.get("currency"),
+                    hist.get("amount_net_clp"),
+                    hist.get("amount_decimal"),
+                    hist.get("amount_minor"),
+                    hist.get("unit_price_decimal"),
+                    hist.get("total_price_decimal"),
+                    hist.get("margin_status"),
+                    hist.get("deal_status"),
+                    0 if not hist.get("is_public_safe") else 1,
+                    hist.get("source_summary"),
+                    str(hist.get("confidence", prod["confidence"])),
+                    ts,
+                ),
+            )
+            summary.commercial_history += 1
 
     conn.commit()
     _assert_no_orphan_links(conn)

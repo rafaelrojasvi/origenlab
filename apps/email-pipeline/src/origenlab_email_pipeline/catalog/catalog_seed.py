@@ -12,6 +12,8 @@ from origenlab_email_pipeline.catalog.catalog_mirror_safety import (
     assert_catalog_prose_spacing,
 )
 from origenlab_email_pipeline.catalog.catalog_schema import (
+    COMMERCIAL_HISTORY_LINE_KINDS,
+    COMMERCIAL_HISTORY_LINE_SIDES,
     CONFIDENCE_LEVELS,
     LINK_KINDS,
     OFFER_STATUSES,
@@ -130,6 +132,7 @@ def validate_seed(data: dict[str, Any]) -> dict[str, list[str]]:
     seen_offer_keys: set[str] = set()
     seen_snapshot_keys: set[str] = set()
     seen_links: set[tuple[str, str]] = set()
+    seen_history_keys: set[str] = set()
 
     for prod in products:
         if not isinstance(prod, dict):
@@ -222,7 +225,72 @@ def validate_seed(data: dict[str, Any]) -> dict[str, list[str]]:
                 raise CatalogSeedValidationError(f"duplicate link: {lk}:{ref}")
             seen_links.add((lk, ref))
 
+        for row in prod.get("commercial_history") or []:
+            _validate_commercial_history_row(row, product_key=pk, seen_history_keys=seen_history_keys)
+
     return {"product_keys": product_keys, "category_keys": sorted(category_keys)}
+
+
+def _validate_commercial_history_row(
+    row: dict[str, Any],
+    *,
+    product_key: str,
+    seen_history_keys: set[str],
+) -> None:
+    if not isinstance(row, dict):
+        raise CatalogSeedValidationError(f"{product_key}: commercial_history row must be object")
+    hk = str(row.get("history_key", ""))
+    if not hk or hk in seen_history_keys:
+        raise CatalogSeedValidationError(f"{product_key}: duplicate or missing history_key {hk!r}")
+    seen_history_keys.add(hk)
+    if not hk.startswith(f"{product_key}:"):
+        raise CatalogSeedValidationError(
+            f"{product_key}: history_key must start with product_key prefix: {hk!r}"
+        )
+    side = str(row.get("line_side", ""))
+    kind = str(row.get("line_kind", ""))
+    if side not in COMMERCIAL_HISTORY_LINE_SIDES:
+        raise CatalogSeedValidationError(f"{hk}: invalid line_side {side!r}")
+    if kind not in COMMERCIAL_HISTORY_LINE_KINDS:
+        raise CatalogSeedValidationError(f"{hk}: invalid line_kind {kind!r}")
+    conf = row.get("confidence")
+    if conf not in CONFIDENCE_LEVELS:
+        raise CatalogSeedValidationError(f"{hk}: invalid confidence {conf!r}")
+    if row.get("is_public_safe") and side == "supplier":
+        raise CatalogSeedValidationError(f"{hk}: supplier commercial history must not be public_safe")
+    if kind != "product" and side == "supplier":
+        raise CatalogSeedValidationError(
+            f"{hk}: deal-level supplier costs must not be attached as product commercial_history"
+        )
+    for field in (
+        "deal_key",
+        "deal_label",
+        "client_org_name",
+        "supplier_org_name",
+        "source_summary",
+        "margin_status",
+        "deal_status",
+        "quantity",
+        "unit",
+        "currency",
+    ):
+        assert_safe_text(row.get(field), field=f"{hk}.{field}")
+    amount_net_clp = row.get("amount_net_clp")
+    amount_decimal = row.get("amount_decimal")
+    if side == "client" and kind == "product":
+        if amount_net_clp is None or not isinstance(amount_net_clp, int):
+            raise CatalogSeedValidationError(f"{hk}: client product line requires amount_net_clp int")
+    if side == "supplier" and kind == "product":
+        if amount_decimal is None:
+            raise CatalogSeedValidationError(f"{hk}: supplier product line requires amount_decimal")
+        cur = str(row.get("currency") or "").strip().upper()
+        if not cur:
+            raise CatalogSeedValidationError(f"{hk}: supplier product line requires currency")
+        minor = row.get("amount_minor")
+        if minor is None:
+            minor = decimal_to_minor(str(amount_decimal), cur)
+        if not validate_decimal_minor_pair(str(amount_decimal), int(minor), cur):
+            raise CatalogSeedValidationError(f"{hk}: amount_decimal/minor mismatch")
 
 
 def _validate_price_snapshot(snap: dict[str, Any], *, product_key: str) -> None:

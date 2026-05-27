@@ -5,7 +5,11 @@ import {
   parseCatalogProductDetailResponse,
   parseCatalogProductsListResponse,
 } from "./catalogParse";
-import { crtopDetailFixture, catalogListFixture } from "../test/fixtures/catalogMirrorFixtures";
+import {
+  catalogListFixture,
+  crtopDetailFixture,
+  servaBlueslickDetailFixture,
+} from "../test/fixtures/catalogMirrorFixtures";
 
 describe("catalogParse", () => {
   it("strips forbidden keys from list and detail payloads", () => {
@@ -59,5 +63,17 @@ describe("catalogParse", () => {
       expect(blob).not.toContain(artifact.toLowerCase());
     }
     expect(detail.product?.price_snapshots[0]?.amount_decimal).toBe("10600.00");
+  });
+
+  it("parses SERVA commercial history without forbidden keys", () => {
+    const parsed = parseCatalogProductDetailResponse(servaBlueslickDetailFixture());
+    const history = parsed.product?.commercial_history ?? [];
+    expect(history).toHaveLength(2);
+    expect(history[0]?.amount_net_clp ?? history[1]?.amount_net_clp).toBe(695000);
+    const blob = JSON.stringify(parsed);
+    for (const key of CATALOG_FORBIDDEN_KEYS) {
+      expect(blob).not.toContain(`"${key}"`);
+    }
+    expect(history.every((h) => h.line_kind === "product")).toBe(true);
   });
 });

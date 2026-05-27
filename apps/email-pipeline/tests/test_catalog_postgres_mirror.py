@@ -26,6 +26,7 @@ from origenlab_email_pipeline.catalog.catalog_seed import default_seed_path
 _REPO = Path(__file__).resolve().parents[1]
 _SEED = default_seed_path(_REPO)
 _MIGRATION = _REPO / "alembic" / "versions" / "20260527_0019_catalog_mirror.py"
+_HISTORY_MIGRATION = _REPO / "alembic" / "versions" / "20260528_0020_catalog_product_commercial_history.py"
 
 
 def _memory_catalog_db() -> sqlite3.Connection:
@@ -94,8 +95,11 @@ def test_migration_defines_catalog_tables_without_evidence_columns() -> None:
         "catalog.product_commercial_link",
     ):
         assert table in text
+    history_text = _HISTORY_MIGRATION.read_text(encoding="utf-8")
+    assert "catalog.product_commercial_history" in history_text
     for forbidden in ("evidence_email_id", "transfer_id", "operation_id", "source_file"):
         assert forbidden not in text
+        assert forbidden not in history_text
 
 
 def test_forbidden_bank_term_rejected() -> None:
@@ -232,8 +236,9 @@ def test_sync_full_replace_inserts_all_tables(tmp_path: Path) -> None:
 
     assert result["skipped"] is False
     assert pg.committed is True
-    assert len(pg.cur.deletes) == 8
+    assert len(pg.cur.deletes) == 9
     assert result["written_counts"]["products"] == 9
+    assert result["written_counts"]["commercial_history"] == 4
     assert result["written_counts"]["products"] == result["built_counts"]["products"]
     assert result["written_counts"]["price_snapshots"] == result["built_counts"]["price_snapshots"]
 

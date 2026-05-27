@@ -76,6 +76,9 @@ CATALOG_MIRROR_PROSE_FIELDS: frozenset[str] = frozenset(
         "spec_key",
         "supplier_org_name",
         "link_ref",
+        "deal_label",
+        "source_summary",
+        "client_org_name",
     }
 )
 
