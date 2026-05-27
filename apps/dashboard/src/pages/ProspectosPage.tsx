@@ -7,7 +7,11 @@ import {
 } from "../api/mirrorLeadIntelClient";
 import { ProspectosDrawer } from "../components/prospectos/ProspectosDrawer";
 import { OperatorApiError } from "../api/operatorClient";
-import { leadStatusLabel } from "../lib/leadIntelFormat";
+import {
+  prospectContactCell,
+  prospectClassificationLabel,
+  prospectTableBadge,
+} from "../lib/prospectLabels";
 import type { LeadResearchSummaryUi } from "../api/leadIntelTypes";
 
 function formatLoadError(label: string, e: unknown): string {
@@ -222,11 +226,10 @@ export function ProspectosPage() {
             <tr>
               <th className="px-4 py-3">Organización</th>
               <th className="px-4 py-3">Contacto</th>
-              <th className="px-4 py-3">Sector</th>
-              <th className="px-4 py-3">Región</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Score</th>
-              <th className="px-4 py-3">Ángulo de producto</th>
+              <th className="px-4 py-3">Sector</th>
+              <th className="px-4 py-3">Ángulo</th>
               <th className="px-4 py-3">Próxima acción</th>
             </tr>
           </thead>
@@ -238,16 +241,23 @@ export function ProspectosPage() {
                 onClick={() => setSelectedKey(row.prospect_key)}
               >
                 <td className="px-4 py-3 font-medium">{row.organization_name}</td>
+                <td className="px-4 py-3 text-sm">{prospectContactCell(row)}</td>
                 <td className="px-4 py-3">
-                  {row.contact_name ?? "—"}
-                  {row.email ? (
-                    <span className="mt-0.5 block text-xs text-[var(--color-muted)]">{row.email}</span>
-                  ) : null}
+                  {(() => {
+                    const badge = prospectTableBadge(row);
+                    return badge ? (
+                      <span
+                        className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge.className}`}
+                      >
+                        {badge.label}
+                      </span>
+                    ) : (
+                      <span className="text-sm">{prospectClassificationLabel(row.classification)}</span>
+                    );
+                  })()}
                 </td>
-                <td className="px-4 py-3">{row.sector ?? "—"}</td>
-                <td className="px-4 py-3">{row.region ?? "—"}</td>
-                <td className="px-4 py-3">{leadStatusLabel(row.status)}</td>
                 <td className="px-4 py-3">{row.final_score}</td>
+                <td className="px-4 py-3 max-w-[10rem] truncate">{row.sector ?? "—"}</td>
                 <td className="px-4 py-3 max-w-[12rem] truncate">{row.product_angle ?? "—"}</td>
                 <td className="px-4 py-3 max-w-[14rem] truncate">{row.recommended_next_action ?? "—"}</td>
               </tr>
