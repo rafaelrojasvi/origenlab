@@ -57,7 +57,7 @@ def fetch_all(
     conn: Connection, sql: str, params: tuple[Any, ...] | None = None
 ) -> list[dict[str, Any]]:
     cur = conn.execute(sql, params or ())
-    return list(cur.fetchall())
+    return [dict(row) for row in cur.fetchall()]
 
 
 def fetch_one(

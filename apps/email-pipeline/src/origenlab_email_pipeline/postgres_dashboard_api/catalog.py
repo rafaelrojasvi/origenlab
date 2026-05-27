@@ -29,6 +29,16 @@ from origenlab_email_pipeline.postgres_dashboard_api.schemas import (
 
 CATALOG_PRODUCT_TABLE = ("catalog", "product")
 
+_PRODUCT_PROSE_FIELDS = ("public_summary", "display_name", "manufacturer_name")
+_SUPPLIER_OFFER_PROSE_FIELDS = (
+    "supplier_org_name",
+    "payment_terms",
+    "delivery_terms",
+    "availability_note",
+)
+_PRICE_SNAPSHOT_PROSE_FIELDS = ("price_notes",)
+_SPEC_PROSE_FIELDS = ("spec_value", "spec_key")
+
 _PRODUCT_LIST_SELECT = """
 SELECT
   p.product_key, p.display_name, p.brand, p.product_kind, p.equipment_class,
@@ -51,15 +61,79 @@ def _clamp_limit(limit: int) -> int:
     return max(1, min(int(limit), DEFAULT_MAX_LIMIT))
 
 
-def _sanitize_row_strings(row: dict[str, Any], *, prefix: str) -> None:
-    for key, value in row.items():
+def _mutable_row(row: Any) -> dict[str, Any]:
+    """Copy psycopg rows before in-place prose repair (fetch_one already copies; fetch_all now too)."""
+    if isinstance(row, dict):
+        return dict(row)
+    return dict(row.items())
+
+
+def _prepare_row_prose_fields(
+    payload: dict[str, Any],
+    *,
+    prefix: str,
+    prose_fields: tuple[str, ...],
+) -> None:
+    for key, value in payload.items():
         if not isinstance(value, str):
             continue
         field = f"{prefix}.{key}"
-        if key in CATALOG_MIRROR_PROSE_FIELDS:
-            row[key] = prepare_catalog_mirror_text(value, field=field)
+        if key in prose_fields:
+            payload[key] = prepare_catalog_mirror_text(value, field=field)
+        elif key in CATALOG_MIRROR_PROSE_FIELDS:
+            payload[key] = prepare_catalog_mirror_text(value, field=field)
         else:
             assert_mirror_text_safe(value, field=field)
+
+
+def _sanitize_row_strings(row: dict[str, Any], *, prefix: str) -> None:
+    _prepare_row_prose_fields(row, prefix=prefix, prose_fields=tuple(CATALOG_MIRROR_PROSE_FIELDS))
+
+
+def _map_product_list_item(row: Any) -> CatalogProductListItem:
+    payload = _mutable_row(row)
+    _prepare_row_prose_fields(payload, prefix="product", prose_fields=_PRODUCT_PROSE_FIELDS)
+    return CatalogProductListItem.model_validate(payload)
+
+
+def _map_supplier_offer_row(row: Any) -> CatalogSupplierOfferRow:
+    payload = _mutable_row(row)
+    _prepare_row_prose_fields(
+        payload, prefix="supplier_offer", prose_fields=_SUPPLIER_OFFER_PROSE_FIELDS
+    )
+    return CatalogSupplierOfferRow.model_validate(payload)
+
+
+def _map_price_snapshot_row(row: Any) -> CatalogPriceSnapshotRow:
+    payload = _mutable_row(row)
+    payload["is_public_safe"] = bool(payload.get("is_public_safe"))
+    _prepare_row_prose_fields(
+        payload, prefix="price_snapshot", prose_fields=_PRICE_SNAPSHOT_PROSE_FIELDS
+    )
+    return CatalogPriceSnapshotRow.model_validate(payload)
+
+
+def _map_spec_row(row: Any) -> CatalogProductSpecRow:
+    payload = _mutable_row(row)
+    _prepare_row_prose_fields(payload, prefix="spec", prose_fields=_SPEC_PROSE_FIELDS)
+    return CatalogProductSpecRow.model_validate(payload)
+
+
+def _repair_catalog_product_detail(detail: CatalogProductDetail) -> CatalogProductDetail:
+    """Explicit nested prose repair on API output (do not rely on row mutation or validators)."""
+    payload = detail.model_dump()
+    _prepare_row_prose_fields(payload, prefix="product", prose_fields=_PRODUCT_PROSE_FIELDS)
+    for offer in payload.get("supplier_offers") or []:
+        _prepare_row_prose_fields(
+            offer, prefix="supplier_offer", prose_fields=_SUPPLIER_OFFER_PROSE_FIELDS
+        )
+    for snap in payload.get("price_snapshots") or []:
+        _prepare_row_prose_fields(
+            snap, prefix="price_snapshot", prose_fields=_PRICE_SNAPSHOT_PROSE_FIELDS
+        )
+    for spec in payload.get("specs") or []:
+        _prepare_row_prose_fields(spec, prefix="spec", prose_fields=_SPEC_PROSE_FIELDS)
+    return CatalogProductDetail.model_validate(payload)
 
 
 def _build_list_filters(
@@ -130,10 +204,7 @@ def list_catalog_products(
         + " ORDER BY p.display_name ASC, p.product_key ASC LIMIT %s"
     )
     rows = fetch_all(conn, list_sql, tuple(filter_params + [limit]))
-    items: list[CatalogProductListItem] = []
-    for row in rows:
-        _sanitize_row_strings(row, prefix="product")
-        items.append(CatalogProductListItem.model_validate(row))
+    items = [_map_product_list_item(row) for row in rows]
 
     return CatalogProductsListResponse(
         table_available=True,
@@ -194,11 +265,7 @@ def _load_specs(conn: Connection, product_key: str) -> list[CatalogProductSpecRo
         """,
         (product_key,),
     )
-    out: list[CatalogProductSpecRow] = []
-    for row in rows:
-        _sanitize_row_strings(row, prefix="spec")
-        out.append(CatalogProductSpecRow.model_validate(row))
-    return out
+    return [_map_spec_row(row) for row in rows]
 
 
 def _load_supplier_offers(conn: Connection, product_key: str) -> list[CatalogSupplierOfferRow]:
@@ -215,11 +282,7 @@ def _load_supplier_offers(conn: Connection, product_key: str) -> list[CatalogSup
         """,
         (product_key,),
     )
-    out: list[CatalogSupplierOfferRow] = []
-    for row in rows:
-        _sanitize_row_strings(row, prefix="supplier_offer")
-        out.append(CatalogSupplierOfferRow.model_validate(row))
-    return out
+    return [_map_supplier_offer_row(row) for row in rows]
 
 
 def _load_price_snapshots(conn: Connection, product_key: str) -> list[CatalogPriceSnapshotRow]:
@@ -236,13 +299,7 @@ def _load_price_snapshots(conn: Connection, product_key: str) -> list[CatalogPri
         """,
         (product_key,),
     )
-    out: list[CatalogPriceSnapshotRow] = []
-    for row in rows:
-        payload = dict(row)
-        payload["is_public_safe"] = bool(payload.get("is_public_safe"))
-        _sanitize_row_strings(payload, prefix="price_snapshot")
-        out.append(CatalogPriceSnapshotRow.model_validate(payload))
-    return out
+    return [_map_price_snapshot_row(row) for row in rows]
 
 
 def _load_commercial_links(conn: Connection, product_key: str) -> list[CatalogCommercialLinkRow]:
@@ -276,9 +333,9 @@ def get_catalog_product(
     if not row:
         return CatalogProductDetailResponse(table_available=True, product=None)
 
-    payload = dict(row)
+    payload = _mutable_row(row)
     payload["is_active"] = bool(payload.get("is_active"))
-    _sanitize_row_strings(payload, prefix="product")
+    _prepare_row_prose_fields(payload, prefix="product", prose_fields=_PRODUCT_PROSE_FIELDS)
     key = str(payload["product_key"])
 
     detail = CatalogProductDetail(
@@ -292,6 +349,6 @@ def get_catalog_product(
     )
     return CatalogProductDetailResponse(
         table_available=True,
-        product=detail,
+        product=_repair_catalog_product_detail(detail),
         disclaimer=CATALOG_DISCLAIMER,
     )

@@ -13,7 +13,11 @@ from origenlab_api.settings import get_settings
 from origenlab_email_pipeline.catalog.catalog_mirror_safety import (
     FORBIDDEN_JOINED_PROSE_ARTIFACTS,
 )
-from origenlab_email_pipeline.postgres_dashboard_api.catalog import list_catalog_products
+from origenlab_email_pipeline.postgres_dashboard_api.catalog import (
+    _map_price_snapshot_row,
+    _map_supplier_offer_row,
+    list_catalog_products,
+)
 
 from conftest import _patch_mirror_postgres
 from fake_catalog_conn import CatalogFakeConn
@@ -146,9 +150,16 @@ def test_mirror_api_repairs_legacy_joined_prose_from_postgres(
     )
     assert "cotización y disponibilidad" in (serva["public_summary"] or "")
 
-    ika = broken_prose_catalog_client.get(
+    ika_response = broken_prose_catalog_client.get(
         "/mirror/catalog/products/ika-rv10-70-vapor-tube"
-    ).json()["product"]
+    )
+    assert ika_response.status_code == 200
+    ika_blob = json.dumps(ika_response.json(), ensure_ascii=False)
+    assert "monto es" in ika_blob
+    assert "Monto 112,00" in ika_blob
+    assert "antes de cotizar" in ika_blob
+
+    ika = ika_response.json()["product"]
     assert "por cliente" in (ika["public_summary"] or "")
     assert "cantidad 3" in (ika["public_summary"] or "")
     assert "monto es" in (ika["supplier_offers"][0]["availability_note"] or "")
@@ -162,6 +173,69 @@ def test_mirror_api_repairs_legacy_joined_prose_from_postgres(
         "/mirror/catalog/products/crtop-olt-hp-5l"
     ).json()["product"]
     assert "antes de cotizar" in (crtop["public_summary"] or "")
+
+
+def test_mapper_repairs_nested_prose_when_row_mutation_is_ignored() -> None:
+    """Regression: in-place row edits must not be required for nested prose repair."""
+
+    class _ReadOnlyRow:
+        def __init__(self, data: dict[str, str]) -> None:
+            self._data = data
+
+        def items(self):
+            return self._data.items()
+
+        def get(self, key: str, default: object = None) -> object:
+            return self._data.get(key, default)
+
+        def __getitem__(self, key: str) -> str:
+            return self._data[key]
+
+    row = _ReadOnlyRow(
+        {
+            "offer_key": "ika-rv10-70-rg-energia-quote",
+            "supplier_org_name": "IKA",
+            "supplier_domain": "ika.net.br",
+            "offer_status": "needs_review",
+            "quoted_at": None,
+            "valid_until": None,
+            "incoterm": None,
+            "payment_terms": None,
+            "delivery_terms": None,
+            "currency": None,
+            "quantity_offered": "1",
+            "availability_note": (
+                "Stock disponible según proveedor; confirmar moneda y si el montoes precio unitario."
+            ),
+            "confidence": "extracted_needs_review",
+        }
+    )
+    offer = _map_supplier_offer_row(row)
+    assert "monto es" in (offer.availability_note or "")
+
+    snap_row = _ReadOnlyRow(
+        {
+            "snapshot_key": "ika-rv10-70-price-ambiguous",
+            "snapshot_kind": "supplier_quote",
+            "offer_key": "ika-rv10-70-rg-energia-quote",
+            "currency": None,
+            "amount_decimal": "112.00",
+            "amount_minor": None,
+            "amount_clp_integer": None,
+            "quantity": "3",
+            "unit": "ea",
+            "incoterm": None,
+            "price_notes": (
+                "Cliente solicitó cantidad3. Monto112,00 del proveedor; confirmar antes decotizar."
+            ),
+            "is_public_safe": False,
+            "confidence": "extracted_needs_review",
+            "observed_at": "2026-05-27T00:00:00Z",
+        }
+    )
+    snap = _map_price_snapshot_row(snap_row)
+    assert "Monto 112,00" in (snap.price_notes or "")
+    assert "antes de cotizar" in (snap.price_notes or "")
 
 
 def test_mirror_catalog_spanish_prose_spacing(catalog_mirror_client: TestClient) -> None:
