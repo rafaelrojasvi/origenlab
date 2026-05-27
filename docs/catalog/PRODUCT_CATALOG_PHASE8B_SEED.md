@@ -65,4 +65,8 @@ uv run pytest tests/test_catalog_seed.py tests/test_build_catalog_sqlite.py -q
 - Dashboard **Catálogo** page  
 - Gmail ingest, sends, outreach, production deploy  
 
-Next: **Phase 8C** — Postgres read mirror after design approval.
+## Phase 8C (Postgres mirror)
+
+See [`PRODUCT_CATALOG_PHASE8C_MIRROR.md`](PRODUCT_CATALOG_PHASE8C_MIRROR.md) for sync/verify commands.
+
+Next: **Phase 8D** — API read routes after approval.
