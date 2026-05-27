@@ -6,9 +6,44 @@ from origenlab_email_pipeline.business_mart import emails_in
 
 INTERNAL_OPERATOR_DOMAINS: frozenset[str] = frozenset({"origenlab.cl", "labdelivery.cl"})
 
+INTERNAL_OPERATOR_EMAILS: frozenset[str] = frozenset(
+    {
+        "tvivancob@gmail.com",
+        "sebastian.rojas.vivanco@gmail.com",
+        "contacto@labdelivery.cl",
+        "contacto@origenlab.cl",
+    }
+)
+
 _PAYMENT_ADMIN_DOMAINS: frozenset[str] = frozenset({"bancochile.cl"})
 
 _LOGISTICS_VENDOR_DOMAINS: frozenset[str] = frozenset({"dhl.com"})
+
+_SYSTEM_NOISE_EMAILS: frozenset[str] = frozenset(
+    {
+        "no-reply@accounts.google.com",
+        "mailer-daemon@googlemail.com",
+    }
+)
+
+_INTERNAL_ADMIN_SUBJECT_MARKERS: tuple[str, ...] = (
+    "re: serva",
+    "serva payment",
+    "pago serva",
+    "wise",
+    "transferencia serva",
+)
+
+_SUPPLIER_QUOTE_SUBJECT_MARKERS: tuple[str, ...] = (
+    "precio",
+    "price",
+    "cotiz",
+    "quote",
+    "presupuesto",
+    " rv",
+    "re:",
+    "re ",
+)
 
 # Existing-client / post-sale threads (not suppliers).
 REAL_CLIENT_DOMAINS: frozenset[str] = frozenset({"ceaf.cl"})
@@ -21,6 +56,8 @@ SUPPLIER_VENDOR_DOMAINS: frozenset[str] = frozenset(
         "dlabsci.com",
         "eppendorf.com",
         "gzfanbolun.com",
+        "hielscher.com",
+        "ika.net.br",
         "ollital.com",
         "ortoalresa.com",
         "serva.de",
@@ -77,7 +114,7 @@ def contact_email_from_sender(sender_preview: str | None) -> str:
 
 def is_internal_operator_contact(contact_email: str) -> bool:
     email = (contact_email or "").strip().lower()
-    if email == "contacto@origenlab.cl":
+    if email in INTERNAL_OPERATOR_EMAILS:
         return True
     return email_domain(email) in INTERNAL_OPERATOR_DOMAINS
 
@@ -159,9 +196,14 @@ def looks_like_payment_admin_contact(
     )
 
 
-def looks_like_vendor_logistics_contact(contact_email: str, subject: str | None) -> bool:
+def looks_like_logistics_admin_contact(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+) -> bool:
     domain = email_domain(contact_email)
-    sub = (subject or "").lower()
+    sub = " ".join([subject or "", snippet or ""]).lower()
     if domain in _LOGISTICS_VENDOR_DOMAINS:
         return True
     return any(
@@ -174,6 +216,63 @@ def looks_like_vendor_logistics_contact(contact_email: str, subject: str | None)
             "solicitud cuenta",
         )
     )
+
+
+def looks_like_vendor_logistics_contact(contact_email: str, subject: str | None) -> bool:
+    """Alias for legacy callers."""
+    return looks_like_logistics_admin_contact(contact_email, subject)
+
+
+def looks_like_system_noise_contact(
+    contact_email: str,
+    sender: str | None,
+    subject: str | None,
+) -> bool:
+    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    if email in _SYSTEM_NOISE_EMAILS:
+        return True
+    if looks_like_security_notification(sender, subject, contact_email=email):
+        return True
+    snd = (sender or "").lower()
+    if "mailer-daemon" in snd or "mailer-daemon" in email:
+        return True
+    return False
+
+
+def looks_like_internal_admin_thread(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> bool:
+    """Operator/internal notes (SERVA payment, Wise, etc.) — not client threads."""
+    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    if is_internal_operator_contact(email):
+        return True
+    hay = " ".join([subject or "", snippet or "", sender or ""]).lower()
+    if email == "sebastian.rojas.vivanco@gmail.com" and "serva" in hay:
+        return True
+    if email == "tvivancob@gmail.com" and any(m in hay for m in _INTERNAL_ADMIN_SUBJECT_MARKERS):
+        return True
+    return False
+
+
+def looks_like_supplier_quote_response(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> bool:
+    """Inbound supplier quote/price (e.g. IKA RV10.70), not a client opportunity."""
+    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    if not is_supplier_vendor_domain(email_domain(email)):
+        return False
+    if looks_like_supplier_admin_signup_subject(subject):
+        return False
+    hay = " ".join([subject or "", snippet or ""]).lower()
+    return any(marker in hay for marker in _SUPPLIER_QUOTE_SUBJECT_MARKERS)
 
 
 def should_keep_visible_despite_suppression(
@@ -256,6 +355,23 @@ def is_supplier_vendor_domain(domain: str) -> bool:
 def looks_like_supplier_admin_signup_subject(subject: str | None) -> bool:
     sub = (subject or "").lower()
     return any(m in sub for m in _ADMIN_SIGNUP_SUBJECT_MARKERS)
+
+
+def looks_like_auto_reply_subject(subject: str | None) -> bool:
+    sub = (subject or "").strip().lower()
+    if not sub:
+        return False
+    if sub.startswith("automatic reply"):
+        return True
+    markers = (
+        "automatic reply",
+        "auto-reply",
+        "out of office",
+        "fuera de oficina",
+        "respuesta automática",
+        "respuesta automatica",
+    )
+    return any(marker in sub for marker in markers)
 
 
 def looks_like_supplier_marketing_thread(

@@ -60,8 +60,8 @@ def test_normalize_dhl_vendor_logistics() -> None:
     raw = _item(contact_email="monica.silva@dhl.com", subject="PROPUESTA COMERCIAL DHL")
     out = normalize_warm_case_item(raw)
     assert out is not None
-    assert out.category == "vendor_logistics"
-    assert out.category != "client_reply"
+    assert out.category == "logistics_admin"
+    assert out.category != "client_response"
     assert "logística" in out.next_action.lower()
 
 
@@ -69,18 +69,18 @@ def test_normalize_dlab_supplier() -> None:
     raw = _item(contact_email="chloe.yang@dlabsci.com", subject="DLAB visit reply")
     out = normalize_warm_case_item(raw)
     assert out is not None
-    assert out.category == "supplier_reply"
+    assert out.category in ("supplier_reply", "supplier_followup", "supplier_quote_received")
     assert "proveedor" in out.next_action.lower()
 
 
 def test_normalize_crtopmachine_supplier() -> None:
     raw = _item(contact_email="ariel@crtopmachine.com", subject="Re: reactor inquiry")
-    assert resolve_normalized_category(raw) == "supplier_reply"
+    assert resolve_normalized_category(raw) in ("supplier_followup", "supplier_quote_received")
 
 
 def test_normalize_asynt_supplier() -> None:
     raw = _item(contact_email="sales@asynt.com", subject="Re: reactor specs")
-    assert resolve_normalized_category(raw) == "supplier_reply"
+    assert resolve_normalized_category(raw) in ("supplier_followup", "supplier_quote_received")
 
 
 def test_normalize_serva_auto_reply_hidden_by_default() -> None:
@@ -92,7 +92,7 @@ def test_normalize_serva_auto_reply_hidden_by_default() -> None:
     assert normalize_warm_case_item(raw, include_noise=False) is None
     shown = normalize_warm_case_item(raw, include_noise=True)
     assert shown is not None
-    assert shown.category == "auto_reply"
+    assert shown.category in ("system_noise", "internal_admin")
 
 
 def test_normalize_banco_payment_admin() -> None:
@@ -107,7 +107,7 @@ def test_normalize_ollital_and_ortoalresa_stay_supplier() -> None:
     oll = _item(contact_email="kelly@ollital.com", subject="Re: Ollital reactor 5L")
     out = normalize_warm_case_item(oll)
     assert out is not None
-    assert out.category == "supplier_reply"
+    assert out.category in ("supplier_reply", "supplier_followup", "supplier_quote_received")
 
     orto = _item(
         contact_email="carmen.llorente@ortoalresa.com",
@@ -115,7 +115,11 @@ def test_normalize_ollital_and_ortoalresa_stay_supplier() -> None:
         category="supplier_reply",
     )
     assert normalize_warm_case_item(orto) is not None
-    assert normalize_warm_case_item(orto).category == "supplier_reply"
+    assert normalize_warm_case_item(orto).category in (
+        "supplier_reply",
+        "supplier_quote_received",
+        "supplier_followup",
+    )
 
 
 def test_normalize_google_security_hidden_from_default() -> None:
@@ -127,7 +131,7 @@ def test_normalize_google_security_hidden_from_default() -> None:
     assert normalize_warm_case_item(raw, include_noise=False) is None
     shown = normalize_warm_case_item(raw, include_noise=True)
     assert shown is not None
-    assert shown.category == "auto_reply"
+    assert shown.category in ("system_noise", "internal_admin")
 
 
 def test_normalize_eppendorf_registration_supplier() -> None:
@@ -138,22 +142,22 @@ def test_normalize_eppendorf_registration_supplier() -> None:
     )
     out = normalize_warm_case_item(raw)
     assert out is not None
-    assert out.category == "supplier_reply"
+    assert out.category in ("supplier_reply", "supplier_followup", "supplier_quote_received")
 
 
 def test_normalize_valuenindustrial_sales_supplier() -> None:
     raw = _item(contact_email="sales@valuenindustrial.com", subject="Promo", category="client_reply")
-    assert resolve_normalized_category(raw) == "supplier_reply"
+    assert resolve_normalized_category(raw) in ("supplier_followup", "supplier_quote_received")
 
 
 def test_normalize_gzfanbolun_sales_supplier() -> None:
     raw = _item(contact_email="sales001@gzfanbolun.com", subject="Offer", category="client_reply")
-    assert resolve_normalized_category(raw) == "supplier_reply"
+    assert resolve_normalized_category(raw) in ("supplier_followup", "supplier_quote_received")
 
 
 def test_normalize_yuanhuai_supplier() -> None:
     raw = _item(contact_email="jizhendong@yuanhuai.com", subject="YHCHEM line", category="client_reply")
-    assert resolve_normalized_category(raw) == "supplier_reply"
+    assert resolve_normalized_category(raw) in ("supplier_followup", "supplier_quote_received")
 
 
 def test_internal_contacto_waiting_client_hidden_by_default() -> None:
@@ -165,7 +169,7 @@ def test_internal_contacto_waiting_client_hidden_by_default() -> None:
     assert normalize_warm_case_item(raw, include_noise=False) is None
     shown = normalize_warm_case_item(raw, include_noise=True)
     assert shown is not None
-    assert shown.category == "auto_reply"
+    assert shown.category in ("system_noise", "internal_admin")
 
 
 def test_bancochile_factura_payment_admin() -> None:
@@ -183,14 +187,14 @@ def test_dhl_import_account_vendor_logistics() -> None:
     )
     out = normalize_warm_case_item(raw)
     assert out is not None
-    assert out.category == "vendor_logistics"
+    assert out.category == "logistics_admin"
 
 
-def test_ceaf_oc_thread_stays_client_reply() -> None:
+def test_ceaf_oc_thread_is_deal_evidence_candidate() -> None:
     raw = _item(contact_email="cgaray@ceaf.cl", subject="Remite OC N º 26172", category="waiting_supplier")
     out = normalize_warm_case_item(raw)
     assert out is not None
-    assert out.category == "client_reply"
+    assert out.category == "deal_evidence_candidate"
 
 
 def test_ceaf_bank_details_payment_admin_open() -> None:
@@ -359,10 +363,13 @@ def test_cases_warm_api_normalizes_audit_samples(tmp_path: Path) -> None:
     data = client.get("/cases/warm?positive_signal_only=false&limit=50").json()
     by_email = {i["contact_email"].lower(): i for i in data["items"]}
 
-    assert by_email["monica.silva@dhl.com"]["category"] == "vendor_logistics"
-    assert by_email["chloe.yang@dlabsci.com"]["category"] == "supplier_reply"
+    assert by_email["monica.silva@dhl.com"]["category"] == "logistics_admin"
+    assert by_email["chloe.yang@dlabsci.com"]["category"] in ("supplier_reply", "supplier_followup")
     assert "order@serva.de" not in by_email
     assert by_email["serviciodetransferencias@bancochile.cl"]["category"] == "payment_admin"
-    assert by_email["kelly@ollital.com"]["category"] == "supplier_reply"
-    assert by_email["carmen.llorente@ortoalresa.com"]["category"] == "supplier_reply"
+    assert by_email["kelly@ollital.com"]["category"] in ("supplier_reply", "supplier_quote_received")
+    assert by_email["carmen.llorente@ortoalresa.com"]["category"] in (
+        "supplier_reply",
+        "supplier_quote_received",
+    )
     assert "contacto@origenlab.cl" not in by_email

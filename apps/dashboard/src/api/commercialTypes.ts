@@ -1,16 +1,25 @@
 /** Types for apps/api commercial read routes (GET /cases/warm, GET /opportunities/equipment). */
 
 export type WarmCaseCategory =
-  | "client_reply"
-  | "supplier_reply"
+  | "client_opportunity"
+  | "client_response"
+  | "supplier_quote_received"
+  | "supplier_followup"
+  | "payment_admin"
+  | "logistics_admin"
+  | "internal_admin"
+  | "system_noise"
+  | "bounce_problem"
+  | "deal_evidence_candidate"
   | "quote_sent"
   | "waiting_supplier"
   | "waiting_client"
+  | "client_reply"
+  | "supplier_reply"
   | "bounce"
   | "opportunity"
   | "auto_reply"
   | "vendor_logistics"
-  | "payment_admin"
   | "payment_received";
 
 export type WarmCaseStatus = "new" | "open" | "waiting" | "quoted" | "problem";

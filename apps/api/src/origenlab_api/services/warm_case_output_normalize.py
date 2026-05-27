@@ -2,96 +2,78 @@
 
 from __future__ import annotations
 
-from origenlab_email_pipeline.warm_case_sender_rules import (
-    REAL_CLIENT_DOMAINS,
-    SUPPLIER_VENDOR_DOMAINS,
-    email_domain,
-    is_internal_operator_contact,
-    is_real_client_domain,
-    looks_like_client_oc_post_sale_subject,
-    looks_like_payment_admin_thread,
-    looks_like_security_notification,
-    looks_like_supplier_admin_signup_subject,
-    looks_like_supplier_marketing_thread,
-    payment_admin_text_haystack,
+from origenlab_email_pipeline.warm_case_role_classification import (
+    infer_warm_case_role_category,
+    role_category_next_action,
+    role_category_status,
 )
-
 from origenlab_api.schemas.cases import WarmCaseCategory, WarmCaseItem, WarmCaseStatus
 
-# Extended operator-facing categories (API output only).
-NORMALIZED_WARM_CATEGORIES: frozenset[str] = frozenset(
+ROLE_WARM_CATEGORIES: frozenset[str] = frozenset(
     {
-        "client_reply",
-        "supplier_reply",
+        "client_opportunity",
+        "client_response",
+        "supplier_quote_received",
+        "supplier_followup",
+        "payment_admin",
+        "logistics_admin",
+        "internal_admin",
+        "system_noise",
+        "bounce_problem",
+        "deal_evidence_candidate",
         "quote_sent",
         "waiting_supplier",
         "waiting_client",
-        "bounce",
+        # Legacy API aliases (dashboard compat during 7B migration)
+        "supplier_reply",
         "opportunity",
+        "client_reply",
+        "bounce",
         "auto_reply",
         "vendor_logistics",
-        "payment_admin",
     }
 )
 
-# Applied after normalization when positive_signal_only=True (Postgres/SQLite repos).
+# Applied after normalization when positive_signal_only=True.
 POST_NORMALIZE_POSITIVE_CATEGORIES: frozenset[str] = frozenset(
     {
-        "client_reply",
-        "supplier_reply",
+        "client_opportunity",
+        "client_response",
+        "supplier_quote_received",
+        "supplier_followup",
+        "payment_admin",
+        "logistics_admin",
+        "deal_evidence_candidate",
         "quote_sent",
         "waiting_supplier",
         "waiting_client",
+        # Legacy names still accepted from mirror rows until promotion catches up
+        "client_reply",
+        "supplier_reply",
         "opportunity",
-        "payment_admin",
         "vendor_logistics",
+        "payment_admin",
     }
 )
 
-_AUTO_REPLY_SUBJECT_MARKERS: tuple[str, ...] = (
-    "automatic reply",
-    "auto-reply",
-    "out of office",
-    "fuera de oficina",
-    "respuesta automática",
-    "respuesta automatica",
+_HIDDEN_WITHOUT_NOISE: frozenset[str] = frozenset(
+    {
+        "system_noise",
+        "internal_admin",
+        "bounce_problem",
+        "bounce",
+        "auto_reply",
+    }
 )
 
-_LOGISTICS_VENDOR_DOMAINS: frozenset[str] = frozenset({"dhl.com"})
-
-_LOGISTICS_SUBJECT_MARKERS: tuple[str, ...] = (
-    "dhl",
-    "cuenta importación",
-    "cuenta importacion",
-    "propuesta comercial dhl",
-    "solicitud cuenta",
-)
-
-_NEXT_ACTION_BY_CATEGORY: dict[str, str] = {
-    "auto_reply": "Ignorar alerta automática / registro; no requiere acción comercial.",
-    "vendor_logistics": (
-        "Revisar gestión logística/cuenta de importación; no cotizar al remitente."
-    ),
-    "supplier_reply": (
-        "Leer propuesta del proveedor y vincularla al cliente/oportunidad correspondiente."
-    ),
-    "payment_admin": "Registrar/confirmar pago y asociarlo a factura/cliente; no cotizar.",
-    "bounce": "Revisar NDR; no reenviar a la misma dirección sin corregir.",
-    "quote_sent": "Confirmar si el cliente respondió; no duplicar cotización.",
-    "waiting_client": "Esperar respuesta o seguimiento suave si pasó el plazo.",
-    "waiting_supplier": "Seguimiento a proveedor por cotización pendiente.",
-    "client_reply": "Responder hilo comercial; verificar specs antes de cotizar.",
-    "opportunity": "Priorizar según señal comercial; validar equipo y plazo.",
+_LEGACY_CATEGORY_ALIASES: dict[str, WarmCaseCategory] = {
+    "vendor_logistics": "logistics_admin",
+    "auto_reply": "system_noise",
+    "bounce": "bounce_problem",
+    "client_reply": "client_response",
+    "supplier_reply": "supplier_followup",
+    "opportunity": "client_opportunity",
 }
-
-_PAYMENT_BANK_DETAILS_MARKERS: tuple[str, ...] = (
-    "datos bancarios",
-    "solicita datos banc",
-    "cuenta corriente",
-    "beneficiario",
-    "registrarla en nuestro sistema",
-    "registrar en nuestro sistema",
-)
 
 
 def is_auto_reply_subject(subject: str | None) -> bool:
@@ -100,91 +82,54 @@ def is_auto_reply_subject(subject: str | None) -> bool:
         return False
     if sub.startswith("automatic reply"):
         return True
-    return any(marker in sub for marker in _AUTO_REPLY_SUBJECT_MARKERS)
-
-
-def _warm_haystack(item: WarmCaseItem) -> str:
-    return payment_admin_text_haystack(
-        subject=item.subject,
-        snippet=item.snippet,
-        account_name=item.account_name,
+    markers = (
+        "automatic reply",
+        "auto-reply",
+        "out of office",
+        "fuera de oficina",
+        "respuesta automática",
+        "respuesta automatica",
     )
+    return any(marker in sub for marker in markers)
 
 
-def _subject_has_logistics_signal(item: WarmCaseItem) -> bool:
-    hay = _warm_haystack(item)
-    return any(kw in hay for kw in _LOGISTICS_SUBJECT_MARKERS)
-
-
-def _payment_admin_next_action(item: WarmCaseItem) -> str:
-    hay = _warm_haystack(item)
-    if any(marker in hay for marker in _PAYMENT_BANK_DETAILS_MARKERS):
-        return (
-            "Registrar/confirmar datos bancarios y asociar a factura/cliente; no cotizar."
-        )
-    return _NEXT_ACTION_BY_CATEGORY["payment_admin"]
-
-
-def _infer_status(category: WarmCaseCategory, prior: WarmCaseStatus) -> WarmCaseStatus:
-    if category in ("auto_reply", "bounce"):
-        return "problem"
-    if category in ("payment_admin", "vendor_logistics"):
-        return "open"
-    if category == "quote_sent":
-        return "quoted"
-    if category in ("waiting_supplier", "waiting_client"):
-        return "waiting"
-    if category == "supplier_reply" and prior in ("waiting", "quoted"):
-        return prior
-    return prior if prior in ("open", "waiting", "quoted", "problem") else "new"
+def _item_to_classifier_row(item: WarmCaseItem) -> dict[str, object]:
+    return {
+        "contact_email": item.contact_email,
+        "sender_preview": item.contact_email,
+        "subject_preview": item.subject,
+        "snippet": item.snippet,
+        "account_name": item.account_name,
+        "has_positive_signal": item.category in ("opportunity", "client_opportunity"),
+        "has_suppression_signal": item.status == "problem",
+    }
 
 
 def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
-    """Deterministic category override from contact domain and subject/snippet."""
-    if is_internal_operator_contact(item.contact_email):
-        return "auto_reply"
-
-    if looks_like_security_notification(None, item.subject, contact_email=item.contact_email):
-        return "auto_reply"
-
-    if is_auto_reply_subject(item.subject):
-        return "auto_reply"
-
-    if looks_like_supplier_marketing_thread(
-        contact_email=item.contact_email,
-        subject=item.subject,
-    ) or looks_like_supplier_admin_signup_subject(item.subject):
-        return "supplier_reply"
-
-    if looks_like_payment_admin_thread(
-        item.contact_email,
-        item.subject,
-        snippet=item.snippet,
-        account_name=item.account_name,
+    """Role-level category from shared pipeline classifier."""
+    role = infer_warm_case_role_category(
+        _item_to_classifier_row(item),
+        enrichment_available=item.category in ("opportunity", "client_opportunity"),
+        include_noise=True,
+    )
+    if role in (
+        "internal_admin",
+        "system_noise",
+        "payment_admin",
+        "logistics_admin",
+        "supplier_quote_received",
+        "supplier_followup",
+        "deal_evidence_candidate",
+        "bounce_problem",
     ):
-        return "payment_admin"
+        return _canonical_category(role)
+    if item.category in ("quote_sent", "waiting_supplier", "waiting_client"):
+        return _canonical_category(item.category)
+    return _canonical_category(role)
 
-    domain = email_domain(item.contact_email)
-    if domain in _LOGISTICS_VENDOR_DOMAINS or _subject_has_logistics_signal(item):
-        return "vendor_logistics"
 
-    if domain in SUPPLIER_VENDOR_DOMAINS:
-        return "supplier_reply"
-
-    if is_real_client_domain(domain) and looks_like_client_oc_post_sale_subject(
-        item.subject,
-        snippet=item.snippet,
-        account_name=item.account_name,
-    ):
-        return "client_reply"
-
-    if item.category in ("quote_sent", "waiting_client", "waiting_supplier"):
-        return item.category  # type: ignore[return-value]
-
-    if item.category == "client_reply":
-        return "client_reply"
-
-    return item.category  # type: ignore[return-value]
+def _canonical_category(category: str) -> WarmCaseCategory:
+    return _LEGACY_CATEGORY_ALIASES.get(category, category)  # type: ignore[return-value]
 
 
 def normalize_warm_case_item(
@@ -195,18 +140,29 @@ def normalize_warm_case_item(
     """
     Adjust category/status/next_action at response time.
 
-    Returns None when the row should be omitted (auto-reply with noise excluded).
+    Returns None when the row should be omitted (noise/admin excluded).
     """
-    category = resolve_normalized_category(item)
+    category = _canonical_category(resolve_normalized_category(item))
 
-    if category == "auto_reply" and not include_noise:
+    if is_auto_reply_subject(item.subject) and category not in (
+        "supplier_quote_received",
+        "supplier_followup",
+    ):
+        category = "system_noise"
+
+    if category in _HIDDEN_WITHOUT_NOISE and not include_noise:
         return None
 
-    status = _infer_status(category, item.status)
-    if category == "payment_admin":
-        next_action = _payment_admin_next_action(item)
-    else:
-        next_action = _NEXT_ACTION_BY_CATEGORY.get(category, item.next_action)
+    status: WarmCaseStatus = role_category_status(
+        category,  # type: ignore[arg-type]
+        _item_to_classifier_row(item),
+    )
+    if category == "quote_sent":
+        status = "quoted"
+    elif category in ("waiting_supplier", "waiting_client"):
+        status = "waiting"
+
+    next_action = role_category_next_action(category)  # type: ignore[arg-type]
 
     return item.model_copy(
         update={
@@ -218,7 +174,6 @@ def normalize_warm_case_item(
 
 
 def filter_positive_normalized_items(items: list[WarmCaseItem]) -> list[WarmCaseItem]:
-    """Keep operator-meaningful categories after response-time normalization."""
     return [item for item in items if item.category in POST_NORMALIZE_POSITIVE_CATEGORIES]
 
 
@@ -229,7 +184,6 @@ def normalize_warm_case_items(
     category_filter: str | None = None,
     positive_signal_only: bool = False,
 ) -> list[WarmCaseItem]:
-    """Normalize and optionally filter by post-normalization category."""
     needle = (category_filter or "").strip().lower()
     out: list[WarmCaseItem] = []
     for item in items:

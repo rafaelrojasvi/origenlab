@@ -32,6 +32,9 @@ export const WARM_VIEW_PRESET_ORDER: WarmCaseViewPreset[] = [
 ];
 
 const CLIENTES_REALES_CATEGORIES: ReadonlySet<WarmCaseCategory> = new Set([
+  "client_opportunity",
+  "client_response",
+  "deal_evidence_candidate",
   "client_reply",
   "quote_sent",
   "waiting_client",
@@ -45,6 +48,8 @@ const SUPPLIER_VENDOR_DOMAINS: ReadonlySet<string> = new Set([
   "crtopmachine.com",
   "asynt.com",
   "eppendorf.com",
+  "ika.net.br",
+  "hielscher.com",
   "valuenindustrial.com",
   "gzfanbolun.com",
   "yuanhuai.com",
@@ -70,7 +75,16 @@ export function isExcludedFromClientesReales(row: WarmCaseItem): boolean {
   if (hay.includes("confirm your registration") || hay.includes("please confirm your registration")) {
     return true;
   }
-  if (row.category === "payment_admin" || row.category === "vendor_logistics") {
+  if (
+    row.category === "payment_admin" ||
+    row.category === "logistics_admin" ||
+    row.category === "vendor_logistics" ||
+    row.category === "internal_admin" ||
+    row.category === "system_noise" ||
+    row.category === "supplier_quote_received" ||
+    row.category === "supplier_followup" ||
+    row.category === "supplier_reply"
+  ) {
     return true;
   }
   if (matchesPagosAdminSignals(row)) {
@@ -164,10 +178,14 @@ export function matchesWarmCaseViewPreset(
       return category === "waiting_supplier" && matchesRealClientPostSale(row);
 
     case "proveedores":
-      if (category === "vendor_logistics") {
+      if (category === "vendor_logistics" || category === "logistics_admin") {
         return false;
       }
-      if (category === "supplier_reply") {
+      if (
+        category === "supplier_reply" ||
+        category === "supplier_quote_received" ||
+        category === "supplier_followup"
+      ) {
         return true;
       }
       if (SUPPLIER_VENDOR_DOMAINS.has(domain)) {
@@ -182,12 +200,16 @@ export function matchesWarmCaseViewPreset(
       return matchesPagosAdminPreset(row);
 
     case "logistica":
-      if (category === "vendor_logistics" || LOGISTICS_DOMAINS.has(domain)) {
+      if (category === "vendor_logistics" || category === "logistics_admin") {
+        return true;
+      }
+      if (LOGISTICS_DOMAINS.has(domain)) {
         return true;
       }
       return (
         haystackIncludesLogistics(row) &&
         category !== "auto_reply" &&
+        category !== "system_noise" &&
         !isExcludedFromClientesReales(row)
       );
 
