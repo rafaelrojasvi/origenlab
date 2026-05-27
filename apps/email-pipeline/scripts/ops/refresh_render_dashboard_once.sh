@@ -48,10 +48,22 @@ _canonical_gmail_count_sql() {
     "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
 }
 
+_fast_mode_mart_health_check() {
+  sqlite3 "$SQLITE_PATH" <<'SQL'
+SELECT
+  (SELECT COUNT(*) FROM contact_master),
+  (SELECT COUNT(*) FROM organization_master),
+  (SELECT COUNT(*) FROM opportunity_signals),
+  (SELECT COUNT(*) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%');
+SQL
+}
+
 echo "== OrigenLab: refresh Render dashboard once =="
 echo "Safety: no sends, no Gmail mutation, no mart/commercial --rebuild, no outreach writes, no deploy."
 if [[ "$DASHBOARD_FAST" == "1" ]]; then
-  echo "Mode: DASHBOARD_FAST=1 (incremental canonical refresh + dashboard-only Postgres sync)"
+  echo "Mode: DASHBOARD_FAST=1 (safe fast mode; reuses full mart baseline, no partial mart writes)"
+  echo "Recovery note: if fast mode was run with partial mart writes in older versions, restore SQLite mart via:"
+  echo "  uv run python scripts/mart/build_business_mart.py --rebuild"
 else
   echo "Mode: default (full mart scan + standard mirror sync)"
 fi
@@ -108,12 +120,21 @@ echo ""
 echo "-- Incremental SQLite derived layers (no --rebuild) --"
 uv sync --group dev >/dev/null
 if [[ "$DASHBOARD_FAST" == "1" ]]; then
-  FAST_SINCE_DAYS="${GMAIL_SINCE_DAYS:-14}"
-  uv run python scripts/mart/build_business_mart.py \
-    --dashboard-fast \
-    --canonical-only \
-    --since-days "$FAST_SINCE_DAYS" \
-    --skip-document-master-if-unchanged
+  echo "-- Fast mode preflight: validating full mart baseline health --"
+  FAST_HEALTH="$(_fast_mode_mart_health_check)"
+  FAST_CONTACT_COUNT="$(echo "$FAST_HEALTH" | awk -F'|' '{print $1}')"
+  FAST_ORG_COUNT="$(echo "$FAST_HEALTH" | awk -F'|' '{print $2}')"
+  FAST_OPP_COUNT="$(echo "$FAST_HEALTH" | awk -F'|' '{print $3}')"
+  FAST_CANONICAL_COUNT="$(echo "$FAST_HEALTH" | awk -F'|' '{print $4}')"
+  echo "  contact_master rows:      ${FAST_CONTACT_COUNT}"
+  echo "  organization_master rows: ${FAST_ORG_COUNT}"
+  echo "  opportunity_signals rows: ${FAST_OPP_COUNT}"
+  echo "  canonical Gmail rows:     ${FAST_CANONICAL_COUNT}"
+  if [[ "${FAST_CONTACT_COUNT}" -le 1000 || "${FAST_ORG_COUNT}" -le 1000 || "${FAST_OPP_COUNT}" -le 0 || "${FAST_CANONICAL_COUNT}" -le 0 ]]; then
+    echo "ERROR: Fast mode refused: full mart baseline is unhealthy. Run build_business_mart.py --rebuild." >&2
+    exit 2
+  fi
+  echo "-- Fast mode: skipping build_business_mart.py to avoid partial writes on baseline mart tables --"
 else
   uv run python scripts/mart/build_business_mart.py
 fi

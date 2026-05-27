@@ -55,21 +55,28 @@ def test_refresh_script_does_not_invoke_send_or_outreach() -> None:
     runtime_lines = [
         ln
         for ln in _script_text(_REFRESH).splitlines()
-        if ln.strip() and not ln.lstrip().startswith("#")
+        if ln.strip() and not ln.lstrip().startswith("#") and not ln.lstrip().startswith("echo ")
     ]
     runtime = "\n".join(runtime_lines)
     for forbidden in _FORBIDDEN_INVOCATIONS:
         assert forbidden not in runtime, f"refresh script must not call {forbidden}"
 
 
-def test_refresh_script_dashboard_fast_invokes_canonical_fast_flags() -> None:
+def test_refresh_script_dashboard_fast_skips_partial_mart_build() -> None:
     text = _script_text(_REFRESH)
     assert 'if [[ "$DASHBOARD_FAST" == "1" ]]; then' in text
-    assert "--dashboard-fast" in text
-    assert "--canonical-only" in text
-    assert "--skip-document-master-if-unchanged" in text
+    assert "skipping build_business_mart.py to avoid partial writes" in text
+    assert "Fast mode preflight: validating full mart baseline health" in text
+    assert "Fast mode refused: full mart baseline is unhealthy. Run build_business_mart.py --rebuild." in text
+    assert "_fast_mode_mart_health_check" in text
     assert "--only canonical" in text
     assert "verify_dashboard_postgres_mirror.py" in text
+
+
+def test_refresh_script_documents_mart_rebuild_recovery_note() -> None:
+    text = _script_text(_REFRESH)
+    assert "Recovery note" in text
+    assert "build_business_mart.py --rebuild" in text
 
 
 def test_refresh_script_default_path_keeps_standard_sync_script() -> None:
