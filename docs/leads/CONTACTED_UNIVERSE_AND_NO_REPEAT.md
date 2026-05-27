@@ -14,12 +14,25 @@ uv run python scripts/leads/audit_contacted_universe.py
 
 Default outputs (under `reports/out/active/current/`):
 
+### Raw safety universe (unchanged — full mail graph)
+
 | File | Purpose |
 |------|---------|
 | `contacted_universe_summary.json` | Counts for dashboards / automation |
-| `contacted_universe_summary.md` | Human-readable summary |
-| `contacted_universe_contacts.csv` | One row per known contact email |
+| `contacted_universe_summary.md` | Human-readable summary (raw vs clean sections) |
+| `contacted_universe_contacts.csv` | One row per known contact email (~28k+ rows) |
 | `contacted_universe_domains.csv` | Aggregated by registrable domain |
+
+### Clean exports for DeepSearch / prospecting (Phase 10A.1)
+
+| File | Purpose |
+|------|---------|
+| `contacted_exact_emails_for_exclusion.csv` | Emails OrigenLab already touched or must not re-mail |
+| `contacted_domains_for_exclusion.csv` | Domains with Sent, bounce, supplier, or suppression |
+| `bounced_emails_for_exclusion.csv` | Bounce suppressions only |
+| `suppressed_contacts_for_exclusion.csv` | Email-level suppressions |
+| `follow_up_candidates_review.csv` | Human shortlist for realistic follow-up |
+| `noisy_contacts_review.csv` | Why the raw universe is huge (noreply, marketplaces, etc.) |
 
 Optional: point at a specific DB or merge `do_not_repeat_master.csv`:
 
@@ -58,6 +71,21 @@ Priority signals (same as cold-export gate):
 ## Domain CSV columns
 
 `domain`, `organization_name`, `sent_count`, `received_count`, `unique_contacts`, `bounced_count`, `suppressed_bool`, `supplier_bool`, `internal_bool`, `buyer_type_guess`, `latest_contacted_at`, `recommended_status`, `reason_codes`
+
+## When to use which export
+
+| Task | File |
+|------|------|
+| Block DeepSearch / import duplicates | `contacted_exact_emails_for_exclusion.csv` + `contacted_domains_for_exclusion.csv` |
+| Never mail again (bounce) | `bounced_emails_for_exclusion.csv` |
+| Operator suppression list | `suppressed_contacts_for_exclusion.csv` |
+| Tatiana follow-up queue | `follow_up_candidates_review.csv` |
+| Audit noise in archive | `noisy_contacts_review.csv` |
+| Forensics / safety overrides | Raw `contacted_universe_*.csv` |
+
+**Exact email exclusion** includes only rows with Sent history, outreach `contacted`/`snoozed`/`replied`, bounce, or suppression — not every `contact_master` row from inbound spam.
+
+**Noisy review** flags noreply/unsubscribe locals, mailer-daemon, numeric locals, supplier marketplace domains (`verifiedsupplier`, `chinalabsupplies`, `chromatography.ltd`, …), suspicious random domains, and context-free freemail.
 
 ## Net-new eligibility (for DeepSearch candidates)
 

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import sqlite3
-from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from origenlab_email_pipeline.business_mart import domain_of, emails_in
 from origenlab_email_pipeline.candidate_export_gate import (
@@ -91,6 +92,109 @@ NET_NEW_INVALID = "invalid_or_noise"
 _BOUNCE_REASON_PREFIX = "bounce_"
 _MAX_SUBJECT_LEN = 160
 
+EXACT_EMAIL_EXCLUSION_FIELDS: tuple[str, ...] = (
+    "normalized_email",
+    "domain",
+    "organization_name",
+    "last_contacted_at",
+    "sent_count",
+    "received_count",
+    "recommended_status",
+    "reason_codes",
+)
+
+DOMAIN_EXCLUSION_FIELDS: tuple[str, ...] = (
+    "domain",
+    "organization_name",
+    "sent_count",
+    "received_count",
+    "unique_contacts",
+    "bounced_count",
+    "recommended_status",
+    "reason_codes",
+)
+
+BOUNCED_EMAIL_EXCLUSION_FIELDS: tuple[str, ...] = (
+    "normalized_email",
+    "domain",
+    "organization_name",
+    "last_contacted_at",
+    "recommended_status",
+    "reason_codes",
+)
+
+SUPPRESSED_CONTACT_EXCLUSION_FIELDS: tuple[str, ...] = (
+    "normalized_email",
+    "domain",
+    "organization_name",
+    "suppressed_bool",
+    "recommended_status",
+    "reason_codes",
+)
+
+FOLLOW_UP_REVIEW_FIELDS: tuple[str, ...] = (
+    "normalized_email",
+    "domain",
+    "organization_name",
+    "first_contacted_at",
+    "last_contacted_at",
+    "sent_count",
+    "received_count",
+    "latest_subject_safe",
+    "buyer_type_guess",
+    "product_interest_guess",
+    "recommended_follow_up_angle",
+    "reason_codes",
+)
+
+NOISY_CONTACT_REVIEW_FIELDS: tuple[str, ...] = (
+    "normalized_email",
+    "domain",
+    "display_name",
+    "organization_name",
+    "role_guess",
+    "sent_count",
+    "received_count",
+    "recommended_status",
+    "noise_reason_codes",
+)
+
+_NOISE_LOCAL_MARKERS: tuple[str, ...] = (
+    "noreply",
+    "no-reply",
+    "donotreply",
+    "do-not-reply",
+    "unsubscribe",
+    "envioscompilado",
+    "mailer-daemon",
+    "postmaster",
+)
+
+_SUPPLIER_MARKETPLACE_DOMAIN_MARKERS: tuple[str, ...] = (
+    "suppliermarketplace",
+    "verifiedsupplier",
+    "chinalabsupplies",
+    "chromatography.ltd",
+)
+
+_FREEMAIL_DOMAINS: frozenset[str] = frozenset(
+    {"gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "icloud.com", "live.com"}
+)
+
+_CLIENT_SUBJECT_MARKERS: tuple[str, ...] = (
+    "cotiz",
+    "cotización",
+    "quote",
+    "presupuesto",
+    "equipo",
+    "licit",
+    "oportunidad",
+    "solicitud",
+    "re:",
+)
+
+_RANDOM_DOMAIN_RE = re.compile(r"^[a-z0-9.-]+$")
+
 
 @dataclass
 class EmailActivity:
@@ -117,10 +221,241 @@ class ContactedUniverseContext:
 
 
 @dataclass
+class FilteredUniverseExports:
+    exact_emails: list[dict[str, str]]
+    domains_exclusion: list[dict[str, str]]
+    bounced_emails: list[dict[str, str]]
+    suppressed_contacts: list[dict[str, str]]
+    follow_up_candidates: list[dict[str, str]]
+    noisy_contacts: list[dict[str, str]]
+
+
+@dataclass
 class ContactedUniverseResult:
     summary: dict[str, Any]
     contacts: list[dict[str, str]]
     domains: list[dict[str, str]]
+    filtered: FilteredUniverseExports
+
+
+def _int_field(row: dict[str, str], key: str) -> int:
+    try:
+        return int(row.get(key) or 0)
+    except ValueError:
+        return 0
+
+
+def _bool_field(row: dict[str, str], key: str) -> bool:
+    return str(row.get(key) or "").lower() == "true"
+
+
+def _suspicious_random_domain(domain: str) -> bool:
+    d = (domain or "").strip().lower()
+    if not d or "." not in d:
+        return True
+    registrable = d.split(".")[-2] if d.count(".") >= 1 else d
+    label = registrable.replace("-", "")
+    if len(label) < 10:
+        return False
+    if not _RANDOM_DOMAIN_RE.match(d):
+        return True
+    vowels = sum(1 for c in label if c in "aeiou")
+    if len(label) >= 12 and vowels / len(label) < 0.15:
+        return True
+    digits = sum(1 for c in label if c.isdigit())
+    if digits >= 4 and digits / len(label) >= 0.35:
+        return True
+    return False
+
+
+def classify_contact_noise(row: dict[str, str]) -> tuple[bool, list[str]]:
+    """Return (is_noisy, stable noise reason codes) for prospect-review filtering."""
+    email = (row.get("normalized_email") or "").strip().lower()
+    domain = (row.get("domain") or domain_of(email) or "").strip().lower()
+    local = email.split("@", 1)[0] if "@" in email else email
+    reasons: list[str] = []
+
+    if not email or "@" not in email:
+        reasons.append("noise_invalid_email")
+        return True, reasons
+
+    if "mailer-daemon" in email or "postmaster" in email:
+        reasons.append("noise_system_mailbox")
+    for marker in _NOISE_LOCAL_MARKERS:
+        if marker in local:
+            reasons.append(f"noise_local_{marker.replace('-', '_')}")
+            break
+
+    role = (row.get("role_guess") or "").strip().lower()
+    if role in ("noise", "admin"):
+        reasons.append(f"noise_role_{role}")
+
+    if len(local) >= 6:
+        digits = sum(1 for c in local if c.isdigit())
+        if digits / len(local) >= 0.6:
+            reasons.append("noise_numeric_local")
+
+    for marker in _SUPPLIER_MARKETPLACE_DOMAIN_MARKERS:
+        if marker in domain:
+            reasons.append("noise_supplier_marketplace")
+            break
+
+    if _suspicious_random_domain(domain):
+        reasons.append("noise_suspicious_domain")
+
+    if domain.endswith(".cn") and any(
+        x in domain for x in ("supplier", "trade", "export", "ltd", "market")
+    ):
+        reasons.append("noise_overseas_supplier_spam")
+
+    if domain in _FREEMAIL_DOMAINS:
+        has_context = bool((row.get("display_name") or "").strip()) or bool(
+            (row.get("organization_name") or "").strip()
+        )
+        if not has_context and _int_field(row, "sent_count") == 0 and _int_field(row, "received_count") == 0:
+            reasons.append("noise_generic_freemail")
+
+    return bool(reasons), list(dict.fromkeys(reasons))
+
+
+def _subject_suggests_client_thread(subject: str) -> bool:
+    s = (subject or "").lower()
+    return any(m in s for m in _CLIENT_SUBJECT_MARKERS)
+
+
+def _follow_up_angle(
+    row: dict[str, str],
+    *,
+    warm_contacts: frozenset[str],
+) -> str:
+    em = row.get("normalized_email") or ""
+    subj = (row.get("latest_subject_safe") or "").lower()
+    if em in warm_contacts:
+        return "warm_opportunity_signal"
+    if _bool_field(row, "replied_bool") and _subject_suggests_client_thread(subj):
+        return "reply_to_quote_thread"
+    if _subject_suggests_client_thread(subj):
+        return "client_request_follow_up"
+    if _int_field(row, "sent_count") > 0 and not _bool_field(row, "replied_bool"):
+        return "prior_outreach_no_reply"
+    if _int_field(row, "received_count") > 0:
+        return "inbound_thread_review"
+    return "relationship_review"
+
+
+def _include_exact_email(row: dict[str, str], ctx: ContactedUniverseContext) -> bool:
+    if _int_field(row, "sent_count") > 0:
+        return True
+    state = (row.get("outreach_state") or "").strip().lower()
+    if state in ("contacted", "snoozed", "replied"):
+        return True
+    if _bool_field(row, "bounced_bool") or _bool_field(row, "suppressed_bool"):
+        return True
+    em = row.get("normalized_email") or ""
+    if em in ctx.gate.suppressed_norms:
+        return True
+    return False
+
+
+def _include_domain_exclusion(row: dict[str, str]) -> bool:
+    if _int_field(row, "sent_count") > 0:
+        return True
+    if _bool_field(row, "suppressed_bool"):
+        return True
+    if _bool_field(row, "supplier_bool"):
+        return True
+    if _bool_field(row, "internal_bool"):
+        return True
+    if _int_field(row, "bounced_count") > 0:
+        return True
+    return False
+
+
+def _is_realistic_follow_up_candidate(
+    row: dict[str, str],
+    ctx: ContactedUniverseContext,
+) -> bool:
+    if _int_field(row, "sent_count") == 0 and _int_field(row, "received_count") == 0:
+        return False
+    if _bool_field(row, "bounced_bool") or _bool_field(row, "suppressed_bool"):
+        return False
+    role = (row.get("role_guess") or "").lower()
+    if role in ("supplier", "internal", "noise", "admin"):
+        return False
+    if row.get("recommended_status") in (
+        RECOMMENDED_BOUNCED,
+        RECOMMENDED_SUPPLIER,
+        RECOMMENDED_INTERNAL,
+    ):
+        return False
+    noisy, _ = classify_contact_noise(row)
+    if noisy:
+        return False
+    em = row.get("normalized_email") or ""
+    if _bool_field(row, "replied_bool"):
+        return True
+    if em in ctx.warm_opportunity_contacts:
+        return True
+    if _subject_suggests_client_thread(row.get("latest_subject_safe") or ""):
+        return True
+    return False
+
+
+def build_filtered_exports(
+    contacts: list[dict[str, str]],
+    domains: list[dict[str, str]],
+    ctx: ContactedUniverseContext,
+) -> FilteredUniverseExports:
+    exact_emails: list[dict[str, str]] = []
+    bounced_emails: list[dict[str, str]] = []
+    suppressed_contacts: list[dict[str, str]] = []
+    follow_up_candidates: list[dict[str, str]] = []
+    noisy_contacts: list[dict[str, str]] = []
+
+    for row in contacts:
+        noisy, noise_reasons = classify_contact_noise(row)
+        if noisy:
+            noisy_contacts.append(
+                {
+                    **{k: row.get(k, "") for k in NOISY_CONTACT_REVIEW_FIELDS if k != "noise_reason_codes"},
+                    "noise_reason_codes": "|".join(noise_reasons),
+                }
+            )
+
+        if _include_exact_email(row, ctx):
+            exact_emails.append({k: row.get(k, "") for k in EXACT_EMAIL_EXCLUSION_FIELDS})
+
+        if _bool_field(row, "bounced_bool"):
+            bounced_emails.append({k: row.get(k, "") for k in BOUNCED_EMAIL_EXCLUSION_FIELDS})
+
+        if _bool_field(row, "suppressed_bool"):
+            suppressed_contacts.append(
+                {k: row.get(k, "") for k in SUPPRESSED_CONTACT_EXCLUSION_FIELDS}
+            )
+
+        if _is_realistic_follow_up_candidate(row, ctx):
+            angle = _follow_up_angle(row, warm_contacts=ctx.warm_opportunity_contacts)
+            follow_up_candidates.append(
+                {
+                    **{k: row.get(k, "") for k in FOLLOW_UP_REVIEW_FIELDS if k != "recommended_follow_up_angle"},
+                    "recommended_follow_up_angle": angle,
+                }
+            )
+
+    domains_exclusion = [
+        {k: row.get(k, "") for k in DOMAIN_EXCLUSION_FIELDS}
+        for row in domains
+        if _include_domain_exclusion(row)
+    ]
+
+    return FilteredUniverseExports(
+        exact_emails=exact_emails,
+        domains_exclusion=domains_exclusion,
+        bounced_emails=bounced_emails,
+        suppressed_contacts=suppressed_contacts,
+        follow_up_candidates=follow_up_candidates,
+        noisy_contacts=noisy_contacts,
+    )
 
 
 def connect_readonly(db_path: Path) -> sqlite3.Connection:
@@ -773,7 +1108,27 @@ def build_contacted_universe(
         "gmail_user": gmail_user,
         "sent_folders": list(sent_folders),
     }
-    return ContactedUniverseResult(summary=summary, contacts=contacts_out, domains=domains_out)
+    filtered = build_filtered_exports(contacts_out, domains_out, ctx)
+    summary["exact_contacted_emails_for_exclusion"] = len(filtered.exact_emails)
+    summary["contacted_domains_for_exclusion"] = len(filtered.domains_exclusion)
+    summary["bounced_emails_for_exclusion"] = len(filtered.bounced_emails)
+    summary["suppressed_contacts_for_exclusion"] = len(filtered.suppressed_contacts)
+    summary["follow_up_candidates_review"] = len(filtered.follow_up_candidates)
+    summary["noisy_contacts_review"] = len(filtered.noisy_contacts)
+    return ContactedUniverseResult(
+        summary=summary,
+        contacts=contacts_out,
+        domains=domains_out,
+        filtered=filtered,
+    )
+
+
+def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, str]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(fieldnames), lineterminator="\n")
+        w.writeheader()
+        for row in rows:
+            w.writerow({k: row.get(k, "") for k in fieldnames})
 
 
 def write_contacted_universe_outputs(
@@ -785,44 +1140,87 @@ def write_contacted_universe_outputs(
     md_path = out_dir / "contacted_universe_summary.md"
     contacts_path = out_dir / "contacted_universe_contacts.csv"
     domains_path = out_dir / "contacted_universe_domains.csv"
+    exact_path = out_dir / "contacted_exact_emails_for_exclusion.csv"
+    domain_excl_path = out_dir / "contacted_domains_for_exclusion.csv"
+    bounced_path = out_dir / "bounced_emails_for_exclusion.csv"
+    suppressed_path = out_dir / "suppressed_contacts_for_exclusion.csv"
+    follow_up_path = out_dir / "follow_up_candidates_review.csv"
+    noisy_path = out_dir / "noisy_contacts_review.csv"
 
     json_path.write_text(
         json.dumps(result.summary, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
-    with contacts_path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(CONTACT_CSV_FIELDS), lineterminator="\n")
-        w.writeheader()
-        for row in result.contacts:
-            w.writerow({k: row.get(k, "") for k in CONTACT_CSV_FIELDS})
+    _write_csv(contacts_path, CONTACT_CSV_FIELDS, result.contacts)
+    _write_csv(domains_path, DOMAIN_CSV_FIELDS, result.domains)
 
-    with domains_path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(DOMAIN_CSV_FIELDS), lineterminator="\n")
-        w.writeheader()
-        for row in result.domains:
-            w.writerow({k: row.get(k, "") for k in DOMAIN_CSV_FIELDS})
+    filt = result.filtered
+    _write_csv(exact_path, EXACT_EMAIL_EXCLUSION_FIELDS, filt.exact_emails)
+    _write_csv(domain_excl_path, DOMAIN_EXCLUSION_FIELDS, filt.domains_exclusion)
+    _write_csv(bounced_path, BOUNCED_EMAIL_EXCLUSION_FIELDS, filt.bounced_emails)
+    _write_csv(suppressed_path, SUPPRESSED_CONTACT_EXCLUSION_FIELDS, filt.suppressed_contacts)
+    _write_csv(follow_up_path, FOLLOW_UP_REVIEW_FIELDS, filt.follow_up_candidates)
+    _write_csv(noisy_path, NOISY_CONTACT_REVIEW_FIELDS, filt.noisy_contacts)
+
+    raw_keys = (
+        "total_sent_email_rows",
+        "unique_outbound_recipient_emails",
+        "unique_outbound_recipient_domains",
+        "total_universe_contacts",
+        "total_universe_domains",
+        "bounced_recipient_emails",
+        "suppressed_contacts",
+        "contacts_eligible_for_follow_up",
+        "contacts_blocked_from_outreach",
+    )
+    clean_keys = (
+        "exact_contacted_emails_for_exclusion",
+        "contacted_domains_for_exclusion",
+        "bounced_emails_for_exclusion",
+        "suppressed_contacts_for_exclusion",
+        "follow_up_candidates_review",
+        "noisy_contacts_review",
+    )
+
+    def _section(title: str, keys: tuple[str, ...]) -> list[str]:
+        block = [f"## {title}", "", "| Metric | Count |", "|--------|------:|"]
+        for key in keys:
+            val = result.summary.get(key)
+            if isinstance(val, (int, float)):
+                block.append(f"| {key} | {val:,} |")
+        block.append("")
+        return block
 
     lines = [
         "# Contacted universe summary",
         "",
         "Read-only audit from SQLite (Gmail Sent + suppressions + outreach state).",
         "",
-        "| Metric | Count |",
-        "|--------|------:|",
     ]
-    for key, val in sorted(result.summary.items()):
-        if key in ("gmail_user", "sent_folders"):
-            continue
-        if isinstance(val, (int, float)):
-            lines.append(f"| {key} | {val:,} |")
+    lines.extend(_section("Raw safety universe (full mail graph)", raw_keys))
+    lines.extend(
+        _section(
+            "Clean exports for DeepSearch / prospecting",
+            clean_keys,
+        )
+    )
     lines.extend(
         [
-            "",
             f"- Gmail user: `{result.summary.get('gmail_user', '')}`",
             f"- Sent folders: `{', '.join(result.summary.get('sent_folders') or [])}`",
             "",
-            "Outputs: `contacted_universe_contacts.csv`, `contacted_universe_domains.csv`.",
+            "### Raw outputs (unchanged)",
+            "- `contacted_universe_contacts.csv`",
+            "- `contacted_universe_domains.csv`",
+            "",
+            "### Prospecting / exclusion outputs",
+            "- `contacted_exact_emails_for_exclusion.csv` — Sent, outreach, bounce, suppression only",
+            "- `contacted_domains_for_exclusion.csv` — domains touched or blocked",
+            "- `bounced_emails_for_exclusion.csv`",
+            "- `suppressed_contacts_for_exclusion.csv`",
+            "- `follow_up_candidates_review.csv` — human follow-up shortlist",
+            "- `noisy_contacts_review.csv` — why the raw universe is large",
         ]
     )
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -832,4 +1230,10 @@ def write_contacted_universe_outputs(
         "summary_md": md_path,
         "contacts_csv": contacts_path,
         "domains_csv": domains_path,
+        "exact_emails_csv": exact_path,
+        "domains_exclusion_csv": domain_excl_path,
+        "bounced_emails_csv": bounced_path,
+        "suppressed_contacts_csv": suppressed_path,
+        "follow_up_candidates_csv": follow_up_path,
+        "noisy_contacts_csv": noisy_path,
     }

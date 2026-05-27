@@ -21,6 +21,8 @@ from origenlab_email_pipeline.leads.contacted_universe_audit import (
     RECOMMENDED_SUPPLIER,
     build_contacted_universe,
     build_contacted_universe_context,
+    build_filtered_exports,
+    classify_contact_noise,
     classify_net_new_eligibility,
     connect_readonly,
 )
@@ -169,6 +171,37 @@ def _seed_db(db: Path) -> None:
         ) VALUES ('senthit@buyer.test', 'contacted', '2026-01-10', '2026-01-10', 'test', '2026-01-10', 'test')
         """
     )
+    conn.execute(
+        """
+        INSERT INTO contact_master (
+          email, contact_name_best, domain, organization_name_guess,
+          organization_type_guess, total_emails, inbound_emails, outbound_emails
+        ) VALUES (
+          'noreply@promo.test', '', 'promo.test', '', '', 1, 1, 0
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO contact_master (
+          email, contact_name_best, domain, organization_name_guess,
+          organization_type_guess, total_emails, inbound_emails, outbound_emails
+        ) VALUES (
+          '987654321@verifiedsupplier.chinalabsupplies.com', '', 'verifiedsupplier.chinalabsupplies.com',
+          '', '', 2, 2, 0
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO contact_master (
+          email, contact_name_best, domain, organization_name_guess,
+          organization_type_guess, total_emails, inbound_emails, outbound_emails
+        ) VALUES (
+          'randomspam@xyz', '', 'xyz', '', '', 1, 1, 0
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -286,6 +319,106 @@ def test_write_outputs(tmp_path: Path, audit_db: Path) -> None:
     out = tmp_path / "current"
     paths = write_contacted_universe_outputs(result, out)
     assert paths["contacts_csv"].is_file()
+    assert paths["exact_emails_csv"].is_file()
+    assert paths["noisy_contacts_csv"].is_file()
     with paths["contacts_csv"].open(encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     assert any(r["normalized_email"] == "senthit@buyer.test" for r in rows)
+
+
+def test_raw_universe_includes_noisy_safety_contacts(audit_db: Path) -> None:
+    result = build_contacted_universe(
+        sqlite3.connect(str(audit_db)),
+        gmail_user="contacto@origenlab.cl",
+        sent_folders=("[Gmail]/Enviados", "[Gmail]/Sent Mail"),
+    )
+    emails = {r["normalized_email"] for r in result.contacts}
+    assert "noreply@promo.test" in emails
+    assert len(result.contacts) > len(result.filtered.exact_emails)
+
+
+def test_exact_contacted_export_excludes_never_contacted_spam(audit_db: Path) -> None:
+    result = build_contacted_universe(
+        sqlite3.connect(str(audit_db)),
+        gmail_user="contacto@origenlab.cl",
+        sent_folders=("[Gmail]/Enviados", "[Gmail]/Sent Mail"),
+    )
+    exact = {r["normalized_email"] for r in result.filtered.exact_emails}
+    assert "senthit@buyer.test" in exact
+    assert "noreply@promo.test" not in exact
+    assert "987654321@verifiedsupplier.chinalabsupplies.com" not in exact
+
+
+def test_contacted_domain_export_includes_sent_domains(audit_db: Path) -> None:
+    result = build_contacted_universe(
+        sqlite3.connect(str(audit_db)),
+        gmail_user="contacto@origenlab.cl",
+        sent_folders=("[Gmail]/Enviados", "[Gmail]/Sent Mail"),
+    )
+    domains = {r["domain"] for r in result.filtered.domains_exclusion}
+    assert "buyer.test" in domains
+    assert int(next(r for r in result.filtered.domains_exclusion if r["domain"] == "buyer.test")["sent_count"]) >= 1
+
+
+def test_noreply_goes_to_noisy_contacts_review(audit_db: Path) -> None:
+    result = build_contacted_universe(
+        sqlite3.connect(str(audit_db)),
+        gmail_user="contacto@origenlab.cl",
+        sent_folders=("[Gmail]/Enviados", "[Gmail]/Sent Mail"),
+    )
+    noisy = {r["normalized_email"] for r in result.filtered.noisy_contacts}
+    assert "noreply@promo.test" in noisy
+    row = next(r for r in result.filtered.noisy_contacts if r["normalized_email"] == "noreply@promo.test")
+    assert "noise_local" in row["noise_reason_codes"]
+
+
+def test_supplier_marketplace_goes_to_noisy_contacts_review(audit_db: Path) -> None:
+    result = build_contacted_universe(
+        sqlite3.connect(str(audit_db)),
+        gmail_user="contacto@origenlab.cl",
+        sent_folders=("[Gmail]/Enviados", "[Gmail]/Sent Mail"),
+    )
+    noisy = {r["normalized_email"] for r in result.filtered.noisy_contacts}
+    assert "987654321@verifiedsupplier.chinalabsupplies.com" in noisy
+    assert "noise_supplier_marketplace" in next(
+        r for r in result.filtered.noisy_contacts
+        if r["normalized_email"] == "987654321@verifiedsupplier.chinalabsupplies.com"
+    )["noise_reason_codes"]
+
+
+def test_follow_up_candidates_exclude_bounce_supplier_noise(audit_db: Path) -> None:
+    result = build_contacted_universe(
+        sqlite3.connect(str(audit_db)),
+        gmail_user="contacto@origenlab.cl",
+        sent_folders=("[Gmail]/Enviados", "[Gmail]/Sent Mail"),
+    )
+    follow = {r["normalized_email"] for r in result.filtered.follow_up_candidates}
+    assert "bounced@bad.test" not in follow
+    assert "vendor@serva.de" not in follow
+    assert "noreply@promo.test" not in follow
+
+
+def test_follow_up_candidates_include_replied_client(audit_db: Path) -> None:
+    result = build_contacted_universe(
+        sqlite3.connect(str(audit_db)),
+        gmail_user="contacto@origenlab.cl",
+        sent_folders=("[Gmail]/Enviados", "[Gmail]/Sent Mail"),
+    )
+    follow = {r["normalized_email"] for r in result.filtered.follow_up_candidates}
+    assert "replier@buyer.test" in follow
+
+
+def test_classify_contact_noise_detects_noreply() -> None:
+    noisy, reasons = classify_contact_noise(
+        {
+            "normalized_email": "noreply@acme.com",
+            "domain": "acme.com",
+            "display_name": "",
+            "organization_name": "",
+            "role_guess": "client",
+            "sent_count": "0",
+            "received_count": "0",
+        }
+    )
+    assert noisy
+    assert any("noise_local" in r for r in reasons)

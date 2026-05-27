@@ -89,6 +89,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Follow-up candidates: {s.get('contacts_eligible_for_follow_up', 0):,}")
     print(f"  Blocked from outreach: {s.get('contacts_blocked_from_outreach', 0):,}")
     print(f"  Universe contacts (CSV rows): {s.get('total_universe_contacts', 0):,}")
+    print("  Clean exports:")
+    print(f"    exact emails for exclusion: {s.get('exact_contacted_emails_for_exclusion', 0):,}")
+    print(f"    domains for exclusion: {s.get('contacted_domains_for_exclusion', 0):,}")
+    print(f"    follow-up candidates: {s.get('follow_up_candidates_review', 0):,}")
+    print(f"    noisy contacts (review): {s.get('noisy_contacts_review', 0):,}")
     for label, path in paths.items():
         print(f"Wrote {label}: {path}")
     return 0
