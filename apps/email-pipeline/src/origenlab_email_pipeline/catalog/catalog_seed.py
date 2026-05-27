@@ -7,6 +7,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from origenlab_email_pipeline.catalog.catalog_mirror_safety import (
+    CatalogMirrorSafetyError,
+    assert_catalog_prose_spacing,
+)
 from origenlab_email_pipeline.catalog.catalog_schema import (
     CONFIDENCE_LEVELS,
     LINK_KINDS,
@@ -81,6 +85,13 @@ def assert_safe_text(value: str | None, *, field: str) -> None:
             )
 
 
+def _assert_prose_spacing(value: str | None, *, field: str) -> None:
+    try:
+        assert_catalog_prose_spacing(value, field=field)
+    except CatalogMirrorSafetyError as exc:
+        raise CatalogSeedValidationError(str(exc)) from exc
+
+
 def load_seed_json(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -150,6 +161,8 @@ def validate_seed(data: dict[str, Any]) -> dict[str, list[str]]:
             "website_slug",
         ):
             assert_safe_text(prod.get(field), field=f"{pk}.{field}")
+            if field in ("public_summary", "display_name"):
+                _assert_prose_spacing(prod.get(field), field=f"{pk}.{field}")
 
         aliases = prod.get("aliases") or []
         if not isinstance(aliases, list):
@@ -186,6 +199,8 @@ def validate_seed(data: dict[str, Any]) -> dict[str, list[str]]:
                 raise CatalogSeedValidationError(f"{ok}: invalid offer_status")
             for field in ("payment_terms", "delivery_terms", "availability_note"):
                 assert_safe_text(offer.get(field), field=f"{ok}.{field}")
+                if field == "availability_note":
+                    _assert_prose_spacing(offer.get(field), field=f"{ok}.{field}")
 
         for snap in prod.get("price_snapshots") or []:
             sk = str(snap["snapshot_key"])
@@ -213,6 +228,7 @@ def validate_seed(data: dict[str, Any]) -> dict[str, list[str]]:
 def _validate_price_snapshot(snap: dict[str, Any], *, product_key: str) -> None:
     sk = snap.get("snapshot_key", "?")
     assert_safe_text(snap.get("price_notes"), field=f"{sk}.price_notes")
+    _assert_prose_spacing(snap.get("price_notes"), field=f"{sk}.price_notes")
 
     is_public = snap.get("is_public_safe", False)
     if is_public:

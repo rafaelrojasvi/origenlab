@@ -72,6 +72,41 @@ def _table_counts(conn: sqlite3.Connection) -> dict[str, int]:
     return {t: int(conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]) for t in tables}
 
 
+def test_sqlite_prose_spacing_preserved() -> None:
+    conn = _memory_conn()
+    build_catalog_from_seed_file(conn, _SEED, dry_run=False)
+    serva = conn.execute(
+        "SELECT public_summary FROM catalog_product WHERE product_key = ?",
+        ("serva-blueslick-250ml",),
+    ).fetchone()
+    assert serva is not None
+    assert "cotización y disponibilidad" in serva["public_summary"]
+
+    ika = conn.execute(
+        """
+        SELECT p.public_summary, o.availability_note, ps.price_notes
+        FROM catalog_product p
+        JOIN catalog_supplier_offer o ON o.product_id = p.id
+        JOIN catalog_price_snapshot ps ON ps.product_id = p.id
+        WHERE p.product_key = ?
+        """,
+        ("ika-rv10-70-vapor-tube",),
+    ).fetchone()
+    assert ika is not None
+    assert "por cliente" in ika["public_summary"]
+    assert "cantidad 3" in ika["public_summary"]
+    assert "monto es" in ika["availability_note"]
+    assert "Monto 112,00" in ika["price_notes"]
+
+    crtop = conn.execute(
+        "SELECT public_summary FROM catalog_product WHERE product_key = ?",
+        ("crtop-olt-hp-5l",),
+    ).fetchone()
+    assert crtop is not None
+    assert "antes de cotizar" in crtop["public_summary"]
+    conn.close()
+
+
 def test_ika_price_currency_null_in_db(tmp_path: Path) -> None:
     conn = _memory_conn()
     build_catalog_from_seed_file(conn, _SEED, dry_run=False)

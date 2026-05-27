@@ -115,6 +115,54 @@ def test_load_mirror_payload_counts_match_sqlite(tmp_path: Path) -> None:
         conn.close()
 
 
+def test_mirror_payload_preserves_spanish_prose_spacing() -> None:
+    conn = _memory_catalog_db()
+    try:
+        payload = load_catalog_mirror_payload(conn)
+        serva = next(p for p in payload["products"] if p["product_key"] == "serva-blueslick-250ml")
+        assert "cotización y disponibilidad" in (serva.get("public_summary") or "")
+
+        ika_offer = next(
+            o for o in payload["supplier_offers"] if o["product_key"] == "ika-rv10-70-vapor-tube"
+        )
+        ika = next(p for p in payload["products"] if p["product_key"] == "ika-rv10-70-vapor-tube")
+        assert "por cliente" in (ika.get("public_summary") or "")
+        assert "cantidad 3" in (ika.get("public_summary") or "")
+        assert "monto es" in (ika_offer.get("availability_note") or "")
+
+        ika_snap = next(
+            s for s in payload["price_snapshots"] if s["snapshot_key"] == "ika-rv10-70-price-ambiguous"
+        )
+        assert "Monto 112,00" in (ika_snap.get("price_notes") or "")
+
+        crtop = next(p for p in payload["products"] if p["product_key"] == "crtop-olt-hp-5l")
+        assert "antes de cotizar" in (crtop.get("public_summary") or "")
+    finally:
+        conn.close()
+
+
+def test_mirror_payload_repairs_legacy_joined_spacing() -> None:
+    conn = _memory_catalog_db()
+    try:
+        conn.execute(
+            """
+            UPDATE catalog_product
+            SET public_summary = ?
+            WHERE product_key = ?
+            """,
+            (
+                "cotizacióny disponibilidad sujetas a confirmación.",
+                "serva-blueslick-250ml",
+            ),
+        )
+        conn.commit()
+        payload = load_catalog_mirror_payload(conn)
+        serva = next(p for p in payload["products"] if p["product_key"] == "serva-blueslick-250ml")
+        assert "cotización y disponibilidad" in (serva.get("public_summary") or "")
+    finally:
+        conn.close()
+
+
 def test_ika_ambiguous_price_preserved_in_payload() -> None:
     conn = _memory_catalog_db()
     try:

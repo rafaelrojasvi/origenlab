@@ -6,7 +6,11 @@ from typing import Any
 
 from psycopg import Connection
 
-from origenlab_email_pipeline.catalog.catalog_mirror_safety import assert_mirror_text_safe
+from origenlab_email_pipeline.catalog.catalog_mirror_safety import (
+    CATALOG_MIRROR_PROSE_FIELDS,
+    assert_mirror_text_safe,
+    prepare_catalog_mirror_text,
+)
 from origenlab_email_pipeline.postgres_dashboard_api.db import fetch_all, fetch_one, table_exists
 from origenlab_email_pipeline.postgres_dashboard_api.outbound_lists import DEFAULT_MAX_LIMIT
 from origenlab_email_pipeline.postgres_dashboard_api.schemas import (
@@ -49,8 +53,13 @@ def _clamp_limit(limit: int) -> int:
 
 def _sanitize_row_strings(row: dict[str, Any], *, prefix: str) -> None:
     for key, value in row.items():
-        if isinstance(value, str):
-            assert_mirror_text_safe(value, field=f"{prefix}.{key}")
+        if not isinstance(value, str):
+            continue
+        field = f"{prefix}.{key}"
+        if key in CATALOG_MIRROR_PROSE_FIELDS:
+            row[key] = prepare_catalog_mirror_text(value, field=field)
+        else:
+            assert_mirror_text_safe(value, field=field)
 
 
 def _build_list_filters(

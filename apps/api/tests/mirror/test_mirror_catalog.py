@@ -101,6 +101,23 @@ def test_mirror_detail_crtop_specs_and_usd_exw(
     assert snap["is_public_safe"] is False
 
 
+def test_mirror_catalog_spanish_prose_spacing(catalog_mirror_client: TestClient) -> None:
+    serva = catalog_mirror_client.get("/mirror/catalog/products/serva-blueslick-250ml").json()
+    assert "cotización y disponibilidad" in (serva["product"]["public_summary"] or "")
+
+    ika = catalog_mirror_client.get("/mirror/catalog/products/ika-rv10-70-vapor-tube").json()[
+        "product"
+    ]
+    assert "por cliente" in (ika["public_summary"] or "")
+    assert "cantidad 3" in (ika["public_summary"] or "")
+    assert "monto es" in (ika["supplier_offers"][0]["availability_note"] or "")
+    snap = next(s for s in ika["price_snapshots"] if s["snapshot_key"] == "ika-rv10-70-price-ambiguous")
+    assert "Monto 112,00" in (snap["price_notes"] or "")
+
+    crtop = catalog_mirror_client.get("/mirror/catalog/products/crtop-olt-hp-5l").json()["product"]
+    assert "antes de cotizar" in (crtop["public_summary"] or "")
+
+
 def test_mirror_detail_ika_ambiguous_currency(
     catalog_mirror_client: TestClient,
 ) -> None:

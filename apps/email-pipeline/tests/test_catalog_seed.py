@@ -99,6 +99,21 @@ def test_forbidden_gmail_url_rejected_in_link() -> None:
         validate_seed(bad)
 
 
+def test_seed_spanish_prose_spacing_phrases() -> None:
+    data = load_seed_json(_SEED)
+    serva = next(p for p in data["products"] if p["product_key"] == "serva-blueslick-250ml")
+    assert "cotización y disponibilidad" in serva["public_summary"]
+
+    ika = next(p for p in data["products"] if p["product_key"] == "ika-rv10-70-vapor-tube")
+    assert "por cliente" in ika["public_summary"]
+    assert "cantidad 3" in ika["public_summary"]
+    assert "monto es" in ika["supplier_offers"][0]["availability_note"]
+    assert "Monto 112,00" in ika["price_snapshots"][0]["price_notes"]
+
+    crtop = next(p for p in data["products"] if p["product_key"] == "crtop-olt-hp-5l")
+    assert "antes de cotizar" in crtop["public_summary"]
+
+
 def test_public_safe_supplier_price_rejected() -> None:
     data = load_seed_json(_SEED)
     bad = copy.deepcopy(data)
