@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Generator
 
 import pytest
@@ -9,6 +10,9 @@ from fastapi.testclient import TestClient
 
 from origenlab_api.main import create_app
 from origenlab_api.settings import get_settings
+from origenlab_email_pipeline.catalog.catalog_mirror_safety import (
+    FORBIDDEN_JOINED_PROSE_ARTIFACTS,
+)
 from origenlab_email_pipeline.postgres_dashboard_api.catalog import list_catalog_products
 
 from conftest import _patch_mirror_postgres
@@ -42,6 +46,21 @@ def catalog_mirror_client(
     sqlite.write_bytes(b"")
     monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(sqlite))
     _patch_mirror_postgres(monkeypatch, CatalogFakeConn())
+    with TestClient(create_app()) as client:
+        yield client
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def broken_prose_catalog_client(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> Generator[TestClient, None, None]:
+    get_settings.cache_clear()
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@localhost:5432/scratch")
+    sqlite = tmp_path / "emails.sqlite"
+    sqlite.write_bytes(b"")
+    monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(sqlite))
+    _patch_mirror_postgres(monkeypatch, CatalogFakeConn(broken_prose=True))
     with TestClient(create_app()) as client:
         yield client
     get_settings.cache_clear()
@@ -99,6 +118,50 @@ def test_mirror_detail_crtop_specs_and_usd_exw(
     assert snap["amount_decimal"] == "10600.00"
     assert snap["incoterm"] == "EXW"
     assert snap["is_public_safe"] is False
+
+
+def test_mirror_api_json_has_no_joined_prose_artifacts(
+    broken_prose_catalog_client: TestClient,
+) -> None:
+    payloads = [
+        broken_prose_catalog_client.get("/mirror/catalog/products", params={"limit": 100}),
+        broken_prose_catalog_client.get("/mirror/catalog/products/crtop-olt-hp-5l"),
+        broken_prose_catalog_client.get("/mirror/catalog/products/ika-rv10-70-vapor-tube"),
+    ]
+    for response in payloads:
+        assert response.status_code == 200
+        blob = json.dumps(response.json(), ensure_ascii=False).lower()
+        for artifact in FORBIDDEN_JOINED_PROSE_ARTIFACTS:
+            assert artifact.lower() not in blob
+
+
+def test_mirror_api_repairs_legacy_joined_prose_from_postgres(
+    broken_prose_catalog_client: TestClient,
+) -> None:
+    list_body = broken_prose_catalog_client.get(
+        "/mirror/catalog/products", params={"limit": 100}
+    ).json()
+    serva = next(
+        i for i in list_body["items"] if i["product_key"] == "serva-blueslick-250ml"
+    )
+    assert "cotización y disponibilidad" in (serva["public_summary"] or "")
+
+    ika = broken_prose_catalog_client.get(
+        "/mirror/catalog/products/ika-rv10-70-vapor-tube"
+    ).json()["product"]
+    assert "por cliente" in (ika["public_summary"] or "")
+    assert "cantidad 3" in (ika["public_summary"] or "")
+    assert "monto es" in (ika["supplier_offers"][0]["availability_note"] or "")
+    snap = next(
+        s for s in ika["price_snapshots"] if s["snapshot_key"] == "ika-rv10-70-price-ambiguous"
+    )
+    assert "Monto 112,00" in (snap["price_notes"] or "")
+    assert "antes de cotizar" in (snap["price_notes"] or "")
+
+    crtop = broken_prose_catalog_client.get(
+        "/mirror/catalog/products/crtop-olt-hp-5l"
+    ).json()["product"]
+    assert "antes de cotizar" in (crtop["public_summary"] or "")
 
 
 def test_mirror_catalog_spanish_prose_spacing(catalog_mirror_client: TestClient) -> None:

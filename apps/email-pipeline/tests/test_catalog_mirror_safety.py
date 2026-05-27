@@ -7,6 +7,7 @@ import re
 import pytest
 
 from origenlab_email_pipeline.catalog.catalog_mirror_safety import (
+    FORBIDDEN_JOINED_PROSE_ARTIFACTS,
     CatalogMirrorSafetyError,
     assert_catalog_prose_spacing,
     prepare_catalog_mirror_text,
@@ -19,6 +20,23 @@ _LEGACY_BROKEN_PROSE_SANITIZER = re.compile(r"\s+(?=[a-z\d])")
 
 def _legacy_broken_prose_sanitizer(text: str) -> str:
     return _LEGACY_BROKEN_PROSE_SANITIZER.sub("", text)
+
+
+@pytest.mark.parametrize(
+    ("broken", "fixed_phrase"),
+    [
+        ("cotizacióny disponibilidad", "cotización y disponibilidad"),
+        ("solicitado porcliente", "por cliente"),
+        ("cantidad3", "cantidad 3"),
+        ("antesde cotizar", "antes de cotizar"),
+        ("antes decotizar", "antes de cotizar"),
+        ("montoes", "monto es"),
+        ("Monto112,00", "Monto 112,00"),
+        ("confirmar antesdecotizar al cliente", "antes de cotizar"),
+    ],
+)
+def test_repair_catalog_prose_spacing_live_phrases(broken: str, fixed_phrase: str) -> None:
+    assert fixed_phrase in repair_catalog_prose_spacing(broken)
 
 
 def test_legacy_broken_sanitizer_produces_joined_words() -> None:
@@ -35,18 +53,14 @@ def test_legacy_broken_sanitizer_produces_joined_words() -> None:
     assert "antesde" in broken
 
 
-def test_repair_catalog_prose_spacing_fixes_legacy_joins() -> None:
+def test_repair_catalog_prose_spacing_fixes_legacy_join_bundle() -> None:
     broken = (
         "cotizacióny disponibilidad; solicitado porcliente, cantidad3; "
-        "montoes precio; Monto112,00; antesde cotizar."
+        "montoes precio; Monto112,00; antesde cotizar; confirmar antes decotizar."
     )
     fixed = repair_catalog_prose_spacing(broken)
-    assert "cotización y disponibilidad" in fixed
-    assert "por cliente" in fixed
-    assert "cantidad 3" in fixed
-    assert "monto es" in fixed
-    assert "Monto 112,00" in fixed
-    assert "antes de cotizar" in fixed
+    for artifact in FORBIDDEN_JOINED_PROSE_ARTIFACTS:
+        assert artifact.lower() not in fixed.lower()
 
 
 def test_prepare_catalog_mirror_text_preserves_good_spanish() -> None:

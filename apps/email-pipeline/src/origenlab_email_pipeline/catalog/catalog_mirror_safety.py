@@ -8,14 +8,30 @@ from typing import Any
 # Legacy bug: alias-style sanitizer removed spaces before lowercase letters/digits.
 _BROKEN_PROSE_JOIN_RE = re.compile(r"\s+(?=[a-z\d])")
 
-# Targeted repairs for known Spanish join artifacts (Postgres rows synced before fix).
+# Targeted repairs for legacy alias-style prose joins (Postgres rows synced before fix).
+# Order matters: longer / compound patterns before shorter ones.
 _PROSE_JOIN_REPAIRS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"cotizacióny\b", re.I), "cotización y"),
-    (re.compile(r"porcliente\b", re.I), "por cliente"),
+    (re.compile(r"cotizacióny", re.I), "cotización y"),
+    (re.compile(r"porcliente", re.I), "por cliente"),
     (re.compile(r"cantidad(\d)", re.I), r"cantidad \1"),
+    (re.compile(r"antesdecotizar", re.I), "antes de cotizar"),
     (re.compile(r"antesde\b", re.I), "antes de"),
+    (re.compile(r"antes decotizar", re.I), "antes de cotizar"),
+    (re.compile(r"\bdecotizar\b", re.I), "de cotizar"),
     (re.compile(r"montoes\b", re.I), "monto es"),
     (re.compile(r"Monto(\d)", re.I), r"Monto \1"),
+)
+
+# Substrings that must not appear in operator-facing prose after repair.
+FORBIDDEN_JOINED_PROSE_ARTIFACTS: tuple[str, ...] = (
+    "cotizacióny",
+    "porcliente",
+    "cantidad3",
+    "antesde",
+    "antesdecotizar",
+    "decotizar",
+    "montoes",
+    "Monto112",
 )
 
 # Fields that must keep human-readable Spanish spacing (never alias-collapse).
@@ -89,10 +105,11 @@ def assert_catalog_prose_spacing(value: str | None, *, field: str) -> None:
     """Reject known joined-word artifacts in operator-facing Spanish prose."""
     if value is None or value == "":
         return
-    for pattern, _replacement in _PROSE_JOIN_REPAIRS:
-        if pattern.search(value):
+    lowered = value.lower()
+    for artifact in FORBIDDEN_JOINED_PROSE_ARTIFACTS:
+        if artifact.lower() in lowered:
             raise CatalogMirrorSafetyError(
-                f"joined-word spacing in {field}: matched {pattern.pattern!r}"
+                f"joined-word spacing in {field}: contains {artifact!r}"
             )
 
 
@@ -104,6 +121,13 @@ def prepare_catalog_mirror_text(value: str | None, *, field: str) -> str | None:
     assert_mirror_text_safe(cleaned, field=field)
     assert_catalog_prose_spacing(cleaned, field=field)
     return cleaned
+
+
+def validate_catalog_prose_field(value: object, *, field: str) -> object:
+    """Pydantic before-validator: repair prose fields on API model construction."""
+    if value is None or not isinstance(value, str):
+        return value
+    return prepare_catalog_mirror_text(value, field=field)
 
 
 def assert_mirror_text_safe(value: str | None, *, field: str) -> None:

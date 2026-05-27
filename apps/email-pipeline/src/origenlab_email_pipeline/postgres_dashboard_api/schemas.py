@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from origenlab_email_pipeline.catalog.catalog_mirror_safety import (
+    validate_catalog_prose_field,
+)
 
 POSTGRES_MIRROR_NOTE: str = (
     "Espejo Postgres de solo lectura; SQLite/Gmail sigue siendo la fuente operativa. "
@@ -273,6 +277,11 @@ class CatalogProductListItem(BaseModel):
     public_summary: str | None = None
     confidence: str
 
+    @field_validator("public_summary", mode="before")
+    @classmethod
+    def _prepare_public_summary(cls, value: object) -> object:
+        return validate_catalog_prose_field(value, field="product.public_summary")
+
 
 class CatalogProductAliasRow(BaseModel):
     alias_source: str
@@ -296,6 +305,11 @@ class CatalogProductSpecRow(BaseModel):
     source: str
     confidence: str
 
+    @field_validator("spec_value", mode="before")
+    @classmethod
+    def _prepare_spec_value(cls, value: object) -> object:
+        return validate_catalog_prose_field(value, field="spec.spec_value")
+
 
 class CatalogSupplierOfferRow(BaseModel):
     offer_key: str
@@ -311,6 +325,11 @@ class CatalogSupplierOfferRow(BaseModel):
     quantity_offered: str | None = None
     availability_note: str | None = None
     confidence: str
+
+    @field_validator("payment_terms", "delivery_terms", "availability_note", mode="before")
+    @classmethod
+    def _prepare_supplier_offer_prose(cls, value: object) -> object:
+        return validate_catalog_prose_field(value, field="supplier_offer.prose")
 
 
 class CatalogPriceSnapshotRow(BaseModel):
@@ -328,6 +347,11 @@ class CatalogPriceSnapshotRow(BaseModel):
     is_public_safe: bool = False
     confidence: str
     observed_at: str | None = None
+
+    @field_validator("price_notes", mode="before")
+    @classmethod
+    def _prepare_price_notes(cls, value: object) -> object:
+        return validate_catalog_prose_field(value, field="price_snapshot.price_notes")
 
 
 class CatalogCommercialLinkRow(BaseModel):
@@ -356,6 +380,11 @@ class CatalogProductDetail(BaseModel):
     supplier_offers: list[CatalogSupplierOfferRow] = Field(default_factory=list)
     price_snapshots: list[CatalogPriceSnapshotRow] = Field(default_factory=list)
     commercial_links: list[CatalogCommercialLinkRow] = Field(default_factory=list)
+
+    @field_validator("public_summary", mode="before")
+    @classmethod
+    def _prepare_public_summary(cls, value: object) -> object:
+        return validate_catalog_prose_field(value, field="product.public_summary")
 
 
 CATALOG_DISCLAIMER: str = (

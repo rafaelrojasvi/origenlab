@@ -115,7 +115,7 @@ def _build_catalog_fixture() -> dict[str, Any]:
 class CatalogFakeConn(MirrorFakeConn):
     """Postgres fake with nine seed products in catalog.* tables."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, broken_prose: bool = False) -> None:
         super().__init__()
         fx = _build_catalog_fixture()
         self.tables[("catalog", "product")] = True
@@ -134,6 +134,39 @@ class CatalogFakeConn(MirrorFakeConn):
         self.offers: list[dict[str, Any]] = fx["offers"]
         self.snapshots: list[dict[str, Any]] = fx["snapshots"]
         self.links: list[dict[str, Any]] = fx["links"]
+        if broken_prose:
+            self._apply_legacy_broken_prose_fixture()
+
+    def _apply_legacy_broken_prose_fixture(self) -> None:
+        """Simulate Postgres rows stored with legacy joined-word prose."""
+        for product in self.products:
+            if product["product_key"] == "serva-blueslick-250ml":
+                product["public_summary"] = (
+                    "Reactivo SERVA para tratamiento de placas en electroforesis; "
+                    "cotizacióny disponibilidad sujetas a confirmación."
+                )
+            if product["product_key"] == "ika-rv10-70-vapor-tube":
+                product["public_summary"] = (
+                    "Tubo de vapor IKA RV10.70 solicitado porcliente (RG Energía), cantidad3; "
+                    "precio proveedor pendiente de confirmar moneda."
+                )
+            if product["product_key"] == "crtop-olt-hp-5l":
+                product["public_summary"] = (
+                    "Reactor de laboratorio CRTOP OLT-HP-5L; confirmar flete e importación "
+                    "antes decotizar al cliente."
+                )
+        for offer in self.offers:
+            if offer["product_key"] == "ika-rv10-70-vapor-tube":
+                offer["availability_note"] = (
+                    "Stock disponible según proveedor; confirmar moneda y si el montoes "
+                    "precio unitario."
+                )
+        for snap in self.snapshots:
+            if snap["snapshot_key"] == "ika-rv10-70-price-ambiguous":
+                snap["price_notes"] = (
+                    "Cliente solicitó cantidad3. Monto112,00 del proveedor; moneda ambigua — "
+                    "confirmar antes decotizar."
+                )
 
     def _apply_list_filters(self, sql: str, params: list[Any]) -> list[dict[str, Any]]:
         rows = list(self.products)
