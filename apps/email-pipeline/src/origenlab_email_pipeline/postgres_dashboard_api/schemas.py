@@ -277,10 +277,11 @@ class CatalogProductListItem(BaseModel):
     public_summary: str | None = None
     confidence: str
 
-    @field_validator("public_summary", mode="before")
+    @field_validator("display_name", "public_summary", mode="before")
     @classmethod
-    def _prepare_public_summary(cls, value: object) -> object:
-        return validate_catalog_prose_field(value, field="product.public_summary")
+    def _prepare_product_prose(cls, value: object, info) -> object:
+        field = f"product.{info.field_name}"
+        return validate_catalog_prose_field(value, field=field)
 
 
 class CatalogProductAliasRow(BaseModel):
@@ -294,6 +295,11 @@ class CatalogProductCategoryRow(BaseModel):
     display_name: str
     equipment_class: str | None = None
     is_primary: bool = False
+
+    @field_validator("display_name", mode="before")
+    @classmethod
+    def _prepare_display_name(cls, value: object) -> object:
+        return validate_catalog_prose_field(value, field="category.display_name")
 
 
 class CatalogProductSpecRow(BaseModel):
@@ -381,10 +387,11 @@ class CatalogProductDetail(BaseModel):
     price_snapshots: list[CatalogPriceSnapshotRow] = Field(default_factory=list)
     commercial_links: list[CatalogCommercialLinkRow] = Field(default_factory=list)
 
-    @field_validator("public_summary", mode="before")
+    @field_validator("display_name", "public_summary", "manufacturer_name", mode="before")
     @classmethod
-    def _prepare_public_summary(cls, value: object) -> object:
-        return validate_catalog_prose_field(value, field="product.public_summary")
+    def _prepare_product_prose(cls, value: object, info) -> object:
+        field = f"product.{info.field_name}"
+        return validate_catalog_prose_field(value, field=field)
 
 
 CATALOG_DISCLAIMER: str = (
@@ -403,6 +410,11 @@ class CatalogProductsListResponse(BaseModel):
     read_only: bool = True
     disclaimer: str = CATALOG_DISCLAIMER
 
+    @field_validator("disclaimer", mode="before")
+    @classmethod
+    def _prepare_disclaimer(cls, value: object) -> object:
+        return validate_catalog_prose_field(value, field="response.disclaimer")
+
 
 class CatalogProductDetailResponse(BaseModel):
     table_available: bool = False
@@ -410,6 +422,11 @@ class CatalogProductDetailResponse(BaseModel):
     data_source: Literal["postgres_mirror"] = "postgres_mirror"
     read_only: bool = True
     disclaimer: str = CATALOG_DISCLAIMER
+
+    @field_validator("disclaimer", mode="before")
+    @classmethod
+    def _prepare_disclaimer(cls, value: object) -> object:
+        return validate_catalog_prose_field(value, field="response.disclaimer")
 
 
 class DependencyStatus(BaseModel):

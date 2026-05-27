@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
+
+_LEGACY_BROKEN_PROSE_SANITIZER = re.compile(r"\s+(?=[a-z\d])")
 
 from fake_conn import MirrorFakeConn, _FakeCursor
 
@@ -137,6 +140,10 @@ class CatalogFakeConn(MirrorFakeConn):
         if broken_prose:
             self._apply_legacy_broken_prose_fixture()
 
+    @staticmethod
+    def _legacy_join_prose(text: str) -> str:
+        return _LEGACY_BROKEN_PROSE_SANITIZER.sub("", text)
+
     def _apply_legacy_broken_prose_fixture(self) -> None:
         """Simulate Postgres rows stored with legacy joined-word prose."""
         for product in self.products:
@@ -146,6 +153,7 @@ class CatalogFakeConn(MirrorFakeConn):
                     "cotizacióny disponibilidad sujetas a confirmación."
                 )
             if product["product_key"] == "ika-rv10-70-vapor-tube":
+                product["display_name"] = self._legacy_join_prose(product["display_name"])
                 product["public_summary"] = (
                     "Tubo de vapor IKA RV10.70 solicitado porcliente (RG Energía), cantidad3; "
                     "precio proveedor pendiente de confirmar moneda."
@@ -155,6 +163,9 @@ class CatalogFakeConn(MirrorFakeConn):
                     "Reactor de laboratorio CRTOP OLT-HP-5L; confirmar flete e importación "
                     "antes decotizar al cliente."
                 )
+        for category in self.categories:
+            if category["category_key"] == "heating_accessory":
+                category["display_name"] = self._legacy_join_prose(category["display_name"])
         for offer in self.offers:
             if offer["product_key"] == "ika-rv10-70-vapor-tube":
                 offer["availability_note"] = (

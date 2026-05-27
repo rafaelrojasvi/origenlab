@@ -33,6 +33,11 @@ def _legacy_broken_prose_sanitizer(text: str) -> str:
         ("montoes", "monto es"),
         ("Monto112,00", "Monto 112,00"),
         ("confirmar antesdecotizar al cliente", "antes de cotizar"),
+        ("Tubo de vaporIKA RV10.70", "vapor IKA"),
+        ("Accesorio decalentamiento", "de calentamiento"),
+        ("espejoPostgres redactado", "espejo Postgres"),
+        ("siendo lafuente operativa", "la fuente"),
+        ("cuerpos decorreo ni datos", "cuerpos de correo"),
     ],
 )
 def test_repair_catalog_prose_spacing_live_phrases(broken: str, fixed_phrase: str) -> None:
@@ -66,6 +71,20 @@ def test_repair_catalog_prose_spacing_fixes_legacy_join_bundle() -> None:
 def test_prepare_catalog_mirror_text_preserves_good_spanish() -> None:
     good = "Tubo de vapor IKA RV10.70 solicitado por cliente (RG Energía), cantidad 3."
     assert prepare_catalog_mirror_text(good, field="test") == good
+
+
+def test_prepare_catalog_disclaimer_repairs_legacy_joined_constant() -> None:
+    from origenlab_email_pipeline.postgres_dashboard_api.schemas import CATALOG_DISCLAIMER
+
+    broken = _legacy_broken_prose_sanitizer(CATALOG_DISCLAIMER)
+    assert "Postgresredactado" in broken
+    assert "lafuente" in broken
+    assert "cuerposdecorreo" in broken
+    fixed = prepare_catalog_mirror_text(broken, field="response.disclaimer")
+    assert fixed is not None
+    assert "espejo Postgres" in fixed
+    assert "la fuente" in fixed
+    assert "cuerpos de correo" in fixed
 
 
 def test_assert_catalog_prose_spacing_rejects_joined_words() -> None:

@@ -139,6 +139,46 @@ def test_mirror_api_json_has_no_joined_prose_artifacts(
             assert artifact.lower() not in blob
 
 
+def test_mirror_api_visible_prose_repairs_list_ika_and_crtop_detail(
+    broken_prose_catalog_client: TestClient,
+) -> None:
+    list_body = broken_prose_catalog_client.get(
+        "/mirror/catalog/products", params={"limit": 100}
+    ).json()
+    list_blob = json.dumps(list_body, ensure_ascii=False)
+    assert "espejo Postgres" in list_body["disclaimer"]
+    assert "la fuente" in list_body["disclaimer"]
+    assert "cuerpos de correo" in list_body["disclaimer"]
+    ika_list = next(
+        i for i in list_body["items"] if i["product_key"] == "ika-rv10-70-vapor-tube"
+    )
+    assert ika_list["display_name"] == "Tubo de vapor IKA RV10.70"
+
+    ika_body = broken_prose_catalog_client.get(
+        "/mirror/catalog/products/ika-rv10-70-vapor-tube"
+    ).json()
+    ika_blob = json.dumps(ika_body, ensure_ascii=False)
+    ika = ika_body["product"]
+    assert ika is not None
+    assert ika["display_name"] == "Tubo de vapor IKA RV10.70"
+    assert ika["categories"][0]["display_name"] == "Accesorio de calentamiento"
+    assert "vapor IKA" in ika_blob
+    assert "de calentamiento" in ika_blob
+    assert "monto es" in ika_blob
+    assert "Monto 112,00" in ika_blob
+    assert "antes de cotizar" in ika_blob
+
+    crtop_body = broken_prose_catalog_client.get(
+        "/mirror/catalog/products/crtop-olt-hp-5l"
+    ).json()
+    crtop_blob = json.dumps(crtop_body, ensure_ascii=False)
+    assert "antes de cotizar" in (crtop_body["product"]["public_summary"] or "")
+    for artifact in FORBIDDEN_JOINED_PROSE_ARTIFACTS:
+        assert artifact.lower() not in crtop_blob.lower()
+        assert artifact.lower() not in list_blob.lower()
+        assert artifact.lower() not in ika_blob.lower()
+
+
 def test_mirror_api_repairs_legacy_joined_prose_from_postgres(
     broken_prose_catalog_client: TestClient,
 ) -> None:

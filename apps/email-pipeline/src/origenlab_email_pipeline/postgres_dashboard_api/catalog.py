@@ -30,6 +30,7 @@ from origenlab_email_pipeline.postgres_dashboard_api.schemas import (
 CATALOG_PRODUCT_TABLE = ("catalog", "product")
 
 _PRODUCT_PROSE_FIELDS = ("public_summary", "display_name", "manufacturer_name")
+_CATEGORY_PROSE_FIELDS = ("display_name",)
 _SUPPLIER_OFFER_PROSE_FIELDS = (
     "supplier_org_name",
     "payment_terms",
@@ -119,6 +120,19 @@ def _map_spec_row(row: Any) -> CatalogProductSpecRow:
     return CatalogProductSpecRow.model_validate(payload)
 
 
+def _map_category_row(row: Any) -> CatalogProductCategoryRow:
+    payload = _mutable_row(row)
+    payload["is_primary"] = bool(payload.get("is_primary"))
+    _prepare_row_prose_fields(payload, prefix="category", prose_fields=_CATEGORY_PROSE_FIELDS)
+    return CatalogProductCategoryRow.model_validate(payload)
+
+
+def _prepare_catalog_disclaimer() -> str:
+    """Repair/validate operator disclaimer on every catalog API response."""
+    text = prepare_catalog_mirror_text(CATALOG_DISCLAIMER, field="response.disclaimer")
+    return text if text is not None else ""
+
+
 def _repair_catalog_product_detail(detail: CatalogProductDetail) -> CatalogProductDetail:
     """Explicit nested prose repair on API output (do not rely on row mutation or validators)."""
     payload = detail.model_dump()
@@ -133,6 +147,8 @@ def _repair_catalog_product_detail(detail: CatalogProductDetail) -> CatalogProdu
         )
     for spec in payload.get("specs") or []:
         _prepare_row_prose_fields(spec, prefix="spec", prose_fields=_SPEC_PROSE_FIELDS)
+    for category in payload.get("categories") or []:
+        _prepare_row_prose_fields(category, prefix="category", prose_fields=_CATEGORY_PROSE_FIELDS)
     return CatalogProductDetail.model_validate(payload)
 
 
@@ -211,7 +227,7 @@ def list_catalog_products(
         items=items,
         total=total,
         limit=limit,
-        disclaimer=CATALOG_DISCLAIMER,
+        disclaimer=_prepare_catalog_disclaimer(),
     )
 
 
@@ -245,13 +261,7 @@ def _load_categories(conn: Connection, product_key: str) -> list[CatalogProductC
         """,
         (product_key,),
     )
-    out: list[CatalogProductCategoryRow] = []
-    for row in rows:
-        payload = dict(row)
-        payload["is_primary"] = bool(payload.get("is_primary"))
-        _sanitize_row_strings(payload, prefix="category")
-        out.append(CatalogProductCategoryRow.model_validate(payload))
-    return out
+    return [_map_category_row(row) for row in rows]
 
 
 def _load_specs(conn: Connection, product_key: str) -> list[CatalogProductSpecRow]:
@@ -350,5 +360,5 @@ def get_catalog_product(
     return CatalogProductDetailResponse(
         table_available=True,
         product=_repair_catalog_product_detail(detail),
-        disclaimer=CATALOG_DISCLAIMER,
+        disclaimer=_prepare_catalog_disclaimer(),
     )
