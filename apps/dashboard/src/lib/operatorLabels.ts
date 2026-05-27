@@ -18,6 +18,15 @@ const WARM_STATUS: Record<string, string> = {
 };
 
 const WARM_CATEGORY: Record<string, string> = {
+  client_opportunity: "Oportunidad cliente",
+  client_response: "Respuesta cliente",
+  supplier_quote_received: "Cotización proveedor",
+  supplier_followup: "Seguimiento proveedor",
+  logistics_admin: "Logística admin",
+  internal_admin: "Admin interno",
+  system_noise: "Ruido sistema",
+  bounce_problem: "Problema rebote",
+  deal_evidence_candidate: "Evidencia deal",
   client_reply: "Respuesta cliente",
   supplier_reply: "Respuesta proveedor",
   quote_sent: "Cotización enviada",

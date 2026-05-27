@@ -32,7 +32,7 @@ const dashboardDataContextSource = import.meta.glob("../context/DashboardDataCon
 
 const commercialMountedSources = Object.entries(
   import.meta.glob(
-    "../{pages/DashboardApp,pages/TodaySummaryPage,context/DashboardDataContext,api/mirrorCommercialClient,api/commercialDealsParse,components/commercial,components/operator,components/layout}/**/*.{ts,tsx}",
+    "../{pages/DashboardApp,pages/TodaySummaryPage,context/DashboardDataContext,lib/warmCaseDetailStrategy.ts,api/mirrorCommercialClient,api/commercialDealsParse,components/commercial,components/operator,components/layout}/**/*.{ts,tsx}",
     {
       query: "?raw",
       import: "default",
@@ -173,6 +173,17 @@ describe("Dashboard-2 safety (mounted Today)", () => {
     }
     expect(operatorClientSource).toContain("parseWarmCasesResponse");
     expect(operatorClientSource).toContain("parseEquipmentOpportunitiesResponse");
+  });
+
+  it("case detail drawer does not expose gmail urls or send actions", () => {
+    const drawerSource = import.meta.glob("../components/commercial/CaseDetailDrawer.tsx", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    })["../components/commercial/CaseDetailDrawer.tsx"] as string;
+    expect(drawerSource).not.toMatch(/gmail_url|mailto:|window\.open/);
+    expect(drawerSource).toMatch(/Read-only case summary/);
+    expect(drawerSource).not.toMatch(/method:\s*["']POST/i);
   });
 
   it("warm cases table does not mount mailto composer links", () => {

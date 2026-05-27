@@ -22,6 +22,7 @@ import { ContactEmailButton } from "./ContactEmailButton";
 import { CopyTextButton } from "./CopyTextButton";
 import { TableListToolbar, ToolbarField, toolbarInputClass, toolbarSelectClass } from "./TableListToolbar";
 import { TableSection } from "./TableSection";
+import { CaseDetailDrawer } from "./CaseDetailDrawer";
 
 export function WarmCasesTable({
   backend,
@@ -57,6 +58,7 @@ export function WarmCasesTable({
     ...DEFAULT_WARM_FILTERS,
     ...initialFilters,
   });
+  const [selectedCase, setSelectedCase] = useState<WarmCaseItem | null>(null);
 
   const sourceLabel = meta
     ? warmCasesSourceLabel(backend, meta.data_source)
@@ -233,8 +235,21 @@ export function WarmCasesTable({
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
             {visibleRows.map((row, index) => (
-              <tr key={row.case_id || `warm-${index}`} className="align-top hover:bg-slate-50/80">
-                <td className="px-3 py-2">
+              <tr
+                key={row.case_id || `warm-${index}`}
+                className="align-top cursor-pointer hover:bg-brand-50/50 focus-within:bg-brand-50/50"
+                onClick={() => setSelectedCase(row)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedCase(row);
+                  }
+                }}
+                tabIndex={0}
+                role="button"
+                aria-label={`Open case summary for ${row.contact_email}`}
+              >
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   <ContactEmailButton email={row.contact_email} onSelect={onContactSelect} />
                   <div className="mt-1">
                     <CopyTextButton label="Copy email" value={row.contact_email} />
@@ -290,6 +305,13 @@ export function WarmCasesTable({
           })}
         </p>
       </div>
+
+      <CaseDetailDrawer
+        item={selectedCase}
+        open={selectedCase !== null}
+        onClose={() => setSelectedCase(null)}
+        onContactSelect={onContactSelect}
+      />
     </TableSection>
   );
 }
