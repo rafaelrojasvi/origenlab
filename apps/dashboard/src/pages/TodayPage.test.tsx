@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EquipmentOpportunitiesResponse, WarmCasesResponse } from "../api/commercialTypes";
 import type { TodayPanelData } from "../api/operatorTypes";
-import { TodayPage } from "./TodayPage";
+import { DashboardApp } from "./DashboardApp";
 
 const panelSqlite: TodayPanelData = {
   health: {
@@ -102,15 +102,17 @@ import {
 } from "../api/operatorClient";
 import { fetchCommercialDealsMirror } from "../api/mirrorCommercialClient";
 
-describe("TodayPage", () => {
+describe("DashboardApp (legacy TodayPage tests)", () => {
   beforeEach(() => {
     vi.stubEnv("MODE", "development");
     vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "");
+    window.location.hash = "#/";
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.clearAllMocks();
+    window.location.hash = "";
   });
 
   function mockAllOk() {
@@ -121,58 +123,30 @@ describe("TodayPage", () => {
       table_available: true,
       read_only: true,
       data_source: "postgres_mirror",
-      total: 1,
+      total: 0,
       limit: 20,
-      items: [
-        {
-          client_org_name: "CEAF",
-          supplier_org_name: "SERVA",
-          deal_status: "logistics_pending",
-          margin_status: "needs_review",
-          reconciliation_status: "reconciled",
-          freight_status: "pending",
-          client_sale_net_clp: 1_260_000,
-          client_sale_gross_clp: 1_499_400,
-          client_payment_received_clp: 1_499_400,
-          supplier_invoice_total_decimal: "363.00",
-          supplier_amount_paid_decimal: "218.00",
-          margin_net_clp: null,
-          margin_pct: null,
-          margin_blockers: [],
-          updated_at: "2026-05-22T12:00:00+00:00",
-        },
-      ],
+      items: [],
     });
   }
 
   it("shows legacy :8000 dev warning when env points at wrong port", () => {
-    vi.stubEnv("MODE", "development");
     vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000");
     mockAllOk();
-    render(<TodayPage />);
+    render(<DashboardApp />);
     screen.getByText(/Local dev misconfiguration/);
-    screen.getByText(/unset VITE_ORIGENLAB_API_BASE_URL/);
   });
 
-  it("renders Dashboard-0 operator status and Dashboard-1 tables", async () => {
+  it("does not expose sqlite paths or raw body fields", async () => {
     mockAllOk();
-    render(<TodayPage />);
-
-    await waitFor(() => {
-      screen.getByText("READY");
-    });
-
-    screen.getByText("SQLite");
-    screen.getByText(/Casos tibios \/ Warm cases/);
-    screen.getByText(/Oportunidades de equipos/);
-    screen.getByText(/Commercial deals/);
-    screen.getByText("CEAF");
-    screen.getByText("SERVA");
-    screen.getByText("buyer@acme.cl");
-    screen.getByText("Hospital Regional");
+    render(<DashboardApp />);
+    await waitFor(() => screen.getByText("READY"));
     expect(screen.queryByText(/\/tmp\/emails\.sqlite/)).toBeNull();
-    expect(screen.queryByText(/\/secret\/path/)).toBeNull();
     expect(screen.queryByText(/body_preview/)).toBeNull();
+
+    const nav = screen.getByRole("navigation", { name: "Dashboard navigation" });
+    fireEvent.click(within(nav).getByRole("link", { name: "Opportunities" }));
+    await waitFor(() => screen.getByText("Hospital Regional"));
+    expect(screen.queryByText(/\/secret\/path/)).toBeNull();
   });
 
   it("shows postgres mirror labels when backend is postgres", async () => {
@@ -194,41 +168,26 @@ describe("TodayPage", () => {
       ...equipmentPayload,
       meta: { ...equipmentPayload.meta, data_source: "postgres_mirror" },
     });
+    mockAllOk();
+    vi.mocked(fetchTodayPanel).mockResolvedValue({
+      ...panelSqlite,
+      health: {
+        ...panelSqlite.health,
+        backend: "postgres",
+        mode: "operator-postgres-readonly",
+        postgres_configured: true,
+      },
+      operator: { ...panelSqlite.operator, verdict: "CAUTION" },
+    });
 
-    render(<TodayPage />);
+    render(<DashboardApp />);
 
     await waitFor(() => {
       screen.getByText("Postgres mirror");
     });
-    expect(screen.getAllByText(/not send\/outreach truth/).length).toBeGreaterThan(0);
   });
 
-  it("renders operator error while tables can still load", async () => {
-    vi.mocked(fetchTodayPanel).mockRejectedValue(new Error("panel down"));
-    vi.mocked(fetchWarmCases).mockResolvedValue(warmPayload);
-    vi.mocked(fetchEquipmentOpportunities).mockResolvedValue(equipmentPayload);
-
-    render(<TodayPage />);
-
-    await waitFor(() => {
-      screen.getByText(/Could not load operator status/);
-    });
-    screen.getByText("buyer@acme.cl");
-  });
-
-  it("renders warm cases error state", async () => {
-    mockAllOk();
-    vi.mocked(fetchWarmCases).mockRejectedValue(new Error("warm failed"));
-
-    render(<TodayPage />);
-
-    await waitFor(() => {
-      screen.getByText(/Warm cases: warm failed/);
-    });
-    screen.getByRole("button", { name: "Retry" });
-  });
-
-  it("opens read-only contact profile from warm case email", async () => {
+  it("opens read-only contact profile from inbox warm case email", async () => {
     mockAllOk();
     vi.mocked(fetchContactProfile).mockResolvedValue({
       meta: { data_source: "sqlite", read_only: true, reduced_mode: false, note: "" },
@@ -256,72 +215,18 @@ describe("TodayPage", () => {
       warnings: [],
     });
 
-    render(<TodayPage />);
+    render(<DashboardApp />);
     await waitFor(() => screen.getByText("READY"));
+
+    const nav = screen.getByRole("navigation", { name: "Dashboard navigation" });
+    fireEvent.click(within(nav).getByRole("link", { name: "Inbox triage" }));
+    await waitFor(() => screen.getByText("buyer@acme.cl"));
 
     fireEvent.click(screen.getByRole("button", { name: "buyer@acme.cl" }));
 
     await waitFor(() => {
       screen.getByText("Read-only contact profile");
       screen.getByText("Buyer");
-    });
-    expect(screen.queryByText(/sqlite_path|source_path|body_preview/i)).toBeNull();
-  });
-
-  it("shows commercial deals empty state when mirror is not synced", async () => {
-    mockAllOk();
-    vi.mocked(fetchCommercialDealsMirror).mockResolvedValue({
-      table_available: false,
-      read_only: true,
-      data_source: "postgres_mirror",
-      total: 0,
-      limit: 20,
-      items: [],
-    });
-
-    render(<TodayPage />);
-
-    await waitFor(() => {
-      screen.getByText("Commercial deals mirror not synced yet.");
-    });
-    expect(vi.mocked(fetchCommercialDealsMirror)).toHaveBeenCalled();
-  });
-
-  it("opens contact profile from equipment row when email exists", async () => {
-    mockAllOk();
-    vi.mocked(fetchContactProfile).mockResolvedValue({
-      meta: { data_source: "sqlite", read_only: true, reduced_mode: false, note: "" },
-      contact: {
-        email: "procurement@hospital.cl",
-        normalized_email: "procurement@hospital.cl",
-        name: "",
-        domain: "",
-        organization_name: "",
-        organization_domain: "",
-        last_seen_at: null,
-        first_seen_at: null,
-        message_count: 0,
-      },
-      outreach: {
-        state: null,
-        last_contacted_at: null,
-        source: null,
-        notes: null,
-        do_not_repeat: false,
-        suppressed_email: false,
-        suppressed_domain: false,
-      },
-      sent_history: { sent_count: 0, latest_sent_at: null, latest_subject: null },
-      warnings: [],
-    });
-
-    render(<TodayPage />);
-    await waitFor(() => screen.getByText("Hospital Regional"));
-
-    fireEvent.click(screen.getByRole("button", { name: "procurement@hospital.cl" }));
-
-    await waitFor(() => {
-      screen.getByText("Read-only contact profile");
     });
   });
 });

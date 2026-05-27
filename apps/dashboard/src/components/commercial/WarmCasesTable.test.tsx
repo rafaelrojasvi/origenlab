@@ -265,6 +265,7 @@ describe("WarmCasesTable", () => {
         error={null}
         onRetry={() => {}}
         onContactSelect={() => {}}
+        initialFilters={{ preset: "todo" }}
       />,
     );
     expect(screen.queryByText("contacto@origenlab.cl")).toBeNull();

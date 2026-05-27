@@ -18,15 +18,21 @@ const mirrorCommercialClientSource = import.meta.glob("../api/mirrorCommercialCl
   eager: true,
 })["../api/mirrorCommercialClient.ts"] as string;
 
-const todayPageSource = import.meta.glob("../pages/TodayPage.tsx", {
+const dashboardAppSource = import.meta.glob("../pages/DashboardApp.tsx", {
   query: "?raw",
   import: "default",
   eager: true,
-})["../pages/TodayPage.tsx"] as string;
+})["../pages/DashboardApp.tsx"] as string;
+
+const dashboardDataContextSource = import.meta.glob("../context/DashboardDataContext.tsx", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+})["../context/DashboardDataContext.tsx"] as string;
 
 const commercialMountedSources = Object.entries(
   import.meta.glob(
-    "../{pages/TodayPage,api/mirrorCommercialClient,api/commercialDealsParse,components/commercial,components/operator}/**/*.{ts,tsx}",
+    "../{pages/DashboardApp,pages/TodaySummaryPage,context/DashboardDataContext,api/mirrorCommercialClient,api/commercialDealsParse,components/commercial,components/operator,components/layout}/**/*.{ts,tsx}",
     {
       query: "?raw",
       import: "default",
@@ -90,13 +96,13 @@ const FORBIDDEN_UI_PATTERNS = [
 ];
 
 describe("Dashboard-2 safety (mounted Today)", () => {
-  it("App.tsx gates TodayPage behind production host allowlist", () => {
+  it("App.tsx gates DashboardApp behind production host allowlist", () => {
     expect(appSource).toContain("isDashboardHostAllowed");
     expect(appSource).toContain("PrivateDashboardPlaceholder");
   });
 
-  it("App.tsx mounts TodayPage only (no legacy commercial panels)", () => {
-    expect(appSource).toContain("TodayPage");
+  it("App.tsx mounts DashboardApp only (no legacy commercial panels)", () => {
+    expect(appSource).toContain("DashboardApp");
     for (const symbol of LEGACY_PANEL_IMPORTS) {
       expect(appSource, `App.tsx must not import or mount ${symbol}`).not.toContain(symbol);
     }
@@ -105,7 +111,9 @@ describe("Dashboard-2 safety (mounted Today)", () => {
   });
 
   it("active runtime does not import parked legacy folder", () => {
-    const activeSources = [appSource, todayPageSource, operatorClientSource].join("\n");
+    const activeSources = [appSource, dashboardAppSource, dashboardDataContextSource, operatorClientSource].join(
+      "\n",
+    );
     expect(activeSources).not.toMatch(/\/legacy\//);
     expect(activeSources).not.toMatch(/legacy\/api\/client/);
   });
@@ -127,14 +135,15 @@ describe("Dashboard-2 safety (mounted Today)", () => {
     expect(operatorClientSource).not.toMatch(/operatorApiUrl\(\s*["']\/contacts["']/);
   });
 
-  it("TodayPage does not call legacy api/client", () => {
-    expect(todayPageSource).not.toMatch(/from\s+["'][^"']*api\/client["']/);
-    expect(todayPageSource).not.toMatch(/api\/client/);
-    expect(todayPageSource).toMatch(/fetchWarmCases|fetchEquipmentOpportunities/);
-    expect(todayPageSource).toMatch(/fetchCommercialDealsMirror/);
-    expect(todayPageSource).not.toMatch(/\/mirror\/commercial\/purchase-events/);
-    expect(todayPageSource).not.toMatch(/fetchPurchase/);
-    expect(todayPageSource).toMatch(/ContactProfilePanel/);
+  it("Dashboard data layer does not call legacy api/client", () => {
+    const dataLayer = [dashboardAppSource, dashboardDataContextSource].join("\n");
+    expect(dataLayer).not.toMatch(/from\s+["'][^"']*api\/client["']/);
+    expect(dataLayer).not.toMatch(/api\/client/);
+    expect(dataLayer).toMatch(/fetchWarmCases|fetchEquipmentOpportunities/);
+    expect(dataLayer).toMatch(/fetchCommercialDealsMirror/);
+    expect(dataLayer).not.toMatch(/\/mirror\/commercial\/purchase-events/);
+    expect(dataLayer).not.toMatch(/fetchPurchase/);
+    expect(dashboardAppSource).toMatch(/ContactProfilePanel|ContactsPage/);
     expect(commercialMountedSources.join("\n")).toMatch(/Read-only contact profile/);
   });
 
@@ -217,9 +226,12 @@ describe("Dashboard-2 safety (mounted Today)", () => {
   });
 
   it("commercial deals UI does not reference purchase-events mirror", () => {
-    const blob = [todayPageSource, mirrorCommercialClientSource, commercialMountedSources.join("\n")].join(
-      "\n",
-    );
+    const blob = [
+      dashboardAppSource,
+      dashboardDataContextSource,
+      mirrorCommercialClientSource,
+      commercialMountedSources.join("\n"),
+    ].join("\n");
     expect(blob).not.toMatch(/\/mirror\/commercial\/purchase-events/);
     expect(blob).not.toMatch(/fetchPurchase|purchase-events["']/);
   });

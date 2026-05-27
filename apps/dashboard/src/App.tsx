@@ -1,6 +1,6 @@
 import { PrivateDashboardPlaceholder } from "./components/PrivateDashboardPlaceholder";
 import { isDashboardHostAllowed } from "./lib/dashboardHostGuard";
-import { TodayPage } from "./pages/TodayPage";
+import { DashboardApp } from "./pages/DashboardApp";
 
 function readBrowserHostname(): string {
   if (typeof window === "undefined") {
@@ -14,5 +14,5 @@ export default function App() {
   if (!isDashboardHostAllowed(readBrowserHostname())) {
     return <PrivateDashboardPlaceholder />;
   }
-  return <TodayPage />;
+  return <DashboardApp />;
 }

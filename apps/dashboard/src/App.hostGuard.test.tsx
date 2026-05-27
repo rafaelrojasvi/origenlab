@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./pages/TodayPage", () => ({
-  TodayPage: () => <div data-testid="today-page">Today</div>,
+vi.mock("./pages/DashboardApp", () => ({
+  DashboardApp: () => <div data-testid="dashboard-app">Dashboard</div>,
 }));
 
 const fetchTodayPanel = vi.fn();
@@ -44,17 +44,17 @@ describe("App production host guard", () => {
     vi.clearAllMocks();
   });
 
-  it("renders TodayPage on dashboard.origenlab.cl", () => {
+  it("renders DashboardApp on dashboard.origenlab.cl", () => {
     mockHostname("dashboard.origenlab.cl");
     render(<App />);
-    expect(screen.getByTestId("today-page")).toBeTruthy();
+    expect(screen.getByTestId("dashboard-app")).toBeTruthy();
     expect(screen.queryByText("Private dashboard")).toBeNull();
   });
 
-  it("renders TodayPage on localhost", () => {
+  it("renders DashboardApp on localhost", () => {
     mockHostname("localhost");
     render(<App />);
-    expect(screen.getByTestId("today-page")).toBeTruthy();
+    expect(screen.getByTestId("dashboard-app")).toBeTruthy();
   });
 
   it("renders private placeholder on origenlab-dashboard.onrender.com", () => {
@@ -64,7 +64,7 @@ describe("App production host guard", () => {
     expect(
       screen.getByText("Use the protected OrigenLab dashboard domain."),
     ).toBeTruthy();
-    expect(screen.queryByTestId("today-page")).toBeNull();
+    expect(screen.queryByTestId("dashboard-app")).toBeNull();
     expect(screen.queryByText(/warm/i)).toBeNull();
     expect(screen.queryByText(/equipment/i)).toBeNull();
     expect(screen.queryByText(/operator/i)).toBeNull();

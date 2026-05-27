@@ -31,6 +31,10 @@ export function WarmCasesTable({
   error,
   onRetry,
   onContactSelect,
+  title = "Casos tibios / Warm cases",
+  subtitle = "Read-only queue · subject/snippet previews only (no email bodies).",
+  initialFilters,
+  showViewPresets = true,
 }: {
   backend: ApiBackend;
   items: WarmCaseItem[];
@@ -44,8 +48,15 @@ export function WarmCasesTable({
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  title?: string;
+  subtitle?: string;
+  initialFilters?: Partial<WarmCaseTableFilters>;
+  showViewPresets?: boolean;
 }) {
-  const [filters, setFilters] = useState<WarmCaseTableFilters>(DEFAULT_WARM_FILTERS);
+  const [filters, setFilters] = useState<WarmCaseTableFilters>({
+    ...DEFAULT_WARM_FILTERS,
+    ...initialFilters,
+  });
 
   const sourceLabel = meta
     ? warmCasesSourceLabel(backend, meta.data_source)
@@ -180,8 +191,8 @@ export function WarmCasesTable({
 
   return (
     <TableSection
-      title="Casos tibios / Warm cases"
-      subtitle="Read-only queue · subject/snippet previews only (no email bodies)."
+      title={title}
+      subtitle={subtitle}
       dataSourceLabel={sourceLabel}
       loading={loading}
       error={error}
@@ -200,7 +211,7 @@ export function WarmCasesTable({
       toolbar={
         loadedCount > 0 ? (
           <div className="space-y-3">
-            {presetChips}
+            {showViewPresets ? presetChips : null}
             {toolbar}
           </div>
         ) : undefined
