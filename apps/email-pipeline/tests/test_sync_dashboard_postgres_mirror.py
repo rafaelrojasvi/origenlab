@@ -752,9 +752,15 @@ def test_alembic_migration_defines_email_classification_canonical() -> None:
     assert "reporting.email_classification_canonical" in text
 
 
+def test_alembic_migration_defines_commercial_deal_mirror() -> None:
+    path = REPO / "alembic" / "versions" / "20260526_0018_commercial_deal_mirror.py"
+    text = path.read_text(encoding="utf-8")
+    assert "commercial.deal" in text
+
+
 def test_alembic_head_matches_db1_api_read_model_chain() -> None:
     path = REPO / "alembic" / "versions" / "20260527_0019_catalog_mirror.py"
     assert path.is_file()
     assert EXPECTED_ALEMBIC_HEAD == "20260527_0019"
     text = path.read_text(encoding="utf-8")
-    assert "commercial.deal" in text
+    assert "catalog.product" in text

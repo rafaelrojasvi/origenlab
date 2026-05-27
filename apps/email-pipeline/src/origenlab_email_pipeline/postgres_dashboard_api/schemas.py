@@ -263,6 +263,126 @@ class CommercialDealDetailResponse(BaseModel):
     disclaimer: str = COMMERCIAL_DEAL_DISCLAIMER
 
 
+class CatalogProductListItem(BaseModel):
+    product_key: str
+    display_name: str
+    brand: str | None = None
+    product_kind: str
+    equipment_class: str | None = None
+    model_number: str | None = None
+    public_summary: str | None = None
+    confidence: str
+
+
+class CatalogProductAliasRow(BaseModel):
+    alias_source: str
+    alias_code: str
+    alias_kind: str | None = None
+
+
+class CatalogProductCategoryRow(BaseModel):
+    category_key: str
+    display_name: str
+    equipment_class: str | None = None
+    is_primary: bool = False
+
+
+class CatalogProductSpecRow(BaseModel):
+    spec_group: str | None = None
+    spec_key: str
+    spec_value: str
+    spec_value_numeric: float | None = None
+    spec_unit: str | None = None
+    source: str
+    confidence: str
+
+
+class CatalogSupplierOfferRow(BaseModel):
+    offer_key: str
+    supplier_org_name: str | None = None
+    supplier_domain: str | None = None
+    offer_status: str
+    quoted_at: str | None = None
+    valid_until: str | None = None
+    incoterm: str | None = None
+    payment_terms: str | None = None
+    delivery_terms: str | None = None
+    currency: str | None = None
+    quantity_offered: str | None = None
+    availability_note: str | None = None
+    confidence: str
+
+
+class CatalogPriceSnapshotRow(BaseModel):
+    snapshot_key: str
+    snapshot_kind: str
+    offer_key: str | None = None
+    currency: str | None = None
+    amount_decimal: str | None = None
+    amount_minor: int | None = None
+    amount_clp_integer: int | None = None
+    quantity: str | None = None
+    unit: str | None = None
+    incoterm: str | None = None
+    price_notes: str | None = None
+    is_public_safe: bool = False
+    confidence: str
+    observed_at: str | None = None
+
+
+class CatalogCommercialLinkRow(BaseModel):
+    link_kind: str
+    link_ref: str
+    confidence: str
+
+
+class CatalogProductDetail(BaseModel):
+    product_key: str
+    display_name: str
+    brand: str | None = None
+    manufacturer_name: str | None = None
+    product_kind: str
+    equipment_class: str | None = None
+    model_number: str | None = None
+    default_unit: str | None = None
+    website_slug: str | None = None
+    website_product_id: str | None = None
+    public_summary: str | None = None
+    is_active: bool = True
+    confidence: str
+    aliases: list[CatalogProductAliasRow] = Field(default_factory=list)
+    categories: list[CatalogProductCategoryRow] = Field(default_factory=list)
+    specs: list[CatalogProductSpecRow] = Field(default_factory=list)
+    supplier_offers: list[CatalogSupplierOfferRow] = Field(default_factory=list)
+    price_snapshots: list[CatalogPriceSnapshotRow] = Field(default_factory=list)
+    commercial_links: list[CatalogCommercialLinkRow] = Field(default_factory=list)
+
+
+CATALOG_DISCLAIMER: str = (
+    "Catálogo operador (espejo Postgres redactado). "
+    "Precios de proveedor son datos internos (is_public_safe=false). "
+    "SQLite sigue siendo la fuente operativa; no incluye cuerpos de correo ni datos bancarios."
+)
+
+
+class CatalogProductsListResponse(BaseModel):
+    table_available: bool = False
+    items: list[CatalogProductListItem] = Field(default_factory=list)
+    total: int = 0
+    limit: int = 50
+    data_source: Literal["postgres_mirror"] = "postgres_mirror"
+    read_only: bool = True
+    disclaimer: str = CATALOG_DISCLAIMER
+
+
+class CatalogProductDetailResponse(BaseModel):
+    table_available: bool = False
+    product: CatalogProductDetail | None = None
+    data_source: Literal["postgres_mirror"] = "postgres_mirror"
+    read_only: bool = True
+    disclaimer: str = CATALOG_DISCLAIMER
+
+
 class DependencyStatus(BaseModel):
     name: str
     status: Literal["ok", "error", "skipped"]
