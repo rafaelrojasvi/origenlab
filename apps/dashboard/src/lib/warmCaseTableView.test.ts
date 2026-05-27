@@ -3,6 +3,7 @@ import type { WarmCaseItem } from "../api/commercialTypes";
 import {
   DEFAULT_WARM_FILTERS,
   applyWarmCaseTableView,
+  categoryRank,
   clearWarmCaseTableFilters,
   filterWarmCases,
   sortWarmCases,
@@ -70,6 +71,24 @@ describe("warmCaseTableView", () => {
   it("sorts by last_seen descending", () => {
     const sorted = sortWarmCases(rows, "last_seen_desc");
     expect(sorted[0].case_id).toBe("b");
+  });
+
+  it("categoryRank covers Phase 7A categories and unknowns sort last", () => {
+    expect(categoryRank("bounce_problem")).toBeLessThan(categoryRank("payment_admin"));
+    expect(categoryRank("supplier_quote_received")).toBeLessThan(categoryRank("client_response"));
+    expect(categoryRank("client_opportunity")).toBeGreaterThan(categoryRank("waiting_client"));
+    expect(categoryRank("not-a-real-category" as WarmCaseItem["category"])).toBe(99);
+  });
+
+  it("sorts by category using Phase 7A ranks", () => {
+    const mixed: WarmCaseItem[] = [
+      { ...rows[0], case_id: "pay", category: "payment_admin" },
+      { ...rows[0], case_id: "client", category: "client_response" },
+      { ...rows[0], case_id: "sup", category: "supplier_quote_received" },
+      { ...rows[0], case_id: "noise", category: "system_noise" },
+    ];
+    const sorted = sortWarmCases(mixed, "category");
+    expect(sorted.map((r) => r.case_id)).toEqual(["noise", "pay", "sup", "client"]);
   });
 
   it("apply combines filter and sort", () => {

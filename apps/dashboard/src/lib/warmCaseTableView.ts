@@ -42,19 +42,33 @@ const STATUS_ORDER: Record<WarmCaseStatus, number> = {
   quoted: 4,
 };
 
-const CATEGORY_ORDER: Record<WarmCaseCategory, number> = {
+/** Lower rank sorts first. Unknown categories fall back to 99 so new API values do not break builds. */
+const CATEGORY_SORT_RANK: Partial<Record<WarmCaseCategory, number>> = {
   bounce: 0,
+  bounce_problem: 0,
   auto_reply: 1,
+  system_noise: 1,
   payment_admin: 2,
   payment_received: 2,
   vendor_logistics: 3,
-  client_reply: 4,
+  logistics_admin: 3,
+  internal_admin: 4,
   supplier_reply: 5,
-  quote_sent: 6,
-  waiting_supplier: 7,
-  waiting_client: 8,
-  opportunity: 9,
+  supplier_quote_received: 5,
+  supplier_followup: 5,
+  client_reply: 6,
+  client_response: 6,
+  quote_sent: 7,
+  waiting_supplier: 8,
+  waiting_client: 9,
+  deal_evidence_candidate: 10,
+  opportunity: 11,
+  client_opportunity: 11,
 };
+
+export function categoryRank(category: WarmCaseCategory): number {
+  return CATEGORY_SORT_RANK[category] ?? 99;
+}
 
 export function warmCaseSearchHaystack(row: WarmCaseItem): string {
   return [
@@ -98,7 +112,7 @@ function compareWarmCases(a: WarmCaseItem, b: WarmCaseItem, sort: WarmCaseSortKe
     case "status":
       return (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
     case "category":
-      return (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+      return categoryRank(a.category) - categoryRank(b.category);
     case "contact":
       return a.contact_email.localeCompare(b.contact_email);
     default:
