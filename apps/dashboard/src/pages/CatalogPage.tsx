@@ -17,6 +17,19 @@ import {
 
 const ALL_BRANDS = ["CRTOP", "Hielscher", "IKA", "Ollital", "Ortoalresa", "SERVA"] as const;
 
+function catalogProductKeyFromLocationHash(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  const queryStart = raw.indexOf("?");
+  if (queryStart < 0) {
+    return null;
+  }
+  const product = new URLSearchParams(raw.slice(queryStart + 1)).get("product")?.trim();
+  return product || null;
+}
+
 function formatLoadError(label: string, e: unknown): string {
   if (e instanceof OperatorApiError) {
     return `${label} (API ${e.status}): ${e.message}`;
@@ -210,6 +223,22 @@ export function CatalogPage() {
       })
       .finally(() => setDetailLoading(false));
   };
+
+  useEffect(() => {
+    const keyFromHash = catalogProductKeyFromLocationHash();
+    if (keyFromHash) {
+      openProduct(keyFromHash);
+    }
+    const onHashChange = () => {
+      const key = catalogProductKeyFromLocationHash();
+      if (key) {
+        openProduct(key);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const closeDrawer = () => {
     setSelectedKey(null);

@@ -68,7 +68,8 @@ export interface DashboardDataState {
   devConfigWarning: string | null;
 }
 
-const DashboardDataContext = createContext<DashboardDataState | null>(null);
+/** @internal Test stubs may wrap pages with a fixed provider value. */
+export const DashboardDataContext = createContext<DashboardDataState | null>(null);
 
 export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<TodayPanelData | null>(null);

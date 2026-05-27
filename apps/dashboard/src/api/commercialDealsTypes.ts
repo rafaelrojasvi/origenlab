@@ -1,5 +1,13 @@
 /** UI types for GET /mirror/commercial/deals (redacted Postgres mirror). */
 
+export type CommercialDealProductLineUi = {
+  product_name: string;
+  line_kind: string;
+  line_net_amount?: number | null;
+  currency?: string | null;
+  catalog_product_key?: string | null;
+};
+
 export type CommercialDealUiRow = {
   client_org_name: string;
   supplier_org_name: string;
@@ -16,6 +24,7 @@ export type CommercialDealUiRow = {
   margin_pct: number | null;
   margin_blockers: string[];
   updated_at: string | null;
+  product_lines: CommercialDealProductLineUi[];
 };
 
 export type CommercialDealsListUi = {

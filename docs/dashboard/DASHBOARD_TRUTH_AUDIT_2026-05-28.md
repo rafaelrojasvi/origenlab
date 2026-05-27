@@ -2,6 +2,8 @@
 
 **Phase 9B (implemented):** classification and dedup fixes — see [PHASE9B_WARM_CLASSIFICATION_FIXES.md](./PHASE9B_WARM_CLASSIFICATION_FIXES.md).
 
+**Phase 9C (implemented):** dashboard UX — Spanish deal status labels, CEAF×SERVA product lines in Negocio destacado, equipment feed unavailable states, Today/Sistema copy, CRTOP grouped subject display.
+
 Status: audit-only (no fixes applied in this pass)  
 Scope: OrigenLab operator dashboard vs Gmail-derived SQLite, Postgres mirrors, classification logic, and known commercial cases.
 

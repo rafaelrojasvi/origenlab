@@ -1,12 +1,27 @@
 import type { CommercialDealUiRow, CommercialDealsListUi } from "../../api/commercialDealsTypes";
 import {
+  dealStatusLabel,
   formatBlockersPreview,
   formatClp,
   formatEurDecimal,
   formatMarginPct,
   formatUpdatedAt,
+  freightStatusLabel,
+  marginStatusLabel,
+  reconciliationStatusLabel,
 } from "../../lib/commercialDealFormat";
 import { TableSection } from "./TableSection";
+
+function StatusCell({ raw, label }: { raw: string; label: string }) {
+  if (!raw || label === "—") {
+    return <>—</>;
+  }
+  return (
+    <span title={raw} className="cursor-help border-b border-dotted border-slate-300">
+      {label}
+    </span>
+  );
+}
 
 function DealRow({ row }: { row: CommercialDealUiRow }) {
   return (
@@ -18,14 +33,24 @@ function DealRow({ row }: { row: CommercialDealUiRow }) {
         <p className="text-slate-800">{row.supplier_org_name || "—"}</p>
       </td>
       <td className="px-3 py-2 align-top text-xs font-medium text-slate-800">
-        {row.deal_status || "—"}
+        <StatusCell raw={row.deal_status} label={dealStatusLabel(row.deal_status)} />
       </td>
       <td className="px-3 py-2 align-top text-xs font-medium text-slate-800">
-        {row.margin_status || "—"}
+        <StatusCell raw={row.margin_status} label={marginStatusLabel(row.margin_status)} />
       </td>
       <td className="px-3 py-2 align-top text-xs text-slate-700">
-        <p>{row.reconciliation_status || "—"}</p>
-        <p className="mt-1 text-[var(--color-muted)]">{row.freight_status || "—"}</p>
+        <p>
+          <StatusCell
+            raw={row.reconciliation_status ?? ""}
+            label={reconciliationStatusLabel(row.reconciliation_status)}
+          />
+        </p>
+        <p className="mt-1 text-[var(--color-muted)]">
+          <StatusCell
+            raw={row.freight_status ?? ""}
+            label={freightStatusLabel(row.freight_status)}
+          />
+        </p>
       </td>
       <td className="px-3 py-2 align-top text-right tabular-nums">{formatClp(row.client_sale_net_clp)}</td>
       <td className="px-3 py-2 align-top text-right tabular-nums">{formatClp(row.client_sale_gross_clp)}</td>

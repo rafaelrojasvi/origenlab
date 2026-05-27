@@ -181,6 +181,7 @@ function mockAllOk() {
         margin_pct: null,
         margin_blockers: [],
         updated_at: "2026-05-22T12:00:00+00:00",
+        product_lines: [],
       },
     ],
   });

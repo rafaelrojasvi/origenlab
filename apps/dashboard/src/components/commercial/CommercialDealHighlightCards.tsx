@@ -1,27 +1,65 @@
-import type { CommercialDealUiRow, CommercialDealsListUi } from "../../api/commercialDealsTypes";
-import { formatBlockersPreview, formatClp, formatMarginPct, formatUpdatedAt } from "../../lib/commercialDealFormat";
+import type {
+  CommercialDealProductLineUi,
+  CommercialDealUiRow,
+  CommercialDealsListUi,
+} from "../../api/commercialDealsTypes";
+import {
+  catalogProductHash,
+  dealStatusLabel,
+  enrichProductLineCatalogKeys,
+  formatBlockersPreview,
+  formatClp,
+  formatMarginPct,
+  formatProductLineLabel,
+  formatUpdatedAt,
+  marginStatusLabel,
+  resolveDealProductLines,
+} from "../../lib/commercialDealFormat";
 
-function dealStatusLabel(status: string): string {
-  const map: Record<string, string> = {
-    logistics_pending: "Logística pendiente",
-    open: "Abierto",
-    closed: "Cerrado",
-    needs_review: "Revisión pendiente",
-  };
-  return map[status.toLowerCase()] || status.replace(/_/g, " ");
+function isCeafServaDeal(row: CommercialDealUiRow): boolean {
+  const client = (row.client_org_name || "").toUpperCase();
+  const supplier = (row.supplier_org_name || "").toUpperCase();
+  return client.includes("CEAF") && supplier.includes("SERVA");
 }
 
-function marginStatusLabel(status: string): string {
-  const map: Record<string, string> = {
-    needs_review: "Requiere revisión",
-    reconciled: "Conciliado",
-    ok: "Ok",
-  };
-  return map[status.toLowerCase()] || status.replace(/_/g, " ");
+function DealProductLines({ lines }: { lines: CommercialDealProductLineUi[] }) {
+  if (!lines.length) {
+    return null;
+  }
+  return (
+    <div className="mt-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+        Productos del negocio
+      </p>
+      <ul className="mt-2 space-y-1.5 text-sm text-slate-800">
+        {lines.map((line, index) => {
+          const label = formatProductLineLabel(line);
+          const key = line.catalog_product_key;
+          return (
+            <li key={`${label}-${index}`}>
+              {key ? (
+                <a
+                  href={catalogProductHash(key)}
+                  className="font-medium text-brand-800 underline decoration-brand-300 underline-offset-2 hover:text-brand-950"
+                >
+                  {label}
+                </a>
+              ) : (
+                <span>{label}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 function DealHighlightCard({ row }: { row: CommercialDealUiRow }) {
   const hasBlockers = (row.margin_blockers?.length ?? 0) > 0;
+  const productLines = enrichProductLineCatalogKeys(
+    resolveDealProductLines(row.product_lines, row.client_org_name, row.supplier_org_name),
+  );
 
   return (
     <article
@@ -53,12 +91,14 @@ function DealHighlightCard({ row }: { row: CommercialDealUiRow }) {
       <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-[var(--color-muted)]">Estado del negocio</dt>
-          <dd className="font-medium text-slate-800">{dealStatusLabel(row.deal_status || "")}</dd>
+          <dd className="font-medium text-slate-800" title={row.deal_status}>
+            {dealStatusLabel(row.deal_status)}
+          </dd>
         </div>
         <div>
           <dt className="text-[var(--color-muted)]">Margen</dt>
-          <dd className="font-medium text-slate-800">
-            {marginStatusLabel(row.margin_status || "")} · {formatMarginPct(row.margin_pct)}
+          <dd className="font-medium text-slate-800" title={row.margin_status}>
+            {marginStatusLabel(row.margin_status)} · {formatMarginPct(row.margin_pct)}
           </dd>
         </div>
         <div>
@@ -83,6 +123,10 @@ function DealHighlightCard({ row }: { row: CommercialDealUiRow }) {
         </div>
       </dl>
 
+      {isCeafServaDeal(row) || productLines.length > 0 ? (
+        <DealProductLines lines={productLines} />
+      ) : null}
+
       {hasBlockers ? (
         <p className="mt-3 rounded-md border border-amber-200 bg-white/70 px-3 py-2 text-sm text-amber-950">
           <span className="font-semibold">Bloqueos:</span> {formatBlockersPreview(row.margin_blockers)}
@@ -103,10 +147,7 @@ export function CommercialDealHighlightCards({ data }: { data: CommercialDealsLi
   }
 
   const featured =
-    items.find(
-      (row) =>
-        row.client_org_name?.toUpperCase() === "CEAF" && row.supplier_org_name?.toUpperCase() === "SERVA",
-    ) ?? items[0];
+    items.find((row) => isCeafServaDeal(row)) ?? items[0];
 
   const rest = items.filter((row) => row !== featured);
 

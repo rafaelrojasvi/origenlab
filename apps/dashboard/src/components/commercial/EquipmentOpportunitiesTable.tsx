@@ -10,6 +10,11 @@ import {
   type EquipmentTableFilters,
 } from "../../lib/equipmentTableView";
 import { equipmentSourceLabel } from "../../lib/dataSourceLabel";
+import {
+  EQUIPMENT_FEED_UNAVAILABLE_LINES,
+  EQUIPMENT_FEED_UNAVAILABLE_TITLE,
+  isEquipmentFeedUnavailable,
+} from "../../lib/equipmentFeedStatus";
 import { truncate } from "../../lib/safeText";
 import { TokenLabel } from "../operator/TokenLabel";
 import { ContactEmailButton } from "./ContactEmailButton";
@@ -50,6 +55,9 @@ export function EquipmentOpportunitiesTable({
   const loadedCount = items.length;
   const apiCount = meta?.count ?? loadedCount;
   const campaignExtra = meta?.campaign_mode ? `campaign ${meta.campaign_mode}` : undefined;
+  const feedUnavailable = isEquipmentFeedUnavailable(meta);
+  const showUnavailableEmpty = !loading && !error && feedUnavailable;
+  const showZeroEmpty = !loading && !error && !feedUnavailable && loadedCount === 0;
 
   const toolbar = (
     <TableListToolbar>
@@ -100,19 +108,28 @@ export function EquipmentOpportunitiesTable({
       loading={loading}
       error={error}
       onRetry={onRetry}
-      empty={!loading && !error && loadedCount === 0}
-      emptyMessage="No hay oportunidades de equipos desde la API."
+      empty={showZeroEmpty}
+      emptyMessage="No hay oportunidades de equipos en la cola actual."
       filterEmpty={!loading && !error && loadedCount > 0 && visibleRows.length === 0}
       filterEmptyMessage="Ninguna oportunidad coincide con la búsqueda actual."
-      reducedNote={
-        meta?.reduced_mode && meta.note
-          ? `Reduced mode: ${meta.note}`
-          : meta?.reduced_mode
-            ? "Reduced mode: canonical queue file missing or empty."
-            : undefined
-      }
-      toolbar={loadedCount > 0 ? toolbar : undefined}
+      reducedNote={!feedUnavailable && meta?.note ? meta.note : undefined}
+      toolbar={loadedCount > 0 && !feedUnavailable ? toolbar : undefined}
     >
+      {showUnavailableEmpty ? (
+        <div
+          className="rounded-xl border border-amber-200 bg-amber-50/90 px-5 py-5 text-sm text-amber-950"
+          role="status"
+          data-testid="equipment-feed-unavailable"
+        >
+          <p className="font-semibold">{EQUIPMENT_FEED_UNAVAILABLE_TITLE}</p>
+          <ul className="mt-3 list-disc space-y-1 pl-5">
+            {EQUIPMENT_FEED_UNAVAILABLE_LINES.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {!showUnavailableEmpty ? (
       <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--color-muted)]">
@@ -203,6 +220,7 @@ export function EquipmentOpportunitiesTable({
           })}
         </p>
       </div>
+      ) : null}
     </TableSection>
   );
 }

@@ -168,6 +168,7 @@ function mockAll() {
         margin_pct: null,
         margin_blockers: ["fx_rate_missing"],
         updated_at: "2026-05-22T12:00:00+00:00",
+        product_lines: [],
       },
     ],
   });

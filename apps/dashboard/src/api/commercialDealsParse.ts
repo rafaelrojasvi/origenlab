@@ -3,7 +3,11 @@
  * Drops private fields even if the API returns them.
  */
 
-import type { CommercialDealUiRow, CommercialDealsListUi } from "./commercialDealsTypes";
+import type {
+  CommercialDealProductLineUi,
+  CommercialDealUiRow,
+  CommercialDealsListUi,
+} from "./commercialDealsTypes";
 import { safePreviewText, safeStr } from "../lib/safeText";
 
 const FORBIDDEN_ROW_KEYS = new Set([
@@ -28,7 +32,6 @@ const FORBIDDEN_ROW_KEYS = new Set([
   "source_path",
   "source_file",
   "margin_notes",
-  "product_line_summaries",
   "cost_summaries_by_type",
   "payment_summaries_masked",
 ]);
@@ -58,6 +61,27 @@ function optionalDecimalString(value: unknown): string | null {
   return s || null;
 }
 
+function parseProductLineSummaries(raw: unknown): CommercialDealProductLineUi[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const out: CommercialDealProductLineUi[] = [];
+  for (const item of raw) {
+    const r = asRecord(item);
+    const product_name = safePreviewText(r.product_name, 120);
+    if (!product_name) {
+      continue;
+    }
+    out.push({
+      product_name,
+      line_kind: safePreviewText(r.line_kind, 40) || "product",
+      line_net_amount: optionalInt(r.line_net_amount),
+      currency: r.currency == null ? null : safePreviewText(r.currency, 8),
+    });
+  }
+  return out;
+}
+
 function parseMarginBlockers(raw: unknown): string[] {
   if (!Array.isArray(raw)) {
     return [];
@@ -69,6 +93,7 @@ function parseMarginBlockers(raw: unknown): string[] {
 
 export function parseCommercialDealUiRow(raw: unknown): CommercialDealUiRow {
   const r = asRecord(raw);
+  const product_lines = parseProductLineSummaries(r.product_line_summaries);
   for (const key of Object.keys(r)) {
     if (FORBIDDEN_ROW_KEYS.has(key)) {
       delete r[key];
@@ -90,6 +115,7 @@ export function parseCommercialDealUiRow(raw: unknown): CommercialDealUiRow {
     margin_pct: optionalFloat(r.margin_pct),
     margin_blockers: parseMarginBlockers(r.margin_blockers),
     updated_at: r.updated_at == null ? null : safePreviewText(r.updated_at, 40),
+    product_lines,
   };
 }
 

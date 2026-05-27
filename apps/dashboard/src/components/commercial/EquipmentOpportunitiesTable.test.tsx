@@ -69,9 +69,9 @@ describe("EquipmentOpportunitiesTable", () => {
         ]}
         meta={{
           data_source: "postgres_mirror",
-          reduced_mode: true,
-          note: "empty mirror",
-          count: 0,
+          reduced_mode: false,
+          note: "",
+          count: 1,
           campaign_mode: null,
         }}
         loading={false}
@@ -108,7 +108,7 @@ describe("EquipmentOpportunitiesTable", () => {
         onContactSelect={() => {}}
       />,
     );
-    screen.getByText(/No hay oportunidades de equipos desde la API/);
+    screen.getByText(/No hay oportunidades de equipos en la cola actual/);
   });
 
   it("opens contact drilldown when contact email is present", () => {
@@ -179,6 +179,55 @@ describe("EquipmentOpportunitiesTable", () => {
     );
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /@/ })).toBeNull();
+  });
+
+  it("shows unavailable panel when feed is in reduced mode", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: true,
+          note: "Cola equipment_first no encontrada.",
+          count: 0,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    const panel = screen.getByTestId("equipment-feed-unavailable");
+    screen.getByText("Fuente de licitaciones no disponible");
+    expect(panel.textContent).toMatch(/No significa que no existan oportunidades/);
+    expect(panel.textContent).toMatch(/equipment_first_operator_queue/);
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("shows zero-items message when feed is available but empty", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 0,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    screen.getByText("No hay oportunidades de equipos en la cola actual.");
+    expect(screen.queryByTestId("equipment-feed-unavailable")).toBeNull();
   });
 });
 

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useDashboardData } from "../context/DashboardDataContext";
 import { dashboardSectionToHash } from "../lib/dashboardHashRoute";
 import type { DashboardSection } from "../lib/dashboardNav";
+import { isEquipmentFeedUnavailable } from "../lib/equipmentFeedStatus";
 import { computeTodaySummaryCounts } from "../lib/todaySummaryCounts";
 import { verdictTone } from "../lib/verdictStyles";
 import { OperatorWarningsList } from "../components/operator/OperatorWarningsList";
@@ -39,25 +40,28 @@ function navigateToSection(section: DashboardSection) {
 function SummaryCard({
   label,
   value,
+  displayValue,
   hint,
   section,
 }: {
   label: string;
   value: number;
+  displayValue?: string;
   hint?: string;
   section: DashboardSection;
 }) {
+  const shown = displayValue ?? String(value);
   return (
     <button
       type="button"
       onClick={() => navigateToSection(section)}
       className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-4 text-left shadow-sm transition-all hover:border-brand-600/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-      aria-label={`${label}: ${value}. Abrir sección.`}
+      aria-label={`${label}: ${shown}. Abrir sección.`}
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         {label}
       </p>
-      <p className="mt-2 text-3xl font-semibold text-brand-900">{value}</p>
+      <p className="mt-2 text-3xl font-semibold text-brand-900">{shown}</p>
       {hint ? <p className="mt-1 text-xs text-[var(--color-muted)]">{hint}</p> : null}
       <p className="mt-2 text-xs font-medium text-brand-700">Ver sección →</p>
     </button>
@@ -82,14 +86,17 @@ export function TodaySummaryPage() {
   const warnings = data?.operator.warnings ?? [];
   const warningsMore = Math.max(0, warnings.length - WARNINGS_PREVIEW);
 
+  const equipmentFeedUnavailable = isEquipmentFeedUnavailable(equipment?.meta ?? null);
+
   const counts = useMemo(
     () =>
       computeTodaySummaryCounts(
         warm?.items ?? [],
         equipment?.items.length ?? 0,
         commercialDeals?.items ?? [],
+        equipmentFeedUnavailable,
       ),
-    [warm?.items, equipment?.items.length, commercialDeals?.items],
+    [warm?.items, equipment?.items.length, commercialDeals?.items, equipmentFeedUnavailable],
   );
 
   return (
@@ -183,6 +190,20 @@ export function TodaySummaryPage() {
         </>
       ) : null}
 
+      {equipmentFeedUnavailable ? (
+        <div
+          className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-4 text-sm text-amber-950"
+          role="status"
+          data-testid="today-equipment-feed-unavailable"
+        >
+          <p className="font-semibold">Fuente de licitaciones no disponible</p>
+          <p className="mt-2">
+            No significa que no existan oportunidades. Revisar generación de{" "}
+            <code className="text-xs">equipment_first_operator_queue</code>.
+          </p>
+        </div>
+      ) : null}
+
       <section aria-labelledby="today-summary-heading">
         <h2 id="today-summary-heading" className="text-lg font-semibold text-brand-900">
           Resumen de colas
@@ -225,7 +246,12 @@ export function TodaySummaryPage() {
           <SummaryCard
             label="Licitaciones / equipos"
             value={counts.tendersEquipment}
-            hint="Cola de oportunidades de equipos"
+            displayValue={equipmentFeedUnavailable ? "N/D" : undefined}
+            hint={
+              equipmentFeedUnavailable
+                ? "Fuente de licitaciones no disponible (modo reducido)"
+                : "Cola de oportunidades de equipos"
+            }
             section="tenders"
           />
           <SummaryCard

@@ -26,6 +26,7 @@ const sampleDeal: CommercialDealsListUi = {
       margin_pct: null,
       margin_blockers: ["Missing confirmed wise_clp_debit"],
       updated_at: "2026-05-22T12:00:00+00:00",
+      product_lines: [],
     },
   ],
 };
@@ -40,7 +41,12 @@ describe("CommercialDealsTable", () => {
     expect(screen.getAllByText(/Espejo Postgres · solo lectura · vista redactada/).length).toBeGreaterThan(0);
     screen.getByText("Centro de Estudios Avanzados en Fruticultura CEAF");
     screen.getByText("SERVA Electrophoresis GmbH");
-    expect(screen.getAllByText("needs_review").length).toBeGreaterThan(0);
+    screen.getByText("Logística pendiente");
+    screen.getByText("Requiere revisión");
+    screen.getByText("Conciliado sin flete proveedor");
+    screen.getByText("DHL / flete externo");
+    expect(screen.queryByText("needs_review")).toBeNull();
+    expect(screen.queryByText("logistics_pending")).toBeNull();
     screen.getByText(/Missing confirmed wise_clp_debit/);
     expect(screen.getByText(/EUR 363\.00/)).toBeTruthy();
   });

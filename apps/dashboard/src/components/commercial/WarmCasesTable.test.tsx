@@ -450,4 +450,32 @@ describe("WarmCasesTable", () => {
     screen.getByText("tatiana.beldarrain@udec.cl");
     expect(screen.queryByText("contacto@origenlab.cl")).toBeNull();
   });
+
+  it("shows grouped CRTOP subject with inline email count", () => {
+    render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={[
+          {
+            ...row,
+            case_id: "crtop-1",
+            account_name: "CRTOP",
+            contact_email: "ariel@crtopmachine.com",
+            subject: "Re: Thank you very much for your inquiry about our reactor.",
+            equipment_signal: "reactor",
+            category: "supplier_quote_received",
+            grouped_email_count: 6,
+          },
+        ]}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 1 }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Todo" }));
+    screen.getByText("CRTOP — Reactor OLT-HP-5L ×6");
+    expect(screen.queryByText(/6 correos/)).toBeNull();
+  });
 });

@@ -37,5 +37,12 @@ describe("todaySummaryCounts", () => {
     expect(counts.dealEvidence).toBe(1);
     expect(counts.dealBlockers).toBe(1);
     expect(counts.tendersEquipment).toBe(3);
+    expect(counts.equipmentFeedUnavailable).toBe(false);
+  });
+
+  it("marks equipment KPI unavailable in reduced mode", () => {
+    const counts = computeTodaySummaryCounts([], 99, [], true);
+    expect(counts.tendersEquipment).toBe(0);
+    expect(counts.equipmentFeedUnavailable).toBe(true);
   });
 });

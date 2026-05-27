@@ -17,6 +17,10 @@ import {
 } from "../../lib/warmCaseTableView";
 import { formatOperatorToken } from "../../lib/operatorLabels";
 import { truncate } from "../../lib/safeText";
+import {
+  formatWarmCaseSubjectLine,
+  warmCaseSubjectShowsInlineGroupCount,
+} from "../../lib/warmCaseDisplay";
 import { TokenLabel } from "../operator/TokenLabel";
 import { ContactEmailButton } from "./ContactEmailButton";
 import { CopyTextButton } from "./CopyTextButton";
@@ -274,13 +278,14 @@ export function WarmCasesTable({
                 </td>
                 <td className="px-3 py-2 max-w-xs">
                   <div className="font-medium text-slate-800">
-                    {row.subject ? truncate(row.subject, 80) : "—"}
-                    {(row.grouped_email_count ?? 1) > 1 ? (
+                    {formatWarmCaseSubjectLine(row)}
+                    {(row.grouped_email_count ?? 1) > 1 &&
+                    !warmCaseSubjectShowsInlineGroupCount(row) ? (
                       <span
                         className="ml-2 inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-600"
-                        title="Correos agrupados en el mismo hilo o asunto de proveedor"
+                        title="Correos en el mismo hilo (no es cantidad pedida)"
                       >
-                        ×{row.grouped_email_count}
+                        {row.grouped_email_count} correos
                       </span>
                     ) : null}
                   </div>

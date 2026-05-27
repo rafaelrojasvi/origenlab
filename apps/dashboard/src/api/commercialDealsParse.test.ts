@@ -48,6 +48,14 @@ describe("commercialDealsParse", () => {
     expect(row).not.toHaveProperty("client_po_number");
     expect(row).not.toHaveProperty("extract_snippet");
     expect(row).not.toHaveProperty("product_line_summaries");
+    expect(row.product_lines).toEqual([
+      {
+        product_name: "BlueSlick",
+        line_kind: "product",
+        line_net_amount: null,
+        currency: null,
+      },
+    ]);
   });
 
   it("parsed row exposes only allowlisted UI keys", () => {
@@ -56,6 +64,7 @@ describe("commercialDealsParse", () => {
       supplier_org_name: "B",
       deal_status: "open",
       margin_status: "computed",
+      product_lines: [],
       supplier_invoice_total_minor: 36300,
       ref_code: "REF-1",
       description: "raw line description",
@@ -78,6 +87,7 @@ describe("commercialDealsParse", () => {
         "margin_pct",
         "margin_blockers",
         "updated_at",
+        "product_lines",
       ].sort(),
     );
   });
