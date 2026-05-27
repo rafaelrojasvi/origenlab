@@ -62,4 +62,31 @@ describe("warmCaseDetailStrategy (español)", () => {
     expect(text).not.toMatch(/https?:\/\//);
     expect(text).toContain("[oculto]");
   });
+
+  it("aplica resumen seguro para caso RG Energía RV10.70", () => {
+    const detail = buildWarmCaseDetailView(
+      row({
+        category: "client_opportunity",
+        account_name: "RG ENERGIA SPA",
+        contact_email: "contacto@labdelivery.cl",
+        subject: "RV: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200// RG ENERGIA SPA",
+      }),
+    );
+    expect(detail.inferredSummary).toContain("RV10.70");
+    expect(detail.inferredSummary).toContain("Falta confirmar moneda y despacho");
+    expect(detail.recommendedStrategy).toContain("San Bernardo");
+  });
+
+  it("aplica resumen seguro para cotización CRTOP", () => {
+    const detail = buildWarmCaseDetailView(
+      row({
+        category: "supplier_quote_received",
+        account_name: "CRTOP",
+        contact_email: "ariel@crtopmachine.com",
+        subject: "Re: Thank you very much for your inquiry about our reactor.",
+      }),
+    );
+    expect(detail.inferredSummary).toContain("US$10,600 EXW");
+    expect(detail.recommendedStrategy).toContain("HS code");
+  });
 });

@@ -163,9 +163,40 @@ function strategyForCategory(category: WarmCaseCategory): { summary: string; str
   }
 }
 
+function strategyOverrideForKnownCases(
+  row: WarmCaseItem,
+): { summary: string; strategy: string } | null {
+  const subject = (row.subject || "").toLowerCase();
+  const sender = (row.contact_email || "").toLowerCase();
+  if ((subject.includes("rv10.70") || subject.includes("3812200")) && subject.includes("rg energia")) {
+    return {
+      summary:
+        "Cliente solicita 3 tubos de vapor IKA RV10.70. Proveedor IKA respondió precio 112,00 y stock disponible. Falta confirmar moneda y despacho.",
+      strategy:
+        "Confirma moneda de la cotización, plazo de importación y condiciones de despacho a San Bernardo. Luego calcula margen y prepara la cotización al cliente fuera de este panel.",
+    };
+  }
+  if (
+    sender.includes("crtopmachine.com") ||
+    subject.includes("crtop") ||
+    subject.includes("olt-hp-5l") ||
+    subject.includes("inquiry about our reactor")
+  ) {
+    return {
+      summary:
+        "Proveedor CRTOP envió cotización de reactor OLT-HP-5L por US$10,600 EXW. Falta shipping y costos de importación antes de cotizar al cliente.",
+      strategy:
+        "Confirma dirección de envío, costo logístico, peso/dimensiones, HS code y garantía/certificados/manual. Con esos datos calcula costo aterrizado y margen antes de responder.",
+    };
+  }
+  return null;
+}
+
 export function buildWarmCaseDetailView(row: WarmCaseItem): WarmCaseDetailView {
   const category = row.category;
-  const { summary, strategy } = strategyForCategory(category);
+  const base = strategyForCategory(category);
+  const override = strategyOverrideForKnownCases(row);
+  const { summary, strategy } = override ?? base;
   const org = row.account_name?.trim() || row.contact_email;
   const subjectBit = row.subject?.trim() ? sanitizeOperatorPreview(row.subject, 72) : "Hilo tibio";
   const caseTitle = `${org}: ${subjectBit}`;

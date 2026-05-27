@@ -96,6 +96,30 @@ def test_build_case_key_stable_and_normalized() -> None:
     assert len(k1) == len("warm:") + 64
 
 
+def test_rg_energia_thread_hint_links_internal_forward_and_supplier_quote() -> None:
+    forward = promo.queue_row_to_promotion_record(
+        _queue_row(
+            10,
+            sender="Tatiana Vivanco <contacto@labdelivery.cl>",
+            subject="RV: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200// RG ENERGIA SPA",
+        ),
+        enrichment_available=False,
+    )
+    supplier = promo.queue_row_to_promotion_record(
+        _queue_row(
+            11,
+            sender='"Bonon Ferreira, Beatriz" <beatriz.bonon@ika.net.br>',
+            subject="RES: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200// RG ENERGIA SPA",
+        ),
+        enrichment_available=False,
+    )
+    assert forward is not None and supplier is not None
+    assert forward.case_key == supplier.case_key
+    assert forward.title == "RG Energía — IKA RV10.70 tubo vapor — qty 3"
+    assert supplier.title == "RG Energía — IKA RV10.70 tubo vapor — qty 3"
+    assert forward.account_name == "RG ENERGIA SPA"
+
+
 def test_duplicate_queue_rows_same_case_key_deduped() -> None:
     rows = [
         promo.queue_row_to_promotion_record(

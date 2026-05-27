@@ -52,7 +52,7 @@ def row_to_warm_case_item(
         subject=subject,
         category=category,
         status=status,
-        next_action=infer_next_action(category),
+        next_action=infer_next_action(category, row=row),
         equipment_signal=_equipment_signal(subject, row, enrichment_available=enrichment_available),
         snippet=snippet,
         gmail_url=None,

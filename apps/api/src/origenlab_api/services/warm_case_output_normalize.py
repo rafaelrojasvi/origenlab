@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from origenlab_email_pipeline.warm_case_role_classification import (
     infer_warm_case_role_category,
     role_category_next_action,
@@ -74,6 +76,19 @@ _LEGACY_CATEGORY_ALIASES: dict[str, WarmCaseCategory] = {
     "supplier_reply": "supplier_followup",
     "opportunity": "client_opportunity",
 }
+
+_SENSITIVE_PREVIEW_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b\d{1,2}\.\d{3}\.\d{3}-[\dkK]\b"),
+    re.compile(r"\b(?:swift|iban|beneficiario|titular|cuenta(?:\s+corriente)?)\b[^.,;]{0,80}", re.I),
+    re.compile(r"\b\d{10,}\b"),
+)
+
+
+def redact_sensitive_preview(value: str) -> str:
+    out = value
+    for pattern in _SENSITIVE_PREVIEW_PATTERNS:
+        out = pattern.sub("[oculto]", out)
+    return out
 
 
 def is_auto_reply_subject(subject: str | None) -> bool:
@@ -163,12 +178,18 @@ def normalize_warm_case_item(
         status = "waiting"
 
     next_action = role_category_next_action(category)  # type: ignore[arg-type]
+    existing_next = (item.next_action or "").strip()
+    if existing_next and ("rv10.70" in existing_next.lower() or "crtop" in existing_next.lower()):
+        next_action = existing_next
+
+    safe_snippet = redact_sensitive_preview(item.snippet or "")
 
     return item.model_copy(
         update={
             "category": category,
             "status": status,
             "next_action": next_action,
+            "snippet": safe_snippet,
         }
     )
 

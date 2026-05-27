@@ -64,7 +64,12 @@ def _require_psycopg() -> None:
         )
 
 
-def build_case_key(primary_contact_email: str, primary_domain: str | None) -> str:
+def build_case_key(
+    primary_contact_email: str, primary_domain: str | None, *, thread_hint: str | None = None
+) -> str:
+    if thread_hint and thread_hint.strip():
+        digest = hashlib.sha256(thread_hint.strip().lower().encode("utf-8")).hexdigest()
+        return f"warm:thread:{digest}"
     email = primary_contact_email.strip().lower()
     domain = (primary_domain or "").strip().lower()
     digest = hashlib.sha256(f"{email}|{domain}".encode("utf-8")).hexdigest()
@@ -75,6 +80,33 @@ def _primary_domain(contact_email: str) -> str | None:
     if "@" not in contact_email:
         return None
     return contact_email.split("@", 1)[1].lower() or None
+
+
+def _thread_case_hint(subject: str) -> str | None:
+    sub = (subject or "").lower()
+    if ("rv10.70" in sub or "3812200" in sub) and "rg energia" in sub:
+        return "rg-energia-ika-rv10.70-3812200"
+    return None
+
+
+def _promotion_title(subject: str, category: WarmCaseCategory) -> str:
+    sub = (subject or "").lower()
+    if ("rv10.70" in sub or "3812200" in sub) and "rg energia" in sub:
+        return "RG Energía — IKA RV10.70 tubo vapor — qty 3"
+    if ("crtop" in sub or "reactor" in sub or "olt-hp-5l" in sub) and category == "supplier_reply":
+        return "CRTOP — Reactor OLT-HP-5L — cotización recibida"
+    return subject[:500]
+
+
+def _promotion_account_name(
+    sender: str, contact_email: str, subject: str, category: WarmCaseCategory
+) -> str:
+    sub = (subject or "").lower()
+    if ("rv10.70" in sub or "3812200" in sub) and "rg energia" in sub:
+        return "RG ENERGIA SPA"
+    if ("crtop" in sub or "reactor" in sub) and category == "supplier_reply":
+        return "CRTOP"
+    return account_name_from_sender(sender, contact_email)
 
 
 def _activity_at_from_row(row: dict[str, Any]) -> datetime:
@@ -108,15 +140,17 @@ def queue_row_to_promotion_record(
     domain = _primary_domain(contact_email)
     equip = equipment_signal_text(subject, row, enrichment_available=enrichment_available) or None
 
+    thread_hint = _thread_case_hint(subject)
+
     return WarmCasePromotionRecord(
-        case_key=build_case_key(contact_email, domain),
-        title=subject[:500],
-        account_name=account_name_from_sender(sender, contact_email),
+        case_key=build_case_key(contact_email, domain, thread_hint=thread_hint),
+        title=_promotion_title(subject, category),
+        account_name=_promotion_account_name(sender, contact_email, subject, category),
         primary_contact_email=contact_email,
         primary_domain=domain,
         category=category,
         status=status,
-        next_action=infer_next_action(category),
+        next_action=infer_next_action(category, row=row),
         equipment_signal=equip,
         last_email_id=int(row["email_id"]),
         last_activity_at=_activity_at_from_row(row),

@@ -78,6 +78,61 @@ def test_normalize_crtopmachine_supplier() -> None:
     assert resolve_normalized_category(raw) in ("supplier_followup", "supplier_quote_received")
 
 
+def test_normalize_keeps_rg_energia_operator_safe_summary() -> None:
+    raw = _item(
+        contact_email="contacto@labdelivery.cl",
+        subject="RV: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200// RG ENERGIA SPA",
+        category="opportunity",
+    )
+    raw = raw.model_copy(
+        update={
+            "next_action": (
+                "Cliente solicita 3 tubos de vapor IKA RV10.70. "
+                "Proveedor IKA respondió precio 112,00 y stock disponible. "
+                "Falta confirmar moneda y despacho."
+            )
+        }
+    )
+    out = normalize_warm_case_item(raw)
+    assert out is not None
+    assert "RV10.70" in out.next_action
+    assert "confirmar moneda y despacho" in out.next_action.lower()
+
+
+def test_normalize_keeps_crtop_operator_safe_summary() -> None:
+    raw = _item(
+        contact_email="ariel@crtopmachine.com",
+        subject="Re: Thank you very much for your inquiry about our reactor.",
+        category="supplier_reply",
+    )
+    raw = raw.model_copy(
+        update={
+            "next_action": (
+                "Proveedor CRTOP envió cotización de reactor OLT-HP-5L por US$10,600 EXW. "
+                "Falta shipping y costos de importación antes de cotizar al cliente."
+            )
+        }
+    )
+    out = normalize_warm_case_item(raw)
+    assert out is not None
+    assert "CRTOP" in out.next_action
+    assert "US$10,600 EXW" in out.next_action
+
+
+def test_normalize_redacts_bank_and_rut_from_snippet() -> None:
+    raw = _item(
+        contact_email="ariel@crtopmachine.com",
+        subject="Re: reactor inquiry",
+        snippet="Beneficiario ACME Spa, SWIFT ABCDCLRMXXX, cuenta corriente 123456789012 y RUT 12.345.678-9",
+        category="supplier_reply",
+    )
+    out = normalize_warm_case_item(raw)
+    assert out is not None
+    assert "swift" not in out.snippet.lower()
+    assert "12.345.678-9" not in out.snippet
+    assert "123456789012" not in out.snippet
+
+
 def test_normalize_asynt_supplier() -> None:
     raw = _item(contact_email="sales@asynt.com", subject="Re: reactor specs")
     assert resolve_normalized_category(raw) in ("supplier_followup", "supplier_quote_received")

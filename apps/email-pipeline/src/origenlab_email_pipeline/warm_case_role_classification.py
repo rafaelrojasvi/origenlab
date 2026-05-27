@@ -15,6 +15,7 @@ from origenlab_email_pipeline.warm_case_sender_rules import (
     looks_like_auto_reply_subject,
     looks_like_client_oc_post_sale_subject,
     looks_like_internal_admin_thread,
+    looks_like_internal_forwarded_client_quote_request,
     looks_like_logistics_admin_contact,
     looks_like_payment_admin_thread,
     looks_like_supplier_quote_response,
@@ -148,6 +149,14 @@ def infer_warm_case_role_category(
 
     if looks_like_system_noise_contact(contact_email, sender_s, subject_s):
         return "system_noise"
+
+    if looks_like_internal_forwarded_client_quote_request(
+        contact_email=contact_email,
+        subject=subject_s,
+        snippet=snippet,
+        sender=sender_s,
+    ):
+        return "client_opportunity"
 
     if looks_like_internal_admin_thread(
         contact_email,

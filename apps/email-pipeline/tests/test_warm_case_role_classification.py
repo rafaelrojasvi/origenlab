@@ -48,6 +48,28 @@ def test_beatriz_ika_quote_is_supplier_quote_received() -> None:
     assert role != "client_opportunity"
 
 
+def test_internal_forwarded_rg_energia_quote_is_client_opportunity() -> None:
+    row = _row(
+        sender="Tatiana Vivanco <contacto@labdelivery.cl>",
+        subject="RV: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200// RG ENERGIA SPA",
+        contact_email="contacto@labdelivery.cl",
+        snippet="Reenvío de solicitud cliente RG ENERGIA SPA para tubo vapor",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "client_opportunity"
+
+
+def test_crtop_reactor_quote_is_supplier_quote_received() -> None:
+    row = _row(
+        sender="Ariel <ariel@crtopmachine.com>",
+        subject="Re: Thank you very much for your inquiry about our reactor.",
+        contact_email="ariel@crtopmachine.com",
+        snippet="CRTOP quotation Lab Reactor OLT-HP-5L, EXW USD 10600",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "supplier_quote_received"
+
+
 def test_dhl_account_email_is_logistics_admin() -> None:
     row = _row(
         sender="Monica Silva <monica.silva@dhl.com>",

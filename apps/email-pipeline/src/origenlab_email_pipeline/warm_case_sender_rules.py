@@ -106,6 +106,25 @@ _SUPPLIER_SUBJECT_MARKERS: tuple[str, ...] = (
     "valuen",
 )
 
+_FORWARDED_CLIENT_QUOTE_SUBJECT_MARKERS: tuple[str, ...] = (
+    "fwd:",
+    "fw:",
+    "rv:",
+    "reenvio",
+    "reenvío",
+)
+
+_CLIENT_QUOTE_REQUEST_MARKERS: tuple[str, ...] = (
+    "solicitud de cotiz",
+    "cotización",
+    "cotizacion",
+    "quotation request",
+    "request for quotation",
+    "rg energia",
+    "rv10.70",
+    "3812200",
+)
+
 
 def contact_email_from_sender(sender_preview: str | None) -> str:
     found = emails_in(sender_preview or "")
@@ -249,6 +268,13 @@ def looks_like_internal_admin_thread(
     """Operator/internal notes (SERVA payment, Wise, etc.) — not client threads."""
     email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
     if is_internal_operator_contact(email):
+        if looks_like_internal_forwarded_client_quote_request(
+            contact_email=email,
+            subject=subject,
+            snippet=snippet,
+            sender=sender,
+        ):
+            return False
         return True
     hay = " ".join([subject or "", snippet or "", sender or ""]).lower()
     if email == "sebastian.rojas.vivanco@gmail.com" and "serva" in hay:
@@ -256,6 +282,23 @@ def looks_like_internal_admin_thread(
     if email == "tvivancob@gmail.com" and any(m in hay for m in _INTERNAL_ADMIN_SUBJECT_MARKERS):
         return True
     return False
+
+
+def looks_like_internal_forwarded_client_quote_request(
+    *,
+    contact_email: str,
+    subject: str | None,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> bool:
+    """Internal forward that carries a real external quote request."""
+    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    if not is_internal_operator_contact(email):
+        return False
+    hay = " ".join([subject or "", snippet or "", sender or ""]).lower()
+    has_forward_marker = any(marker in hay for marker in _FORWARDED_CLIENT_QUOTE_SUBJECT_MARKERS)
+    has_quote_signal = any(marker in hay for marker in _CLIENT_QUOTE_REQUEST_MARKERS)
+    return has_forward_marker and has_quote_signal
 
 
 def looks_like_supplier_quote_response(

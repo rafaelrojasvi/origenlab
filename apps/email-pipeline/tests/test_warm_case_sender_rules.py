@@ -8,6 +8,7 @@ from origenlab_email_pipeline.warm_case_sender_rules import (
     looks_like_payment_admin_thread,
     looks_like_security_notification,
     looks_like_supplier_marketing_thread,
+    looks_like_internal_forwarded_client_quote_request,
 )
 
 
@@ -108,4 +109,13 @@ def test_gmail_cotizacion_stays_waiting_supplier_not_client() -> None:
             include_noise=False,
         )
         == "waiting_supplier"
+    )
+
+
+def test_internal_forwarded_quote_request_detected_as_client_forward() -> None:
+    assert looks_like_internal_forwarded_client_quote_request(
+        contact_email="contacto@labdelivery.cl",
+        subject="RV: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200// RG ENERGIA SPA",
+        snippet="Solicitud cliente externa",
+        sender="Tatiana Vivanco <contacto@labdelivery.cl>",
     )
