@@ -30,6 +30,7 @@ def _script_text(path: Path) -> str:
 def test_refresh_script_default_commercial_mirror_off() -> None:
     text = _script_text(_REFRESH)
     assert 'RUN_COMMERCIAL_DEAL_MIRROR="${RUN_COMMERCIAL_DEAL_MIRROR:-0}"' in text
+    assert 'DASHBOARD_FAST="${DASHBOARD_FAST:-0}"' in text
     assert 'RUN_COMMERCIAL_DEAL_MIRROR" == "1"' in text
     assert "COMMERCIAL_MIRROR_STATUS=\"skipped\"" in text or 'COMMERCIAL_MIRROR_STATUS="skipped"' in text
 
@@ -59,6 +60,21 @@ def test_refresh_script_does_not_invoke_send_or_outreach() -> None:
     runtime = "\n".join(runtime_lines)
     for forbidden in _FORBIDDEN_INVOCATIONS:
         assert forbidden not in runtime, f"refresh script must not call {forbidden}"
+
+
+def test_refresh_script_dashboard_fast_invokes_canonical_fast_flags() -> None:
+    text = _script_text(_REFRESH)
+    assert 'if [[ "$DASHBOARD_FAST" == "1" ]]; then' in text
+    assert "--dashboard-fast" in text
+    assert "--canonical-only" in text
+    assert "--skip-document-master-if-unchanged" in text
+    assert "--only canonical" in text
+    assert "verify_dashboard_postgres_mirror.py" in text
+
+
+def test_refresh_script_default_path_keeps_standard_sync_script() -> None:
+    text = _script_text(_REFRESH)
+    assert "bash scripts/ops/sync_dashboard_mirror_to_cloud.sh" in text
 
 
 def test_refresh_script_syntax_check() -> None:

@@ -17,6 +17,7 @@
 # Optional env:
 #   RUN_GMAIL_INGEST=1             run Gmail ingest before sync (default 0)
 #   RUN_COMMERCIAL_DEAL_MIRROR=1   sync+verify commercial.deal after dashboard mirror (default 0)
+#   DASHBOARD_FAST=1               fast daily mode (canonical/recent rows + dashboard-only mirror sync)
 #   GMAIL_SINCE_DAYS=14            bound IMAP fetch when ingest runs
 #   ORIGENLAB_GMAIL_SENT_FOLDER    default "[Gmail]/Enviados"
 #   ORIGENLAB_EXPECT_EQUIPMENT_COUNT  default 9 (verify assertion)
@@ -35,6 +36,7 @@ SQLITE_PATH="${ORIGENLAB_SQLITE_PATH:-$HOME/data/origenlab-email/sqlite/emails.s
 CLOUD_PG_URL="${ORIGENLAB_CLOUD_POSTGRES_URL:-}"
 RUN_GMAIL_INGEST="${RUN_GMAIL_INGEST:-0}"
 RUN_COMMERCIAL_DEAL_MIRROR="${RUN_COMMERCIAL_DEAL_MIRROR:-0}"
+DASHBOARD_FAST="${DASHBOARD_FAST:-0}"
 GMAIL_SINCE_DAYS="${GMAIL_SINCE_DAYS:-14}"
 GMAIL_SENT_FOLDER="${ORIGENLAB_GMAIL_SENT_FOLDER:-[Gmail]/Enviados}"
 EXPECT_EQUIPMENT="${ORIGENLAB_EXPECT_EQUIPMENT_COUNT:-9}"
@@ -48,6 +50,11 @@ _canonical_gmail_count_sql() {
 
 echo "== OrigenLab: refresh Render dashboard once =="
 echo "Safety: no sends, no Gmail mutation, no mart/commercial --rebuild, no outreach writes, no deploy."
+if [[ "$DASHBOARD_FAST" == "1" ]]; then
+  echo "Mode: DASHBOARD_FAST=1 (incremental canonical refresh + dashboard-only Postgres sync)"
+else
+  echo "Mode: default (full mart scan + standard mirror sync)"
+fi
 
 if [[ ! -f "$SQLITE_PATH" ]]; then
   echo "ERROR: SQLite not found: $SQLITE_PATH" >&2
@@ -100,7 +107,16 @@ fi
 echo ""
 echo "-- Incremental SQLite derived layers (no --rebuild) --"
 uv sync --group dev >/dev/null
-uv run python scripts/mart/build_business_mart.py
+if [[ "$DASHBOARD_FAST" == "1" ]]; then
+  FAST_SINCE_DAYS="${GMAIL_SINCE_DAYS:-14}"
+  uv run python scripts/mart/build_business_mart.py \
+    --dashboard-fast \
+    --canonical-only \
+    --since-days "$FAST_SINCE_DAYS" \
+    --skip-document-master-if-unchanged
+else
+  uv run python scripts/mart/build_business_mart.py
+fi
 uv run python scripts/commercial/build_commercial_intel_v1.py
 
 echo ""
@@ -110,7 +126,19 @@ echo "$SQLITE_CANONICAL_AFTER"
 
 echo ""
 echo "-- Sync dashboard mirror → Render Postgres --"
-bash scripts/ops/sync_dashboard_mirror_to_cloud.sh
+if [[ "$DASHBOARD_FAST" == "1" ]]; then
+  uv run alembic -c alembic.ini upgrade head
+  uv run python scripts/sync/sync_dashboard_postgres_mirror.py \
+    --allow-non-scratch-postgres \
+    --only canonical \
+    --include-equipment-opportunities \
+    --include-warm-cases \
+    --updated-by "${ORIGENLAB_SYNC_UPDATED_BY:-phase1-cloud-manual}" \
+    --reason "${ORIGENLAB_SYNC_REASON:-Phase 6.6 dashboard-fast canonical mirror sync}" \
+    --json-out /tmp/phase1_cloud_mirror_sync.json
+else
+  bash scripts/ops/sync_dashboard_mirror_to_cloud.sh
+fi
 
 echo ""
 echo "-- Verify mirror (assert Render dashboard readiness) --"
@@ -142,6 +170,7 @@ echo "Render dashboard mirror refresh complete."
 echo ""
 echo "Summary:"
 echo "  Gmail ingest:              $GMAIL_INGEST_LABEL"
+echo "  Dashboard fast mode:       ${DASHBOARD_FAST}"
 echo "  SQLite canonical (before): $SQLITE_CANONICAL_BEFORE"
 echo "  SQLite canonical (after):  $SQLITE_CANONICAL_AFTER"
 echo "  Dashboard mirror verify:   $DASHBOARD_VERIFY_JSON"

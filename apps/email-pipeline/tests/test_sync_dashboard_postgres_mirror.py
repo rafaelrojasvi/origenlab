@@ -122,11 +122,42 @@ def test_plan_loader_steps_only_canonical() -> None:
     assert "canonical" in steps[0].argv
 
 
+def test_dashboard_fast_maps_to_only_canonical(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    calls: list[str] = []
+
+    def _fake_loader(cmd: list[str], _root: Path) -> int:
+        calls.append(" ".join(cmd))
+        return 0
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(_PATCH_WM, return_value=5), patch(_PATCH_CLASSIFY, return_value={}), patch(
+        _PATCH_PURCHASE, return_value={}
+    ):
+        result = run_dashboard_mirror_sync(
+            ["--sqlite-db", str(db), "--dashboard-fast"],
+            repo_root=REPO,
+            loader_runner=_fake_loader,
+        )
+
+    assert result["ok"] is True
+    assert len(calls) == 1
+    assert "sqlite_mart_core_to_postgres.py" in calls[0]
+    assert "--tables canonical" in calls[0]
+
+
 def test_refuses_missing_postgres_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     db = tmp_path / "x.sqlite"
     db.write_bytes(b"")
     monkeypatch.delenv("ORIGENLAB_POSTGRES_URL", raising=False)
     monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
+    monkeypatch.delenv("ORIGENLAB_CLOUD_POSTGRES_URL", raising=False)
     monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(db))
     result = run_dashboard_mirror_sync(
         ["--sqlite-db", str(db)],
@@ -463,6 +494,7 @@ def test_script_help() -> None:
     assert "--allow-empty-mart" in r.stdout
     assert "--include-equipment-opportunities" in r.stdout
     assert "--include-warm-cases" in r.stdout
+    assert "--dashboard-fast" in r.stdout
 
 
 def test_validate_optional_loader_audit_requires_operator_on_apply() -> None:

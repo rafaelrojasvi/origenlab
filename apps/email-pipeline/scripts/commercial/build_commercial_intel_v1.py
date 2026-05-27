@@ -19,6 +19,7 @@ import argparse
 from collections import Counter, defaultdict
 import sqlite3
 import sys
+import time
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -616,9 +617,11 @@ def main() -> int:
     run_id = start_run(conn, script_name="scripts/commercial/build_commercial_intel_v1.py", notes="commercial-intel-v1")
 
     try:
+        stage_t0 = time.monotonic()
         internal_domains = {d.strip().lower() for d in args.internal_domain if d.strip()} or derive_internal_domains(conn)
         vendor_domains = {d.strip().lower() for d in args.vendor_domain if d.strip()} | derive_vendor_domains(conn)
         existing_client_domains = {d.strip().lower() for d in args.existing_client_domain if d.strip()} | derive_existing_client_domains(conn)
+        print(f"[timing] commercial_domain_derivation_seconds={time.monotonic() - stage_t0:.2f}")
 
         if args.rebuild:
             _clear_rebuildable(conn)
@@ -630,14 +633,21 @@ def main() -> int:
             except ValueError:
                 last_watermark = 0
 
+        stage_t0 = time.monotonic()
         rows = fetch_emails_for_commercial_build(
             conn,
             rebuild=args.rebuild,
             last_watermark=last_watermark,
             reprocess_days=args.reprocess_days,
         )
+        print(f"[timing] commercial_fetch_emails_seconds={time.monotonic() - stage_t0:.2f}")
         email_ids = [int(r["id"]) for r in rows]
+
+        stage_t0 = time.monotonic()
         _delete_existing_facts_for_emails(conn, email_ids)
+        print(f"[timing] commercial_delete_existing_facts_seconds={time.monotonic() - stage_t0:.2f}")
+
+        stage_t0 = time.monotonic()
         facts_summary = _build_email_facts(
             conn,
             rows=rows,
@@ -646,8 +656,15 @@ def main() -> int:
             vendor_domains=vendor_domains,
             existing_client_domains=existing_client_domains,
         )
+        print(f"[timing] commercial_build_email_facts_seconds={time.monotonic() - stage_t0:.2f}")
+
+        stage_t0 = time.monotonic()
         rollup_summary = _rebuild_rollups(conn, run_id=run_id)
+        print(f"[timing] commercial_rebuild_rollups_seconds={time.monotonic() - stage_t0:.2f}")
+
+        stage_t0 = time.monotonic()
         candidate_summary = _persist_candidates(conn, run_id=run_id)
+        print(f"[timing] commercial_persist_candidates_seconds={time.monotonic() - stage_t0:.2f}")
 
         max_email_id = conn.execute("SELECT COALESCE(MAX(id),0) FROM emails").fetchone()[0]
         set_kv(conn, WATERMARK_KEY, str(int(max_email_id or 0)))

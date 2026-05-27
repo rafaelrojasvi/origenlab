@@ -727,6 +727,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--dashboard-fast",
+        action="store_true",
+        help=(
+            "Fast daily mirror mode: canonical mart loader only (no archive mart replace). "
+            "Does not change default behavior unless explicitly set."
+        ),
+    )
+    p.add_argument(
         "--updated-by",
         "--operator",
         dest="updated_by",
@@ -765,12 +773,15 @@ def run_dashboard_mirror_sync(
         "errors": [],
         "warnings": [],
         "elapsed_seconds": 0.0,
+        "timings": {},
     }
 
     t0 = time.monotonic()
     started_at = datetime.now(timezone.utc)
 
     try:
+        if args.dashboard_fast and args.only is None:
+            args.only = "canonical"
         sqlite_path = resolve_sqlite_path(args.sqlite_db)
         pg_url = resolve_postgres_url(args.postgres_url)
         assert_scratch_postgres_target(
@@ -888,10 +899,18 @@ def run_dashboard_mirror_sync(
                 allow_non_scratch=bool(args.allow_non_scratch_postgres),
             )
             phase_log(f"[sync] loader {step.name}: {' '.join(cmd[2:6])} ...", log=log)
+            step_t0 = time.monotonic()
             if loader_runner is not None:
                 rc = loader_runner(cmd, root)
             else:
                 rc = run_loader_subprocess(cmd, repo_root=root)
+            result.setdefault("timings", {})[f"loader_{step.name}_seconds"] = round(
+                time.monotonic() - step_t0, 3
+            )
+            phase_log(
+                f"[sync] loader {step.name} finished in {result['timings'][f'loader_{step.name}_seconds']}s",
+                log=log,
+            )
             if rc != 0:
                 raise RuntimeError(f"Loader {step.name} failed with exit code {rc}")
 
@@ -910,28 +929,40 @@ def run_dashboard_mirror_sync(
             dry_run=False,
         )
         result["sync_run_id"] = sync_id
+        stage_t0 = time.monotonic()
         classification_sync = sync_email_classification_canonical(
             pg_url,
             sqlite_path,
             sync_run_id=sync_id,
             dry_run=False,
         )
+        result.setdefault("timings", {})["classification_sync_seconds"] = round(
+            time.monotonic() - stage_t0, 3
+        )
         result["classification_sync"] = classification_sync
+        stage_t0 = time.monotonic()
         purchase_sync = sync_commercial_purchase_events(
             pg_url,
             sqlite_path,
             sync_run_id=sync_id,
             dry_run=False,
         )
+        result.setdefault("timings", {})["commercial_purchase_sync_seconds"] = round(
+            time.monotonic() - stage_t0, 3
+        )
         result["commercial_purchase_sync"] = purchase_sync
 
         deals_sync: dict[str, Any] | None = None
         if args.include_commercial_deals:
+            stage_t0 = time.monotonic()
             deals_sync = sync_commercial_deals(
                 pg_url,
                 sqlite_path,
                 sync_run_id=sync_id,
                 dry_run=False,
+            )
+            result.setdefault("timings", {})["commercial_deals_sync_seconds"] = round(
+                time.monotonic() - stage_t0, 3
             )
             result["commercial_deals_sync"] = deals_sync
 
@@ -946,6 +977,7 @@ def run_dashboard_mirror_sync(
         equipment_summary: dict[str, Any] | None = None
         warm_summary: dict[str, Any] | None = None
         if args.include_equipment_opportunities or args.include_warm_cases:
+            stage_t0 = time.monotonic()
             equipment_summary, warm_summary = run_optional_db2_loaders(
                 args=args,
                 pg_url=pg_url,
@@ -953,6 +985,9 @@ def run_dashboard_mirror_sync(
                 repo_root=root,
                 sync_run_id=sync_id,
                 dry_run=False,
+            )
+            result.setdefault("timings", {})["optional_db2_loaders_seconds"] = round(
+                time.monotonic() - stage_t0, 3
             )
             if equipment_summary is not None:
                 result["equipment_opportunity_sync"] = equipment_summary

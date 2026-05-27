@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import sqlite3
 import sys
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -51,9 +52,16 @@ from origenlab_email_pipeline.business_mart import (
     primary_sender_email,
     signal_row,
 )
+from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
-from origenlab_email_pipeline.pipeline_run_recorder import finish_run, get_git_describe, set_kv, start_run
+from origenlab_email_pipeline.pipeline_run_recorder import (
+    finish_run,
+    get_git_describe,
+    get_kv,
+    set_kv,
+    start_run,
+)
 from origenlab_email_pipeline.sqlite_migrate import SchemaLayer, migrate_sqlite_schema
 from origenlab_email_pipeline.progress import iter_with_progress
 
@@ -67,11 +75,55 @@ def _ext(s: str | None) -> str:
     return s.rsplit(".", 1)[-1][:12]
 
 
+DOC_SIGNATURE_KV = "mart_document_master_signature_v1"
+
+
+def _ensure_fast_indexes(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_emails_source_file ON emails(source_file);
+        CREATE INDEX IF NOT EXISTS idx_emails_folder ON emails(folder);
+        CREATE INDEX IF NOT EXISTS idx_emails_source_file_date_iso ON emails(source_file, date_iso);
+        CREATE INDEX IF NOT EXISTS idx_opportunity_signals_email_id ON opportunity_signals(email_id);
+        """
+    )
+    conn.commit()
+
+
+def _document_signature(conn: sqlite3.Connection) -> str:
+    a = conn.execute("SELECT COUNT(*), COALESCE(MAX(id), 0) FROM attachments").fetchone()
+    ae = conn.execute("SELECT COUNT(*), COALESCE(MAX(attachment_id), 0) FROM attachment_extracts").fetchone()
+    a_count, a_max = int(a[0] if a else 0), int(a[1] if a else 0)
+    ae_count, ae_max = int(ae[0] if ae else 0), int(ae[1] if ae else 0)
+    return f"{a_count}:{a_max}:{ae_count}:{ae_max}"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--internal-domain", action="append", default=[], help="repeatable; add internal domains (default: inferred)")
     ap.add_argument("--limit-emails", type=int, default=None, help="debug: limit emails scanned")
     ap.add_argument("--rebuild", action="store_true", help="truncate and rebuild mart tables")
+    ap.add_argument(
+        "--dashboard-fast",
+        action="store_true",
+        help="Fast daily mode (canonical/recent rows, skip heavy stages when safe).",
+    )
+    ap.add_argument(
+        "--canonical-only",
+        action="store_true",
+        help="Process only canonical contacto Gmail source rows.",
+    )
+    ap.add_argument(
+        "--since-days",
+        type=int,
+        default=None,
+        help="Restrict email scan to date_iso within N days (best effort).",
+    )
+    ap.add_argument(
+        "--skip-document-master-if-unchanged",
+        action="store_true",
+        help="Skip rebuilding document_master when attachment/extract signature is unchanged.",
+    )
     ap.add_argument(
         "--mart-date-slack-days",
         type=int,
@@ -88,6 +140,7 @@ def main() -> None:
     db_path = settings.resolved_sqlite_path()
     conn = connect(db_path)
     migrate_sqlite_schema(conn, layers={SchemaLayer.ARCHIVE_AND_MART})
+    _ensure_fast_indexes(conn)
 
     run_id = start_run(
         conn,
@@ -101,6 +154,12 @@ def main() -> None:
 
     print(f"DB: {db_path}")
     print(f"Internal domains (guess): {sorted(internal_domains)[:10]}")
+    if args.dashboard_fast:
+        print("[mode] dashboard-fast enabled")
+    if args.canonical_only:
+        print("[mode] canonical-only enabled")
+    if args.since_days is not None:
+        print(f"[mode] since-days={args.since_days}")
     mart_slack = int(args.mart_date_slack_days)
     if mart_slack < 0 or mart_slack > 3660:
         mart_slack = MART_DATE_SLACK_DAYS_DEFAULT
@@ -119,86 +178,99 @@ def main() -> None:
 
     # ---- document_master from attachment_extracts (success only) ----
     try:
-        doc_rows = conn.execute(
-            """
-            SELECT
-              a.id AS attachment_id,
-              a.email_id,
-              a.filename,
-              a.content_type,
-              e.sender,
-              e.recipients,
-              e.date_iso,
-              e.subject,
-              e.top_reply_clean,
-              ae.detected_doc_type,
-              ae.text_preview,
-              ae.has_quote_terms,
-              ae.has_invoice_terms,
-              ae.has_purchase_terms,
-              ae.has_price_list_terms
-            FROM attachment_extracts ae
-            JOIN attachments a ON a.id = ae.attachment_id
-            JOIN emails e ON e.id = a.email_id
-            WHERE ae.extract_status='success'
-            """
-        ).fetchall()
+        stage_t0 = time.monotonic()
+        skip_document_master = False
+        if args.skip_document_master_if_unchanged:
+            sig = _document_signature(conn)
+            last_sig = get_kv(conn, DOC_SIGNATURE_KV) or ""
+            if sig == last_sig:
+                skip_document_master = True
+                print("document_master unchanged signature; skipping rebuild.")
+            else:
+                set_kv(conn, DOC_SIGNATURE_KV, sig)
 
         inserted_docs = 0
-        for r in iter_with_progress(doc_rows, desc="document_master"):
-            attachment_id = int(r[0])
-            email_id = int(r[1])
-            filename = r[2] or ""
-            sender_email = primary_sender_email(r[4] or "") or ""
-            sender_domain = domain_of(sender_email) or ""
-            recip_domains = [domain_of(x) for x in emails_in(r[5] or "")]
-            recip_domains = [d for d in recip_domains if d]
-            # pick the first external recipient domain as recipient_domain (best-effort)
-            recipient_domain = ""
-            for d in recip_domains:
-                if d not in internal_domains:
-                    recipient_domain = d
-                    break
-            if not recipient_domain and recip_domains:
-                recipient_domain = recip_domains[0]
-
-            subj = r[7] or ""
-            top = r[8] or ""
-            preview_raw = (r[10] or "")[:2000]
-            preview_clean, preview_q = clean_document_preview(preview_raw)
-            tags = equipment_tags_from_text(subj + "\n" + top + "\n" + preview_clean)
-            conn.execute(
+        if not skip_document_master:
+            doc_rows = conn.execute(
                 """
-                INSERT OR REPLACE INTO document_master
-                (attachment_id, email_id, filename, extension, sender_email, sender_domain,
-                 recipient_domain, sent_at, doc_type, extracted_preview_raw, extracted_preview_clean, preview_quality_score,
-                 has_quote_terms, has_invoice_terms, has_purchase_terms, has_price_list_terms,
-                 equipment_tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    attachment_id,
-                    email_id,
-                    filename,
-                    _ext(filename),
-                    sender_email,
-                    sender_domain,
-                    recipient_domain,
-                    email_date_iso_for_mart_timeline(r[6], slack_days=mart_slack),
-                    (r[9] or "unknown"),
-                    preview_raw,
-                    preview_clean,
-                    float(preview_q),
-                    int(r[11] or 0),
-                    int(r[12] or 0),
-                    int(r[13] or 0),
-                    int(r[14] or 0),
-                    ",".join(tags),
-                ),
-            )
-            inserted_docs += 1
-        conn.commit()
-        print(f"document_master rows: {inserted_docs:,}")
+                SELECT
+                  a.id AS attachment_id,
+                  a.email_id,
+                  a.filename,
+                  a.content_type,
+                  e.sender,
+                  e.recipients,
+                  e.date_iso,
+                  e.subject,
+                  e.top_reply_clean,
+                  ae.detected_doc_type,
+                  ae.text_preview,
+                  ae.has_quote_terms,
+                  ae.has_invoice_terms,
+                  ae.has_purchase_terms,
+                  ae.has_price_list_terms
+                FROM attachment_extracts ae
+                JOIN attachments a ON a.id = ae.attachment_id
+                JOIN emails e ON e.id = a.email_id
+                WHERE ae.extract_status='success'
+                """
+            ).fetchall()
+
+            for r in iter_with_progress(doc_rows, desc="document_master"):
+                attachment_id = int(r[0])
+                email_id = int(r[1])
+                filename = r[2] or ""
+                sender_email = primary_sender_email(r[4] or "") or ""
+                sender_domain = domain_of(sender_email) or ""
+                recip_domains = [domain_of(x) for x in emails_in(r[5] or "")]
+                recip_domains = [d for d in recip_domains if d]
+                # pick the first external recipient domain as recipient_domain (best-effort)
+                recipient_domain = ""
+                for d in recip_domains:
+                    if d not in internal_domains:
+                        recipient_domain = d
+                        break
+                if not recipient_domain and recip_domains:
+                    recipient_domain = recip_domains[0]
+
+                subj = r[7] or ""
+                top = r[8] or ""
+                preview_raw = (r[10] or "")[:2000]
+                preview_clean, preview_q = clean_document_preview(preview_raw)
+                tags = equipment_tags_from_text(subj + "\n" + top + "\n" + preview_clean)
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO document_master
+                    (attachment_id, email_id, filename, extension, sender_email, sender_domain,
+                     recipient_domain, sent_at, doc_type, extracted_preview_raw, extracted_preview_clean, preview_quality_score,
+                     has_quote_terms, has_invoice_terms, has_purchase_terms, has_price_list_terms,
+                     equipment_tags)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        attachment_id,
+                        email_id,
+                        filename,
+                        _ext(filename),
+                        sender_email,
+                        sender_domain,
+                        recipient_domain,
+                        email_date_iso_for_mart_timeline(r[6], slack_days=mart_slack),
+                        (r[9] or "unknown"),
+                        preview_raw,
+                        preview_clean,
+                        float(preview_q),
+                        int(r[11] or 0),
+                        int(r[12] or 0),
+                        int(r[13] or 0),
+                        int(r[14] or 0),
+                        ",".join(tags),
+                    ),
+                )
+                inserted_docs += 1
+            conn.commit()
+            print(f"document_master rows: {inserted_docs:,}")
+        print(f"[timing] document_master_seconds={time.monotonic() - stage_t0:.2f}")
 
         # ---- precompute doc aggregates per email_id ----
         doc_aggs = doc_aggregates(
@@ -237,11 +309,22 @@ def main() -> None:
         })
 
         # We'll treat internal vs external based on internal_domains guess.
-        sql = """
-          SELECT id, sender, recipients, subject, COALESCE(top_reply_clean,''), COALESCE(full_body_clean,''), date_iso
-          FROM emails
-        """
-        cur = conn.execute(sql)
+        stage_t0 = time.monotonic()
+        sql = (
+            "SELECT id, sender, recipients, subject, COALESCE(top_reply_clean,''), "
+            "COALESCE(full_body_clean,''), date_iso FROM emails"
+        )
+        where_clauses: list[str] = []
+        params: list[object] = []
+        if args.canonical_only or args.dashboard_fast:
+            where_clauses.append(sql_predicate_contacto_gmail_source(table_alias=None, coalesce_null=False))
+        if args.since_days is not None:
+            days = max(1, min(int(args.since_days), 3650))
+            where_clauses.append("substr(COALESCE(date_iso,''),1,10) >= date('now', ?)")
+            params.append(f"-{days} day")
+        if where_clauses:
+            sql += " WHERE " + " AND ".join(where_clauses)
+        cur = conn.execute(sql, params)
         n = 0
         batch = cur.fetchmany(5000)
         while batch:
@@ -310,7 +393,9 @@ def main() -> None:
             batch = cur.fetchmany(5000)
 
         print(f"Scanned emails (for mart): {n:,}")
+        print(f"[timing] email_scan_seconds={time.monotonic() - stage_t0:.2f}")
 
+        stage_t0 = time.monotonic()
         conn.execute("DELETE FROM contact_master")
         for email, row in iter_with_progress(contact.items(), desc="contact_master"):
             d = row["domain"] or ""
@@ -351,7 +436,9 @@ def main() -> None:
             )
         conn.commit()
         print(f"contact_master rows: {len(contact):,}")
+        print(f"[timing] contact_master_seconds={time.monotonic() - stage_t0:.2f}")
 
+        stage_t0 = time.monotonic()
         # ---- organization_master from contact_master rollup ----
         org = defaultdict(lambda: {
             "org_name": None,
@@ -430,7 +517,9 @@ def main() -> None:
             )
         conn.commit()
         print(f"organization_master rows: {len(org):,}")
+        print(f"[timing] organization_master_seconds={time.monotonic() - stage_t0:.2f}")
 
+        stage_t0 = time.monotonic()
         # ---- opportunity_signals (simple heuristics) ----
         conn.execute("DELETE FROM opportunity_signals")
 
@@ -499,6 +588,7 @@ def main() -> None:
         )
         conn.commit()
         print(f"opportunity_signals rows: {len(sig_rows):,}")
+        print(f"[timing] opportunity_signals_seconds={time.monotonic() - stage_t0:.2f}")
 
         built_at = now_iso()
         set_kv(conn, "mart_built_at", built_at)
