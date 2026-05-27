@@ -1,0 +1,110 @@
+"""Tests for GET /mirror/leads/* (redacted Postgres mirror)."""
+
+from __future__ import annotations
+
+from typing import Any, Generator
+
+import pytest
+from fastapi.testclient import TestClient
+
+from origenlab_api.main import create_app
+from origenlab_api.settings import get_settings
+
+from conftest import _patch_mirror_postgres
+from fake_lead_conn import LeadFakeConn
+
+_FORBIDDEN_RESPONSE_KEYS = frozenset(
+    {
+        "evidence_email_id",
+        "transfer_id",
+        "operation_id",
+        "source_file",
+        "gmail_url",
+        "body",
+        "input_file_name",
+        "batch_key",
+    }
+)
+
+
+def _collect_keys(obj: object, keys: set[str]) -> None:
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            keys.add(str(k))
+            _collect_keys(v, keys)
+    elif isinstance(obj, list):
+        for item in obj:
+            _collect_keys(item, keys)
+
+
+@pytest.fixture
+def lead_mirror_client(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> Generator[TestClient, None, None]:
+    get_settings.cache_clear()
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@localhost:5432/scratch")
+    sqlite = tmp_path / "emails.sqlite"
+    sqlite.write_bytes(b"")
+    monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(sqlite))
+    _patch_mirror_postgres(monkeypatch, LeadFakeConn())
+    with TestClient(create_app()) as client:
+        yield client
+    get_settings.cache_clear()
+
+
+def test_mirror_list_prospects_shape(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get("/mirror/leads/prospects", params={"limit": 50})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["table_available"] is True
+    assert body["read_only"] is True
+    assert body["data_source"] == "postgres_mirror"
+    assert "revisión humana" in body["disclaimer"].lower()
+    assert body["total"] == 3
+    assert len(body["items"]) == 3
+    keys: set[str] = set()
+    _collect_keys(body, keys)
+    assert not (_FORBIDDEN_RESPONSE_KEYS & keys)
+
+
+def test_include_blocked_false_hides_blocked(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"include_blocked": False, "limit": 50},
+    )
+    assert r.status_code == 200
+    emails = [i["email"] for i in r.json()["items"]]
+    assert "blocked@blocked.cl" not in emails
+
+
+def test_filter_classification_and_search(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"classification": "net_new_safe_review", "limit": 50},
+    )
+    assert r.status_code == 200
+    assert len(r.json()["items"]) == 1
+    assert r.json()["items"][0]["organization_name"] == "Acme Labs"
+
+    r2 = lead_mirror_client.get("/mirror/leads/prospects", params={"q": "Hospital", "limit": 50})
+    assert r2.status_code == 200
+    assert len(r2.json()["items"]) == 1
+
+
+def test_detail_returns_evidence_and_recommendation(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get("/mirror/leads/prospects/contacto-acme-cl")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["prospect"]["organization_name"] == "Acme Labs"
+    assert len(body["evidence"]) >= 1
+    assert body["recommendation"] is not None
+    assert body["recommendation"]["suggested_body_preview"]
+
+
+def test_summary_counts(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get("/mirror/leads/summary")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 4
+    assert body["net_new_safe"] == 1
+    assert body["blocked_count"] == 1

@@ -1,0 +1,117 @@
+/** UI types for read-only lead research mirror (GET /mirror/leads/*). */
+
+export interface LeadProspectListItemUi {
+  prospect_key: string;
+  organization_name: string;
+  contact_name: string | null;
+  email: string | null;
+  domain: string | null;
+  sector: string | null;
+  region: string | null;
+  buyer_type: string | null;
+  product_angle: string | null;
+  final_score: number;
+  classification: string;
+  status: string;
+  spanish_message_angle: string | null;
+  recommended_next_action: string | null;
+  risk_flags: string | null;
+  evidence_url: string | null;
+  is_blocked: boolean;
+  campaign_bucket: string | null;
+}
+
+export interface LeadProspectEvidenceUi {
+  evidence_kind: string;
+  evidence_url: string | null;
+  evidence_note: string | null;
+  source: string | null;
+  confidence: string | null;
+}
+
+export interface LeadProspectRecommendationUi {
+  campaign_bucket: string | null;
+  recommended_message_angle: string | null;
+  recommended_next_action: string | null;
+  why_this_lead: string | null;
+  suggested_subject: string | null;
+  suggested_body_preview: string | null;
+  safety_note: string | null;
+}
+
+export interface LeadProspectBlockReasonUi {
+  reason_code: string;
+  reason_label: string | null;
+}
+
+export interface LeadProspectDetailUi {
+  prospect_key: string;
+  organization_name: string;
+  contact_name: string | null;
+  email: string | null;
+  domain: string | null;
+  sector: string | null;
+  region: string | null;
+  buyer_type: string | null;
+  likely_need: string | null;
+  product_angle: string | null;
+  evidence_url: string | null;
+  evidence_note: string | null;
+  source: string | null;
+  final_score: number;
+  confidence: string | null;
+  classification: string;
+  spanish_message_angle: string | null;
+  risk_flags: string | null;
+  block_or_review_reason: string | null;
+  recommended_next_action: string | null;
+  status: string;
+  campaign_bucket: string | null;
+  is_blocked: boolean;
+}
+
+export interface LeadProspectsListUi {
+  table_available: boolean;
+  items: LeadProspectListItemUi[];
+  total: number;
+  data_source: string;
+  read_only: boolean;
+  disclaimer: string;
+}
+
+export interface LeadProspectDetailResponseUi {
+  table_available: boolean;
+  prospect: LeadProspectDetailUi | null;
+  evidence: LeadProspectEvidenceUi[];
+  recommendation: LeadProspectRecommendationUi | null;
+  block_reasons: LeadProspectBlockReasonUi[];
+  data_source: string;
+  read_only: boolean;
+  disclaimer: string;
+}
+
+export interface LeadResearchSummaryUi {
+  table_available: boolean;
+  total: number;
+  review_count: number;
+  blocked_count: number;
+  net_new_safe: number;
+  public_tender_review: number;
+  same_domain_review: number;
+  research_needed: number;
+  data_source: string;
+  read_only: boolean;
+  disclaimer: string;
+}
+
+export interface LeadProspectsListQuery {
+  q?: string;
+  classification?: string;
+  sector?: string;
+  region?: string;
+  buyer_type?: string;
+  campaign_bucket?: string;
+  min_score?: number;
+  include_blocked?: boolean;
+  limit?: number;
+}

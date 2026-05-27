@@ -5,6 +5,7 @@ export type DashboardSection =
   | "inbox"
   | "opportunities"
   | "deals"
+  | "prospectos"
   | "catalogo"
   | "suppliers"
   | "tenders"
@@ -23,6 +24,11 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { id: "inbox", label: "Bandeja de revisión", description: "Correos tibios con filtros por rol" },
   { id: "opportunities", label: "Oportunidades", description: "Cola de equipos y señales" },
   { id: "deals", label: "Negocios", description: "Espejo de negocios comerciales" },
+  {
+    id: "prospectos",
+    label: "Prospectos",
+    description: "Nuevas oportunidades de clientes (investigación DeepSearch)",
+  },
   {
     id: "catalogo",
     label: "Catálogo",

@@ -1,0 +1,2 @@
+organization_name,contact_name,email,domain,classification,block_reason,risk_flags,evidence_note
+Blocked Co,,blocked@blocked.cl,blocked.cl,already_contacted_block,email_en_lista_contactados,dominio_en_historial_origenlab,Ya contactado

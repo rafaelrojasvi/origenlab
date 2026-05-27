@@ -20,8 +20,10 @@ import {
 } from "../api/operatorClient";
 import type { TodayPanelData } from "../api/operatorTypes";
 import type { CatalogProductsListUi } from "../api/catalogTypes";
+import type { LeadResearchSummaryUi } from "../api/leadIntelTypes";
 import type { CommercialDealsListUi } from "../api/commercialDealsTypes";
 import { fetchCatalogProductsMirror } from "../api/mirrorCatalogClient";
+import { fetchLeadResearchSummaryMirror } from "../api/mirrorLeadIntelClient";
 import { fetchCommercialDealsMirror } from "../api/mirrorCommercialClient";
 import {
   getLegacyDevPortWarning,
@@ -54,6 +56,9 @@ export interface DashboardDataState {
   catalogProducts: CatalogProductsListUi | null;
   catalogProductsLoading: boolean;
   catalogProductsError: string | null;
+  leadResearchSummary: LeadResearchSummaryUi | null;
+  leadResearchSummaryLoading: boolean;
+  leadResearchSummaryError: string | null;
   contactEmail: string | null;
   setContactEmail: (email: string | null) => void;
   loadAll: () => void;
@@ -62,6 +67,7 @@ export interface DashboardDataState {
   loadEquipment: () => Promise<void>;
   loadCommercialDeals: () => Promise<void>;
   loadCatalogProducts: () => Promise<void>;
+  loadLeadResearchSummary: () => Promise<void>;
   refreshing: boolean;
   mirrorBackend: boolean;
   backend: TodayPanelData["health"]["backend"] | "sqlite";
@@ -91,6 +97,10 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const [catalogProducts, setCatalogProducts] = useState<CatalogProductsListUi | null>(null);
   const [catalogProductsLoading, setCatalogProductsLoading] = useState(true);
   const [catalogProductsError, setCatalogProductsError] = useState<string | null>(null);
+
+  const [leadResearchSummary, setLeadResearchSummary] = useState<LeadResearchSummaryUi | null>(null);
+  const [leadResearchSummaryLoading, setLeadResearchSummaryLoading] = useState(true);
+  const [leadResearchSummaryError, setLeadResearchSummaryError] = useState<string | null>(null);
 
   const [contactEmail, setContactEmail] = useState<string | null>(null);
 
@@ -159,6 +169,19 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadLeadResearchSummary = useCallback(async () => {
+    setLeadResearchSummaryLoading(true);
+    setLeadResearchSummaryError(null);
+    try {
+      setLeadResearchSummary(await fetchLeadResearchSummaryMirror());
+    } catch (e) {
+      setLeadResearchSummaryError(formatLoadError("Prospectos", e));
+      setLeadResearchSummary(null);
+    } finally {
+      setLeadResearchSummaryLoading(false);
+    }
+  }, []);
+
   const loadAll = useCallback(() => {
     void Promise.all([
       loadPanel(),
@@ -166,8 +189,16 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       loadEquipment(),
       loadCommercialDeals(),
       loadCatalogProducts(),
+      loadLeadResearchSummary(),
     ]);
-  }, [loadPanel, loadWarm, loadEquipment, loadCommercialDeals, loadCatalogProducts]);
+  }, [
+    loadPanel,
+    loadWarm,
+    loadEquipment,
+    loadCommercialDeals,
+    loadCatalogProducts,
+    loadLeadResearchSummary,
+  ]);
 
   useEffect(() => {
     loadAll();
@@ -186,7 +217,8 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     warmLoading ||
     equipmentLoading ||
     commercialDealsLoading ||
-    catalogProductsLoading;
+    catalogProductsLoading ||
+    leadResearchSummaryLoading;
 
   const value = useMemo<DashboardDataState>(
     () => ({
@@ -205,6 +237,9 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       catalogProducts,
       catalogProductsLoading,
       catalogProductsError,
+      leadResearchSummary,
+      leadResearchSummaryLoading,
+      leadResearchSummaryError,
       contactEmail,
       setContactEmail,
       loadAll,
@@ -213,6 +248,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       loadEquipment,
       loadCommercialDeals,
       loadCatalogProducts,
+      loadLeadResearchSummary,
       refreshing,
       mirrorBackend,
       backend,
@@ -234,6 +270,9 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       catalogProducts,
       catalogProductsLoading,
       catalogProductsError,
+      leadResearchSummary,
+      leadResearchSummaryLoading,
+      leadResearchSummaryError,
       contactEmail,
       loadAll,
       loadPanel,
@@ -241,6 +280,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       loadEquipment,
       loadCommercialDeals,
       loadCatalogProducts,
+      loadLeadResearchSummary,
       refreshing,
       mirrorBackend,
       backend,

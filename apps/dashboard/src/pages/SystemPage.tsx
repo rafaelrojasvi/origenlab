@@ -2,7 +2,7 @@ import { useDashboardData } from "../context/DashboardDataContext";
 import { backendLabel } from "../lib/verdictStyles";
 
 export function SystemPage() {
-  const { data, warm, equipment, commercialDeals } = useDashboardData();
+  const { data, warm, equipment, commercialDeals, leadResearchSummary } = useDashboardData();
 
   return (
     <section className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-5 py-5 shadow-sm">
@@ -63,6 +63,36 @@ export function SystemPage() {
           </dd>
         </div>
       </dl>
+      <div className="rounded-lg border border-[var(--color-border)] bg-slate-50/80 px-4 py-4 text-sm">
+        <h3 className="font-semibold text-brand-900">Lead intelligence</h3>
+        <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+          <div>
+            <dt className="text-[var(--color-muted)]">Fuente</dt>
+            <dd>CSV DeepSearch / Phase 10B</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--color-muted)]">Modo</dt>
+            <dd>Solo lectura · no envía correos</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--color-muted)]">En revisión</dt>
+            <dd>{leadResearchSummary?.review_count ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--color-muted)]">Bloqueados</dt>
+            <dd>{leadResearchSummary?.blocked_count ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--color-muted)]">Total espejo</dt>
+            <dd>
+              {leadResearchSummary?.table_available
+                ? leadResearchSummary.total
+                : "aún no sincronizado"}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
       <footer className="border-t border-[var(--color-border)] pt-4 text-xs text-[var(--color-muted)]">
         Rutas de solo lectura: estado del operador, casos tibios, oportunidades de equipos,
         negocios comerciales y contactos.

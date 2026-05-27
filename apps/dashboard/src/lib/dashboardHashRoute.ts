@@ -6,6 +6,7 @@ const VALID_SECTIONS = new Set<string>([
   "inbox",
   "opportunities",
   "deals",
+  "prospectos",
   "catalogo",
   "suppliers",
   "tenders",

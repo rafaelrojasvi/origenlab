@@ -77,6 +77,7 @@ export function TodaySummaryPage() {
     equipment,
     commercialDeals,
     catalogProducts,
+    leadResearchSummary,
     mirrorBackend,
     loadPanel,
     setContactEmail,
@@ -260,7 +261,31 @@ export function TodaySummaryPage() {
             hint="Catálogo operador (espejo Postgres)"
             section="catalogo"
           />
+          <SummaryCard
+            label="Prospectos nuevos"
+            value={leadResearchSummary?.net_new_safe ?? 0}
+            hint="Net-new seguros (investigación DeepSearch)"
+            section="prospectos"
+          />
         </div>
+
+        {leadResearchSummary &&
+        (leadResearchSummary.same_domain_review >= 3 ||
+          leadResearchSummary.blocked_count >= 5) ? (
+          <p
+            className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            data-testid="today-prospect-prior-history-warning"
+          >
+            Hay prospectos con historial previo; revisar antes de contactar.{" "}
+            <button
+              type="button"
+              className="font-medium text-brand-800 underline"
+              onClick={() => navigateToSection("prospectos")}
+            >
+              Ver Prospectos
+            </button>
+          </p>
+        ) : null}
       </section>
     </div>
   );

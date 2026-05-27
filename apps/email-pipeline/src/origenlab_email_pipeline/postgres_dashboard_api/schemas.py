@@ -464,6 +464,117 @@ class CatalogProductDetailResponse(BaseModel):
         return validate_catalog_prose_field(value, field="response.disclaimer")
 
 
+LEAD_RESEARCH_DISCLAIMER: str = (
+    "Prospectos generados desde investigación y deduplicados contra historial OrigenLab. "
+    "Revisión humana requerida antes de cualquier contacto."
+)
+
+
+class LeadProspectListItem(BaseModel):
+    prospect_key: str
+    organization_name: str
+    contact_name: str | None = None
+    email: str | None = None
+    domain: str | None = None
+    sector: str | None = None
+    region: str | None = None
+    buyer_type: str | None = None
+    product_angle: str | None = None
+    final_score: int = 0
+    classification: str
+    status: str
+    spanish_message_angle: str | None = None
+    recommended_next_action: str | None = None
+    risk_flags: str | None = None
+    evidence_url: str | None = None
+    is_blocked: bool = False
+    campaign_bucket: str | None = None
+
+
+class LeadProspectEvidenceRow(BaseModel):
+    evidence_kind: str = "public_url"
+    evidence_url: str | None = None
+    evidence_note: str | None = None
+    source: str | None = None
+    confidence: str | None = None
+
+
+class LeadProspectRecommendationRow(BaseModel):
+    campaign_bucket: str | None = None
+    recommended_message_angle: str | None = None
+    recommended_next_action: str | None = None
+    why_this_lead: str | None = None
+    suggested_subject: str | None = None
+    suggested_body_preview: str | None = None
+    safety_note: str | None = None
+
+
+class LeadProspectBlockReasonRow(BaseModel):
+    reason_code: str
+    reason_label: str | None = None
+
+
+class LeadProspectDetail(BaseModel):
+    prospect_key: str
+    organization_name: str
+    contact_name: str | None = None
+    email: str | None = None
+    domain: str | None = None
+    sector: str | None = None
+    region: str | None = None
+    buyer_type: str | None = None
+    likely_need: str | None = None
+    product_angle: str | None = None
+    evidence_url: str | None = None
+    evidence_note: str | None = None
+    source: str | None = None
+    final_score: int = 0
+    confidence: str | None = None
+    classification: str
+    spanish_message_angle: str | None = None
+    risk_flags: str | None = None
+    block_or_review_reason: str | None = None
+    recommended_next_action: str | None = None
+    status: str
+    campaign_bucket: str | None = None
+    is_blocked: bool = False
+
+
+class LeadProspectsListResponse(BaseModel):
+    table_available: bool = False
+    items: list[LeadProspectListItem] = Field(default_factory=list)
+    total: int = 0
+    data_source: Literal["postgres_mirror"] = "postgres_mirror"
+    read_only: bool = True
+    disclaimer: str = LEAD_RESEARCH_DISCLAIMER
+
+
+class LeadProspectDetailResponse(BaseModel):
+    table_available: bool = False
+    prospect: LeadProspectDetail | None = None
+    evidence: list[LeadProspectEvidenceRow] = Field(default_factory=list)
+    recommendation: LeadProspectRecommendationRow | None = None
+    block_reasons: list[LeadProspectBlockReasonRow] = Field(default_factory=list)
+    data_source: Literal["postgres_mirror"] = "postgres_mirror"
+    read_only: bool = True
+    disclaimer: str = LEAD_RESEARCH_DISCLAIMER
+
+
+class LeadResearchSummaryResponse(BaseModel):
+    table_available: bool = False
+    total: int = 0
+    review_count: int = 0
+    blocked_count: int = 0
+    net_new_safe: int = 0
+    public_tender_review: int = 0
+    same_domain_review: int = 0
+    research_needed: int = 0
+    last_batch_row_count: int | None = None
+    data_source: Literal["postgres_mirror"] = "postgres_mirror"
+    read_only: bool = True
+    disclaimer: str = LEAD_RESEARCH_DISCLAIMER
+
+
 class DependencyStatus(BaseModel):
     name: str
     status: Literal["ok", "error", "skipped"]
