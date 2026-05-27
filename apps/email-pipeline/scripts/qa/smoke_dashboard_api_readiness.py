@@ -3,12 +3,15 @@
 
 Does not send email, mutate Gmail, or write SQLite/Postgres.
 
-Example:
-  uv run python scripts/qa/smoke_dashboard_api_readiness.py \\
-    --api-base https://api.origenlab.cl
-
+Local (no Cloudflare Access):
   uv run python scripts/qa/smoke_dashboard_api_readiness.py \\
     --api-base http://127.0.0.1:8001
+
+Production (Cloudflare Access service token via env — preferred):
+  export CF_ACCESS_CLIENT_ID=...
+  export CF_ACCESS_CLIENT_SECRET=...
+  uv run python scripts/qa/smoke_dashboard_api_readiness.py \\
+    --api-base https://api.origenlab.cl
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from origenlab_email_pipeline.qa.dashboard_api_readiness import (  # noqa: E402
+    resolve_cf_access_credentials,
     run_dashboard_api_smoke,
 )
 
@@ -42,9 +46,32 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional path to write machine-readable report (no secrets)",
     )
+    parser.add_argument(
+        "--cf-access-client-id",
+        default=None,
+        help="Cloudflare Access service token client id (overrides env; prefer CF_ACCESS_CLIENT_ID)",
+    )
+    parser.add_argument(
+        "--cf-access-client-secret",
+        default=None,
+        help="Cloudflare Access service token secret (overrides env; prefer CF_ACCESS_CLIENT_SECRET)",
+    )
     args = parser.parse_args(argv)
 
-    report = run_dashboard_api_smoke(args.api_base, timeout=args.timeout)
+    try:
+        cf_access = resolve_cf_access_credentials(
+            cli_client_id=args.cf_access_client_id,
+            cli_client_secret=args.cf_access_client_secret,
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    report = run_dashboard_api_smoke(
+        args.api_base,
+        timeout=args.timeout,
+        cf_access=cf_access,
+    )
     for line in report.summary_lines():
         print(line)
 
@@ -52,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         payload = {
             "api_base": report.api_base,
             "passed": report.passed,
+            "cloudflare_access_configured": cf_access is not None and cf_access.is_configured,
             "checks": [
                 {"name": c.name, "ok": c.ok, "detail": c.detail} for c in report.checks
             ],

@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
+
+import pytest
 
 from origenlab_email_pipeline.qa.dashboard_api_readiness import (
     BLUESLICK_PRODUCT_KEY,
+    CF_ACCESS_403_HINT,
+    CF_ACCESS_CLIENT_ID_HEADER,
+    CF_ACCESS_CLIENT_SECRET_HEADER,
     TEMED_PRODUCT_KEY,
+    CloudflareAccessConfig,
     collect_json_keys,
+    default_fetch_json,
+    resolve_cf_access_credentials,
     run_dashboard_api_smoke,
     scan_payload_safety,
 )
@@ -234,3 +243,118 @@ def test_summary_does_not_embed_response_bodies() -> None:
     assert "695000" not in joined
     assert "117.00" not in joined
     assert "postgresql://" not in joined
+
+
+def test_resolve_cf_access_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CF_ACCESS_CLIENT_ID", "cf-id-from-env")
+    monkeypatch.setenv("CF_ACCESS_CLIENT_SECRET", "cf-secret-from-env")
+    cfg = resolve_cf_access_credentials()
+    assert cfg is not None
+    assert cfg.client_id == "cf-id-from-env"
+    assert cfg.client_secret == "cf-secret-from-env"
+
+
+def test_resolve_cf_access_origenlab_env_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CF_ACCESS_CLIENT_ID", raising=False)
+    monkeypatch.delenv("CF_ACCESS_CLIENT_SECRET", raising=False)
+    monkeypatch.setenv("ORIGENLAB_CF_ACCESS_CLIENT_ID", "origen-id")
+    monkeypatch.setenv("ORIGENLAB_CF_ACCESS_CLIENT_SECRET", "origen-secret")
+    cfg = resolve_cf_access_credentials()
+    assert cfg is not None
+    assert cfg.client_id == "origen-id"
+
+
+def test_resolve_cf_access_cli_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CF_ACCESS_CLIENT_ID", "env-id")
+    monkeypatch.setenv("CF_ACCESS_CLIENT_SECRET", "env-secret")
+    cfg = resolve_cf_access_credentials(cli_client_id="cli-id", cli_client_secret="cli-secret")
+    assert cfg is not None
+    assert cfg.client_id == "cli-id"
+    assert cfg.client_secret == "cli-secret"
+
+
+def test_default_fetch_json_attaches_cf_access_headers() -> None:
+    captured: dict[str, str] = {}
+
+    class FakeResponse:
+        status = 200
+
+        def read(self) -> bytes:
+            return b'{"ok": true}'
+
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    def fake_urlopen(req: object, timeout: float = 30.0) -> FakeResponse:
+        _ = timeout
+        request = req  # type: ignore[assignment]
+        for key, value in request.header_items():  # type: ignore[attr-defined]
+            captured[key] = value
+        return FakeResponse()
+
+    cfg = CloudflareAccessConfig(client_id="test-client-id", client_secret="test-client-secret")
+    with patch("origenlab_email_pipeline.qa.dashboard_api_readiness.urlopen", fake_urlopen):
+        status, body, err = default_fetch_json(
+            "http://127.0.0.1:8001",
+            "/health",
+            extra_headers=cfg.request_headers(),
+        )
+    assert status == 200
+    assert body == {"ok": True}
+    assert err == ""
+    normalized = {k.lower(): v for k, v in captured.items()}
+    assert normalized[CF_ACCESS_CLIENT_ID_HEADER.lower()] == "test-client-id"
+    assert normalized[CF_ACCESS_CLIENT_SECRET_HEADER.lower()] == "test-client-secret"
+
+
+def test_smoke_403_without_cf_token_shows_helpful_message() -> None:
+    def fetch_403(path: str, params: dict[str, str | int]) -> tuple[int, dict[str, Any] | None, str]:
+        _ = path, params
+        return 403, None, "Forbidden"
+
+    report = run_dashboard_api_smoke("https://api.origenlab.cl", fetch=fetch_403)
+    assert not report.passed
+    health = report.checks[0]
+    assert health.detail == CF_ACCESS_403_HINT
+
+
+def test_smoke_403_with_cf_configured_does_not_show_cf_hint() -> None:
+    def fetch_403(path: str, params: dict[str, str | int]) -> tuple[int, dict[str, Any] | None, str]:
+        _ = path, params
+        return 403, None, "Forbidden"
+
+    cf = CloudflareAccessConfig(client_id="id", client_secret="secret")
+    report = run_dashboard_api_smoke("https://api.origenlab.cl", fetch=fetch_403, cf_access=cf)
+    health = report.checks[0]
+    assert CF_ACCESS_403_HINT not in health.detail
+    assert "HTTP 403" in health.detail
+
+
+def test_smoke_summary_never_prints_cf_secrets() -> None:
+    secret = "super-secret-cf-token-value"
+    cf = CloudflareAccessConfig(client_id="public-client-id", client_secret=secret)
+
+    report = run_dashboard_api_smoke(
+        "https://api.example.test",
+        fetch=_mock_fetch(_good_responses()),
+        cf_access=cf,
+    )
+    joined = "\n".join(report.summary_lines())
+    assert secret not in joined
+    assert "public-client-id" not in joined
+
+
+def test_local_unauthenticated_mode_without_cf_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CF_ACCESS_CLIENT_ID", raising=False)
+    monkeypatch.delenv("CF_ACCESS_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("ORIGENLAB_CF_ACCESS_CLIENT_ID", raising=False)
+    monkeypatch.delenv("ORIGENLAB_CF_ACCESS_CLIENT_SECRET", raising=False)
+    assert resolve_cf_access_credentials() is None
+    report = run_dashboard_api_smoke(
+        "http://127.0.0.1:8001",
+        fetch=_mock_fetch(_good_responses()),
+    )
+    assert report.passed

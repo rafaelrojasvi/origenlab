@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -52,6 +53,71 @@ PROSE_ARTIFACTS: tuple[str, ...] = FORBIDDEN_JOINED_PROSE_ARTIFACTS
 
 FetchJsonFn = Callable[[str, dict[str, str | int]], tuple[int, dict[str, Any] | None, str]]
 
+CF_ACCESS_CLIENT_ID_HEADER = "CF-Access-Client-Id"
+CF_ACCESS_CLIENT_SECRET_HEADER = "CF-Access-Client-Secret"
+
+CF_ACCESS_403_HINT = (
+    "HTTP 403: API is probably protected by Cloudflare Access. "
+    "Provide CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET or run against local API."
+)
+
+
+@dataclass(frozen=True)
+class CloudflareAccessConfig:
+    client_id: str
+    client_secret: str
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.client_id.strip() and self.client_secret.strip())
+
+    def request_headers(self) -> dict[str, str]:
+        return {
+            CF_ACCESS_CLIENT_ID_HEADER: self.client_id,
+            CF_ACCESS_CLIENT_SECRET_HEADER: self.client_secret,
+        }
+
+
+def resolve_cf_access_credentials(
+    *,
+    cli_client_id: str | None = None,
+    cli_client_secret: str | None = None,
+) -> CloudflareAccessConfig | None:
+    """Load Cloudflare Access service token from env (preferred) or CLI overrides."""
+    env_id = (
+        os.environ.get("CF_ACCESS_CLIENT_ID")
+        or os.environ.get("ORIGENLAB_CF_ACCESS_CLIENT_ID")
+        or ""
+    ).strip()
+    env_secret = (
+        os.environ.get("CF_ACCESS_CLIENT_SECRET")
+        or os.environ.get("ORIGENLAB_CF_ACCESS_CLIENT_SECRET")
+        or ""
+    ).strip()
+    client_id = (cli_client_id or env_id or "").strip()
+    client_secret = (cli_client_secret or env_secret or "").strip()
+    if not client_id and not client_secret:
+        return None
+    if not client_id or not client_secret:
+        raise ValueError(
+            "Cloudflare Access requires both client id and client secret "
+            "(CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET)"
+        )
+    return CloudflareAccessConfig(client_id=client_id, client_secret=client_secret)
+
+
+def format_http_status_detail(
+    status: int,
+    err: str,
+    *,
+    expected: int = 200,
+    cf_access_configured: bool = False,
+) -> str:
+    if status == 403 and not cf_access_configured:
+        return CF_ACCESS_403_HINT
+    hint = err or "no body"
+    return f"HTTP {status} (expected {expected}) — {hint[:120]}"
+
 
 @dataclass
 class EndpointCheck:
@@ -84,11 +150,15 @@ def default_fetch_json(
     params: dict[str, str | int] | None = None,
     *,
     timeout: float = 30.0,
+    extra_headers: dict[str, str] | None = None,
 ) -> tuple[int, dict[str, Any] | None, str]:
     """GET JSON from operator API. Returns (status, body, error_or_snippet)."""
     query = urlencode(params) if params else ""
     url = f"{base_url.rstrip('/')}{path}" + (f"?{query}" if query else "")
-    req = Request(url, method="GET", headers={"Accept": "application/json"})
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if extra_headers:
+        headers.update(extra_headers)
+    req = Request(url, method="GET", headers=headers)
     try:
         with urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
@@ -167,10 +237,19 @@ def _expect_status(
     err: str,
     *,
     expected: int = 200,
+    cf_access_configured: bool = False,
 ) -> EndpointCheck:
     if status != expected:
-        hint = err or "no body"
-        return EndpointCheck(name, False, f"HTTP {status} (expected {expected}) — {hint[:120]}")
+        return EndpointCheck(
+            name,
+            False,
+            format_http_status_detail(
+                status,
+                err,
+                expected=expected,
+                cf_access_configured=cf_access_configured,
+            ),
+        )
     if body is None:
         return EndpointCheck(name, False, err or "missing JSON body")
     safety = scan_payload_safety(body)
@@ -179,9 +258,11 @@ def _expect_status(
     return EndpointCheck(name, True, f"HTTP {status}")
 
 
-def _check_health(fetch: FetchJsonFn) -> EndpointCheck:
+def _check_health(fetch: FetchJsonFn, *, cf_access_configured: bool = False) -> EndpointCheck:
     status, body, err = fetch("/health", {})
-    check = _expect_status("GET /health", status, body, err)
+    check = _expect_status(
+        "GET /health", status, body, err, cf_access_configured=cf_access_configured
+    )
     if not check.ok or body is None:
         return check
     if body.get("ok") is not True:
@@ -191,9 +272,11 @@ def _check_health(fetch: FetchJsonFn) -> EndpointCheck:
     return EndpointCheck("GET /health", True, f"ok service={body.get('service')}")
 
 
-def _check_operator_status(fetch: FetchJsonFn) -> EndpointCheck:
+def _check_operator_status(fetch: FetchJsonFn, *, cf_access_configured: bool = False) -> EndpointCheck:
     status, body, err = fetch("/operator/status", {})
-    check = _expect_status("GET /operator/status", status, body, err)
+    check = _expect_status(
+        "GET /operator/status", status, body, err, cf_access_configured=cf_access_configured
+    )
     if not check.ok or body is None:
         return check
     verdict = str(body.get("verdict") or "").strip()
@@ -204,9 +287,11 @@ def _check_operator_status(fetch: FetchJsonFn) -> EndpointCheck:
     return EndpointCheck("GET /operator/status", True, f"verdict={verdict}")
 
 
-def _check_commercial_deals(fetch: FetchJsonFn) -> EndpointCheck:
+def _check_commercial_deals(fetch: FetchJsonFn, *, cf_access_configured: bool = False) -> EndpointCheck:
     status, body, err = fetch("/mirror/commercial/deals", {"limit": 20})
-    check = _expect_status("GET /mirror/commercial/deals", status, body, err)
+    check = _expect_status(
+        "GET /mirror/commercial/deals", status, body, err, cf_access_configured=cf_access_configured
+    )
     if not check.ok or body is None:
         return check
     if body.get("read_only") is not True:
@@ -233,9 +318,11 @@ def _check_commercial_deals(fetch: FetchJsonFn) -> EndpointCheck:
     )
 
 
-def _check_catalog_products(fetch: FetchJsonFn) -> EndpointCheck:
+def _check_catalog_products(fetch: FetchJsonFn, *, cf_access_configured: bool = False) -> EndpointCheck:
     status, body, err = fetch("/mirror/catalog/products", {"limit": 100})
-    check = _expect_status("GET /mirror/catalog/products", status, body, err)
+    check = _expect_status(
+        "GET /mirror/catalog/products", status, body, err, cf_access_configured=cf_access_configured
+    )
     if not check.ok or body is None:
         return check
     if body.get("read_only") is not True:
@@ -269,11 +356,12 @@ def _check_catalog_detail(
     label: str,
     expect_eur: str,
     expect_clp: int,
+    cf_access_configured: bool = False,
 ) -> EndpointCheck:
     path = f"/mirror/catalog/products/{product_key}"
     status, body, err = fetch(path, {})
     name = f"GET {path}"
-    check = _expect_status(name, status, body, err)
+    check = _expect_status(name, status, body, err, cf_access_configured=cf_access_configured)
     if not check.ok or body is None:
         return check
     product = body.get("product")
@@ -296,9 +384,9 @@ def _check_catalog_detail(
     return EndpointCheck(name, True, f"{label} commercial_history reference amounts present")
 
 
-def _check_warm_cases(fetch: FetchJsonFn) -> EndpointCheck:
+def _check_warm_cases(fetch: FetchJsonFn, *, cf_access_configured: bool = False) -> EndpointCheck:
     status, body, err = fetch("/cases/warm", {"limit": 20, "include_noise": "false"})
-    check = _expect_status("GET /cases/warm", status, body, err)
+    check = _expect_status("GET /cases/warm", status, body, err, cf_access_configured=cf_access_configured)
     if not check.ok or body is None:
         return check
     meta = body.get("meta")
@@ -317,12 +405,14 @@ def _check_warm_cases(fetch: FetchJsonFn) -> EndpointCheck:
     )
 
 
-def _check_equipment(fetch: FetchJsonFn) -> EndpointCheck:
+def _check_equipment(fetch: FetchJsonFn, *, cf_access_configured: bool = False) -> EndpointCheck:
     status, body, err = fetch(
         "/opportunities/equipment",
         {"limit": 20, "include_account_intelligence": "false"},
     )
-    check = _expect_status("GET /opportunities/equipment", status, body, err)
+    check = _expect_status(
+        "GET /opportunities/equipment", status, body, err, cf_access_configured=cf_access_configured
+    )
     if not check.ok or body is None:
         return check
     meta = body.get("meta")
@@ -354,29 +444,37 @@ def run_dashboard_api_smoke(
     *,
     timeout: float = 30.0,
     fetch: FetchJsonFn | None = None,
+    cf_access: CloudflareAccessConfig | None = None,
 ) -> SmokeReport:
     """Run all read-only smoke checks against the operator API base URL."""
     base = api_base.strip().rstrip("/")
     if not base.startswith("http"):
         raise ValueError("api_base must start with http:// or https://")
 
+    cf_configured = cf_access is not None and cf_access.is_configured
+    extra_headers = cf_access.request_headers() if cf_configured else None
+
     def bound_fetch(path: str, params: dict[str, str | int]) -> tuple[int, dict[str, Any] | None, str]:
         if fetch is not None:
             return fetch(path, params)
-        return default_fetch_json(base, path, params, timeout=timeout)
+        return default_fetch_json(
+            base, path, params, timeout=timeout, extra_headers=extra_headers
+        )
 
+    cf_kw = {"cf_access_configured": cf_configured}
     report = SmokeReport(api_base=base)
     report.checks = [
-        _check_health(bound_fetch),
-        _check_operator_status(bound_fetch),
-        _check_commercial_deals(bound_fetch),
-        _check_catalog_products(bound_fetch),
+        _check_health(bound_fetch, **cf_kw),
+        _check_operator_status(bound_fetch, **cf_kw),
+        _check_commercial_deals(bound_fetch, **cf_kw),
+        _check_catalog_products(bound_fetch, **cf_kw),
         _check_catalog_detail(
             bound_fetch,
             product_key=BLUESLICK_PRODUCT_KEY,
             label="BlueSlick",
             expect_eur="117.00",
             expect_clp=695000,
+            **cf_kw,
         ),
         _check_catalog_detail(
             bound_fetch,
@@ -384,8 +482,9 @@ def run_dashboard_api_smoke(
             label="TEMED",
             expect_eur="31.00",
             expect_clp=545000,
+            **cf_kw,
         ),
-        _check_warm_cases(bound_fetch),
-        _check_equipment(bound_fetch),
+        _check_warm_cases(bound_fetch, **cf_kw),
+        _check_equipment(bound_fetch, **cf_kw),
     ]
     return report

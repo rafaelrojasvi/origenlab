@@ -16,25 +16,52 @@ Read-only operator checklist after **refresh + deploy**. Does not send email, mu
 
 ## Automated smoke (recommended)
 
-From `apps/email-pipeline`:
+From `apps/email-pipeline`.
+
+### Local API (no Cloudflare Access)
+
+Start `apps/api` on port 8001, then:
 
 ```bash
-uv run python scripts/qa/smoke_dashboard_api_readiness.py \
-  --api-base https://YOUR-API-HOST
-```
-
-Local API after `uv run` in `apps/api`:
-
-```bash
+cd apps/email-pipeline
 uv run python scripts/qa/smoke_dashboard_api_readiness.py \
   --api-base http://127.0.0.1:8001
 ```
 
-Optional machine-readable report (still no secrets):
+No service token headers are sent unless you set the env vars below.
+
+### Production API (Cloudflare Access)
+
+`https://api.origenlab.cl` is behind **Cloudflare Access**. Use a **service token** (read-only smoke) via environment variables — **do not** paste secrets into chat or commit them.
+
+```bash
+cd apps/email-pipeline
+export CF_ACCESS_CLIENT_ID='your-client-id'
+export CF_ACCESS_CLIENT_SECRET='your-client-secret'
+uv run python scripts/qa/smoke_dashboard_api_readiness.py \
+  --api-base https://api.origenlab.cl
+```
+
+Alternate env names (same values): `ORIGENLAB_CF_ACCESS_CLIENT_ID` / `ORIGENLAB_CF_ACCESS_CLIENT_SECRET`.
+
+Optional CLI overrides (prefer env for production):
 
 ```bash
 uv run python scripts/qa/smoke_dashboard_api_readiness.py \
-  --api-base https://YOUR-API-HOST \
+  --api-base https://api.origenlab.cl \
+  --cf-access-client-id "$CF_ACCESS_CLIENT_ID" \
+  --cf-access-client-secret "$CF_ACCESS_CLIENT_SECRET"
+```
+
+If smoke returns **HTTP 403** without tokens configured, the script prints:
+
+> HTTP 403: API is probably protected by Cloudflare Access. Provide CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET or run against local API.
+
+### Machine-readable report (no secrets in output)
+
+```bash
+uv run python scripts/qa/smoke_dashboard_api_readiness.py \
+  --api-base https://api.origenlab.cl \
   --json-out /tmp/dashboard_smoke_report.json
 ```
 
@@ -79,6 +106,7 @@ The script does **not** print response bodies, DB paths, Postgres URLs, or crede
 | Forbidden key / prose artifact | Fix mirror redaction or catalog builder; do not patch dashboard to hide leaks |
 | `sqlite_path` on `/operator/status` | API config leak — fix operator status serializer before go-live |
 | Equipment `meta.source_path` set | API must not expose CSV paths to browser |
+| HTTP 403 on all routes | Set `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`, or use local `:8001` |
 
 ## Related
 
