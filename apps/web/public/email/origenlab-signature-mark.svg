@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Atom mark v3: balanced bodies + lighter orbits (export 96px, display 48px) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="OrigenLab atom">
+  <g transform="translate(48 48)">
+    <ellipse cx="0" cy="0" rx="34" ry="12" fill="none" stroke="#14b8a6" stroke-width="1.4" opacity="0.88"/>
+    <ellipse cx="0" cy="0" rx="34" ry="12" fill="none" stroke="#14b8a6" stroke-width="1.4" opacity="0.88" transform="rotate(60)"/>
+    <ellipse cx="0" cy="0" rx="34" ry="12" fill="none" stroke="#14b8a6" stroke-width="1.4" opacity="0.88" transform="rotate(-60)"/>
+    <path d="M 20 -9 L 23 -5 L 21 2 L 14 6 L 4 5 L -6 0 L -15 2 L -19 8 L -16 13 L -6 14 L 4 6 L 10 -4 L 18 -9 Z" fill="none" stroke="#ccfbf1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.82"/>
+    <path d="M -20 9 L -11 9 L -2 4 L 5 -6 L 14 -11 L 19 -7 L 21 -2 L 17 4 L 8 7 L -2 6 L -12 9 L -18 12 Z" fill="none" stroke="#99f6e4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.78"/>
+    <path d="M 0 0 L -10 -3 L -15 2 L -16 8 L -11 12 L -2 11 L 5 6 L 11 -3 L 17 -8 L 20 -5 L 20 0 L 15 5 L 6 7 L -2 5 L -7 10 L -4 13 L 0 0 Z" fill="none" stroke="#5eead4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.74"/>
+    <circle cx="0" cy="0" r="4.8" fill="#ffffff"/>
+    <circle cx="0" cy="0" r="2.8" fill="#042f2e"/>
+    <circle cx="19.5" cy="-8.5" r="4.5" fill="#f0fdfa"/>
+    <circle cx="-12.2" cy="11.5" r="4.5" fill="#ccfbf1"/>
+    <circle cx="-7.5" cy="-3" r="4.5" fill="#99f6e4"/>
+  </g>
+</svg>

@@ -10,6 +10,7 @@
     "lint": "astro check",
     "validate:catalog": "node scripts/validate-catalog.mjs",
     "generate:logo-svgs": "node scripts/generate-logo-svgs.mjs",
+    "export:email-signature": "node scripts/export-email-signature-assets.mjs",
     "astro": "astro"
   },
   "dependencies": {
