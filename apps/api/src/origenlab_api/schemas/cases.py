@@ -78,6 +78,7 @@ class WarmCaseItem(BaseModel):
     equipment_signal: str = ""
     snippet: str = ""
     gmail_url: str | None = None
+    grouped_email_count: int = 1
 
 
 class WarmCasesResponse(BaseModel):

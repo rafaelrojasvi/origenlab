@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from origenlab_api.main import create_app
 from origenlab_api.services.warm_case_output_normalize import (
+    dedupe_warm_case_items,
     filter_positive_normalized_items,
     is_auto_reply_subject,
     normalize_warm_case_item,
@@ -54,6 +55,56 @@ def _item(
 def test_auto_reply_subject_detection() -> None:
     assert is_auto_reply_subject("Automatic reply: Quotation Request")
     assert is_auto_reply_subject("Out of office until Monday")
+    assert is_auto_reply_subject("RES: Resposta automática: Cotización")
+    assert is_auto_reply_subject("Autorespuesta: fuera de oficina")
+    assert is_auto_reply_subject("Automatische Antwort: Anfrage")
+
+
+def test_ika_autoresponse_downgrades_stored_supplier_quote() -> None:
+    raw = _item(
+        contact_email="noreply@ika.net.br",
+        subject="RES: Resposta automática: Cotización",
+        category="supplier_quote_received",
+        snippet="Resposta automática — retornaremos em breve.",
+    )
+    assert normalize_warm_case_item(raw, include_noise=False) is None
+    out = normalize_warm_case_item(raw, include_noise=True)
+    assert out is not None
+    assert out.category == "system_noise"
+
+
+def test_crtop_duplicate_rows_collapsed_with_grouped_count() -> None:
+    rows = [
+        _item(
+            contact_email="ariel@crtopmachine.com",
+            subject="Re: Thank you very much for your inquiry about our reactor.",
+            category="supplier_quote_received",
+            snippet="CRTOP quotation OLT-HP-5L EXW USD 10600",
+        ).model_copy(update={"last_email_id": 10, "last_seen_at": "2026-05-18T10:00:00Z"}),
+        _item(
+            contact_email="ariel@crtopmachine.com",
+            subject="Re: Thank you very much for your inquiry about our reactor.",
+            category="supplier_quote_received",
+            snippet="Follow-up on reactor quote",
+        ).model_copy(update={"last_email_id": 11, "last_seen_at": "2026-05-19T10:00:00Z"}),
+    ]
+    merged = dedupe_warm_case_items([normalize_warm_case_item(r) for r in rows if normalize_warm_case_item(r)])
+    assert len(merged) == 1
+    assert merged[0].last_email_id == 11
+    assert merged[0].grouped_email_count == 2
+
+
+def test_mail_delivery_subsystem_bounce_hidden_by_default() -> None:
+    raw = _item(
+        contact_email="mailer-daemon@googlemail.com",
+        subject="Delivery Status Notification (Failure)",
+        category="bounce",
+        account_name="Mail Delivery Subsystem",
+    )
+    assert normalize_warm_case_item(raw, include_noise=False) is None
+    shown = normalize_warm_case_item(raw, include_noise=True)
+    assert shown is not None
+    assert shown.category == "bounce_problem"
 
 
 def test_normalize_dhl_vendor_logistics() -> None:
@@ -422,7 +473,11 @@ def test_cases_warm_api_normalizes_audit_samples(tmp_path: Path) -> None:
     assert by_email["chloe.yang@dlabsci.com"]["category"] in ("supplier_reply", "supplier_followup")
     assert "order@serva.de" not in by_email
     assert by_email["serviciodetransferencias@bancochile.cl"]["category"] == "payment_admin"
-    assert by_email["kelly@ollital.com"]["category"] in ("supplier_reply", "supplier_quote_received")
+    assert by_email["kelly@ollital.com"]["category"] in (
+        "supplier_reply",
+        "supplier_quote_received",
+        "supplier_followup",
+    )
     assert by_email["carmen.llorente@ortoalresa.com"]["category"] in (
         "supplier_reply",
         "supplier_quote_received",

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from origenlab_email_pipeline.warm_case_classification import infer_warm_case_category
 from origenlab_email_pipeline.warm_case_sender_rules import (
+    looks_like_auto_reply_text,
     looks_like_client_oc_post_sale_subject,
+    looks_like_internal_forwarded_client_quote_request,
     looks_like_payment_admin_thread,
+    looks_like_real_supplier_quote_content,
     looks_like_security_notification,
     looks_like_supplier_marketing_thread,
-    looks_like_internal_forwarded_client_quote_request,
+    looks_like_supplier_quote_response,
 )
 
 
@@ -109,6 +112,27 @@ def test_gmail_cotizacion_stays_waiting_supplier_not_client() -> None:
             include_noise=False,
         )
         == "waiting_supplier"
+    )
+
+
+def test_portuguese_resposta_automatica_is_auto_reply() -> None:
+    assert looks_like_auto_reply_text("RES: Resposta automática: Cotización")
+    assert not looks_like_real_supplier_quote_content(
+        "RES: Resposta automática: Cotización",
+        "Esta é uma resposta automática.",
+    )
+    assert not looks_like_supplier_quote_response(
+        "noreply@ika.net.br",
+        "RES: Resposta automática: Cotización",
+        snippet="Esta é uma resposta automática.",
+    )
+
+
+def test_beatriz_real_quote_passes_supplier_quote_gate() -> None:
+    assert looks_like_supplier_quote_response(
+        "beatriz.bonon@ika.net.br",
+        "RE: IKA RV10.70 price response",
+        snippet="Monto 112,00 stock disponible",
     )
 
 

@@ -59,6 +59,29 @@ def test_internal_forwarded_rg_energia_quote_is_client_opportunity() -> None:
     assert role == "client_opportunity"
 
 
+def test_ika_autoresponse_is_system_noise_not_supplier_quote() -> None:
+    row = _row(
+        sender="IKA Brasil <noreply@ika.net.br>",
+        subject="RES: Resposta automática: Cotización",
+        contact_email="noreply@ika.net.br",
+        snippet="Esta é uma resposta automática. Retornaremos em breve.",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "system_noise"
+    assert role != "supplier_quote_received"
+
+
+def test_beatriz_ika_quote_with_price_stays_supplier_quote_received() -> None:
+    row = _row(
+        sender="Beatriz Bonon <beatriz.bonon@ika.net.br>",
+        subject="RES: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200",
+        contact_email="beatriz.bonon@ika.net.br",
+        snippet="Monto 112,00 — stock disponible para 3 unidades RV10.70",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "supplier_quote_received"
+
+
 def test_crtop_reactor_quote_is_supplier_quote_received() -> None:
     row = _row(
         sender="Ariel <ariel@crtopmachine.com>",

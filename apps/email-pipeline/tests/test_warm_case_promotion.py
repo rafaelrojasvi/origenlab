@@ -120,6 +120,34 @@ def test_rg_energia_thread_hint_links_internal_forward_and_supplier_quote() -> N
     assert forward.account_name == "RG ENERGIA SPA"
 
 
+def test_crtop_reactor_thread_hint_links_duplicate_subjects() -> None:
+    rows = [
+        promo.queue_row_to_promotion_record(
+            _queue_row(
+                20,
+                sender="Ariel <ariel@crtopmachine.com>",
+                subject="Re: Thank you very much for your inquiry about our reactor.",
+                date_iso="2026-05-18T10:00:00Z",
+            ),
+            enrichment_available=False,
+        ),
+        promo.queue_row_to_promotion_record(
+            _queue_row(
+                21,
+                sender="Ariel <ariel@crtopmachine.com>",
+                subject="Re: Thank you very much for your inquiry about our reactor.",
+                date_iso="2026-05-19T10:00:00Z",
+            ),
+            enrichment_available=False,
+        ),
+    ]
+    assert rows[0] is not None and rows[1] is not None
+    assert rows[0].case_key == rows[1].case_key
+    assert rows[0].case_key.startswith("warm:thread:")
+    deduped = promo.dedupe_candidates([rows[0], rows[1]])
+    assert len(deduped) == 1
+
+
 def test_duplicate_queue_rows_same_case_key_deduped() -> None:
     rows = [
         promo.queue_row_to_promotion_record(

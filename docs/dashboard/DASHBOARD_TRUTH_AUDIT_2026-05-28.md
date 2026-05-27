@@ -1,5 +1,7 @@
 # Dashboard truth audit — 2026-05-28
 
+**Phase 9B (implemented):** classification and dedup fixes — see [PHASE9B_WARM_CLASSIFICATION_FIXES.md](./PHASE9B_WARM_CLASSIFICATION_FIXES.md).
+
 Status: audit-only (no fixes applied in this pass)  
 Scope: OrigenLab operator dashboard vs Gmail-derived SQLite, Postgres mirrors, classification logic, and known commercial cases.
 

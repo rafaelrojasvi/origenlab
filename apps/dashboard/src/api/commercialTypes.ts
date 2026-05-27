@@ -46,6 +46,8 @@ export interface WarmCaseItem {
   equipment_signal: string;
   snippet: string;
   gmail_url: string | null;
+  /** Collapsed duplicate emails in the same supplier/thread group (API default 1). */
+  grouped_email_count?: number;
 }
 
 export interface WarmCasesResponse {

@@ -82,6 +82,10 @@ export function normalizeWarmCaseItem(raw: unknown, index: number): WarmCaseItem
     equipment_signal: safePreviewText(r.equipment_signal, 120),
     snippet: safePreviewText(r.snippet, 400),
     gmail_url: null,
+    grouped_email_count:
+      typeof r.grouped_email_count === "number" && Number.isFinite(r.grouped_email_count)
+        ? Math.max(1, Math.floor(r.grouped_email_count))
+        : 1,
   };
 }
 

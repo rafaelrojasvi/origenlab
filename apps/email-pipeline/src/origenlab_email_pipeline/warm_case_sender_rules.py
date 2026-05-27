@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from origenlab_email_pipeline.business_mart import emails_in
 
 INTERNAL_OPERATOR_DOMAINS: frozenset[str] = frozenset({"origenlab.cl", "labdelivery.cl"})
@@ -43,6 +45,43 @@ _SUPPLIER_QUOTE_SUBJECT_MARKERS: tuple[str, ...] = (
     " rv",
     "re:",
     "re ",
+)
+
+_WEAK_SUPPLIER_QUOTE_SUBJECT_MARKERS: frozenset[str] = frozenset({"re:", "re "})
+
+_AUTO_REPLY_TEXT_MARKERS: tuple[str, ...] = (
+    "automatic reply",
+    "auto-reply",
+    "auto reply",
+    "out of office",
+    "out-of-office",
+    "fuera de oficina",
+    "fuera de la oficina",
+    "respuesta automática",
+    "respuesta automatica",
+    "resposta automática",
+    "resposta automatica",
+    "autorespuesta",
+    "automatische antwort",
+    "réponse automatique",
+    "reponse automatique",
+    "absence du bureau",
+    "i am out of the office",
+    "estoy fuera de la oficina",
+    "estou fora do escritório",
+    "estou fora do escritorio",
+    "vacation reply",
+    "vacation responder",
+    "away from the office",
+    "office closed",
+    "oficina cerrada",
+    "escritório fechado",
+    "escritorio fechado",
+)
+
+_REAL_QUOTE_PRICE_RE = re.compile(
+    r"(?:\busd\b|\beur\b|\bexw\b|\bfob\b|\bus\$\s*\d|\$\s*\d|\d+[,.]\d{2}\s*(?:usd|eur|clp)?)",
+    re.I,
 )
 
 # Existing-client / post-sale threads (not suppliers).
@@ -301,6 +340,61 @@ def looks_like_internal_forwarded_client_quote_request(
     return has_forward_marker and has_quote_signal
 
 
+def _supplier_quote_haystack(
+    subject: str | None,
+    snippet: str | None = None,
+) -> str:
+    return " ".join([subject or "", snippet or ""]).lower()
+
+
+def looks_like_auto_reply_text(
+    subject: str | None,
+    snippet: str | None = None,
+) -> bool:
+    """Supplier/client autoresponder — PT/ES/DE/EN vacation and office-closed cues."""
+    hay = _supplier_quote_haystack(subject, snippet)
+    if not hay.strip():
+        return False
+    if hay.strip().startswith("automatic reply"):
+        return True
+    return any(marker in hay for marker in _AUTO_REPLY_TEXT_MARKERS)
+
+
+def looks_like_auto_reply_subject(subject: str | None) -> bool:
+    """Subject-only autoreply check (API compat)."""
+    return looks_like_auto_reply_text(subject, None)
+
+
+def looks_like_real_supplier_quote_content(
+    subject: str | None,
+    snippet: str | None = None,
+) -> bool:
+    """Price/product/stock cues — not thread prefix alone."""
+    hay = _supplier_quote_haystack(subject, snippet)
+    if _REAL_QUOTE_PRICE_RE.search(hay):
+        return True
+    product_cues = (
+        "rv10",
+        "rv 10",
+        "3812200",
+        "reactor",
+        "olt-hp",
+        "olt hp",
+        "stock dispon",
+        "disponible",
+        "disponibilidade",
+        "in stock",
+        "112,00",
+        "112.00",
+    )
+    quote_words = ("precio", "price", "cotiz", "quote", "presupuesto", "quotation")
+    if any(cue in hay for cue in product_cues) and any(word in hay for word in quote_words):
+        return True
+    if "price response" in hay or "precio" in hay and "rv" in hay:
+        return True
+    return False
+
+
 def looks_like_supplier_quote_response(
     contact_email: str,
     subject: str | None,
@@ -314,8 +408,15 @@ def looks_like_supplier_quote_response(
         return False
     if looks_like_supplier_admin_signup_subject(subject):
         return False
-    hay = " ".join([subject or "", snippet or ""]).lower()
-    return any(marker in hay for marker in _SUPPLIER_QUOTE_SUBJECT_MARKERS)
+    if looks_like_auto_reply_text(subject, snippet):
+        return looks_like_real_supplier_quote_content(subject, snippet)
+    hay = _supplier_quote_haystack(subject, snippet)
+    matched = [marker for marker in _SUPPLIER_QUOTE_SUBJECT_MARKERS if marker in hay]
+    if not matched:
+        return False
+    if all(marker in _WEAK_SUPPLIER_QUOTE_SUBJECT_MARKERS for marker in matched):
+        return looks_like_real_supplier_quote_content(subject, snippet)
+    return True
 
 
 def should_keep_visible_despite_suppression(
@@ -398,23 +499,6 @@ def is_supplier_vendor_domain(domain: str) -> bool:
 def looks_like_supplier_admin_signup_subject(subject: str | None) -> bool:
     sub = (subject or "").lower()
     return any(m in sub for m in _ADMIN_SIGNUP_SUBJECT_MARKERS)
-
-
-def looks_like_auto_reply_subject(subject: str | None) -> bool:
-    sub = (subject or "").strip().lower()
-    if not sub:
-        return False
-    if sub.startswith("automatic reply"):
-        return True
-    markers = (
-        "automatic reply",
-        "auto-reply",
-        "out of office",
-        "fuera de oficina",
-        "respuesta automática",
-        "respuesta automatica",
-    )
-    return any(marker in sub for marker in markers)
 
 
 def looks_like_supplier_marketing_thread(

@@ -275,6 +275,14 @@ export function WarmCasesTable({
                 <td className="px-3 py-2 max-w-xs">
                   <div className="font-medium text-slate-800">
                     {row.subject ? truncate(row.subject, 80) : "—"}
+                    {(row.grouped_email_count ?? 1) > 1 ? (
+                      <span
+                        className="ml-2 inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-600"
+                        title="Correos agrupados en el mismo hilo o asunto de proveedor"
+                      >
+                        ×{row.grouped_email_count}
+                      </span>
+                    ) : null}
                   </div>
                   {row.snippet ? (
                     <p className="mt-1 text-xs text-[var(--color-muted)]">

@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import re
 
+from origenlab_email_pipeline.warm_case_grouping import warm_case_group_key
 from origenlab_email_pipeline.warm_case_role_classification import (
     infer_warm_case_role_category,
     role_category_next_action,
     role_category_status,
+)
+from origenlab_email_pipeline.warm_case_sender_rules import (
+    looks_like_auto_reply_text,
+    looks_like_real_supplier_quote_content,
 )
 from origenlab_api.schemas.cases import WarmCaseCategory, WarmCaseItem, WarmCaseStatus
 
@@ -92,20 +97,8 @@ def redact_sensitive_preview(value: str) -> str:
 
 
 def is_auto_reply_subject(subject: str | None) -> bool:
-    sub = (subject or "").strip().lower()
-    if not sub:
-        return False
-    if sub.startswith("automatic reply"):
-        return True
-    markers = (
-        "automatic reply",
-        "auto-reply",
-        "out of office",
-        "fuera de oficina",
-        "respuesta automática",
-        "respuesta automatica",
-    )
-    return any(marker in sub for marker in markers)
+    """Subject-only autoreply check (tests + legacy callers)."""
+    return looks_like_auto_reply_text(subject, None)
 
 
 def _item_to_classifier_row(item: WarmCaseItem) -> dict[str, object]:
@@ -159,11 +152,9 @@ def normalize_warm_case_item(
     """
     category = _canonical_category(resolve_normalized_category(item))
 
-    if is_auto_reply_subject(item.subject) and category not in (
-        "supplier_quote_received",
-        "supplier_followup",
-    ):
-        category = "system_noise"
+    if looks_like_auto_reply_text(item.subject, item.snippet):
+        if not looks_like_real_supplier_quote_content(item.subject, item.snippet):
+            category = "system_noise"
 
     if category in _HIDDEN_WITHOUT_NOISE and not include_noise:
         return None
@@ -198,6 +189,32 @@ def filter_positive_normalized_items(items: list[WarmCaseItem]) -> list[WarmCase
     return [item for item in items if item.category in POST_NORMALIZE_POSITIVE_CATEGORIES]
 
 
+def dedupe_warm_case_items(items: list[WarmCaseItem]) -> list[WarmCaseItem]:
+    """Collapse duplicate supplier/thread rows; keep latest activity and grouped count."""
+    buckets: dict[str, list[WarmCaseItem]] = {}
+    for item in items:
+        key = warm_case_group_key(item.contact_email, item.subject)
+        buckets.setdefault(key, []).append(item)
+
+    merged: list[WarmCaseItem] = []
+    for group in buckets.values():
+        group.sort(
+            key=lambda row: (row.last_seen_at or "", row.last_email_id),
+            reverse=True,
+        )
+        primary = group[0]
+        count = len(group)
+        if count > 1:
+            primary = primary.model_copy(update={"grouped_email_count": count})
+        merged.append(primary)
+
+    merged.sort(
+        key=lambda row: (row.last_seen_at or "", row.last_email_id),
+        reverse=True,
+    )
+    return merged
+
+
 def normalize_warm_case_items(
     items: list[WarmCaseItem],
     *,
@@ -216,4 +233,4 @@ def normalize_warm_case_items(
         out.append(normalized)
     if positive_signal_only:
         out = filter_positive_normalized_items(out)
-    return out
+    return dedupe_warm_case_items(out)

@@ -12,7 +12,7 @@ from origenlab_email_pipeline.warm_case_sender_rules import (
     is_internal_operator_contact,
     is_real_client_domain,
     is_supplier_vendor_domain,
-    looks_like_auto_reply_subject,
+    looks_like_auto_reply_text,
     looks_like_client_oc_post_sale_subject,
     looks_like_internal_admin_thread,
     looks_like_internal_forwarded_client_quote_request,
@@ -144,7 +144,7 @@ def infer_warm_case_role_category(
     if looks_like_obvious_noise(sender_s, subject_s):
         return "bounce_problem"
 
-    if looks_like_auto_reply_subject(subject_s):
+    if looks_like_auto_reply_text(subject_s, snippet):
         return "system_noise"
 
     if looks_like_system_noise_contact(contact_email, sender_s, subject_s):

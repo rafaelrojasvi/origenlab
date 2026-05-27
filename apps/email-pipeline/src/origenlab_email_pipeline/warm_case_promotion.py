@@ -16,6 +16,7 @@ from origenlab_email_pipeline.mart_core_postgres_migrate import (
     iso_text_to_datetime,
     normalize_postgres_url,
 )
+from origenlab_email_pipeline.warm_case_grouping import thread_case_hint
 from origenlab_email_pipeline.warm_case_classification import (
     WarmCaseCategory,
     account_name_from_sender,
@@ -82,11 +83,8 @@ def _primary_domain(contact_email: str) -> str | None:
     return contact_email.split("@", 1)[1].lower() or None
 
 
-def _thread_case_hint(subject: str) -> str | None:
-    sub = (subject or "").lower()
-    if ("rv10.70" in sub or "3812200" in sub) and "rg energia" in sub:
-        return "rg-energia-ika-rv10.70-3812200"
-    return None
+def _thread_case_hint(subject: str, contact_email: str = "") -> str | None:
+    return thread_case_hint(subject, contact_email)
 
 
 def _promotion_title(subject: str, category: WarmCaseCategory) -> str:
@@ -140,7 +138,7 @@ def queue_row_to_promotion_record(
     domain = _primary_domain(contact_email)
     equip = equipment_signal_text(subject, row, enrichment_available=enrichment_available) or None
 
-    thread_hint = _thread_case_hint(subject)
+    thread_hint = _thread_case_hint(subject, contact_email)
 
     return WarmCasePromotionRecord(
         case_key=build_case_key(contact_email, domain, thread_hint=thread_hint),
