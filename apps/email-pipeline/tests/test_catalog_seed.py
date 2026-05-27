@@ -45,10 +45,26 @@ def test_normalize_serva_and_ika_alias_codes() -> None:
 def test_ika_price_ambiguity_required_in_seed() -> None:
     data = load_seed_json(_SEED)
     ika = next(p for p in data["products"] if p["product_key"] == "ika-rv10-70-vapor-tube")
+    assert ika["display_name"] == "Tubo de vapor IKA RV10.70"
+    assert ika["supplier_offers"][0]["quantity_offered"] == "1"
     snap = ika["price_snapshots"][0]
     assert snap["amount_decimal"] == "112.00"
     assert snap["currency"] is None
-    assert "ambiguous" in snap["price_notes"].lower()
+    assert snap["quantity"] == "3"
+    notes = snap["price_notes"].lower()
+    assert "ambigu" in notes
+    assert "unitario" in notes or "unit" in notes
+    assert "cantidad 3" in notes or "cantidad" in notes
+
+
+def test_crtop_public_summary_has_no_supplier_price() -> None:
+    data = load_seed_json(_SEED)
+    crtop = next(p for p in data["products"] if p["product_key"] == "crtop-olt-hp-5l")
+    summary = crtop["public_summary"].lower()
+    assert "10600" not in summary
+    assert "10,600" not in summary
+    assert "usd" not in summary
+    assert "exw" not in summary
 
 
 def test_crtop_price_usd_exw_in_seed() -> None:

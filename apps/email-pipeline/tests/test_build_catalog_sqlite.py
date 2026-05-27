@@ -86,7 +86,9 @@ def test_ika_price_currency_null_in_db(tmp_path: Path) -> None:
     assert row is not None
     assert row["currency"] is None
     assert row["amount_decimal"] == "112.00"
-    assert "ambiguous" in (row["price_notes"] or "").lower()
+    notes = (row["price_notes"] or "").lower()
+    assert "ambigu" in notes
+    assert "unitario" in notes
     conn.close()
 
 

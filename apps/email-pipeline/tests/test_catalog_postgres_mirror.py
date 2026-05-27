@@ -122,7 +122,9 @@ def test_ika_ambiguous_price_preserved_in_payload() -> None:
         ika = next(s for s in snaps if s["snapshot_key"] == "ika-rv10-70-price-ambiguous")
         assert ika["currency"] is None
         assert ika["amount_decimal"] == "112.00"
-        assert "ambiguous" in (ika.get("price_notes") or "").lower()
+        notes = (ika.get("price_notes") or "").lower()
+        assert "ambigu" in notes
+        assert ika["quantity"] == "3"
         assert ika["is_public_safe"] is False
     finally:
         conn.close()

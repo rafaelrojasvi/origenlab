@@ -82,7 +82,7 @@
     },
     {
       "product_key": "ika-rv10-70-vapor-tube",
-      "display_name": "IKA RV10.70 vapor tube",
+      "display_name": "Tubo de vapor IKA RV10.70",
       "brand": "IKA",
       "manufacturer_name": "IKA",
       "product_kind": "accessory",
@@ -91,7 +91,7 @@
       "default_unit": "ea",
       "website_slug": null,
       "website_product_id": null,
-      "public_summary": "Tubo de vapor IKA RV10.70 solicitado por cliente (RG Energía); cotización proveedor pendiente de confirmar moneda.",
+      "public_summary": "Tubo de vapor IKA RV10.70 solicitado por cliente (RG Energía), cantidad 3; precio proveedor pendiente de confirmar moneda y si aplica por unidad.",
       "confidence": "extracted_needs_review",
       "category_keys": ["heating_accessory"],
       "aliases": [
@@ -106,8 +106,8 @@
           "supplier_domain": "ika.net.br",
           "offer_status": "needs_review",
           "currency": null,
-          "quantity_offered": "3",
-          "availability_note": "Stock available per supplier reply; confirm currency before client quote.",
+          "quantity_offered": "1",
+          "availability_note": "Stock disponible según proveedor; confirmar moneda y si el monto es precio unitario.",
           "confidence": "extracted_needs_review"
         }
       ],
@@ -120,7 +120,7 @@
           "currency": null,
           "quantity": "3",
           "unit": "ea",
-          "price_notes": "Currency ambiguous; confirm before quoting client.",
+          "price_notes": "Cliente solicitó cantidad 3. Monto 112,00 del proveedor se registra como candidato a precio unitario; moneda ambigua — confirmar antes de cotizar.",
           "confidence": "extracted_needs_review",
           "observed_at": "2026-05-27T00:00:00Z"
         }
@@ -140,7 +140,7 @@
       "default_unit": "ea",
       "website_slug": null,
       "website_product_id": null,
-      "public_summary": "Reactor de laboratorio CRTOP OLT-HP-5L; cotización proveedor EXW USD 10,600 — confirmar flete e importación antes de cotizar al cliente.",
+      "public_summary": "Reactor de laboratorio CRTOP OLT-HP-5L; confirmar flete e importación antes de cotizar al cliente.",
       "confidence": "operator_confirmed",
       "category_keys": ["lab_reactor"],
       "aliases": [
