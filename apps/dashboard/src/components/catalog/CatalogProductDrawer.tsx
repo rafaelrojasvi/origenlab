@@ -8,10 +8,9 @@ import {
   formatCatalogDate,
   formatCatalogMoney,
   formatCatalogQuantity,
-  formatCommercialHistoryAmount,
+  formatCommercialHistoryClientSale,
+  formatCommercialHistoryDealState,
   formatCommercialLinkRef,
-  catalogMarginStatusLabel,
-  commercialHistorySideLabel,
   groupCommercialHistoryByDeal,
   groupCatalogSpecs,
   primaryCategoryLabel,
@@ -218,7 +217,11 @@ export function CatalogProductDrawer({
 
               <DetailSection title="Ofertas de proveedor">
                 {product.supplier_offers.length === 0 ? (
-                  <p className="text-sm text-[var(--color-muted)]">Sin ofertas de proveedor.</p>
+                  <p className="text-sm text-[var(--color-muted)]">
+                    {product.commercial_history.length > 0
+                      ? "Sin cotizaciones abiertas de proveedor. Este producto tiene historial comercial confirmado."
+                      : "Sin ofertas de proveedor registradas."}
+                  </p>
                 ) : (
                   <ul className="space-y-3">
                     {product.supplier_offers.map((offer) => (
@@ -342,57 +345,65 @@ export function CatalogProductDrawer({
                   </p>
                 ) : (
                   <ul className="space-y-4">
-                    {groupCommercialHistoryByDeal(product.commercial_history).map((deal) => (
-                      <li
-                        key={deal.dealKey}
-                        className="rounded-lg border border-[var(--color-border)] bg-slate-50 px-3 py-3"
-                      >
-                        <p className="text-sm font-semibold text-slate-900">{deal.dealLabel}</p>
-                        <p className="text-xs text-[var(--color-muted)]">
-                          Negocio vinculado · {deal.lines[0]?.client_org_name ?? "Cliente"} ×{" "}
-                          {deal.lines[0]?.supplier_org_name ?? "Proveedor"}
-                        </p>
-                        {deal.lines[0]?.margin_status ? (
-                          <p className="mt-1 text-xs text-slate-700">
-                            Estado de margen: {catalogMarginStatusLabel(deal.lines[0].margin_status)}
+                    {groupCommercialHistoryByDeal(product.commercial_history).map((deal) => {
+                      const dealState = formatCommercialHistoryDealState(deal.lines);
+                      return (
+                        <li
+                          key={deal.dealKey}
+                          className="rounded-lg border border-[var(--color-border)] bg-slate-50 px-3 py-3"
+                        >
+                          <p className="text-sm text-slate-800">
+                            <span className="font-medium">Negocio vinculado:</span> {deal.dealLabel}
                           </p>
-                        ) : null}
-                        <ul className="mt-3 space-y-3">
-                          {deal.lines.map((line) => (
-                            <li
-                              key={line.history_key}
-                              className={
-                                line.line_side === "supplier"
-                                  ? "rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm"
-                                  : "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                              }
-                            >
-                              <p className="font-medium text-slate-900">
-                                {commercialHistorySideLabel(line)}
-                              </p>
-                              <p className="mt-1 text-base font-semibold text-slate-900">
-                                {formatCommercialHistoryAmount(line)}
-                              </p>
-                              {line.line_side === "supplier" ? (
-                                <p className="text-xs font-medium text-amber-900">
-                                  {supplierPriceVisibilityLabel(line.is_public_safe)}
-                                </p>
-                              ) : null}
-                              {line.quantity ? (
-                                <p className="mt-1 text-slate-700">
-                                  {formatCatalogQuantity(line.quantity, line.unit)}
-                                </p>
-                              ) : null}
-                              {line.source_summary ? (
-                                <p className="mt-1 text-xs text-[var(--color-muted)]">
-                                  {line.source_summary}
-                                </p>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
+                          {dealState ? (
+                            <p className="mt-1 text-sm text-slate-700">
+                              <span className="font-medium">Estado:</span> {dealState}
+                            </p>
+                          ) : null}
+                          <ul className="mt-3 space-y-3">
+                            {deal.lines
+                              .filter((line) => line.line_kind === "product")
+                              .map((line) => (
+                                <li
+                                  key={line.history_key}
+                                  className={
+                                    line.line_side === "supplier"
+                                      ? "rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm"
+                                      : "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                                  }
+                                >
+                                  {line.line_side === "client" ? (
+                                    <p className="text-slate-800">
+                                      <span className="font-medium">Vendido a cliente:</span>{" "}
+                                      {formatCommercialHistoryClientSale(line)}
+                                    </p>
+                                  ) : (
+                                    <>
+                                      <p className="text-slate-800">
+                                        <span className="font-medium">Costo proveedor:</span>{" "}
+                                        {formatCatalogMoney(line.amount_decimal, line.currency)}
+                                      </p>
+                                      <p className="mt-1 text-xs font-medium text-amber-900">
+                                        {supplierPriceVisibilityLabel(line.is_public_safe)}
+                                      </p>
+                                    </>
+                                  )}
+                                  {line.quantity ? (
+                                    <p className="mt-1 text-slate-700">
+                                      {formatCatalogQuantity(line.quantity, line.unit)}
+                                    </p>
+                                  ) : null}
+                                  {line.source_summary ? (
+                                    <p className="mt-1 text-xs text-[var(--color-muted)]">
+                                      {line.source_summary}
+                                    </p>
+                                  ) : null}
+                                </li>
+                              ))}
+                          </ul>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </DetailSection>

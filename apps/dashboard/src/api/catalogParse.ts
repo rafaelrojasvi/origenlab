@@ -48,7 +48,10 @@ export const CATALOG_FORBIDDEN_PROSE_ARTIFACTS = [
   "lafuente",
   "cuerpos decorreo",
   "oportunida de s",
+  "enelectroforesis",
 ] as const;
+
+const DISPLAY_PROSE_REPAIRS: [RegExp, string][] = [[/enelectroforesis/gi, "en electroforesis"]];
 
 const FORBIDDEN_VALUE_PATTERNS: RegExp[] = [
   /\bbank\b/i,
@@ -76,6 +79,14 @@ function stripForbiddenKeys(row: Record<string, unknown>): void {
   }
 }
 
+function repairCatalogDisplayProse(text: string): string {
+  let out = text;
+  for (const [pattern, replacement] of DISPLAY_PROSE_REPAIRS) {
+    out = out.replace(pattern, replacement);
+  }
+  return out;
+}
+
 function sanitizeCatalogText(value: unknown, maxLen = 2000): string {
   const text = safePreviewText(value, maxLen);
   if (!text) {
@@ -86,7 +97,7 @@ function sanitizeCatalogText(value: unknown, maxLen = 2000): string {
       return "";
     }
   }
-  return text;
+  return repairCatalogDisplayProse(text);
 }
 
 function optionalStr(value: unknown, maxLen = 500): string | null {

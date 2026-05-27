@@ -58,6 +58,16 @@ describe("CatalogPage", () => {
     vi.clearAllMocks();
   });
 
+  it("SERVA table rows show sold commercial summary not Sin oferta", async () => {
+    render(<CatalogPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/Vendido a CEAF · Costo proveedor EUR 117,00/)).toBeTruthy();
+      expect(screen.getByText(/Vendido a CEAF · Costo proveedor EUR 31,00/)).toBeTruthy();
+    });
+    expect(screen.queryByText("Sin oferta registrada")).toBeNull();
+    expect(screen.queryByText("Sin dato comercial registrado")).toBeNull();
+  });
+
   it("loads nine catalog products with real category names", async () => {
     render(<CatalogPage />);
     await waitFor(() => {
@@ -151,6 +161,23 @@ describe("CatalogPage", () => {
     expect(within(dialog).getByText(/antes de cotizar/i)).toBeTruthy();
   });
 
+  it("opens TEMED drawer with Historial comercial", async () => {
+    render(<CatalogPage />);
+    await waitFor(() => screen.getByText("TEMED 25 ml"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Abrir ficha de TEMED/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByText("Historial comercial")).toBeTruthy();
+    expect(
+      within(dialog).getAllByText((_, el) => (el?.textContent ?? "").includes("$545.000")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(dialog).getAllByText((_, el) => (el?.textContent ?? "").includes("31,00")).length,
+    ).toBeGreaterThan(0);
+    expect(within(dialog).queryByText(/Sin oferta registrada/i)).toBeNull();
+  });
+
   it("opens SERVA drawer with Historial comercial and formatted CLP/EUR", async () => {
     render(<CatalogPage />);
     await waitFor(() => screen.getByText("BlueSlick™ 250 ml"));
@@ -160,8 +187,15 @@ describe("CatalogPage", () => {
 
     expect(within(dialog).getByText("Historial comercial")).toBeTruthy();
     expect(within(dialog).getByText("CEAF × SERVA")).toBeTruthy();
-    expect(within(dialog).getByText("Vendido a cliente")).toBeTruthy();
-    expect(within(dialog).getByText("Costo proveedor")).toBeTruthy();
+    expect(within(dialog).getByText(/Vendido a cliente:/)).toBeTruthy();
+    expect(within(dialog).getByText(/Costo proveedor:/)).toBeTruthy();
+    expect(within(dialog).getByText(/Negocio vinculado:/)).toBeTruthy();
+    expect(within(dialog).getByText(/logística pendiente/)).toBeTruthy();
+    expect(within(dialog).getByText(/margen requiere revisión/)).toBeTruthy();
+    expect(
+      within(dialog).getByText(/Sin cotizaciones abiertas de proveedor/i),
+    ).toBeTruthy();
+    expect(within(dialog).queryByText(/Sin oferta registrada/i)).toBeNull();
     expect(
       within(dialog).getAllByText((_, el) => (el?.textContent ?? "").includes("$695.000")).length,
     ).toBeGreaterThan(0);
@@ -189,5 +223,6 @@ describe("CatalogPage", () => {
     expect(blob).not.toContain("oportunida de s");
     expect(blob).not.toContain("swift");
     expect(blob).not.toContain("gmail");
+    expect(blob).not.toContain("enelectroforesis");
   });
 });

@@ -76,4 +76,19 @@ describe("catalogParse", () => {
     }
     expect(history.every((h) => h.line_kind === "product")).toBe(true);
   });
+
+  it("repairs enelectroforesis in display prose", () => {
+    const parsed = parseCatalogProductDetailResponse({
+      table_available: true,
+      product: {
+        product_key: "serva-blueslick-250ml",
+        display_name: "BlueSlick",
+        product_kind: "reagent",
+        confidence: "website_editorial",
+        public_summary: "Placas enelectroforesis en laboratorio.",
+      },
+    });
+    expect(parsed.product?.public_summary).toContain("en electroforesis");
+    expect(parsed.product?.public_summary).not.toContain("enelectroforesis");
+  });
 });

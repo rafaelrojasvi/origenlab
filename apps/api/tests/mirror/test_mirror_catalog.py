@@ -188,7 +188,10 @@ def test_mirror_api_repairs_legacy_joined_prose_from_postgres(
     serva = next(
         i for i in list_body["items"] if i["product_key"] == "serva-blueslick-250ml"
     )
-    assert "cotización y disponibilidad" in (serva["public_summary"] or "")
+    serva_summary = serva["public_summary"] or ""
+    assert "cotización y disponibilidad" in serva_summary
+    assert "en electroforesis" in serva_summary
+    assert "enelectroforesis" not in serva_summary.lower()
 
     ika_response = broken_prose_catalog_client.get(
         "/mirror/catalog/products/ika-rv10-70-vapor-tube"
@@ -280,7 +283,10 @@ def test_mapper_repairs_nested_prose_when_row_mutation_is_ignored() -> None:
 
 def test_mirror_catalog_spanish_prose_spacing(catalog_mirror_client: TestClient) -> None:
     serva = catalog_mirror_client.get("/mirror/catalog/products/serva-blueslick-250ml").json()
-    assert "cotización y disponibilidad" in (serva["product"]["public_summary"] or "")
+    summary = serva["product"]["public_summary"] or ""
+    assert "cotización y disponibilidad" in summary
+    assert "en electroforesis" in summary
+    assert "enelectroforesis" not in summary.lower()
 
     ika = catalog_mirror_client.get("/mirror/catalog/products/ika-rv10-70-vapor-tube").json()[
         "product"

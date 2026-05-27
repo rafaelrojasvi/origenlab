@@ -39,6 +39,7 @@ _PROSE_JOIN_REPAIRS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"Preciosdeproveedor", re.I), "Precios de proveedor"),
     (re.compile(r"proveedorsondatosinternos", re.I), "proveedor son datos internos"),
     (re.compile(r"nidatosbancarios", re.I), "ni datos bancarios"),
+    (re.compile(r"enelectroforesis", re.I), "en electroforesis"),
 )
 
 # Substrings that must not appear in operator-facing prose after repair.
@@ -57,6 +58,7 @@ FORBIDDEN_JOINED_PROSE_ARTIFACTS: tuple[str, ...] = (
     "lafuente",
     "cuerpos decorreo",
     "oportunida de s",
+    "enelectroforesis",
 )
 
 # Fields that must keep human-readable Spanish spacing (never alias-collapse).

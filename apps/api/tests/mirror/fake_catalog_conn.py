@@ -155,7 +155,7 @@ class CatalogFakeConn(MirrorFakeConn):
         for product in self.products:
             if product["product_key"] == "serva-blueslick-250ml":
                 product["public_summary"] = (
-                    "Reactivo SERVA para tratamiento de placas en electroforesis; "
+                    "Reactivo SERVA para tratamiento de placas enelectroforesis; "
                     "cotizacióny disponibilidad sujetas a confirmación."
                 )
             if product["product_key"] == "ika-rv10-70-vapor-tube":

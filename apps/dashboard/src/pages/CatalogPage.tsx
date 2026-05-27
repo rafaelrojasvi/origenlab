@@ -436,7 +436,7 @@ export function CatalogPage() {
                 <th className="px-3 py-3 font-semibold">Categoría</th>
                 <th className="px-3 py-3 font-semibold">Clase</th>
                 <th className="px-3 py-3 font-semibold">Modelo</th>
-                <th className="px-3 py-3 font-semibold">Última oferta proveedor</th>
+                <th className="px-3 py-3 font-semibold">Último dato comercial</th>
                 <th className="px-3 py-3 font-semibold">Vínculos</th>
                 <th className="px-3 py-3 font-semibold">Estado</th>
               </tr>

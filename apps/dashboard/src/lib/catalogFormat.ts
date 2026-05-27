@@ -303,14 +303,109 @@ export function latestPriceSnapshot(
   return snapshots[0];
 }
 
+function commercialHistoryProductLine(
+  detail: CatalogProductDetailUi,
+  side: "client" | "supplier",
+): CatalogProductCommercialHistoryUi | undefined {
+  return detail.commercial_history.find(
+    (row) => row.line_side === side && row.line_kind === "product",
+  );
+}
+
+/** Table/drawer summary when product has confirmed deal lines (sold products). */
+export function buildListCommercialDataSummary(detail: CatalogProductDetailUi | null): string | null {
+  if (!detail?.commercial_history.length) {
+    return null;
+  }
+  const client = commercialHistoryProductLine(detail, "client");
+  const supplier = commercialHistoryProductLine(detail, "supplier");
+  if (!client && !supplier) {
+    return null;
+  }
+  const parts: string[] = [];
+  if (client) {
+    const buyer = client.client_org_name?.trim() || "cliente";
+    parts.push(`Vendido a ${buyer}`);
+  }
+  if (supplier?.amount_decimal) {
+    parts.push(
+      `Costo proveedor ${formatCatalogMoney(supplier.amount_decimal, supplier.currency)}`,
+    );
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
+
+export function formatCommercialHistoryClientSale(
+  line: CatalogProductCommercialHistoryUi,
+): string {
+  if (line.amount_net_clp != null) {
+    return `${formatCatalogMoney(String(line.amount_net_clp), "CLP")} neto CLP`;
+  }
+  if (line.amount_decimal) {
+    return formatCatalogMoney(line.amount_decimal, line.currency);
+  }
+  return "—";
+}
+
+export function catalogDealStatusLabel(status: string | null | undefined): string {
+  const raw = (status ?? "").trim().toLowerCase();
+  if (!raw) {
+    return "—";
+  }
+  if (raw.includes("logistics_pending")) {
+    return "logística pendiente";
+  }
+  if (raw.includes("paid_by_client") && raw.includes("supplier_payment_sent")) {
+    return "pagado por cliente · pago proveedor enviado";
+  }
+  return raw.replace(/__/g, " · ").replace(/_/g, " ");
+}
+
+export function formatCommercialHistoryDealState(
+  lines: CatalogProductCommercialHistoryUi[],
+): string | null {
+  const first = lines[0];
+  if (!first) {
+    return null;
+  }
+  const parts: string[] = [];
+  const deal = catalogDealStatusLabel(first.deal_status);
+  if (deal && deal !== "—") {
+    parts.push(deal);
+  }
+  if (first.margin_status === "needs_review") {
+    parts.push("margen requiere revisión");
+  } else if (first.margin_status) {
+    const margin = catalogMarginStatusLabel(first.margin_status);
+    if (margin && margin !== "—") {
+      parts.push(margin);
+    }
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
+
+export function hasCatalogCommercialData(detail: CatalogProductDetailUi | null): boolean {
+  if (!detail) {
+    return false;
+  }
+  if (detail.commercial_history.length > 0) {
+    return true;
+  }
+  return Boolean(latestPriceSnapshot(detail.price_snapshots) || latestSupplierOffer(detail.supplier_offers));
+}
+
 export function buildListOfferSummary(detail: CatalogProductDetailUi | null): string {
   if (!detail) {
     return "—";
   }
+  const commercialSummary = buildListCommercialDataSummary(detail);
+  if (commercialSummary) {
+    return commercialSummary;
+  }
   const snap = latestPriceSnapshot(detail.price_snapshots);
   const offer = latestSupplierOffer(detail.supplier_offers);
   if (!snap && !offer) {
-    return "Sin oferta registrada";
+    return "Sin dato comercial registrado";
   }
 
   const key = detail.product_key;
@@ -342,7 +437,7 @@ export function buildListOfferSummary(detail: CatalogProductDetailUi | null): st
     const note = offer.availability_note;
     return note.length > 72 ? `${note.slice(0, 72)}…` : note;
   }
-  return "Sin oferta registrada";
+  return "Sin dato comercial registrado";
 }
 
 export function catalogMarginStatusLabel(status: string | null | undefined): string {

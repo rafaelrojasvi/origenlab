@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildListCommercialDataSummary,
   buildListOfferSummary,
   formatCommercialHistoryAmount,
   formatCatalogDate,
@@ -10,6 +11,7 @@ import {
   crtopDetailFixture,
   ikaDetailFixture,
   servaBlueslickDetailFixture,
+  servaTemedDetailFixture,
 } from "../test/fixtures/catalogMirrorFixtures";
 
 describe("catalogFormat", () => {
@@ -35,6 +37,31 @@ describe("catalogFormat", () => {
     expect(buildListOfferSummary(detail)).toContain("USD 10.600,00");
     expect(buildListOfferSummary(detail)).toContain("EXW");
     expect(buildListOfferSummary(detail)).toContain("1 unidad");
+  });
+
+  it("builds SERVA table commercial summaries", () => {
+    const blueslick = buildListOfferSummary(servaBlueslickDetailFixture().product!);
+    expect(blueslick).toContain("Vendido a CEAF");
+    expect(blueslick).toContain("Costo proveedor EUR 117,00");
+    expect(blueslick).not.toContain("Sin oferta");
+
+    const temed = buildListOfferSummary(servaTemedDetailFixture().product!);
+    expect(temed).toContain("Vendido a CEAF");
+    expect(temed).toContain("Costo proveedor EUR 31,00");
+  });
+
+  it("returns Sin dato comercial only without quotes or history", () => {
+    expect(
+      buildListOfferSummary({
+        ...servaBlueslickDetailFixture().product!,
+        commercial_history: [],
+        supplier_offers: [],
+        price_snapshots: [],
+      }),
+    ).toBe("Sin dato comercial registrado");
+    expect(buildListCommercialDataSummary(servaBlueslickDetailFixture().product!)).toContain(
+      "Vendido a CEAF",
+    );
   });
 
   it("formats CLP and EUR commercial history amounts", () => {
