@@ -136,6 +136,10 @@ vi.mock("../api/mirrorCommercialClient", () => ({
   fetchCommercialDealsMirror: vi.fn(),
 }));
 
+vi.mock("../api/mirrorCatalogClient", () => ({
+  fetchCatalogProductsMirror: vi.fn(),
+}));
+
 vi.mock("../lib/logo/threeBodyCanvasRunner", () => ({
   startThreeBodyCanvas: vi.fn(() => () => {}),
 }));
@@ -146,11 +150,14 @@ import {
   fetchWarmCases,
 } from "../api/operatorClient";
 import { fetchCommercialDealsMirror } from "../api/mirrorCommercialClient";
+import { fetchCatalogProductsMirror } from "../api/mirrorCatalogClient";
+import { catalogListFixture } from "../test/fixtures/catalogMirrorFixtures";
 
 function mockAllOk() {
   vi.mocked(fetchTodayPanel).mockResolvedValue(panelSqlite);
   vi.mocked(fetchWarmCases).mockResolvedValue(warmPayload);
   vi.mocked(fetchEquipmentOpportunities).mockResolvedValue(equipmentPayload);
+  vi.mocked(fetchCatalogProductsMirror).mockResolvedValue(catalogListFixture());
   vi.mocked(fetchCommercialDealsMirror).mockResolvedValue({
     table_available: true,
     read_only: true,
@@ -211,6 +218,7 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
       "Bandeja de revisión",
       "Oportunidades",
       "Negocios",
+      "Catálogo",
       "Proveedores",
       "Licitaciones",
       "Pagos y logística",
@@ -230,7 +238,19 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
     screen.getByText("Cotizaciones y seguimientos de proveedores");
     screen.getByText("Evidencia de negocio");
     screen.getByText("Licitaciones / equipos");
+    screen.getByText("Productos catalogados");
     expect(screen.queryByText(/Casos tibios \/ Warm cases/)).toBeNull();
+  });
+
+  it("Catalog page renders product table", async () => {
+    render(<DashboardApp />);
+    await waitFor(() => screen.getByText("LISTO"));
+
+    await navigateTo("Catálogo");
+    await waitFor(() => {
+      screen.getByText("9 productos catalogados");
+      screen.getByText("CRTOP Lab Reactor OLT-HP-5L");
+    });
   });
 
   it("Inbox page contains warm cases table", async () => {

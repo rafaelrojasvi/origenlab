@@ -72,6 +72,7 @@ export function TodaySummaryPage() {
     warm,
     equipment,
     commercialDeals,
+    catalogProducts,
     mirrorBackend,
     loadPanel,
     setContactEmail,
@@ -226,6 +227,12 @@ export function TodaySummaryPage() {
             value={counts.tendersEquipment}
             hint="Cola de oportunidades de equipos"
             section="tenders"
+          />
+          <SummaryCard
+            label="Productos catalogados"
+            value={catalogProducts?.total ?? 0}
+            hint="Catálogo operador (espejo Postgres)"
+            section="catalogo"
           />
         </div>
       </section>

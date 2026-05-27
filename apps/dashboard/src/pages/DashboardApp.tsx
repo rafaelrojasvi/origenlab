@@ -2,6 +2,7 @@ import { DashboardDataProvider } from "../context/DashboardDataContext";
 import { DashboardShell } from "../components/layout/DashboardShell";
 import { useDashboardSection } from "../lib/dashboardHashRoute";
 import type { DashboardSection } from "../lib/dashboardNav";
+import { CatalogPage } from "./CatalogPage";
 import { ContactsPage } from "./ContactsPage";
 import { DealsPage } from "./DealsPage";
 import { InboxTriagePage } from "./InboxTriagePage";
@@ -22,6 +23,8 @@ function DashboardSectionView({ section }: { section: DashboardSection }) {
       return <OpportunitiesPage />;
     case "deals":
       return <DealsPage />;
+    case "catalogo":
+      return <CatalogPage />;
     case "suppliers":
       return <SuppliersPage />;
     case "tenders":

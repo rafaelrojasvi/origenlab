@@ -5,6 +5,7 @@ export type DashboardSection =
   | "inbox"
   | "opportunities"
   | "deals"
+  | "catalogo"
   | "suppliers"
   | "tenders"
   | "payments-logistics"
@@ -22,6 +23,11 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { id: "inbox", label: "Bandeja de revisión", description: "Correos tibios con filtros por rol" },
   { id: "opportunities", label: "Oportunidades", description: "Cola de equipos y señales" },
   { id: "deals", label: "Negocios", description: "Espejo de negocios comerciales" },
+  {
+    id: "catalogo",
+    label: "Catálogo",
+    description: "Productos, reactivos, equipos y repuestos cotizables",
+  },
   { id: "suppliers", label: "Proveedores", description: "Cotizaciones y seguimientos de proveedores" },
   { id: "tenders", label: "Licitaciones", description: "Señales de compras públicas" },
   {

@@ -19,7 +19,9 @@ import {
   fetchWarmCases,
 } from "../api/operatorClient";
 import type { TodayPanelData } from "../api/operatorTypes";
+import type { CatalogProductsListUi } from "../api/catalogTypes";
 import type { CommercialDealsListUi } from "../api/commercialDealsTypes";
+import { fetchCatalogProductsMirror } from "../api/mirrorCatalogClient";
 import { fetchCommercialDealsMirror } from "../api/mirrorCommercialClient";
 import {
   getLegacyDevPortWarning,
@@ -49,6 +51,9 @@ export interface DashboardDataState {
   commercialDeals: CommercialDealsListUi | null;
   commercialDealsLoading: boolean;
   commercialDealsError: string | null;
+  catalogProducts: CatalogProductsListUi | null;
+  catalogProductsLoading: boolean;
+  catalogProductsError: string | null;
   contactEmail: string | null;
   setContactEmail: (email: string | null) => void;
   loadAll: () => void;
@@ -56,6 +61,7 @@ export interface DashboardDataState {
   loadWarm: () => Promise<void>;
   loadEquipment: () => Promise<void>;
   loadCommercialDeals: () => Promise<void>;
+  loadCatalogProducts: () => Promise<void>;
   refreshing: boolean;
   mirrorBackend: boolean;
   backend: TodayPanelData["health"]["backend"] | "sqlite";
@@ -80,6 +86,10 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const [commercialDeals, setCommercialDeals] = useState<CommercialDealsListUi | null>(null);
   const [commercialDealsLoading, setCommercialDealsLoading] = useState(true);
   const [commercialDealsError, setCommercialDealsError] = useState<string | null>(null);
+
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProductsListUi | null>(null);
+  const [catalogProductsLoading, setCatalogProductsLoading] = useState(true);
+  const [catalogProductsError, setCatalogProductsError] = useState<string | null>(null);
 
   const [contactEmail, setContactEmail] = useState<string | null>(null);
 
@@ -135,9 +145,28 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadCatalogProducts = useCallback(async () => {
+    setCatalogProductsLoading(true);
+    setCatalogProductsError(null);
+    try {
+      setCatalogProducts(await fetchCatalogProductsMirror({ limit: 100 }));
+    } catch (e) {
+      setCatalogProductsError(formatLoadError("Catálogo", e));
+      setCatalogProducts(null);
+    } finally {
+      setCatalogProductsLoading(false);
+    }
+  }, []);
+
   const loadAll = useCallback(() => {
-    void Promise.all([loadPanel(), loadWarm(), loadEquipment(), loadCommercialDeals()]);
-  }, [loadPanel, loadWarm, loadEquipment, loadCommercialDeals]);
+    void Promise.all([
+      loadPanel(),
+      loadWarm(),
+      loadEquipment(),
+      loadCommercialDeals(),
+      loadCatalogProducts(),
+    ]);
+  }, [loadPanel, loadWarm, loadEquipment, loadCommercialDeals, loadCatalogProducts]);
 
   useEffect(() => {
     loadAll();
@@ -152,7 +181,11 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const mirrorBackend = data?.health.backend === "postgres";
   const backend = data?.health.backend ?? "sqlite";
   const refreshing =
-    panelLoading || warmLoading || equipmentLoading || commercialDealsLoading;
+    panelLoading ||
+    warmLoading ||
+    equipmentLoading ||
+    commercialDealsLoading ||
+    catalogProductsLoading;
 
   const value = useMemo<DashboardDataState>(
     () => ({
@@ -168,6 +201,9 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       commercialDeals,
       commercialDealsLoading,
       commercialDealsError,
+      catalogProducts,
+      catalogProductsLoading,
+      catalogProductsError,
       contactEmail,
       setContactEmail,
       loadAll,
@@ -175,6 +211,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       loadWarm,
       loadEquipment,
       loadCommercialDeals,
+      loadCatalogProducts,
       refreshing,
       mirrorBackend,
       backend,
@@ -193,12 +230,16 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       commercialDeals,
       commercialDealsLoading,
       commercialDealsError,
+      catalogProducts,
+      catalogProductsLoading,
+      catalogProductsError,
       contactEmail,
       loadAll,
       loadPanel,
       loadWarm,
       loadEquipment,
       loadCommercialDeals,
+      loadCatalogProducts,
       refreshing,
       mirrorBackend,
       backend,
