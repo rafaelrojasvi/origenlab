@@ -1,5 +1,9 @@
 # Como poner la firma en Gmail (con imagen)
 
+Firma actual con franja de marcas: pegar desde `origenlab-contacto-signature-SMALL-embedded.html` (atomo + `origenlab-brand-strip.png` embebidos).
+
+Regenerar: `npm run build:email-brands && npm run build:email-signature-embedded` en `apps/web`.
+
 ## Por que no se ve la imagen al pegar
 
 Gmail **no puede** cargar:

@@ -11,6 +11,8 @@
     "validate:catalog": "node scripts/validate-catalog.mjs",
     "generate:logo-svgs": "node scripts/generate-logo-svgs.mjs",
     "export:email-signature": "node scripts/export-email-signature-assets.mjs",
+    "build:email-brands": "node scripts/build-email-brand-strip.mjs",
+    "build:email-signature-embedded": "node scripts/build-gmail-signature-embedded.mjs",
     "astro": "astro"
   },
   "dependencies": {
