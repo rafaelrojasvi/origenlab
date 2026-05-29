@@ -97,16 +97,28 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-def _parse_review_row(row: dict[str, str]) -> dict[str, Any]:
+def _blocked_recommended_action(classification: str, row: dict[str, str]) -> str:
+    explicit = (row.get("recommended_next_action") or "").strip()
+    if explicit:
+        return explicit
+    if classification == CLASS_ALREADY_CONTACTED:
+        return "No contactar: ya contactado"
+    return "No contactar — bloqueado por historial OrigenLab"
+
+
+def _parse_phase10b_row(row: dict[str, str], *, from_blocked_csv: bool) -> dict[str, Any]:
     classification = (row.get("classification") or "").strip()
     is_blocked = classification in _BLOCKED_CLASSIFICATIONS
-    status = classification_to_status(classification)
+    status = "blocked" if is_blocked else classification_to_status(classification)
     sector = (row.get("sector") or "").strip()
     buyer_type = (row.get("buyer_type") or "").strip()
     org = (row.get("organization_name") or "").strip()
     email = (row.get("email") or "").strip()
     domain = (row.get("domain") or "").strip()
     likely_need = (row.get("likely_need") or row.get("product_angle") or "").strip()
+    block_or_review = (
+        (row.get("block_reason") if from_blocked_csv else row.get("block_or_review_reason")) or ""
+    ).strip()
     return {
         "prospect_key": make_prospect_key(org, email, domain),
         "organization_name": org,
@@ -128,47 +140,22 @@ def _parse_review_row(row: dict[str, str]) -> dict[str, Any]:
         "classification": classification,
         "spanish_message_angle": (row.get("spanish_message_angle") or "").strip() or None,
         "risk_flags": (row.get("risk_flags") or "").strip() or None,
-        "block_or_review_reason": (row.get("block_or_review_reason") or "").strip() or None,
-        "recommended_next_action": (row.get("recommended_next_action") or "").strip() or None,
+        "block_or_review_reason": block_or_review or None,
+        "recommended_next_action": _blocked_recommended_action(classification, row)
+        if is_blocked
+        else (row.get("recommended_next_action") or "").strip() or None,
         "status": status,
         "campaign_bucket": infer_campaign_bucket(classification, sector, buyer_type),
         "is_blocked": 1 if is_blocked else 0,
     }
 
 
+def _parse_review_row(row: dict[str, str]) -> dict[str, Any]:
+    return _parse_phase10b_row(row, from_blocked_csv=False)
+
+
 def _parse_blocked_row(row: dict[str, str]) -> dict[str, Any]:
-    classification = (row.get("classification") or "").strip()
-    org = (row.get("organization_name") or "").strip()
-    email = (row.get("email") or "").strip()
-    domain = (row.get("domain") or "").strip()
-    block_reason = (row.get("block_reason") or row.get("block_or_review_reason") or "").strip()
-    return {
-        "prospect_key": make_prospect_key(org, email, domain),
-        "organization_name": org,
-        "contact_name": (row.get("contact_name") or "").strip() or None,
-        "email": email or None,
-        "domain": domain or None,
-        "role_title": None,
-        "sector": None,
-        "region": None,
-        "buyer_type": None,
-        "likely_need": None,
-        "product_angle": None,
-        "evidence_url": None,
-        "evidence_note": (row.get("evidence_note") or "").strip() or None,
-        "source": None,
-        "input_priority_score": 0,
-        "final_score": 0,
-        "confidence": None,
-        "classification": classification,
-        "spanish_message_angle": None,
-        "risk_flags": (row.get("risk_flags") or "").strip() or None,
-        "block_or_review_reason": block_reason or None,
-        "recommended_next_action": "No contactar — bloqueado por historial OrigenLab",
-        "status": "blocked",
-        "campaign_bucket": "blocked",
-        "is_blocked": 1,
-    }
+    return _parse_phase10b_row(row, from_blocked_csv=True)
 
 
 def _suggested_subject(org: str, product_angle: str | None) -> str:
@@ -337,6 +324,11 @@ def build_lead_research_sqlite(
         why = p.get("likely_need") or ""
         if p.get("product_angle"):
             why = f"{why} · {p['product_angle']}".strip(" ·")
+        safety_note = (
+            "No contactar — bloqueado por historial OrigenLab."
+            if p["is_blocked"]
+            else "Revisión humana requerida. No enviar automáticamente."
+        )
         conn.execute(
             """
             INSERT INTO lead_research_recommendation (
@@ -353,7 +345,7 @@ def build_lead_research_sqlite(
                 why or None,
                 _suggested_subject(p["organization_name"], p.get("product_angle")),
                 _suggested_body_preview(p["organization_name"], p.get("spanish_message_angle")),
-                "Revisión humana requerida. No enviar automáticamente.",
+                safety_note,
             ),
         )
         for code, label in _block_reason_rows(p):

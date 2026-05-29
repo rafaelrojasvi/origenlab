@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from origenlab_email_pipeline.leads.new_customer_research import (
+    BLOCKED_OUTPUT_FIELDS,
     CLASS_ALREADY_CONTACTED,
     CLASS_BOUNCED,
     CLASS_NET_NEW,
@@ -22,6 +23,7 @@ from origenlab_email_pipeline.leads.new_customer_research import (
     load_exclusion_lists,
     process_deepsearch_prospects,
     run_process,
+    write_all_outputs,
     write_top25_markdown,
 )
 
@@ -165,6 +167,41 @@ def test_exact_contacted_email_is_blocked(excl: ExclusionLists) -> None:
     row = _deepsearch_row(email="known@buyer.test", domain="buyer.test")
     cls, _ = classify_prospect(row, excl)
     assert cls == CLASS_ALREADY_CONTACTED
+
+
+def test_contacted_exact_email_blocked_preserves_deepsearch_context(excl: ExclusionLists) -> None:
+    """5M-style prospect: blocked for no-repeat but keeps operator context from DeepSearch."""
+    row = _deepsearch_row(
+        organization_name="5M S.A.",
+        contact_name="Alejandra Cid",
+        email="known@buyer.test",
+        domain="buyer.test",
+        sector="Laboratorios privados",
+        region="Biobío / Tarapacá",
+        buyer_type="laboratorio_acuicola",
+        product_angle="incubadoras; balances; sample prep; QC",
+        evidence_url="https://www.sernapesca.cl/app/uploads/2023/11/entidades_de_analisis_20190102.pdf",
+        evidence_note="Entidad SERNAPESCA con contactos públicos",
+        source="sernapesca_entidades_analisis",
+        priority_score="82",
+        confidence="alta",
+    )
+    processed = process_deepsearch_prospects([row], excl)
+    assert len(processed) == 1
+    p = processed[0]
+    assert p.classification == CLASS_ALREADY_CONTACTED
+    assert p.is_blocked
+    assert p.input_priority_score == 82
+    assert p.final_score == 0
+    blocked = p.to_blocked_dict()
+    assert blocked["sector"] == "Laboratorios privados"
+    assert blocked["region"] == "Biobío / Tarapacá"
+    assert blocked["buyer_type"] == "laboratorio_acuicola"
+    assert "incubadoras" in blocked["product_angle"]
+    assert blocked["evidence_url"].startswith("https://www.sernapesca.cl/")
+    assert blocked["input_priority_score"] == "82"
+    assert blocked["final_score"] == "0"
+    assert blocked["recommended_next_action"] == "No contactar: ya contactado"
 
 
 def test_bounced_email_is_blocked(excl: ExclusionLists) -> None:
@@ -326,6 +363,34 @@ def test_run_process_writes_output_files(tmp_path: Path) -> None:
     assert (out_dir / "new_customer_targets_summary.md").is_file()
     assert result.summary["blocked_rows"] >= 1
     assert result.summary["review_rows"] >= 1
+
+    with (out_dir / "new_customer_targets_blocked.csv").open(encoding="utf-8", newline="") as f:
+        blocked_rows = list(csv.DictReader(f))
+    old_contact = next(r for r in blocked_rows if r["email"] == "known@buyer.test")
+    assert old_contact["classification"] == CLASS_ALREADY_CONTACTED
+    assert old_contact.get("sector") == "Laboratorios privados"
+    assert old_contact.get("input_priority_score") == "50"
+    assert old_contact["recommended_next_action"] == "No contactar: ya contactado"
+
+
+def test_blocked_csv_writes_preservation_columns(tmp_path: Path, excl: ExclusionLists) -> None:
+    row = _deepsearch_row(
+        organization_name="5M S.A.",
+        email="known@buyer.test",
+        domain="buyer.test",
+        sector="Laboratorios privados",
+        product_angle="incubadoras",
+        priority_score="82",
+    )
+    prospects = process_deepsearch_prospects([row], excl)
+    out_dir = tmp_path / "out"
+    write_all_outputs(prospects, {"classification_counts": {}}, out_dir)
+    with (out_dir / "new_customer_targets_blocked.csv").open(encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        assert reader.fieldnames == list(BLOCKED_OUTPUT_FIELDS)
+        row_out = next(reader)
+    assert row_out["sector"] == "Laboratorios privados"
+    assert row_out["product_angle"] == "incubadoras"
 
 
 def test_top25_markdown_has_sections(tmp_path: Path, excl: ExclusionLists) -> None:

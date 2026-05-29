@@ -55,8 +55,18 @@ def test_builder_writes_rows_and_mirror_safe() -> None:
         assert lead_research_tables_exist(conn)
         counts = sqlite_lead_research_counts(conn)
         assert counts["prospects"] == 5
-        assert counts["evidence"] >= 4
+        assert counts["evidence"] >= 5
         assert counts["recommendations"] == 5
+        blocked_row = conn.execute(
+            """
+            SELECT input_priority_score, sector, product_angle, evidence_url
+            FROM lead_research_prospect WHERE is_blocked = 1
+            """
+        ).fetchone()
+        assert blocked_row[0] == 82
+        assert blocked_row[1] == "Laboratorios privados"
+        assert "incubadoras" in (blocked_row[2] or "")
+        assert blocked_row[3]
 
         payload = load_lead_research_mirror_payload(conn)
         for row in payload["prospects"]:
@@ -64,7 +74,14 @@ def test_builder_writes_rows_and_mirror_safe() -> None:
                 assert key not in FORBIDDEN_MIRROR_KEYS
         blocked = [p for p in payload["prospects"] if p["is_blocked"]]
         assert len(blocked) == 1
-        assert blocked[0]["classification"] == "already_contacted_block"
+        b0 = blocked[0]
+        assert b0["classification"] == "already_contacted_block"
+        assert b0["organization_name"] == "5M S.A."
+        assert b0["sector"] == "Laboratorios privados"
+        assert b0["buyer_type"] == "laboratorio_acuicola"
+        assert b0["product_angle"] == "incubadoras; balances; sample prep; QC"
+        assert b0["evidence_url"]
+        assert b0["final_score"] == 0
     finally:
         conn.close()
 

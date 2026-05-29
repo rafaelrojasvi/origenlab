@@ -60,10 +60,21 @@ BLOCKED_OUTPUT_FIELDS: tuple[str, ...] = (
     "contact_name",
     "email",
     "domain",
+    "sector",
+    "region",
+    "buyer_type",
+    "input_priority_score",
+    "final_score",
     "classification",
+    "spanish_message_angle",
+    "product_angle",
+    "evidence_url",
+    "evidence_note",
+    "source",
+    "confidence",
     "block_reason",
     "risk_flags",
-    "evidence_note",
+    "recommended_next_action",
 )
 
 # Classification labels (stable codes)
@@ -186,15 +197,30 @@ class ProcessedProspect:
 
     def to_blocked_dict(self) -> dict[str, str]:
         r = self.row
+        if self.classification == CLASS_ALREADY_CONTACTED:
+            action = "No contactar: ya contactado"
+        else:
+            action = self.recommended_next_action
         return {
             "organization_name": r.get("organization_name", ""),
             "contact_name": r.get("contact_name", ""),
             "email": r.get("email", ""),
             "domain": r.get("domain", ""),
+            "sector": r.get("sector", ""),
+            "region": r.get("region", ""),
+            "buyer_type": r.get("buyer_type", ""),
+            "input_priority_score": str(self.input_priority_score),
+            "final_score": "0",
             "classification": self.classification,
+            "spanish_message_angle": self.spanish_message_angle,
+            "product_angle": r.get("product_angle", ""),
+            "evidence_url": r.get("evidence_url", ""),
+            "evidence_note": r.get("evidence_note", ""),
+            "source": r.get("source", ""),
+            "confidence": r.get("confidence", ""),
             "block_reason": self.block_or_review_reason,
             "risk_flags": r.get("risk_flags", ""),
-            "evidence_note": r.get("evidence_note", ""),
+            "recommended_next_action": action,
         }
 
 
@@ -475,6 +501,8 @@ def recommended_next_action(classification: str, row: dict[str, str]) -> str:
         return "Revisar si conviene contactar otra persona del mismo dominio o esperar respuesta"
     if classification == CLASS_RESEARCH_ONLY:
         return "Investigar email del responsable de laboratorio en sitio web o directorio"
+    if classification == CLASS_ALREADY_CONTACTED:
+        return "No contactar: ya contactado"
     return "Sin acción — bloqueado por política de no repetición"
 
 
@@ -487,8 +515,13 @@ def process_deepsearch_prospects(
         flags = parse_risk_flags(row.get("risk_flags"))
         classification, reason = classify_prospect(row, excl)
         input_score = _int_score(row.get("priority_score"), 50)
-        final_score = compute_final_score(
-            row, classification=classification, input_score=input_score, flags=flags
+        is_blocked = classification in _BLOCKED
+        final_score = (
+            0
+            if is_blocked
+            else compute_final_score(
+                row, classification=classification, input_score=input_score, flags=flags
+            )
         )
         angle = spanish_message_angle(row)
         action = recommended_next_action(classification, row)
