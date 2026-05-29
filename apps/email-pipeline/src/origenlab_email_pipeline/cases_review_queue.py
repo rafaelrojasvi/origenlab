@@ -102,6 +102,12 @@ def fetch_cases_review_queue(
         pos_clause = "AND COALESCE(agg.has_positive, 0) = 1"
 
     params: list[Any] = [cutoff]
+    email_cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(emails)")}
+    recipients_expr = (
+        "substr(COALESCE(e.recipients, ''), 1, 200)"
+        if "recipients" in email_cols
+        else "''"
+    )
 
     if cisf:
         sql = f"""
@@ -110,6 +116,7 @@ def fetch_cases_review_queue(
           e.date_iso,
           substr(COALESCE(e.subject, ''), 1, 140) AS subject_preview,
           substr(COALESCE(e.sender, ''), 1, 140) AS sender_preview,
+          {recipients_expr} AS recipients_preview,
           e.source_file,
           COALESCE(agg.has_positive, 0) AS has_positive_signal,
           COALESCE(agg.has_suppression, 0) AS has_suppression_signal,
@@ -141,6 +148,7 @@ def fetch_cases_review_queue(
           e.date_iso,
           substr(COALESCE(e.subject, ''), 1, 140) AS subject_preview,
           substr(COALESCE(e.sender, ''), 1, 140) AS sender_preview,
+          {recipients_expr} AS recipients_preview,
           e.source_file,
           NULL AS has_positive_signal,
           NULL AS has_suppression_signal,

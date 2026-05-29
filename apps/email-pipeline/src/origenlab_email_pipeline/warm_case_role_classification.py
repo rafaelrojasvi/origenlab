@@ -7,17 +7,23 @@ from typing import Any, Literal
 
 from origenlab_email_pipeline.cases_review_queue import looks_like_obvious_noise
 from origenlab_email_pipeline.warm_case_sender_rules import (
+    contact_email_from_recipients,
     contact_email_from_sender,
     email_domain,
     is_internal_operator_contact,
     is_real_client_domain,
     is_supplier_vendor_domain,
     looks_like_auto_reply_text,
+    looks_like_client_equipment_opportunity_thread,
     looks_like_client_oc_post_sale_subject,
+    looks_like_client_waiting_review_ack,
+    looks_like_contact_routing_notice,
     looks_like_internal_admin_thread,
     looks_like_internal_forwarded_client_quote_request,
     looks_like_logistics_admin_contact,
+    looks_like_low_intent_client_acknowledgement,
     looks_like_payment_admin_thread,
+    looks_like_supplier_followup_thread,
     looks_like_supplier_quote_response,
     looks_like_supplier_marketing_thread,
     looks_like_system_noise_contact,
@@ -95,6 +101,14 @@ def _row_contact_email(row: dict[str, Any]) -> str:
     explicit = row.get("contact_email")
     if isinstance(explicit, str) and "@" in explicit:
         return explicit.strip().lower()
+    source = row.get("source_file")
+    if _is_sent_folder(source if isinstance(source, str) else None):
+        for key in ("recipients_preview", "recipients"):
+            raw = row.get(key)
+            if isinstance(raw, str):
+                external = contact_email_from_recipients(raw)
+                if external:
+                    return external
     sender = row.get("sender_preview")
     return contact_email_from_sender(sender if isinstance(sender, str) else None)
 
@@ -144,11 +158,20 @@ def infer_warm_case_role_category(
     if looks_like_obvious_noise(sender_s, subject_s):
         return "bounce_problem"
 
+    if looks_like_contact_routing_notice(subject_s, snippet, sender=sender_s):
+        return "system_noise"
+
     if looks_like_auto_reply_text(subject_s, snippet):
         return "system_noise"
 
     if looks_like_system_noise_contact(contact_email, sender_s, subject_s):
         return "system_noise"
+
+    source_early = row.get("source_file")
+    if _is_sent_folder(source_early if isinstance(source_early, str) else None):
+        subj_early = (subject_s or "").lower()
+        if "cotiz" in subj_early or "quote" in subj_early or "presupuesto" in subj_early:
+            return "quote_sent"
 
     if looks_like_internal_forwarded_client_quote_request(
         contact_email=contact_email,
@@ -180,6 +203,35 @@ def infer_warm_case_role_category(
     if looks_like_deal_evidence_thread(contact_email, subject_s, snippet=snippet):
         return "deal_evidence_candidate"
 
+    if looks_like_client_waiting_review_ack(subject_s, snippet, contact_email=contact_email):
+        return "waiting_client"
+
+    source = row.get("source_file")
+    if _is_sent_folder(source if isinstance(source, str) else None):
+        subj_l_early = (subject_s or "").lower()
+        if "cotiz" in subj_l_early or "quote" in subj_l_early or "presupuesto" in subj_l_early:
+            return "quote_sent"
+        return "waiting_client"
+
+    if looks_like_client_equipment_opportunity_thread(
+        contact_email,
+        subject_s,
+        snippet=snippet,
+        sender=sender_s,
+    ):
+        return "client_opportunity"
+
+    if looks_like_low_intent_client_acknowledgement(subject_s, snippet):
+        return "client_response"
+
+    if looks_like_supplier_followup_thread(
+        contact_email,
+        subject_s,
+        snippet=snippet,
+        sender=sender_s,
+    ):
+        return "supplier_followup"
+
     if looks_like_supplier_quote_response(
         contact_email,
         subject_s,
@@ -197,12 +249,6 @@ def infer_warm_case_role_category(
 
     subj_l = (subject_s or "").lower()
     snd_l = (sender_s or "").lower()
-    source = row.get("source_file")
-
-    if _is_sent_folder(source if isinstance(source, str) else None):
-        if "cotiz" in subj_l or "quote" in subj_l or "presupuesto" in subj_l:
-            return "quote_sent"
-        return "waiting_client"
 
     if enrichment_available and _bool_signal(row.get("has_positive_signal")):
         if any(k in subj_l for k in _EQUIPMENT_KEYWORDS) or any(
@@ -287,7 +333,9 @@ def role_category_next_action(role: WarmCaseRoleCategory) -> str:
         "logistics_admin": "Revisar logística/cuenta de importación; no cotizar al remitente.",
         "deal_evidence_candidate": "Vincular al deal comercial; no cotizar desde este hilo.",
         "supplier_quote_received": "Cotización de proveedor recibida; vincular a oportunidad/cliente.",
-        "supplier_followup": "Seguimiento con proveedor; leer propuesta y cerrar quote al cliente.",
+        "supplier_followup": (
+            "Seguimiento con proveedor; confirmar datos logísticos antes de cotizar al cliente."
+        ),
         "quote_sent": "Confirmar si el cliente respondió; no duplicar cotización.",
         "waiting_client": "Esperar respuesta o seguimiento suave si pasó el plazo.",
         "waiting_supplier": "Seguimiento a proveedor por cotización pendiente.",

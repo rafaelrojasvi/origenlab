@@ -13,7 +13,13 @@ from origenlab_email_pipeline.warm_case_role_classification import (
     role_category_status,
     role_category_to_legacy_storage,
 )
-from origenlab_email_pipeline.warm_case_sender_rules import contact_email_from_sender
+from origenlab_email_pipeline.warm_case_sender_rules import (
+    contact_email_from_sender,
+    looks_like_client_equipment_opportunity_thread,
+    looks_like_client_waiting_review_ack,
+    looks_like_low_intent_client_acknowledgement,
+    looks_like_supplier_followup_thread,
+)
 
 # Legacy storage categories (Postgres CHECK / SQLite promotion).
 WarmCaseCategory = WarmCaseLegacyCategory
@@ -106,9 +112,21 @@ def infer_warm_case_status(category: WarmCaseCategory, row: dict[str, Any]) -> W
 def infer_next_action(category: WarmCaseCategory, row: dict[str, Any] | None = None) -> str:
     subject_l = ""
     sender_l = ""
+    snippet_l = ""
+    contact_email = ""
     if row:
         subject_l = str(row.get("subject_preview") or row.get("subject") or "").lower()
         sender_l = str(row.get("sender_preview") or "").lower()
+        snippet_l = str(row.get("snippet") or "").lower()
+        raw_contact = row.get("contact_email")
+        if isinstance(raw_contact, str) and "@" in raw_contact:
+            contact_email = raw_contact.strip().lower()
+        else:
+            contact_email = contact_email_from_sender(
+                row.get("sender_preview") if isinstance(row.get("sender_preview"), str) else None
+            )
+    hay = f"{subject_l} {snippet_l} {sender_l}"
+
     if (
         "rv10.70" in subject_l
         and ("rg energia" in subject_l or "3812200" in subject_l)
@@ -119,6 +137,16 @@ def infer_next_action(category: WarmCaseCategory, row: dict[str, Any] | None = N
             "Proveedor IKA respondió precio 112,00 y stock disponible. "
             "Falta confirmar moneda y despacho."
         )
+    if category == "supplier_reply" and looks_like_supplier_followup_thread(
+        contact_email,
+        subject_l or None,
+        snippet=snippet_l or None,
+        sender=sender_l or None,
+    ):
+        return (
+            "CRTOP espera dirección para calcular flete. "
+            "No cotizar al cliente hasta tener shipping/importación."
+        )
     if (
         ("crtop" in sender_l or "crtop" in subject_l or "olt-hp-5l" in subject_l)
         and category in ("supplier_reply", "waiting_supplier")
@@ -126,6 +154,36 @@ def infer_next_action(category: WarmCaseCategory, row: dict[str, Any] | None = N
         return (
             "Proveedor CRTOP envió cotización de reactor OLT-HP-5L por US$10,600 EXW. "
             "Falta shipping y costos de importación antes de cotizar al cliente."
+        )
+    if category == "opportunity" and looks_like_client_equipment_opportunity_thread(
+        contact_email,
+        subject_l or None,
+        snippet=snippet_l or None,
+        sender=sender_l or None,
+    ):
+        return (
+            "Cliente universitario evaluando escalamiento de extracción vegetal con ultrasonido. "
+            "Hielscher deriva cotización local a OrigenLab."
+        )
+    if category in ("waiting_client", "client_reply") and looks_like_client_waiting_review_ack(
+        subject_l or None,
+        snippet_l or None,
+        contact_email=contact_email or None,
+    ):
+        return "Francisca UC recibió propuesta de reactor y la revisará."
+    if category == "quote_sent" and ("ongo" in hay or "up400st" in hay):
+        return (
+            "Cotización UP400St enviada a ONGO. "
+            "Seguimiento en 3–5 días hábiles si no hay respuesta."
+        )
+    if looks_like_low_intent_client_acknowledgement(subject_l or None, snippet_l or None):
+        return "Agradecimiento sin solicitud nueva; sin seguimiento inmediato."
+    if category == "bounce" and (
+        "mailer-daemon" in sender_l or "delivery" in subject_l or "undeliverable" in subject_l
+    ):
+        return (
+            "Rebote de entrega; revisar supresión por email exacto. "
+            "Alerta de entregabilidad si hay muchos rebotes en el lote."
         )
     legacy_to_role: dict[WarmCaseCategory, WarmCaseRoleCategory] = {
         "opportunity": "client_opportunity",

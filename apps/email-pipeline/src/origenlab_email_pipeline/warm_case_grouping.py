@@ -41,6 +41,17 @@ def thread_case_hint(subject: str, contact_email: str = "") -> str | None:
         ):
             return "crtop-reactor-olt-hp-5l"
 
+    if (
+        "unach" in sub
+        or "universidad adventista" in sub
+        or domain.endswith("unach.cl")
+    ) and ("hielscher" in sub or "uip2000" in sub or "ultrason" in sub):
+        return "unach-hielscher-uip2000-extraction"
+
+    if "ongo" in sub or domain == "ongo.cl":
+        if "up400st" in sub or "sonicador" in sub:
+            return "ongo-hielscher-up400st-quote"
+
     return None
 
 

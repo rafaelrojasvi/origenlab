@@ -26,6 +26,8 @@ from origenlab_email_pipeline.warm_case_classification import (
     infer_warm_case_category,
     infer_warm_case_status,
 )
+from origenlab_email_pipeline.warm_case_role_classification import _is_sent_folder
+from origenlab_email_pipeline.warm_case_sender_rules import contact_email_from_recipients
 
 try:
     import psycopg
@@ -91,8 +93,16 @@ def _promotion_title(subject: str, category: WarmCaseCategory) -> str:
     sub = (subject or "").lower()
     if ("rv10.70" in sub or "3812200" in sub) and "rg energia" in sub:
         return "RG Energía — IKA RV10.70 tubo vapor — qty 3"
+    if ("unach" in sub or "universidad adventista" in sub) and (
+        "hielscher" in sub or "uip2000" in sub
+    ):
+        return "UNACH — Hielscher UIP2000hdT — extracción vegetal"
     if ("crtop" in sub or "reactor" in sub or "olt-hp-5l" in sub) and category == "supplier_reply":
+        if any(cue in sub for cue in ("shipping", "flete", "address")):
+            return "CRTOP — Reactor OLT-HP-5L — flete pendiente"
         return "CRTOP — Reactor OLT-HP-5L — cotización recibida"
+    if "ongo" in sub and category == "quote_sent":
+        return "ONGO — Cotización UP400St enviada"
     return subject[:500]
 
 
@@ -104,6 +114,10 @@ def _promotion_account_name(
         return "RG ENERGIA SPA"
     if ("crtop" in sub or "reactor" in sub) and category == "supplier_reply":
         return "CRTOP"
+    if "unach" in sub or "universidad adventista" in sub:
+        return "Universidad Adventista de Chile (UNACH)"
+    if "ongo" in sub or contact_email.endswith("@ongo.cl"):
+        return "ONGO"
     return account_name_from_sender(sender, contact_email)
 
 
@@ -121,9 +135,20 @@ def queue_row_to_promotion_record(
     if _FORBIDDEN_ROW_KEYS.intersection(row.keys()):
         raise ValueError("queue row must not include raw email body fields")
 
-    contact_email = contact_email_from_sender(
-        row.get("sender_preview") if isinstance(row.get("sender_preview"), str) else None
-    ).strip().lower()
+    source_file = str(row.get("source_file") or "")
+    if _is_sent_folder(source_file):
+        contact_email = contact_email_from_recipients(
+            row.get("recipients_preview")
+            if isinstance(row.get("recipients_preview"), str)
+            else row.get("recipients")
+            if isinstance(row.get("recipients"), str)
+            else None
+        )
+    else:
+        contact_email = contact_email_from_sender(
+            row.get("sender_preview") if isinstance(row.get("sender_preview"), str) else None
+        )
+    contact_email = contact_email.strip().lower()
     if not contact_email or "@" not in contact_email:
         return None
 

@@ -170,6 +170,16 @@ def contact_email_from_sender(sender_preview: str | None) -> str:
     return found[0].lower() if found else ""
 
 
+def contact_email_from_recipients(recipients: str | None) -> str:
+    """First external recipient on outbound (Sent) messages."""
+    for raw in emails_in(recipients or ""):
+        email = raw.lower()
+        if is_internal_operator_contact(email):
+            continue
+        return email
+    return ""
+
+
 def is_internal_operator_contact(contact_email: str) -> bool:
     email = (contact_email or "").strip().lower()
     if email in INTERNAL_OPERATOR_EMAILS:
@@ -179,6 +189,18 @@ def is_internal_operator_contact(contact_email: str) -> bool:
 
 def is_real_client_domain(domain: str) -> bool:
     return (domain or "").strip().lower() in REAL_CLIENT_DOMAINS
+
+
+def is_chile_institution_client_domain(domain: str) -> bool:
+    """University / lab / institutional .cl domains (not vendor suppliers)."""
+    d = (domain or "").strip().lower()
+    if not d.endswith(".cl"):
+        return False
+    if is_supplier_vendor_domain(d) or d in INTERNAL_OPERATOR_DOMAINS:
+        return False
+    if d in {"gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "googlemail.com"}:
+        return False
+    return True
 
 
 PAYMENT_ADMIN_TEXT_MARKERS: tuple[str, ...] = (
@@ -499,6 +521,165 @@ def is_supplier_vendor_domain(domain: str) -> bool:
 def looks_like_supplier_admin_signup_subject(subject: str | None) -> bool:
     sub = (subject or "").lower()
     return any(m in sub for m in _ADMIN_SIGNUP_SUBJECT_MARKERS)
+
+
+def _message_haystack(
+    subject: str | None,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> str:
+    return " ".join([subject or "", snippet or "", sender or ""]).lower()
+
+
+def looks_like_contact_routing_notice(
+    subject: str | None,
+    snippet: str | None = None,
+    *,
+    sender: str | None = None,
+) -> bool:
+    """IST-style autorespuesta with forwarded contact (not a sales opportunity)."""
+    hay = _message_haystack(subject, snippet, sender)
+    if "autorespuesta" not in hay and "auto respuesta" not in hay:
+        return False
+    if "ist.cl" in hay:
+        return True
+    routing_cues = (
+        "reenvi",
+        "redirig",
+        "forward",
+        "forwarded",
+        "contacto sugerido",
+        "suggested contact",
+        "se reenvían",
+        "se reenvian",
+        "automatically forwarded",
+        "sebastian.cornejov",
+    )
+    return any(cue in hay for cue in routing_cues)
+
+
+def looks_like_client_equipment_opportunity_thread(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> bool:
+    """Client/university equipment thread (e.g. UNACH + Hielscher ultrasonic scaling)."""
+    hay = _message_haystack(subject, snippet, sender)
+    equipment_cues = (
+        "hielscher",
+        "ultrason",
+        "sonicador",
+        "uip2000",
+        "up400st",
+        "up200st",
+        "extracción",
+        "extraccion",
+        "extraction",
+        "reactor",
+        "centrifug",
+        "balanza",
+        "incubad",
+    )
+    client_cues = (
+        "universidad",
+        "unach",
+        "facultad",
+        "susanaalfaro",
+        "solicitud sobre",
+        "evaluating",
+        "escalamiento",
+        "pilot",
+        "semi-industrial",
+    )
+    has_equipment = any(cue in hay for cue in equipment_cues)
+    has_client = any(cue in hay for cue in client_cues)
+    domain = email_domain(contact_email)
+    if is_chile_institution_client_domain(domain) and has_equipment:
+        return True
+    if has_client and has_equipment and "[rch-" in hay:
+        return True
+    if has_client and has_equipment and "universidad" in hay:
+        return True
+    return False
+
+
+def looks_like_low_intent_client_acknowledgement(
+    subject: str | None,
+    snippet: str | None = None,
+) -> bool:
+    hay = _message_haystack(subject, snippet)
+    low_cues = (
+        "gracias por su información",
+        "gracias por la información",
+        "gracias por su informacion",
+        "thank you for the information",
+    )
+    return any(cue in hay for cue in low_cues)
+
+
+def looks_like_client_waiting_review_ack(
+    subject: str | None,
+    snippet: str | None = None,
+    *,
+    contact_email: str | None = None,
+) -> bool:
+    hay = _message_haystack(subject, snippet)
+    normalized = hay.replace("á", "a")
+    if "lo revisaremos" in hay or "lo revisaremos" in normalized:
+        return True
+    if "revisaremos" in hay and ("gracias" in hay or "thank" in hay):
+        return True
+    domain = email_domain(contact_email or "")
+    subj_only = (subject or "").lower()
+    if domain == "uc.cl" and "origenlab" in subj_only and "equipos para laboratorio" in subj_only:
+        if subj_only.startswith("re:") or subj_only.startswith("re "):
+            return True
+    return False
+
+
+def looks_like_supplier_followup_thread(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> bool:
+    """Supplier chase for quote receipt / shipping address — not a fresh price quote."""
+    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    if not is_supplier_vendor_domain(email_domain(email)):
+        return False
+    if looks_like_auto_reply_text(subject, snippet) and not looks_like_real_supplier_quote_content(
+        subject, snippet
+    ):
+        return False
+    hay = _message_haystack(subject, snippet, sender)
+    follow_cues = (
+        "shipping",
+        "shipment",
+        "freight",
+        "flete",
+        "calculate shipping",
+        "calculate the shipping",
+        "address to calculate",
+        "dirección para calcular",
+        "direccion para calcular",
+        "did you receive",
+        "receive the quotation",
+        "received the quotation",
+        "recibió nuestra cotización",
+        "recibio nuestra cotizacion",
+        "review the quotation",
+        "review our quotation",
+    )
+    has_follow = any(cue in hay for cue in follow_cues)
+    has_price = looks_like_real_supplier_quote_content(subject, snippet)
+    if has_follow and not has_price:
+        return True
+    if has_follow and "inquiry about our reactor" in hay:
+        return True
+    return False
 
 
 def looks_like_supplier_marketing_thread(
