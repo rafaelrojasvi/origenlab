@@ -45,8 +45,13 @@ RUN_GMAIL_INGEST=1 GMAIL_SINCE_DAYS=14 \
 RUN_COMMERCIAL_DEAL_MIRROR=1 \
   bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
 
-# Full operator refresh (fast dashboard + deals + catalog for Catálogo tab):
-DASHBOARD_FAST=1 RUN_GMAIL_INGEST=1 RUN_COMMERCIAL_DEAL_MIRROR=1 RUN_CATALOG_MIRROR=1 \
+# Full operator refresh (fast dashboard + deals + catalog + lead research + outbound sidecars):
+DASHBOARD_FAST=1 RUN_GMAIL_INGEST=1 RUN_COMMERCIAL_DEAL_MIRROR=1 RUN_CATALOG_MIRROR=1 RUN_LEAD_RESEARCH_MIRROR=1 \
+  bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
+
+# Post-campaign refresh (recommended after outreach + bounce sync):
+# See "Post-campaign dashboard refresh order" below.
+DASHBOARD_FAST=1 RUN_GMAIL_INGEST=1 RUN_LEAD_RESEARCH_MIRROR=1 \
   bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
 ```
 
@@ -76,6 +81,10 @@ ORIGENLAB_GMAIL_TOKEN_JSON=/home/you/data/origenlab-email/secrets/gmail_workspac
 | 6 | `verify_dashboard_postgres_mirror.py --assert-render-dashboard` | — (read-only) |
 | 7 (opt-in) | `RUN_COMMERCIAL_DEAL_MIRROR=1`: commercial deal dry-run → sync → `verify_commercial_deals_postgres_mirror.py --scan-jsonb` | Postgres `commercial.deal` only |
 | 8 (opt-in) | `RUN_CATALOG_MIRROR=1`: `build_catalog_sqlite.py` → catalog sync dry-run → sync → `verify_catalog_postgres_mirror.py --scan-text` | SQLite `catalog_*` + Postgres `catalog.*` |
+| 9 (opt-in) | `RUN_LEAD_RESEARCH_MIRROR=1`: build lead research SQLite → sync → `verify_lead_research_postgres_mirror.py --scan-text` | SQLite `lead_research_*` + Postgres `lead_intel.*` |
+| 10 (default on) | `RUN_OUTBOUND_SIDECAR_MIRROR=1`: `sqlite_outbound_sidecars_to_postgres.py --replace` → `verify_outbound_sidecar_postgres_mirror.py` | Postgres `outbound.*` only |
+
+**`RUN_OUTBOUND_SIDECAR_MIRROR` defaults to `1`.** Set `RUN_OUTBOUND_SIDECAR_MIRROR=0` only when skipping outbound mirror (not recommended after campaigns — `DASHBOARD_FAST=1` uses `--only canonical` and does **not** refresh suppression counts without this step).
 
 Gmail ingest flags (when enabled):
 
@@ -132,6 +141,49 @@ If catalog verify fails, the script exits non-zero with:
 
 Summary prints Postgres counts when verify passes: `products`, `supplier_offers`, `price_snapshots`, `commercial_history`.
 
+### Outbound sidecar mirror (default on, `RUN_OUTBOUND_SIDECAR_MIRROR=1`)
+
+Runs **after** dashboard mirror verify and **after** commercial / catalog / lead research blocks when those flags are set. Required when `DASHBOARD_FAST=1` (`--only canonical` skips outbound sidecars in the main sync).
+
+| Sub-step | Command | Notes |
+|----------|---------|--------|
+| Sync | `sqlite_outbound_sidecars_to_postgres.py --replace` | Reloads `outbound.contact_email_suppression`, domain suppression, outreach state |
+| Verify | `verify_outbound_sidecar_postgres_mirror.py` | JSON: `/tmp/outbound_sidecar_mirror_verify.json` |
+
+When `RUN_LEAD_RESEARCH_MIRROR=1`, verify also checks lead_intel **blocked** and **net_new_safe** segment counts.
+
+If outbound sidecar verify fails, the script exits non-zero with:
+
+`Outbound sidecar mirror verify failed. Dashboard may show PRECAUCIÓN / stale suppressions.`
+
+Warm cases / equipment may still be current; suppression and net-new KPIs on Today are **not trustworthy** until verify passes.
+
+---
+
+## Post-campaign dashboard refresh order
+
+After a campaign send and bounce sync, run **before** opening the operator dashboard:
+
+| Step | Action | Mutates |
+|------|--------|---------|
+| 1 | Gmail Sent + INBOX ingest (`RUN_GMAIL_INGEST=1` or manual IMAP) | SQLite |
+| 2 | Bounce suppression sync (`sync_outreach_batch_from_ingested_bounces.py --apply`) | SQLite suppressions |
+| 3 | Contacted universe audit (`audit_contacted_universe.py`) | CSV exports |
+| 4 | Lead research rebuild (`RUN_LEAD_RESEARCH_MIRROR=1` or `build_lead_research_sqlite.py`) | SQLite lead_research |
+| 5 | Dashboard mirror refresh (`refresh_render_dashboard_once.sh`, `DASHBOARD_FAST=1`) | Postgres mart/reporting |
+| 6 | Outbound sidecar sync (automatic when `RUN_OUTBOUND_SIDECAR_MIRROR=1`, default) | Postgres `outbound.*` |
+| 7 | Verify Postgres (`verify_outbound_sidecar_postgres_mirror.py`; included in script) | — |
+| 8 | Dashboard hard refresh (browser) | — |
+
+**One command** (steps 1, 4–7 when flags set; run steps 2–3 manually first if not already done):
+
+```bash
+DASHBOARD_FAST=1 RUN_GMAIL_INGEST=1 RUN_LEAD_RESEARCH_MIRROR=1 \
+  bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
+```
+
+Expected operator dashboard status after green verify: **LISTO** (`api.v_operator_status.verdict = READY`, `outbound_readiness_json.verdict = mirror_ok`).
+
 ---
 
 ## Verify expectations (fail-closed)
@@ -164,6 +216,17 @@ JSON artifact: `/tmp/commercial_deals_mirror_verify.json`
 | Text columns | No forbidden terms (`--scan-text`) |
 
 JSON artifact: `/tmp/catalog_postgres_mirror_verify.json`
+
+### Outbound sidecar mirror (default on, `RUN_OUTBOUND_SIDECAR_MIRROR=1`)
+
+| Check | Expected |
+|-------|----------|
+| `outbound.contact_email_suppression` row count | Matches SQLite `contact_email_suppression` |
+| Bounce suppressions (`bounce_%` reason codes) | Matches SQLite |
+| Contacted sidecar distinct emails | Matches SQLite (suppression ∪ outreach contacted/replied/snoozed) |
+| Lead blocked / net_new_safe (when lead mirror ran) | Matches SQLite `lead_research_prospect` segments |
+
+JSON artifact: `/tmp/outbound_sidecar_mirror_verify.json`
 
 ---
 
@@ -202,6 +265,8 @@ uv run python scripts/qa/verify_dashboard_postgres_mirror.py \
 | Gmail folder select fails | `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders` and set `ORIGENLAB_GMAIL_SENT_FOLDER`. |
 | Equipment count ≠ 9 | Set `ORIGENLAB_EXPECT_EQUIPMENT_COUNT` to current baseline after operator review. |
 | Dashboard stale after green verify | Open dashboard and click **Refresh** (browser cache / SPA poll). |
+| **PRECAUCIÓN** / stale suppressions after campaign | `DASHBOARD_FAST=1` skips outbound in main sync — ensure `RUN_OUTBOUND_SIDECAR_MIRROR=1` (default) or run `sqlite_outbound_sidecars_to_postgres.py --replace` manually |
+| Suppression count mismatch (e.g. SQLite 114 vs Postgres 96) | Run outbound sidecar sync + `verify_outbound_sidecar_postgres_mirror.py`; check `/tmp/outbound_sidecar_mirror_verify.json` |
 
 ---
 

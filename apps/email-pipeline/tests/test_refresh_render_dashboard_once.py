@@ -33,6 +33,7 @@ def test_refresh_script_default_commercial_mirror_off() -> None:
     assert 'RUN_COMMERCIAL_DEAL_MIRROR="${RUN_COMMERCIAL_DEAL_MIRROR:-0}"' in text
     assert 'RUN_CATALOG_MIRROR="${RUN_CATALOG_MIRROR:-0}"' in text
     assert 'RUN_LEAD_RESEARCH_MIRROR="${RUN_LEAD_RESEARCH_MIRROR:-0}"' in text
+    assert 'RUN_OUTBOUND_SIDECAR_MIRROR="${RUN_OUTBOUND_SIDECAR_MIRROR:-1}"' in text
     assert 'DASHBOARD_FAST="${DASHBOARD_FAST:-0}"' in text
     assert 'RUN_COMMERCIAL_DEAL_MIRROR" == "1"' in text
     assert "COMMERCIAL_MIRROR_STATUS=\"skipped\"" in text or 'COMMERCIAL_MIRROR_STATUS="skipped"' in text

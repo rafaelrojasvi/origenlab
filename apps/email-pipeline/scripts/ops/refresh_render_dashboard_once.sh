@@ -19,6 +19,7 @@
 #   RUN_COMMERCIAL_DEAL_MIRROR=1   sync+verify commercial.deal after dashboard mirror (default 0)
 #   RUN_CATALOG_MIRROR=1           build SQLite catalog + sync+verify catalog.* (default 0)
 #   RUN_LEAD_RESEARCH_MIRROR=1     build SQLite lead_research + sync lead_intel.* (default 0)
+#   RUN_OUTBOUND_SIDECAR_MIRROR=1  sync outbound sidecars after dashboard mirror (default 1)
 #   DASHBOARD_FAST=1               fast daily mode (canonical/recent rows + dashboard-only mirror sync)
 #   GMAIL_SINCE_DAYS=14            bound IMAP fetch when ingest runs
 #   ORIGENLAB_GMAIL_SENT_FOLDER    default "[Gmail]/Enviados"
@@ -40,6 +41,7 @@ RUN_GMAIL_INGEST="${RUN_GMAIL_INGEST:-0}"
 RUN_COMMERCIAL_DEAL_MIRROR="${RUN_COMMERCIAL_DEAL_MIRROR:-0}"
 RUN_CATALOG_MIRROR="${RUN_CATALOG_MIRROR:-0}"
 RUN_LEAD_RESEARCH_MIRROR="${RUN_LEAD_RESEARCH_MIRROR:-0}"
+RUN_OUTBOUND_SIDECAR_MIRROR="${RUN_OUTBOUND_SIDECAR_MIRROR:-1}"
 DASHBOARD_FAST="${DASHBOARD_FAST:-0}"
 GMAIL_SINCE_DAYS="${GMAIL_SINCE_DAYS:-14}"
 GMAIL_SENT_FOLDER="${ORIGENLAB_GMAIL_SENT_FOLDER:-[Gmail]/Enviados}"
@@ -48,6 +50,7 @@ DASHBOARD_VERIFY_JSON="/tmp/render_dashboard_mirror_verify.json"
 COMMERCIAL_VERIFY_JSON="/tmp/commercial_deals_mirror_verify.json"
 CATALOG_VERIFY_JSON="/tmp/catalog_postgres_mirror_verify.json"
 LEAD_RESEARCH_VERIFY_JSON="/tmp/lead_research_mirror_verify.json"
+OUTBOUND_SIDECAR_VERIFY_JSON="/tmp/outbound_sidecar_mirror_verify.json"
 
 _canonical_gmail_count_sql() {
   sqlite3 "$SQLITE_PATH" \
@@ -177,14 +180,17 @@ uv run python scripts/qa/verify_dashboard_postgres_mirror.py \
 COMMERCIAL_MIRROR_STATUS="skipped"
 CATALOG_MIRROR_STATUS="skipped"
 LEAD_RESEARCH_MIRROR_STATUS="skipped"
+OUTBOUND_SIDECAR_MIRROR_STATUS="skipped"
 GMAIL_INGEST_LABEL="off"
 COMMERCIAL_MIRROR_LABEL="off"
 CATALOG_MIRROR_LABEL="off"
 LEAD_RESEARCH_MIRROR_LABEL="off"
+OUTBOUND_SIDECAR_MIRROR_LABEL="off"
 [[ "$RUN_GMAIL_INGEST" == "1" ]] && GMAIL_INGEST_LABEL="on"
 [[ "$RUN_COMMERCIAL_DEAL_MIRROR" == "1" ]] && COMMERCIAL_MIRROR_LABEL="on"
 [[ "$RUN_CATALOG_MIRROR" == "1" ]] && CATALOG_MIRROR_LABEL="on"
 [[ "$RUN_LEAD_RESEARCH_MIRROR" == "1" ]] && LEAD_RESEARCH_MIRROR_LABEL="on"
+[[ "$RUN_OUTBOUND_SIDECAR_MIRROR" == "1" ]] && OUTBOUND_SIDECAR_MIRROR_LABEL="on"
 
 if [[ "$RUN_COMMERCIAL_DEAL_MIRROR" == "1" ]]; then
   # shellcheck source=scripts/ops/_refresh_commercial_deal_mirror.sh
@@ -222,6 +228,20 @@ if [[ "$RUN_LEAD_RESEARCH_MIRROR" == "1" ]]; then
   fi
 fi
 
+if [[ "$RUN_OUTBOUND_SIDECAR_MIRROR" == "1" ]]; then
+  # shellcheck source=scripts/ops/_refresh_outbound_sidecar_mirror.sh
+  source "${PIPE}/scripts/ops/_refresh_outbound_sidecar_mirror.sh"
+  lead_flag=0
+  [[ "$RUN_LEAD_RESEARCH_MIRROR" == "1" ]] && lead_flag=1
+  if run_outbound_sidecar_mirror_refresh "$PIPE" "$OUTBOUND_SIDECAR_VERIFY_JSON" "$lead_flag"; then
+    OUTBOUND_SIDECAR_MIRROR_STATUS="ok"
+  else
+    OUTBOUND_SIDECAR_MIRROR_STATUS="failed"
+    echo "ERROR: Refresh stopped — outbound sidecar mirror verify failed (dashboard may show stale suppressions)." >&2
+    exit 1
+  fi
+fi
+
 echo ""
 echo "============================================================"
 echo "Render dashboard mirror refresh complete."
@@ -253,6 +273,24 @@ fi
 echo "  Lead research mirror:      $LEAD_RESEARCH_MIRROR_LABEL ($LEAD_RESEARCH_MIRROR_STATUS)"
 if [[ "$RUN_LEAD_RESEARCH_MIRROR" == "1" ]]; then
   echo "  Lead research verify JSON: $LEAD_RESEARCH_VERIFY_JSON"
+fi
+echo "  Outbound sidecar mirror:     $OUTBOUND_SIDECAR_MIRROR_LABEL ($OUTBOUND_SIDECAR_MIRROR_STATUS)"
+if [[ "$RUN_OUTBOUND_SIDECAR_MIRROR" == "1" ]]; then
+  echo "  Outbound sidecar verify JSON: $OUTBOUND_SIDECAR_VERIFY_JSON"
+  if [[ "$OUTBOUND_SIDECAR_MIRROR_STATUS" == "ok" && -f "$OUTBOUND_SIDECAR_VERIFY_JSON" ]]; then
+    echo "  Outbound Postgres counts:"
+    uv run python -c "
+import json, sys
+payload = json.load(open(sys.argv[1]))
+pg = payload.get('postgres_counts') or {}
+for key in ('email_suppression_total', 'bounce_suppressions', 'contacted_sidecar_distinct_emails'):
+    print(f'    {key}: {pg.get(key, \"—\")}')
+if payload.get('postgres_lead_segments'):
+    lead = payload['postgres_lead_segments']
+    print(f'    lead_blocked: {lead.get(\"lead_blocked\", \"—\")}')
+    print(f'    lead_net_new_safe: {lead.get(\"lead_net_new_safe\", \"—\")}')
+" "$OUTBOUND_SIDECAR_VERIFY_JSON"
+  fi
 fi
 echo "  Sends / outreach / deploy: not run (read-only refresh)"
 echo ""

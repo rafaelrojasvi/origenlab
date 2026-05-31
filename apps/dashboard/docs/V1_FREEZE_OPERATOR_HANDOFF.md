@@ -174,6 +174,30 @@ npm run smoke:contacts
 npm run smoke:proxy
 ```
 
+### Post-campaign mirror smoke (Postgres backend / Render)
+
+After outreach send + bounce sync, run the [post-campaign refresh](../../../email-pipeline/docs/REFRESH_RENDER_DASHBOARD_ONCE.md#post-campaign-dashboard-refresh-order) from email-pipeline, then verify Today:
+
+| Check | Expected |
+|-------|----------|
+| `GET /operator/status` → `verdict` | **`READY`** (UI: **LISTO**) |
+| `outbound_readiness_json.verdict` | **`mirror_ok`** (not `mirror_stale`) |
+| `/tmp/outbound_sidecar_mirror_verify.json` → `ok` | **`true`** |
+| Suppression counts in verify JSON | SQLite = Postgres (`email_suppression_total`, `bounce_suppressions`) |
+| Lead segments (if mirrored) | `lead_blocked`, `lead_net_new_safe` match SQLite |
+| Browser | Hard refresh on https://dashboard.origenlab.cl |
+
+```bash
+# API smoke (requires postgres backend + fresh mirror)
+cd apps/api
+ORIGENLAB_API_BACKEND=postgres ORIGENLAB_POSTGRES_URL="$ORIGENLAB_CLOUD_POSTGRES_URL" \
+  uv run python scripts/dashboard_v1_http_smoke.py --expect-backend postgres
+
+curl -sS "http://127.0.0.1:8001/operator/status" | jq '.verdict, .outbound_readiness_json'
+```
+
+If **PRECAUCIÓN** persists with stale suppression counts, re-run refresh with default `RUN_OUTBOUND_SIDECAR_MIRROR=1` or `sqlite_outbound_sidecars_to_postgres.py --replace`.
+
 ---
 
 ## Mode 2 — Disposable Postgres mirror validation

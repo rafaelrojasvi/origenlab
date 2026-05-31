@@ -462,6 +462,11 @@ curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary?scope=archive' | jq '.s
 | `contact_count` (canonical) | ≪ archive `contact_count` when archive is queried |
 | Classification KPIs | Non-zero after sync if canonical mail exists in SQLite window |
 | Postgres canonical mirror (post-sync) | Order of hundreds of contacts/orgs for operativo Gmail (not full archive tens of thousands) |
+| `GET /operator/status` verdict (Dashboard v1 Today) | **`READY`** (LISTO) — not `CAUTION` / PRECAUCIÓN |
+| `outbound_readiness_json.verdict` | **`mirror_ok`** — not `mirror_stale` |
+| Outbound sidecar counts (Postgres) | Match SQLite: email suppressions, bounce suppressions, contacted sidecar distinct emails |
+| Lead research segments (when mirrored) | `lead_blocked` and `lead_net_new_safe` match SQLite |
+| Outbound sidecar verify JSON | `/tmp/outbound_sidecar_mirror_verify.json` with `"ok": true` |
 
 <a id="dashboard-troubleshooting"></a>
 ##### Troubleshooting
@@ -491,12 +496,27 @@ curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary?scope=archive' | jq '.s
 3. `uv run python scripts/qa/verify_commercial_deals_postgres_mirror.py --scan-jsonb`
 4. Deploy `apps/api` + `apps/dashboard` when approved (empty table → dashboard shows *Commercial deals mirror not synced yet.*)
 
-**One-shot Render refresh (Gmail optional → incremental mart → dashboard mirror → optional commercial.deal / catalog):** [`REFRESH_RENDER_DASHBOARD_ONCE.md`](REFRESH_RENDER_DASHBOARD_ONCE.md) — `scripts/ops/refresh_render_dashboard_once.sh`. Default: no Gmail ingest, no commercial deal mirror, no catalog mirror. Set `RUN_GMAIL_INGEST=1` for read-only IMAP; set `RUN_COMMERCIAL_DEAL_MIRROR=1` for `sync_commercial_deals_postgres_mirror.py` + `verify_commercial_deals_postgres_mirror.py --scan-jsonb`; set `RUN_CATALOG_MIRROR=1` for `build_catalog_sqlite.py` + `sync_catalog_postgres_mirror.py` + `verify_catalog_postgres_mirror.py --scan-text` (all after dashboard mirror verify; no `--rebuild`, no sends, no deploy).
+**One-shot Render refresh (Gmail optional → incremental mart → dashboard mirror → optional commercial.deal / catalog / lead research / outbound sidecars):** [`REFRESH_RENDER_DASHBOARD_ONCE.md`](REFRESH_RENDER_DASHBOARD_ONCE.md) — `scripts/ops/refresh_render_dashboard_once.sh`. Default: no Gmail ingest, no commercial deal mirror, no catalog mirror, **outbound sidecar mirror on** (`RUN_OUTBOUND_SIDECAR_MIRROR=1`). Set `RUN_GMAIL_INGEST=1` for read-only IMAP; set `RUN_COMMERCIAL_DEAL_MIRROR=1` for commercial deal sync+verify; set `RUN_CATALOG_MIRROR=1` for catalog build+sync+verify; set `RUN_LEAD_RESEARCH_MIRROR=1` for lead_intel mirror; set `RUN_OUTBOUND_SIDECAR_MIRROR=0` only to skip outbound sidecar reload (not recommended after campaigns).
+
+**Post-campaign dashboard refresh** (after send + bounce sync + contacted audit + lead rebuild):
+
+```bash
+# Steps 2–4 (SQLite) — run manually if not already done:
+#   sync_outreach_batch_from_ingested_bounces.py --apply
+#   audit_contacted_universe.py
+#   build_lead_research_sqlite.py  (or use RUN_LEAD_RESEARCH_MIRROR=1 below)
+
+# Steps 1, 5–7 (mirror + outbound sidecar verify):
+DASHBOARD_FAST=1 RUN_GMAIL_INGEST=1 RUN_LEAD_RESEARCH_MIRROR=1 \
+  bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
+```
+
+Expected Today status: **LISTO** (`READY` / `mirror_ok`). If PRECAUCIÓN persists, check `/tmp/outbound_sidecar_mirror_verify.json` — suppression counts must match SQLite.
 
 **Typical Tatiana refresh after mail + catalog fixes:**
 
 ```bash
-DASHBOARD_FAST=1 RUN_GMAIL_INGEST=1 RUN_COMMERCIAL_DEAL_MIRROR=1 RUN_CATALOG_MIRROR=1 \
+DASHBOARD_FAST=1 RUN_GMAIL_INGEST=1 RUN_COMMERCIAL_DEAL_MIRROR=1 RUN_CATALOG_MIRROR=1 RUN_LEAD_RESEARCH_MIRROR=1 \
   bash apps/email-pipeline/scripts/ops/refresh_render_dashboard_once.sh
 ```
 
