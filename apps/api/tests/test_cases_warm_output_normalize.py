@@ -483,3 +483,44 @@ def test_cases_warm_api_normalizes_audit_samples(tmp_path: Path) -> None:
         "supplier_quote_received",
     )
     assert "contacto@origenlab.cl" not in by_email
+
+
+def test_cyberday_campaign_hidden_from_default_warm_queue() -> None:
+    from origenlab_email_pipeline.warm_case_sender_rules import CYBERDAY_CAMPAIGN_SUBJECT
+
+    raw = _item(
+        contact_email="lab@example.cl",
+        subject=CYBERDAY_CAMPAIGN_SUBJECT,
+        category="waiting_client",
+        status="waiting",
+    )
+    assert normalize_warm_case_item(raw, include_noise=False) is None
+    shown = normalize_warm_case_item(raw, include_noise=True)
+    assert shown is not None
+    assert shown.category == "campaign_outreach"
+
+
+def test_idiem_auto_ack_hidden_by_default() -> None:
+    raw = _item(
+        contact_email="contacto@idiem.cl",
+        subject="Re: consulta equipos",
+        category="client_reply",
+        snippet="Hemos recibido su mensaje. Acuse automático IDIEM.",
+    )
+    assert normalize_warm_case_item(raw, include_noise=False) is None
+    shown = normalize_warm_case_item(raw, include_noise=True)
+    assert shown is not None
+    assert shown.category == "auto_acknowledgement"
+
+
+def test_cesmec_client_opportunity_stays_in_positive_filter() -> None:
+    raw = _item(
+        contact_email="juan-pablo.garcia@bureauveritas.com",
+        subject="Re: Catálogo equipos laboratorio CESMEC",
+        category="opportunity",
+        snippet="CESMEC metrología balances",
+    )
+    out = normalize_warm_case_item(raw, include_noise=False)
+    assert out is not None
+    assert out.category == "client_opportunity"
+    assert out in filter_positive_normalized_items([out])

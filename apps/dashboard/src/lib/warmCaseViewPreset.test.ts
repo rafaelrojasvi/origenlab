@@ -320,4 +320,28 @@ describe("warmCaseViewPreset", () => {
     expect(matchesWarmCaseViewPreset(FALSE_POSITIVE_CLIENT_REPLY[4], preset)).toBe(true);
     expect(filterWarmCasesByViewPreset(FALSE_POSITIVE_CLIENT_REPLY, "todo")).toHaveLength(5);
   });
+
+  it("excludes Cyber campaign rows from Clientes reales and shows them in Campañas / marketing", () => {
+    const cyber = warmRow({
+      contact_email: "lab@example.cl",
+      category: "campaign_outreach",
+      subject: "CYBERDAY — equipos de laboratorio seleccionados hasta el 7 de junio",
+      status: "waiting",
+    });
+    expect(isExcludedFromClientesReales(cyber)).toBe(true);
+    expect(matchesWarmCaseViewPreset(cyber, "clientes_reales")).toBe(false);
+    expect(matchesWarmCaseViewPreset(cyber, "campanas_marketing")).toBe(true);
+  });
+
+  it("excludes auto_acknowledgement from Clientes reales", () => {
+    const idiem = warmRow({
+      contact_email: "contacto@idiem.cl",
+      category: "auto_acknowledgement",
+      subject: "Acuse de recibo",
+      snippet: "Hemos recibido su mensaje",
+      status: "problem",
+    });
+    expect(matchesWarmCaseViewPreset(idiem, "clientes_reales")).toBe(false);
+    expect(matchesWarmCaseViewPreset(idiem, "campanas_marketing")).toBe(true);
+  });
 });

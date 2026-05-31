@@ -12,6 +12,8 @@ from origenlab_email_pipeline.warm_case_classification import (
     infer_warm_case_category,
     infer_warm_case_status,
 )
+from origenlab_email_pipeline.warm_case_role_classification import _is_sent_folder
+from origenlab_email_pipeline.warm_case_sender_rules import contact_email_from_recipients
 
 from origenlab_api.schemas.cases import WarmCaseCategory, WarmCaseItem, WarmCaseStatus
 
@@ -33,13 +35,26 @@ def row_to_warm_case_item(
     email_id = int(row["email_id"])
     subject = str(row.get("subject_preview") or "")
     sender = str(row.get("sender_preview") or "")
+    source_file = str(row.get("source_file") or "")
+    if _is_sent_folder(source_file):
+        contact_email = contact_email_from_recipients(
+            row.get("recipients_preview")
+            if isinstance(row.get("recipients_preview"), str)
+            else row.get("recipients")
+            if isinstance(row.get("recipients"), str)
+            else None
+        ) or _contact_email_from_sender(sender)
+    else:
+        contact_email = _contact_email_from_sender(sender)
+    contact_email = contact_email.strip().lower()
+    row_for_class = dict(row)
+    row_for_class["contact_email"] = contact_email
     category = infer_warm_case_category(
-        row,
+        row_for_class,
         enrichment_available=enrichment_available,
         include_noise=include_noise,
     )
-    status = infer_warm_case_status(category, row)
-    contact_email = _contact_email_from_sender(sender)
+    status = infer_warm_case_status(category, row_for_class)
     snippet_parts = [p for p in (subject.strip(), sender.strip()) if p]
     snippet = " · ".join(snippet_parts)[:280]
 
@@ -52,8 +67,8 @@ def row_to_warm_case_item(
         subject=subject,
         category=category,
         status=status,
-        next_action=infer_next_action(category, row=row),
-        equipment_signal=_equipment_signal(subject, row, enrichment_available=enrichment_available),
+        next_action=infer_next_action(category, row=row_for_class),
+        equipment_signal=_equipment_signal(subject, row_for_class, enrichment_available=enrichment_available),
         snippet=snippet,
         gmail_url=None,
     )

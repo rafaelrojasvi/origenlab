@@ -14,10 +14,13 @@ from origenlab_email_pipeline.warm_case_sender_rules import (
     is_real_client_domain,
     is_supplier_vendor_domain,
     looks_like_auto_reply_text,
+    looks_like_cesmec_catalogue_client_thread,
     looks_like_client_equipment_opportunity_thread,
     looks_like_client_oc_post_sale_subject,
     looks_like_client_waiting_review_ack,
     looks_like_contact_routing_notice,
+    looks_like_cyberday_bulk_campaign_subject,
+    looks_like_idiem_auto_acknowledgement,
     looks_like_internal_admin_thread,
     looks_like_internal_forwarded_client_quote_request,
     looks_like_logistics_admin_contact,
@@ -27,6 +30,7 @@ from origenlab_email_pipeline.warm_case_sender_rules import (
     looks_like_supplier_quote_response,
     looks_like_supplier_marketing_thread,
     looks_like_system_noise_contact,
+    looks_like_unach_hielscher_supplier_wait,
     should_keep_visible_despite_suppression,
 )
 
@@ -44,6 +48,9 @@ WarmCaseRoleCategory = Literal[
     "quote_sent",
     "waiting_supplier",
     "waiting_client",
+    "campaign_outreach",
+    "waiting_campaign_reply",
+    "auto_acknowledgement",
 ]
 
 # Legacy storage categories (Postgres CHECK / promotion).
@@ -158,6 +165,21 @@ def infer_warm_case_role_category(
     if looks_like_obvious_noise(sender_s, subject_s):
         return "bounce_problem"
 
+    if looks_like_cyberday_bulk_campaign_subject(subject_s):
+        source_cyber = row.get("source_file")
+        if _is_sent_folder(source_cyber if isinstance(source_cyber, str) else None):
+            return "campaign_outreach"
+        if _bool_signal(row.get("has_suppression_signal")) or looks_like_obvious_noise(
+            sender_s, subject_s
+        ):
+            return "bounce_problem"
+        return "waiting_campaign_reply"
+
+    if looks_like_idiem_auto_acknowledgement(
+        contact_email, subject_s, snippet=snippet, sender=sender_s
+    ):
+        return "auto_acknowledgement"
+
     if looks_like_contact_routing_notice(subject_s, snippet, sender=sender_s):
         return "system_noise"
 
@@ -202,6 +224,16 @@ def infer_warm_case_role_category(
 
     if looks_like_deal_evidence_thread(contact_email, subject_s, snippet=snippet):
         return "deal_evidence_candidate"
+
+    if looks_like_cesmec_catalogue_client_thread(
+        contact_email, subject_s, snippet=snippet, sender=sender_s
+    ):
+        return "client_opportunity"
+
+    if looks_like_unach_hielscher_supplier_wait(
+        contact_email, subject_s, snippet=snippet, sender=sender_s
+    ):
+        return "waiting_supplier"
 
     if looks_like_client_waiting_review_ack(subject_s, snippet, contact_email=contact_email):
         return "waiting_client"
@@ -286,6 +318,9 @@ def role_category_to_legacy_storage(role: WarmCaseRoleCategory) -> WarmCaseLegac
         "quote_sent": "quote_sent",
         "waiting_supplier": "waiting_supplier",
         "waiting_client": "waiting_client",
+        "campaign_outreach": "waiting_client",
+        "waiting_campaign_reply": "waiting_client",
+        "auto_acknowledgement": "client_reply",
     }[role]
 
 
@@ -293,11 +328,13 @@ def role_category_status(
     role: WarmCaseRoleCategory,
     row: dict[str, Any],
 ) -> Literal["new", "open", "waiting", "quoted", "problem"]:
-    if role in ("bounce_problem", "system_noise", "internal_admin"):
+    if role in ("bounce_problem", "system_noise", "internal_admin", "auto_acknowledgement"):
         return "problem"
     if role == "quote_sent":
         return "quoted"
-    if role in ("waiting_supplier", "waiting_client"):
+    if role in ("waiting_supplier", "waiting_client", "waiting_campaign_reply"):
+        return "waiting"
+    if role == "campaign_outreach":
         return "waiting"
     if role in (
         "client_opportunity",
@@ -341,4 +378,7 @@ def role_category_next_action(role: WarmCaseRoleCategory) -> str:
         "waiting_supplier": "Seguimiento a proveedor por cotización pendiente.",
         "client_response": "Responder hilo comercial; verificar specs antes de cotizar.",
         "client_opportunity": "Priorizar según señal comercial; validar equipo y plazo.",
+        "campaign_outreach": "Envío masivo CYBERDAY; no tratar como oportunidad tibia individual.",
+        "waiting_campaign_reply": "Campaña CYBERDAY enviada; esperar respuesta (vista Campañas).",
+        "auto_acknowledgement": "Acuse automático institucional; no requiere seguimiento comercial.",
     }[role]

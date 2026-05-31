@@ -128,6 +128,36 @@ _ADMIN_SIGNUP_SUBJECT_MARKERS: tuple[str, ...] = (
     "activar su cuenta",
 )
 
+# CyberDay 2026 bulk outreach — must not appear as default warm client queue.
+CYBERDAY_CAMPAIGN_SUBJECT = (
+    "CYBERDAY — equipos de laboratorio seleccionados hasta el 7 de junio"
+)
+
+_IDIEM_AUTO_ACK_MARKERS: tuple[str, ...] = (
+    "acuse",
+    "recibimos su mensaje",
+    "hemos recibido su",
+    "hemos recibido el",
+    "mensaje recibido",
+    "confirmamos recepción",
+    "confirmamos recepcion",
+    "gracias por contactar",
+    "recepción de requerimiento",
+    "recepcion de requerimiento",
+    "recepción de su requerimiento",
+    "recepcion de su requerimiento",
+)
+
+_CESMEC_CLIENT_MARKERS: tuple[str, ...] = (
+    "cesmec",
+    "bureau veritas",
+    "bureauveritas",
+    "catálogo",
+    "catalogo",
+    "metrolog",
+    "balances",
+)
+
 _SUPPLIER_SUBJECT_MARKERS: tuple[str, ...] = (
     "supplier",
     "proveedor",
@@ -450,6 +480,8 @@ def should_keep_visible_despite_suppression(
 ) -> bool:
     """Payment/logistics/supplier rows must stay in api.v_warm_case (status <> problem-only gate)."""
     if category in ("supplier_reply", "quote_sent", "waiting_supplier", "waiting_client"):
+        if looks_like_cyberday_bulk_campaign_subject(subject):
+            return False
         return True
     if looks_like_payment_admin_contact(contact_email, subject, snippet=snippet):
         return True
@@ -521,6 +553,72 @@ def is_supplier_vendor_domain(domain: str) -> bool:
 def looks_like_supplier_admin_signup_subject(subject: str | None) -> bool:
     sub = (subject or "").lower()
     return any(m in sub for m in _ADMIN_SIGNUP_SUBJECT_MARKERS)
+
+
+def looks_like_cyberday_bulk_campaign_subject(subject: str | None) -> bool:
+    """Exact CyberDay 2026 bulk-send subject (operator outreach, not warm client thread)."""
+    if not subject:
+        return False
+    normalized = subject.strip().lower().replace("–", "-").replace("—", "-")
+    expected = CYBERDAY_CAMPAIGN_SUBJECT.lower().replace("—", "-")
+    if normalized == expected:
+        return True
+    return "cyberday" in normalized and "equipos de laboratorio seleccionados" in normalized
+
+
+def looks_like_idiem_auto_acknowledgement(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> bool:
+    """IDIEM institutional auto-ack — not a sales opportunity."""
+    hay = _message_haystack(subject, snippet, sender)
+    domain = email_domain(contact_email) or email_domain(contact_email_from_sender(sender))
+    if domain != "idiem.cl" and "idiem" not in hay:
+        return False
+    if domain == "idiem.cl" and (contact_email or "").startswith("no-reply@"):
+        return True
+    if looks_like_auto_reply_text(subject, snippet):
+        return True
+    return any(marker in hay for marker in _IDIEM_AUTO_ACK_MARKERS)
+
+
+def looks_like_cesmec_catalogue_client_thread(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> bool:
+    """CESMEC / Bureau Veritas catalogue follow-up — real client opportunity."""
+    hay = _message_haystack(subject, snippet, sender)
+    domain = email_domain(contact_email)
+    if domain not in ("bureauveritas.com", "ceaf.cl") and not any(
+        m in hay for m in ("cesmec", "bureau veritas", "bureauveritas")
+    ):
+        return False
+    return any(marker in hay for marker in _CESMEC_CLIENT_MARKERS)
+
+
+def looks_like_unach_hielscher_supplier_wait(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> bool:
+    """UNACH + Hielscher scaling thread — operator waiting on supplier quote."""
+    hay = _message_haystack(subject, snippet, sender)
+    if not any(c in hay for c in ("unach", "universidad adventista", "[rch-", "uip2000")):
+        return False
+    if "hielscher" not in hay and not is_supplier_vendor_domain(email_domain(contact_email)):
+        return False
+    sender_domain = email_domain(contact_email_from_sender(sender))
+    if is_supplier_vendor_domain(sender_domain) or is_supplier_vendor_domain(email_domain(contact_email)):
+        return True
+    return "[rch-" in hay and "hielscher" in hay
 
 
 def _message_haystack(

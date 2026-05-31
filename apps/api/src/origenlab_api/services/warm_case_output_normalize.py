@@ -12,6 +12,7 @@ from origenlab_email_pipeline.warm_case_role_classification import (
 )
 from origenlab_email_pipeline.warm_case_sender_rules import (
     looks_like_auto_reply_text,
+    looks_like_cyberday_bulk_campaign_subject,
     looks_like_real_supplier_quote_content,
 )
 from origenlab_api.schemas.cases import WarmCaseCategory, WarmCaseItem, WarmCaseStatus
@@ -31,6 +32,9 @@ ROLE_WARM_CATEGORIES: frozenset[str] = frozenset(
         "quote_sent",
         "waiting_supplier",
         "waiting_client",
+        "campaign_outreach",
+        "waiting_campaign_reply",
+        "auto_acknowledgement",
         # Legacy API aliases (dashboard compat during 7B migration)
         "supplier_reply",
         "opportunity",
@@ -70,6 +74,9 @@ _HIDDEN_WITHOUT_NOISE: frozenset[str] = frozenset(
         "bounce_problem",
         "bounce",
         "auto_reply",
+        "auto_acknowledgement",
+        "campaign_outreach",
+        "waiting_campaign_reply",
     }
 )
 
@@ -80,6 +87,7 @@ _LEGACY_CATEGORY_ALIASES: dict[str, WarmCaseCategory] = {
     "client_reply": "client_response",
     "supplier_reply": "supplier_followup",
     "opportunity": "client_opportunity",
+    "waiting_client": "waiting_client",
 }
 
 _SENSITIVE_PREVIEW_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -115,6 +123,11 @@ def _item_to_classifier_row(item: WarmCaseItem) -> dict[str, object]:
 
 def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
     """Role-level category from shared pipeline classifier."""
+    if looks_like_cyberday_bulk_campaign_subject(item.subject):
+        return _canonical_category("campaign_outreach")
+    if looks_like_idiem_auto_ack(item):
+        return _canonical_category("auto_acknowledgement")
+
     role = infer_warm_case_role_category(
         _item_to_classifier_row(item),
         enrichment_available=item.category in ("opportunity", "client_opportunity"),
@@ -134,6 +147,17 @@ def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
     if item.category in ("quote_sent", "waiting_supplier", "waiting_client"):
         return _canonical_category(item.category)
     return _canonical_category(role)
+
+
+def looks_like_idiem_auto_ack(item: WarmCaseItem) -> bool:
+    from origenlab_email_pipeline.warm_case_sender_rules import looks_like_idiem_auto_acknowledgement
+
+    return looks_like_idiem_auto_acknowledgement(
+        item.contact_email,
+        item.subject,
+        snippet=item.snippet,
+        sender=item.contact_email,
+    )
 
 
 def _canonical_category(category: str) -> WarmCaseCategory:

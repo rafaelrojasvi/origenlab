@@ -3,12 +3,19 @@
 import type { WarmCaseCategory, WarmCaseItem } from "../api/commercialTypes";
 import { emailDomain } from "./clientTableView";
 
+const CYBERDAY_SUBJECT_NEEDLE = "cyberday";
+
+function looksLikeCyberdayCampaignRow(row: WarmCaseItem): boolean {
+  return row.subject.toLowerCase().includes(CYBERDAY_SUBJECT_NEEDLE);
+}
+
 export type WarmCaseViewPreset =
   | "clientes_reales"
   | "proveedores"
   | "pagos_admin"
   | "logistica"
   | "con_senal_equipo"
+  | "campanas_marketing"
   | "todo";
 
 export const DEFAULT_WARM_VIEW_PRESET: WarmCaseViewPreset = "clientes_reales";
@@ -19,6 +26,7 @@ export const WARM_VIEW_PRESET_LABELS: Record<WarmCaseViewPreset, string> = {
   pagos_admin: "Pagos/admin",
   logistica: "Logística",
   con_senal_equipo: "Con señal de equipo",
+  campanas_marketing: "Campañas / marketing",
   todo: "Todo",
 };
 
@@ -28,6 +36,7 @@ export const WARM_VIEW_PRESET_ORDER: WarmCaseViewPreset[] = [
   "pagos_admin",
   "logistica",
   "con_senal_equipo",
+  "campanas_marketing",
   "todo",
 ];
 
@@ -73,6 +82,14 @@ export function isExcludedFromClientesReales(row: WarmCaseItem): boolean {
     return true;
   }
   if (hay.includes("confirm your registration") || hay.includes("please confirm your registration")) {
+    return true;
+  }
+  if (
+    row.category === "campaign_outreach" ||
+    row.category === "waiting_campaign_reply" ||
+    row.category === "auto_acknowledgement" ||
+    looksLikeCyberdayCampaignRow(row)
+  ) {
     return true;
   }
   if (
@@ -215,6 +232,14 @@ export function matchesWarmCaseViewPreset(
 
     case "con_senal_equipo":
       return Boolean(row.equipment_signal?.trim());
+
+    case "campanas_marketing":
+      return (
+        category === "campaign_outreach" ||
+        category === "waiting_campaign_reply" ||
+        category === "auto_acknowledgement" ||
+        looksLikeCyberdayCampaignRow(row)
+      );
 
     default:
       return true;

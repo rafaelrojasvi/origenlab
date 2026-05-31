@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from origenlab_email_pipeline.warm_case_classification import infer_warm_case_role
 from origenlab_email_pipeline.warm_case_role_classification import infer_warm_case_role_category
+from origenlab_email_pipeline.warm_case_sender_rules import CYBERDAY_CAMPAIGN_SUBJECT
 
 
 def _row(
@@ -151,7 +152,7 @@ def test_crtop_reactor_followup_is_supplier_followup_not_fresh_quote() -> None:
     assert role != "supplier_quote_received"
 
 
-def test_unach_hielscher_thread_is_client_opportunity_not_supplier_only() -> None:
+def test_unach_hielscher_thread_is_waiting_supplier_not_default_warm() -> None:
     row = _row(
         sender="Marcos Acevedo <marcos.a@hielscher.com>",
         subject="[RCH-Universidad Adventista de Chile] Hielscher Ultrasonics: Su solicitud sobre el UIP2000hdT",
@@ -159,7 +160,7 @@ def test_unach_hielscher_thread_is_client_opportunity_not_supplier_only() -> Non
         snippet="extracción vegetal asistida por ultrasonido, escalamiento 30-50 L",
     )
     role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
-    assert role == "client_opportunity"
+    assert role == "waiting_supplier"
 
 
 def test_francisca_uc_lo_revisaremos_is_waiting_client() -> None:
@@ -228,3 +229,66 @@ def test_mailer_daemon_bounce_is_bounce_problem() -> None:
     )
     role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
     assert role == "bounce_problem"
+
+
+def test_cyberday_sent_email_is_campaign_outreach_not_waiting_client() -> None:
+    row = _row(
+        sender="Tatiana Vivanco <contacto@origenlab.cl>",
+        subject=CYBERDAY_CAMPAIGN_SUBJECT,
+        contact_email="lab@example.cl",
+        source_file="gmail:contacto@origenlab.cl/[Gmail]/Enviados",
+    )
+    row["recipients_preview"] = "Lab Example <lab@example.cl>"
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "campaign_outreach"
+    assert role != "waiting_client"
+
+
+def test_cyberday_bounced_suppressed_sent_still_campaign_outreach() -> None:
+    """Sent-folder campaign copy stays campaign_outreach; bounce NDR is a separate row."""
+    row = _row(
+        sender="Tatiana Vivanco <contacto@origenlab.cl>",
+        subject=CYBERDAY_CAMPAIGN_SUBJECT,
+        contact_email="bounce@example.cl",
+        source_file="gmail:contacto@origenlab.cl/[Gmail]/Enviados",
+        snippet="",
+    )
+    row["recipients_preview"] = "Bounce <bounce@example.cl>"
+    row["has_suppression_signal"] = True
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "campaign_outreach"
+
+
+def test_cyberday_inbound_ndr_with_suppression_is_bounce_problem() -> None:
+    row = _row(
+        sender="Mail Delivery Subsystem <mailer-daemon@googlemail.com>",
+        subject=CYBERDAY_CAMPAIGN_SUBJECT,
+        contact_email="mailer-daemon@googlemail.com",
+        snippet="550 5.1.1 User unknown",
+        source_file="gmail:contacto@origenlab.cl/INBOX",
+    )
+    row["has_suppression_signal"] = True
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "bounce_problem"
+
+
+def test_idiem_auto_ack_is_auto_acknowledgement() -> None:
+    row = _row(
+        sender="IDIEM <contacto@idiem.cl>",
+        subject="Re: CYBERDAY — equipos de laboratorio",
+        contact_email="contacto@idiem.cl",
+        snippet="Hemos recibido su mensaje. Acuse de recibo automático.",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "auto_acknowledgement"
+
+
+def test_cesmec_stays_visible_as_client_opportunity() -> None:
+    row = _row(
+        sender="Juan Pablo García <juan-pablo.garcia@bureauveritas.com>",
+        subject="Re: Catálogo equipos laboratorio CESMEC",
+        contact_email="juan-pablo.garcia@bureauveritas.com",
+        snippet="Solicitud catálogo metrología balances CESMEC",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "client_opportunity"
