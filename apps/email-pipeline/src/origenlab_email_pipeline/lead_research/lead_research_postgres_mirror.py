@@ -120,7 +120,10 @@ def sync_lead_research_postgres_mirror(
                       evidence_url, evidence_note, source, final_score, confidence,
                       classification, spanish_message_angle, risk_flags,
                       block_or_review_reason, recommended_next_action, status,
-                      campaign_bucket, is_blocked, synced_at
+                      campaign_bucket, is_blocked, synced_at,
+                      source_type, dataset_label,
+                      gmail_first_contacted_at, gmail_last_contacted_at,
+                      gmail_sent_count, gmail_received_count, gmail_latest_subject_safe
                     ) VALUES (
                       %(prospect_key)s, %(organization_name)s, %(contact_name)s, %(email)s,
                       %(domain)s, %(sector)s, %(region)s, %(buyer_type)s, %(likely_need)s,
@@ -128,7 +131,10 @@ def sync_lead_research_postgres_mirror(
                       %(final_score)s, %(confidence)s, %(classification)s,
                       %(spanish_message_angle)s, %(risk_flags)s, %(block_or_review_reason)s,
                       %(recommended_next_action)s, %(status)s, %(campaign_bucket)s,
-                      %(is_blocked)s, %(synced_at)s
+                      %(is_blocked)s, %(synced_at)s,
+                      %(source_type)s, %(dataset_label)s,
+                      %(gmail_first_contacted_at)s, %(gmail_last_contacted_at)s,
+                      %(gmail_sent_count)s, %(gmail_received_count)s, %(gmail_latest_subject_safe)s
                     )
                     """,
                     {**row, "synced_at": synced_at},

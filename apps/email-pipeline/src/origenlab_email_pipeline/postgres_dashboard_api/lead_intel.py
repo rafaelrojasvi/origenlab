@@ -27,7 +27,10 @@ SELECT
   prospect_key, organization_name, contact_name, email, domain,
   sector, region, buyer_type, product_angle, final_score, classification,
   status, spanish_message_angle, recommended_next_action, risk_flags,
-  evidence_url, is_blocked, campaign_bucket
+  evidence_url, is_blocked, campaign_bucket,
+  source_type, dataset_label,
+  gmail_first_contacted_at, gmail_last_contacted_at,
+  gmail_sent_count, gmail_received_count, gmail_latest_subject_safe
 FROM lead_intel.prospect
 """
 
@@ -46,6 +49,8 @@ def list_lead_prospects(
     *,
     q: str | None = None,
     classification: str | None = None,
+    source_type: str | None = None,
+    blocked_only: bool = False,
     sector: str | None = None,
     region: str | None = None,
     buyer_type: str | None = None,
@@ -63,8 +68,13 @@ def list_lead_prospects(
     clauses: list[str] = []
     params: list[Any] = []
 
-    if not include_blocked:
+    if blocked_only:
+        clauses.append("is_blocked = TRUE")
+    elif not include_blocked:
         clauses.append("is_blocked = FALSE")
+    if source_type:
+        clauses.append("source_type = %s")
+        params.append(source_type)
     if classification:
         clauses.append("classification = %s")
         params.append(classification)
@@ -122,7 +132,10 @@ def get_lead_prospect(conn: Connection, *, prospect_key: str) -> LeadProspectDet
                evidence_url, evidence_note, source, final_score, confidence,
                classification, spanish_message_angle, risk_flags,
                block_or_review_reason, recommended_next_action, status,
-               campaign_bucket, is_blocked
+               campaign_bucket, is_blocked,
+               source_type, dataset_label,
+               gmail_first_contacted_at, gmail_last_contacted_at,
+               gmail_sent_count, gmail_received_count, gmail_latest_subject_safe
         FROM lead_intel.prospect
         WHERE prospect_key = %s
         LIMIT 1
@@ -188,6 +201,13 @@ def get_lead_research_summary(conn: Connection) -> LeadResearchSummaryResponse:
           COUNT(*) FILTER (WHERE NOT is_blocked) AS review_count,
           COUNT(*) FILTER (WHERE is_blocked) AS blocked_count,
           COUNT(*) FILTER (WHERE classification = 'net_new_safe_review') AS net_new_safe,
+          COUNT(*) FILTER (
+            WHERE source_type = 'gmail_historico' AND NOT is_blocked
+          ) AS gmail_historico,
+          COUNT(*) FILTER (
+            WHERE source_type = 'followup_antiguo' AND NOT is_blocked
+          ) AS followup_antiguo,
+          COUNT(*) FILTER (WHERE source_type = 'caso_activo') AS caso_activo,
           COUNT(*) FILTER (WHERE classification = 'public_tender_review') AS public_tender_review,
           COUNT(*) FILTER (WHERE classification = 'same_domain_contacted_review') AS same_domain_review,
           COUNT(*) FILTER (WHERE classification = 'research_only_contact_needed') AS research_needed
@@ -204,6 +224,9 @@ def get_lead_research_summary(conn: Connection) -> LeadResearchSummaryResponse:
         review_count=int(agg["review_count"]),
         blocked_count=int(agg["blocked_count"]),
         net_new_safe=int(agg["net_new_safe"]),
+        gmail_historico=int(agg.get("gmail_historico") or 0),
+        followup_antiguo=int(agg.get("followup_antiguo") or 0),
+        caso_activo=int(agg.get("caso_activo") or 0),
         public_tender_review=int(agg["public_tender_review"]),
         same_domain_review=int(agg["same_domain_review"]),
         research_needed=int(agg["research_needed"]),

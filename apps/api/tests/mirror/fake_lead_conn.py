@@ -41,6 +41,109 @@ class LeadFakeConn(MirrorFakeConn):
                 "status": "net_new_safe_review",
                 "campaign_bucket": "private_lab",
                 "is_blocked": False,
+                "source_type": "deepsearch",
+                "dataset_label": "phase10b_deepsearch",
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
+            },
+            {
+                "prospect_key": "gmail-historico-cl",
+                "organization_name": "Gmail Histórico Co",
+                "contact_name": "Ana",
+                "email": "ana@gmailhist.cl",
+                "domain": "gmailhist.cl",
+                "sector": "Laboratorios",
+                "region": "RM",
+                "buyer_type": "laboratorio_privado",
+                "likely_need": None,
+                "product_angle": "equipos",
+                "evidence_url": None,
+                "evidence_note": None,
+                "source": "gmail_archive",
+                "final_score": 80,
+                "confidence": "alta",
+                "classification": "old_gmail_prospect_review",
+                "spanish_message_angle": "Presentación OrigenLab",
+                "risk_flags": "",
+                "block_or_review_reason": "gmail_historico",
+                "recommended_next_action": "Revisar antes de presentación",
+                "status": "revision_individual",
+                "campaign_bucket": "private_lab",
+                "is_blocked": False,
+                "source_type": "gmail_historico",
+                "dataset_label": "presentacion_batch1_final_send_25.csv",
+                "gmail_first_contacted_at": "2024-01-15",
+                "gmail_last_contacted_at": "2025-06-01",
+                "gmail_sent_count": 4,
+                "gmail_received_count": 1,
+                "gmail_latest_subject_safe": "Consulta equipos",
+            },
+            {
+                "prospect_key": "followup-antiguo-cl",
+                "organization_name": "Follow-up Antiguo Co",
+                "contact_name": None,
+                "email": "old@followup.cl",
+                "domain": "followup.cl",
+                "sector": "Laboratorios",
+                "region": "RM",
+                "buyer_type": "laboratorio_privado",
+                "likely_need": None,
+                "product_angle": "balances",
+                "evidence_url": None,
+                "evidence_note": None,
+                "source": "gmail_archive",
+                "final_score": 75,
+                "confidence": "media",
+                "classification": "old_followup_review",
+                "spanish_message_angle": "Seguimiento",
+                "risk_flags": "",
+                "block_or_review_reason": "followup_antiguo",
+                "recommended_next_action": "Seguimiento personalizado",
+                "status": "revision_individual",
+                "campaign_bucket": "private_lab",
+                "is_blocked": False,
+                "source_type": "followup_antiguo",
+                "dataset_label": "presentacion_batch2_followup_old_25.csv",
+                "gmail_first_contacted_at": "2023-03-01",
+                "gmail_last_contacted_at": "2024-11-20",
+                "gmail_sent_count": 6,
+                "gmail_received_count": 2,
+                "gmail_latest_subject_safe": "Re: cotización",
+            },
+            {
+                "prospect_key": "caso-activo-cl",
+                "organization_name": "Caso Activo Hold",
+                "contact_name": "Pedro",
+                "email": "pedro@casoactivo.cl",
+                "domain": "casoactivo.cl",
+                "sector": None,
+                "region": None,
+                "buyer_type": None,
+                "likely_need": None,
+                "product_angle": None,
+                "evidence_url": None,
+                "evidence_note": None,
+                "source": "warm_case_hold",
+                "final_score": 0,
+                "confidence": None,
+                "classification": "active_case_hold",
+                "spanish_message_angle": "Caso personalizado",
+                "risk_flags": "",
+                "block_or_review_reason": "CESMEC hold",
+                "recommended_next_action": "hold_personalized_no_generic_campaign",
+                "status": "hold_personalizado",
+                "campaign_bucket": "active_case",
+                "is_blocked": False,
+                "source_type": "caso_activo",
+                "dataset_label": "presentacion_hold_active_personalized.csv",
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
             },
             {
                 "prospect_key": "blocked-blocked-cl",
@@ -66,6 +169,13 @@ class LeadFakeConn(MirrorFakeConn):
                 "status": "blocked",
                 "campaign_bucket": "blocked",
                 "is_blocked": True,
+                "source_type": "deepsearch",
+                "dataset_label": None,
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
             },
             {
                 "prospect_key": "other-origenlab-cl",
@@ -91,6 +201,13 @@ class LeadFakeConn(MirrorFakeConn):
                 "status": "same_domain_review",
                 "campaign_bucket": "same_domain",
                 "is_blocked": False,
+                "source_type": "deepsearch",
+                "dataset_label": "phase10b_deepsearch",
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
             },
             {
                 "prospect_key": "hospitaldemo-cl",
@@ -116,6 +233,13 @@ class LeadFakeConn(MirrorFakeConn):
                 "status": "public_tender_review",
                 "campaign_bucket": "public_tender",
                 "is_blocked": False,
+                "source_type": "deepsearch",
+                "dataset_label": "phase10b_deepsearch",
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
             },
         ]
         self.evidence = [
@@ -150,8 +274,14 @@ class LeadFakeConn(MirrorFakeConn):
         rows = list(self.prospects)
         s = " ".join(sql.split()).lower()
         idx = 0
-        if "is_blocked = false" in s:
+        if "is_blocked = true" in s:
+            rows = [r for r in rows if r["is_blocked"]]
+        elif "is_blocked = false" in s:
             rows = [r for r in rows if not r["is_blocked"]]
+        if "source_type = %s" in s:
+            st = str(params[idx])
+            rows = [r for r in rows if r.get("source_type") == st]
+            idx += 1
         if "classification = %s" in s:
             cls = str(params[idx])
             rows = [r for r in rows if r["classification"] == cls]
@@ -245,6 +375,19 @@ class LeadFakeConn(MirrorFakeConn):
                             1
                             for r in self.prospects
                             if r["classification"] == "research_only_contact_needed"
+                        ),
+                        "gmail_historico": sum(
+                            1
+                            for r in self.prospects
+                            if r.get("source_type") == "gmail_historico" and not r["is_blocked"]
+                        ),
+                        "followup_antiguo": sum(
+                            1
+                            for r in self.prospects
+                            if r.get("source_type") == "followup_antiguo" and not r["is_blocked"]
+                        ),
+                        "caso_activo": sum(
+                            1 for r in self.prospects if r.get("source_type") == "caso_activo"
                         ),
                     }
                 ]

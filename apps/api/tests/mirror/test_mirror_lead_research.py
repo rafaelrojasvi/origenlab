@@ -78,8 +78,8 @@ def test_mirror_list_prospects_shape(lead_mirror_client: TestClient) -> None:
     assert body["data_source"] == "postgres_mirror"
     _assert_lead_disclaimer_spacing(body["disclaimer"])
     assert "revisión humana" in body["disclaimer"].lower()
-    assert body["total"] == 3
-    assert len(body["items"]) == 3
+    assert body["total"] == 6
+    assert len(body["items"]) == 6
     keys: set[str] = set()
     _collect_keys(body, keys)
     assert not (_FORBIDDEN_RESPONSE_KEYS & keys)
@@ -123,6 +123,42 @@ def test_summary_counts(lead_mirror_client: TestClient) -> None:
     r = lead_mirror_client.get("/mirror/leads/summary")
     assert r.status_code == 200
     body = r.json()
-    assert body["total"] == 4
+    assert body["total"] == 7
     assert body["net_new_safe"] == 1
+    assert body["gmail_historico"] == 1
+    assert body["followup_antiguo"] == 1
+    assert body["caso_activo"] == 1
     assert body["blocked_count"] == 1
+
+
+def test_gmail_historico_not_in_net_new_filter(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"classification": "net_new_safe_review", "limit": 50},
+    )
+    assert r.status_code == 200
+    emails = {i["email"] for i in r.json()["items"]}
+    assert "ana@gmailhist.cl" not in emails
+    assert "old@followup.cl" not in emails
+
+
+def test_filter_source_type_gmail_historico(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"source_type": "gmail_historico", "limit": 50},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["source_type"] == "gmail_historico"
+    assert items[0]["classification"] == "old_gmail_prospect_review"
+
+
+def test_filter_source_type_caso_activo(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"source_type": "caso_activo", "limit": 50},
+    )
+    assert r.status_code == 200
+    assert len(r.json()["items"]) == 1
+    assert r.json()["items"][0]["status"] == "hold_personalizado"

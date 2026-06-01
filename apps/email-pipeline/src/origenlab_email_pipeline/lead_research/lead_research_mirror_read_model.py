@@ -28,7 +28,10 @@ def load_lead_research_mirror_payload(conn: sqlite3.Connection) -> dict[str, lis
                evidence_url, evidence_note, source, final_score, confidence,
                classification, spanish_message_angle, risk_flags,
                block_or_review_reason, recommended_next_action, status,
-               campaign_bucket, is_blocked
+               campaign_bucket, is_blocked,
+               source_type, dataset_label,
+               gmail_first_contacted_at, gmail_last_contacted_at,
+               gmail_sent_count, gmail_received_count, gmail_latest_subject_safe
         FROM lead_research_prospect
         WHERE is_active = 1
         ORDER BY final_score DESC, organization_name

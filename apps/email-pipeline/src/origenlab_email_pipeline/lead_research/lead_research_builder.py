@@ -10,7 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from origenlab_email_pipeline.lead_research.lead_research_schema import ensure_lead_research_tables
+from origenlab_email_pipeline.lead_research.lead_research_schema import (
+    ensure_lead_research_origin_columns,
+    ensure_lead_research_tables,
+)
 from origenlab_email_pipeline.leads.new_customer_research import (
     CLASS_ALREADY_CONTACTED,
     CLASS_BOUNCED,
@@ -231,6 +234,7 @@ def build_lead_research_sqlite(
         return result
 
     ensure_lead_research_tables(conn)
+    ensure_lead_research_origin_columns(conn)
     now = _utc_now()
     conn.execute("PRAGMA foreign_keys = ON")
 
@@ -269,9 +273,10 @@ def build_lead_research_sqlite(
               evidence_url, evidence_note, source, input_priority_score, final_score,
               confidence, classification, spanish_message_angle, risk_flags,
               block_or_review_reason, recommended_next_action, status, campaign_bucket,
-              is_blocked, is_active, created_at
+              is_blocked, is_active, created_at,
+              source_type, dataset_label
             ) VALUES (
-              ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+              ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?, ?
             )
             """,
             (
@@ -303,6 +308,8 @@ def build_lead_research_sqlite(
                 p["is_blocked"],
                 1,
                 now,
+                "deepsearch",
+                review_csv.name,
             ),
         )
         prospect_id = int(cur.lastrowid)

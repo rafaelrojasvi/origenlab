@@ -503,6 +503,13 @@ class LeadProspectListItem(BaseModel):
     evidence_url: str | None = None
     is_blocked: bool = False
     campaign_bucket: str | None = None
+    source_type: str | None = None
+    dataset_label: str | None = None
+    gmail_first_contacted_at: str | None = None
+    gmail_last_contacted_at: str | None = None
+    gmail_sent_count: int | None = None
+    gmail_received_count: int | None = None
+    gmail_latest_subject_safe: str | None = None
 
 
 class LeadProspectEvidenceRow(BaseModel):
@@ -552,6 +559,13 @@ class LeadProspectDetail(BaseModel):
     status: str
     campaign_bucket: str | None = None
     is_blocked: bool = False
+    source_type: str | None = None
+    dataset_label: str | None = None
+    gmail_first_contacted_at: str | None = None
+    gmail_last_contacted_at: str | None = None
+    gmail_sent_count: int | None = None
+    gmail_received_count: int | None = None
+    gmail_latest_subject_safe: str | None = None
 
 
 class LeadProspectsListResponse(BaseModel):
@@ -590,6 +604,9 @@ class LeadResearchSummaryResponse(BaseModel):
     review_count: int = 0
     blocked_count: int = 0
     net_new_safe: int = 0
+    gmail_historico: int = 0
+    followup_antiguo: int = 0
+    caso_activo: int = 0
     public_tender_review: int = 0
     same_domain_review: int = 0
     research_needed: int = 0

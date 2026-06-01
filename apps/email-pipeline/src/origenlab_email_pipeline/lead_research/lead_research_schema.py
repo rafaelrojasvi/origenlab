@@ -104,8 +104,35 @@ CREATE INDEX IF NOT EXISTS idx_lead_followup_batch ON lead_research_followup_can
 """
 
 
+_ORIGIN_COLUMN_DDL: tuple[tuple[str, str], ...] = (
+    ("source_type", "TEXT"),
+    ("dataset_label", "TEXT"),
+    ("gmail_first_contacted_at", "TEXT"),
+    ("gmail_last_contacted_at", "TEXT"),
+    ("gmail_sent_count", "INTEGER"),
+    ("gmail_received_count", "INTEGER"),
+    ("gmail_latest_subject_safe", "TEXT"),
+)
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(r[1]) for r in rows}
+
+
+def ensure_lead_research_origin_columns(conn: sqlite3.Connection) -> None:
+    """Add presentación / Gmail history columns to existing SQLite DBs."""
+    if not lead_research_tables_exist(conn):
+        return
+    existing = _table_columns(conn, "lead_research_prospect")
+    for name, col_type in _ORIGIN_COLUMN_DDL:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE lead_research_prospect ADD COLUMN {name} {col_type}")
+
+
 def ensure_lead_research_tables(conn: sqlite3.Connection) -> None:
     conn.executescript(LEAD_RESEARCH_DDL)
+    ensure_lead_research_origin_columns(conn)
 
 
 def lead_research_tables_exist(conn: sqlite3.Connection) -> bool:
