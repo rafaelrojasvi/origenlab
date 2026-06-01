@@ -49,15 +49,21 @@ DOMAIN_INVENTORY_FIELDS = [
     "likely_region",
     "source_tables",
     "confidence",
+    "promotion_bucket",
+    "do_not_promote_to_institution",
     "notes",
 ]
 
 COLLISION_FIELDS = [
     "collision_type",
+    "collision_category",
     "domain",
     "org_names",
+    "domain_count",
     "contact_count",
     "confidence",
+    "do_not_promote_to_institution",
+    "recommended_action",
     "notes",
 ]
 
@@ -75,6 +81,8 @@ INSTITUTION_CANDIDATE_FIELDS = [
     "classification_guess",
     "sector_guess",
     "confidence",
+    "promotion_bucket",
+    "do_not_promote_to_institution",
     "review_reason",
 ]
 
@@ -108,6 +116,83 @@ _SECTOR_KEYWORDS: dict[str, tuple[str, ...]] = {
     "logistics_admin": ("aduana", "logist", "transport", "courier", "dhl", "fedex"),
     "public_tender": ("licit", "chilecompra", "mercado publico"),
 }
+
+# --- Institution grouping noise filters (from manual collision review 2026-06-01) ---
+# Normalized org tokens that must never become institution collisions or alias seeds.
+_SKIP_ORG_KEYS = frozenset({
+    "net", "gov", "com", "cl", "ltda", "sa", "spa", "inc", "corp", "group", "mail", "email",
+    "thermofisher", "laboratorio", "universidad", "hospital", "lab",
+    "solostocks", "mailmarketing", "onmicrosoft", "linkedin", "microsoft", "mercadolibre",
+    "whatsapp", "aliexpress", "madeinchina", "templatemonster", "postmates", "disneyplus",
+    "onedrive", "trendmicro", "adobesystems", "interweave", "knittingdaily",
+    "nuevocon", "promasivo", "infogerencial", "productosenlinea", "correopremium",
+    "emailchile", "chileemprende", "comcenter", "promopyme", "sendpyme", "cloudmefy",
+    "pymemail", "hipermail", "massiveplan", "pagerank", "bluehosty", "enviador",
+    "smtpchile", "cuatrotresocho", "epsistemapro", "sistemawebpro", "developrograms",
+    "poollatino", "tradekey", "suppliermarketplace", "globalspec", "directindustry",
+    "estadoinfo", "estado msg", "estado alerta", "alerta estado", "b estado",
+    "made in china", "chile emailmarketing", "max email", "hs inbox",
+    "verified manufacturers", "gold suppliers",
+})
+
+# Substrings matched against domain + normalized org (conservative, explainable list).
+_PHISHING_STEMS = (
+    "estado-msg", "estado-alerta", "alerta-estado", "estadoinfo", "b-estado.com",
+    "certifiedfactory", "tradeonepass", "paymentkennel", "carwatchpro",
+)
+_ESP_PLATFORM_STEMS = (
+    "mailmarketing", "chile-emailmarketing", "emailchile", "correopremium",
+    "nuevocon", "promasivo", "infogerencial", "productosenlinea", "hipermail",
+    "massiveplan", "smtpchile", "enviador", "pagerank", "bluehosty", "comcenter",
+    "promopyme", "sendpyme", "cloudmefy", "pymemail", "chileemprende", "rankpyme",
+    "planesmasivo", "publicidadpremium", "epsistemapro", "sistemawebpro", "developrograms",
+    "cuatrotresocho", "emktg-cgce", "solostocks",
+)
+_MARKETPLACE_PLATFORM_STEMS = (
+    "mercadolibre", "microsoft.com", "linkedin.com", "onmicrosoft.com", "whatsapp",
+    "aliexpress", "made-in-china", "madeinchina.com", "templatemonster", "postmates",
+    "disneyplus", "onedrive", "trendmicro.com", "adobesystems", "interweave.com",
+    "knittingdaily", "tradekey.com", "directindustry", "globalspec", "poollatino",
+)
+# Randomized .cn factory / B2B blast hosts (pattern-based, not full TLD block).
+_CN_FACTORY_DOMAIN_RE = re.compile(
+    r"(?:^|[.-])(?:certifiedfactory|tradeonepass|factorycategory|gold-suppliers|"
+    r"verified-manufacturers|b2bmanufacturer|globalmanufacturer|householdedappliances|"
+    r"textileleather|printandprintes|autopartspaccessories|mechanicalesa|chargingtreasure|"
+    r"guangdongled|led--light|yxmaterial|wantouta|xiaoxiaojituan|fcghgcfhcdfg)"
+    r"|\.cn$",
+    re.IGNORECASE,
+)
+_PUBLIC_SECTOR_MANUAL_STEMS = ("bancoestado", "bancofalabella")
+
+PROMOTION_BUCKETS = frozenset({
+    "supplier_vendor",
+    "platform_or_marketing",
+    "noise_token",
+    "marketplace_platform",
+    "suspicious_phishing",
+    "manual_review",
+    "unknown_review",
+})
+
+ALIAS_SEED_FIELDS = [
+    "canonical_institution_name",
+    "alias_name",
+    "domains",
+    "confidence",
+    "evidence_summary",
+    "recommended_scope",
+    "status",
+    "notes",
+]
+
+
+@dataclass(frozen=True)
+class PromotionClassification:
+    bucket: str
+    do_not_promote: bool
+    notes: str
+    recommended_action: str
 
 
 def _utc_now() -> str:
@@ -160,6 +245,101 @@ def _guess_classification(
     return "unknown"
 
 
+def _registrable_stem(domain: str) -> str:
+    parts = domain.lower().strip().split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return domain.lower()
+
+
+def _classify_promotion(
+    domain: str,
+    org_name: str,
+    *,
+    is_supplier: bool,
+    related_domains: list[str] | None = None,
+) -> PromotionClassification:
+    """Classify a domain/org for institution promotion (audit output only)."""
+    dom = domain.lower().strip()
+    norm_org = _norm_org(org_name)
+    hay = f"{dom} {norm_org}"
+    doms = related_domains or [dom]
+    dom_hay = " ".join(doms)
+
+    if is_supplier:
+        return PromotionClassification(
+            bucket="supplier_vendor",
+            do_not_promote=True,
+            notes="supplier_master, domain suppression, or supplier heuristic",
+            recommended_action="keep_domain_separate",
+        )
+
+    if norm_org in _SKIP_ORG_KEYS or len(norm_org) < 4:
+        return PromotionClassification(
+            bucket="noise_token",
+            do_not_promote=True,
+            notes="normalized org is a generic token or too short",
+            recommended_action="exclude_from_alias_map",
+        )
+
+    if any(stem in hay or stem in dom_hay for stem in _PHISHING_STEMS):
+        return PromotionClassification(
+            bucket="suspicious_phishing",
+            do_not_promote=True,
+            notes="estado/alerta phishing or factory-scam host pattern",
+            recommended_action="exclude_from_alias_map",
+        )
+
+    if _CN_FACTORY_DOMAIN_RE.search(dom) or _CN_FACTORY_DOMAIN_RE.search(dom_hay):
+        return PromotionClassification(
+            bucket="noise_token",
+            do_not_promote=True,
+            notes="randomized .cn / factory-blast domain pattern",
+            recommended_action="exclude_from_alias_map",
+        )
+
+    if any(stem in hay or stem in dom_hay for stem in _MARKETPLACE_PLATFORM_STEMS):
+        return PromotionClassification(
+            bucket="marketplace_platform",
+            do_not_promote=True,
+            notes="marketplace or shared platform sender — not one customer institution",
+            recommended_action="exclude_from_alias_map",
+        )
+
+    if any(stem in hay or stem in dom_hay for stem in _ESP_PLATFORM_STEMS):
+        return PromotionClassification(
+            bucket="platform_or_marketing",
+            do_not_promote=True,
+            notes="bulk-mail / ESP / marketing infrastructure",
+            recommended_action="exclude_from_alias_map",
+        )
+
+    if any(stem in hay for stem in _PUBLIC_SECTOR_MANUAL_STEMS):
+        suspicious_tld = any(d.endswith(".site") or ".site" in d for d in doms)
+        if suspicious_tld:
+            return PromotionClassification(
+                bucket="manual_review",
+                do_not_promote=True,
+                notes="public-sector brand mixed with suspicious .site senders",
+                recommended_action="manual_review",
+            )
+
+    if re.search(r"(?:^|[.-])(?:mx\d+|srv\d+|server\d+|mc\d+|dic\d+|ep\d+|vip\d+)", dom_hay):
+        return PromotionClassification(
+            bucket="platform_or_marketing",
+            do_not_promote=True,
+            notes="numbered bulk-mail / hosting subdomain pattern",
+            recommended_action="exclude_from_alias_map",
+        )
+
+    return PromotionClassification(
+        bucket="unknown_review",
+        do_not_promote=False,
+        notes="",
+        recommended_action="manual_review",
+    )
+
+
 def _confidence(
     *,
     org_variants: int,
@@ -167,7 +347,10 @@ def _confidence(
     supplier: bool,
     contact_count: int,
     has_org_master: bool,
+    promotion: PromotionClassification,
 ) -> str:
+    if promotion.do_not_promote or promotion.bucket != "unknown_review":
+        return "low"
     if free_email:
         return "low"
     if supplier:
@@ -347,13 +530,22 @@ def run_institution_grouping_audit(
         contacted_count = sum(1 for e in data["contacts"] if e in contacted_emails)
         is_supplier = dom in supplier_domains or is_supplier_email_domain(f"x@{dom}", supplier_domains)
         free = dom in _FREE_EMAIL_DOMAINS
+        promotion = _classify_promotion(dom, primary_org, is_supplier=is_supplier)
         conf = _confidence(
             org_variants=len(org_variants),
             free_email=free,
             supplier=is_supplier,
             contact_count=contact_count,
             has_org_master=dom in org_master,
+            promotion=promotion,
         )
+        note_parts: list[str] = []
+        if free:
+            note_parts.append("free_email_domain")
+        if len(org_variants) > 1:
+            note_parts.append("multi_org_name")
+        if promotion.do_not_promote and promotion.notes:
+            note_parts.append(promotion.notes)
         sources = ["contact_master"]
         if dom in org_master:
             sources.append("organization_master")
@@ -382,22 +574,36 @@ def run_institution_grouping_audit(
             "likely_region": "",
             "source_tables": ";".join(sorted(set(sources))),
             "confidence": conf,
-            "notes": "free_email_domain" if free else ("multi_org_name" if len(org_variants) > 1 else ""),
+            "promotion_bucket": promotion.bucket,
+            "do_not_promote_to_institution": promotion.do_not_promote,
+            "notes": "; ".join(note_parts),
         })
 
+    inv_by_domain = {row["domain"]: row for row in domain_inventory}
     _write_csv(out_dir / "domain_org_inventory.csv", DOMAIN_INVENTORY_FIELDS, domain_inventory)
 
     # collisions
     collisions: list[dict] = []
+    collision_category_counts: Counter[str] = Counter()
     for row in domain_inventory:
         variants = [v.strip() for v in str(row["org_name_variants"]).split("|") if v.strip()]
         if len(variants) > 1:
+            promotion = _classify_promotion(
+                row["domain"],
+                row["current_org_name"],
+                is_supplier=bool(row["supplier_flag"]),
+            )
+            collision_category_counts[promotion.bucket] += 1
             collisions.append({
                 "collision_type": "domain_multiple_org_names",
+                "collision_category": promotion.bucket,
                 "domain": row["domain"],
                 "org_names": row["org_name_variants"],
+                "domain_count": 1,
                 "contact_count": row["contact_count"],
                 "confidence": row["confidence"],
+                "do_not_promote_to_institution": promotion.do_not_promote,
+                "recommended_action": promotion.recommended_action,
                 "notes": "normalize alias or pick canonical org name",
             })
 
@@ -407,24 +613,42 @@ def run_institution_grouping_audit(
         if key and row["domain"] not in _FREE_EMAIL_DOMAINS:
             org_to_domains[key].add(row["domain"])
 
-    _skip_org_keys = frozenset({
-        "net", "gov", "com", "cl", "ltda", "sa", "spa", "inc", "corp", "group", "mail", "email",
-        "thermofisher", "laboratorio", "universidad", "hospital", "lab",
-    })
     for norm_org, domains in sorted(org_to_domains.items(), key=lambda x: -len(x[1])):
-        if len(norm_org) < 8 or norm_org in _skip_org_keys:
+        if len(norm_org) < 8:
             continue
         if len(domains) > 1:
             dom_list = sorted(domains)
-            if not _domains_likely_same_institution(dom_list):
-                collisions.append({
-                    "collision_type": "org_name_multiple_domains",
-                    "domain": dom_list[0],
-                    "org_names": norm_org,
-                    "contact_count": "",
-                    "confidence": "low",
-                    "notes": f"domains: {' | '.join(dom_list[:12])}",
-                })
+            if norm_org in _SKIP_ORG_KEYS:
+                promotion = PromotionClassification(
+                    bucket="noise_token",
+                    do_not_promote=True,
+                    notes="normalized org on exclusion token list",
+                    recommended_action="exclude_from_alias_map",
+                )
+            elif _domains_likely_same_institution(dom_list):
+                continue
+            else:
+                sample_inv = inv_by_domain.get(dom_list[0], {})
+                promotion = _classify_promotion(
+                    dom_list[0],
+                    sample_inv.get("current_org_name", norm_org),
+                    is_supplier=bool(sample_inv.get("supplier_flag")),
+                    related_domains=dom_list,
+                )
+            contact_total = sum(int(inv_by_domain.get(d, {}).get("contact_count") or 0) for d in dom_list)
+            collision_category_counts[promotion.bucket] += 1
+            collisions.append({
+                "collision_type": "org_name_multiple_domains",
+                "collision_category": promotion.bucket,
+                "domain": dom_list[0],
+                "org_names": norm_org,
+                "domain_count": len(dom_list),
+                "contact_count": contact_total,
+                "confidence": "low",
+                "do_not_promote_to_institution": promotion.do_not_promote,
+                "recommended_action": promotion.recommended_action,
+                "notes": f"domains: {' | '.join(dom_list[:12])}",
+            })
 
     _write_csv(
         out_dir / "org_name_collision_review.csv",
@@ -452,6 +676,10 @@ def run_institution_grouping_audit(
             review.append("org_name_variants")
         if classification == "supplier":
             review.append("supplier_vendor")
+        if row.get("do_not_promote_to_institution"):
+            review.append("do_not_promote")
+        if row.get("promotion_bucket") and row["promotion_bucket"] != "unknown_review":
+            review.append(row["promotion_bucket"])
         candidates.append({
             "canonical_institution_name": row["current_org_name"] or dom,
             "domains": dom,
@@ -466,6 +694,8 @@ def run_institution_grouping_audit(
             "classification_guess": classification,
             "sector_guess": row["likely_sector"],
             "confidence": row["confidence"],
+            "promotion_bucket": row.get("promotion_bucket", "unknown_review"),
+            "do_not_promote_to_institution": row.get("do_not_promote_to_institution", False),
             "review_reason": ";".join(review) if review else "",
         })
 
@@ -474,6 +704,9 @@ def run_institution_grouping_audit(
         INSTITUTION_CANDIDATE_FIELDS,
         sorted(candidates, key=lambda r: (-int(r["sent_count"]), r["domains"])),
     )
+
+    alias_seeds = _build_alias_seed_candidates(org_to_domains, inv_by_domain)
+    _write_csv(out_dir / "alias_seed_candidates.csv", ALIAS_SEED_FIELDS, alias_seeds)
 
     # generic mailbox review
     generic_rows: list[dict] = []
@@ -536,9 +769,24 @@ def run_institution_grouping_audit(
     )
 
     domains_multi_org = sum(1 for r in domain_inventory if "|" in str(r.get("org_name_variants", "")))
-    orgs_multi_domain = sum(1 for c in collisions if c["collision_type"] == "org_name_multiple_domains")
-    high_conf = sum(1 for c in candidates if c["confidence"] == "high")
-    needs_review = sum(1 for c in candidates if c["confidence"] in {"low", "needs_review", "medium"})
+    org_collisions = [c for c in collisions if c["collision_type"] == "org_name_multiple_domains"]
+    orgs_multi_domain_total = len(org_collisions)
+    orgs_multi_domain_actionable = sum(
+        1 for c in org_collisions if not c.get("do_not_promote_to_institution")
+    )
+    orgs_multi_domain_filtered = orgs_multi_domain_total - orgs_multi_domain_actionable
+    domains_do_not_promote = sum(1 for r in domain_inventory if r.get("do_not_promote_to_institution"))
+    high_conf = sum(
+        1
+        for c in candidates
+        if c["confidence"] == "high" and not c.get("do_not_promote_to_institution")
+    )
+    needs_review = sum(
+        1
+        for c in candidates
+        if c["confidence"] in {"low", "needs_review", "medium"}
+        and not c.get("do_not_promote_to_institution")
+    )
 
     contacted_domains = len({domain_of(e) for e in contacted_emails if domain_of(e)})
     suppressed_domain_count = len(supplier_domains)
@@ -548,7 +796,13 @@ def run_institution_grouping_audit(
         "total_domains": len(domain_inventory),
         "total_contacts": total_contacts,
         "domains_with_multiple_org_names": domains_multi_org,
-        "org_names_with_multiple_domains": orgs_multi_domain,
+        "org_names_with_multiple_domains": orgs_multi_domain_actionable,
+        "org_names_with_multiple_domains_total": orgs_multi_domain_total,
+        "org_names_with_multiple_domains_filtered": orgs_multi_domain_filtered,
+        "collision_rows_by_category": dict(sorted(collision_category_counts.items())),
+        "domains_do_not_promote_to_institution": domains_do_not_promote,
+        "alias_seed_candidates_count": len(alias_seeds),
+        "exclusion_org_keys_count": len(_SKIP_ORG_KEYS),
         "contacts_without_org": contacts_without_org,
         "contacts_with_generic_email": generic_contacts,
         "suppressed_domains_count": suppressed_domain_count,
@@ -589,6 +843,10 @@ def print_headline_counts(summary: dict[str, Any], *, out_dir: Path) -> None:
         "total_contacts",
         "domains_with_multiple_org_names",
         "org_names_with_multiple_domains",
+        "org_names_with_multiple_domains_total",
+        "org_names_with_multiple_domains_filtered",
+        "domains_do_not_promote_to_institution",
+        "alias_seed_candidates_count",
         "contacts_with_generic_email",
         "contacted_domains_count",
         "suppressed_domains_count",
@@ -597,16 +855,85 @@ def print_headline_counts(summary: dict[str, Any], *, out_dir: Path) -> None:
         "candidate_institution_groups_count",
     ):
         print(f"  {key}: {summary[key]}")
+    by_cat = summary.get("collision_rows_by_category") or {}
+    if by_cat:
+        print(f"  collision_rows_by_category: {by_cat}")
 
 
 def _domains_likely_same_institution(domains: list[str]) -> bool:
-    """Heuristic: subdomains or shared registrable stem."""
+    """Heuristic: shared registrable stem or corporate subdomain of one stem."""
     if len(domains) <= 1:
         return True
-    stems = [d.split(".")[0] for d in domains]
-    if len(set(stems)) == 1:
+    stems = {_registrable_stem(d) for d in domains}
+    if len(stems) == 1:
+        return True
+    base_labels = {s.split(".")[0] for s in stems}
+    if len(base_labels) == 1:
+        tlds = {d.rsplit(".", 1)[-1] for d in domains}
+        if "site" in tlds and (tlds & {"cl", "com", "net", "org"}):
+            return False
+        return True
+    parent = max(stems, key=len)
+    if all(d == parent or d.endswith("." + parent) or parent in d for d in domains):
         return True
     return False
+
+
+def _build_alias_seed_candidates(
+    org_to_domains: dict[str, set[str]],
+    inv_by_domain: dict[str, dict],
+) -> list[dict]:
+    """Proposed alias seeds only — not a production alias table."""
+    seeds: list[dict] = []
+    for norm_org, domains in sorted(org_to_domains.items(), key=lambda x: -len(x[1])):
+        if len(domains) < 2 or norm_org in _SKIP_ORG_KEYS:
+            continue
+        dom_list = sorted(domains)
+        if not _domains_likely_same_institution(dom_list):
+            continue
+        for dom in dom_list:
+            inv_row = inv_by_domain.get(dom, {})
+            dom_promo = _classify_promotion(
+                dom,
+                str(inv_row.get("current_org_name") or norm_org),
+                is_supplier=bool(inv_row.get("supplier_flag")),
+            )
+            if dom_promo.do_not_promote:
+                break
+        else:
+            sample = inv_by_domain.get(dom_list[0], {})
+            promotion = _classify_promotion(
+                dom_list[0],
+                str(sample.get("current_org_name") or norm_org),
+                is_supplier=bool(sample.get("supplier_flag")),
+                related_domains=dom_list,
+            )
+            if promotion.do_not_promote or promotion.bucket != "unknown_review":
+                continue
+            contact_total = sum(int(inv_by_domain.get(d, {}).get("contact_count") or 0) for d in dom_list)
+            stems = {_registrable_stem(d) for d in dom_list}
+            tlds = {d.rsplit(".", 1)[-1] for d in dom_list}
+            # Skip trivial single-stem / single-TLD subdomain-only groups.
+            if len(stems) == 1 and len(tlds) < 2:
+                continue
+            if contact_total < 2 and len(dom_list) < 3:
+                continue
+            scope = "exact_domain_only"
+            if len(stems) > 1 or len(tlds) > 1:
+                scope = "parent_org"
+            seeds.append({
+                "canonical_institution_name": str(sample.get("current_org_name") or norm_org),
+                "alias_name": norm_org,
+                "domains": " | ".join(dom_list),
+                "confidence": "high" if contact_total >= 3 else "medium",
+                "evidence_summary": (
+                    f"{len(dom_list)} domains share registrable stem; {contact_total} contacts."
+                ),
+                "recommended_scope": scope,
+                "status": "proposed_manual_review",
+                "notes": "Audit-only seed — approve before any institution_alias DDL.",
+            })
+    return sorted(seeds, key=lambda r: (-len(r["domains"]), r["alias_name"]))
 
 
 def _write_markdown_docs(
