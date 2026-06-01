@@ -4,7 +4,7 @@ Status: canonical (decision checkpoint)
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-01
 
-Related: [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · [`../scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py)
+Related: [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`INSTITUTION_EXPLORER_SPEC.md`](INSTITUTION_EXPLORER_SPEC.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · [`../scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py)
 
 Read-only review artifacts (gitignored, not committed):  
 `reports/out/active/current/institution_alias_seed_review_2026_06_01/`
@@ -106,7 +106,7 @@ Source: institution grouping audit → 133 proposed seeds → conservative manua
 
 1. **Manual sign-off** — operator reviews `approved_alias_seed_candidates.csv` from the latest review pack; reject or defer rows freely.
 2. **Tiny proposed alias store (maybe)** — e.g. a versioned CSV or table with `status=proposed|approved|rejected` — only after explicit approval; still no send coupling.
-3. **Read-only institution explorer** — optional UI that groups domain cards by approved alias; confidence badges; no write actions.
+3. **Read-only institution explorer** — see [`INSTITUTION_EXPLORER_SPEC.md`](INSTITUTION_EXPLORER_SPEC.md); optional UI that groups domain cards by approved alias; confidence badges; no write actions.
 4. **Never** — connect aliases to outbound safety, suppression sidecars, or automatic contact merge.
 
 Re-run grouping audit after blocklist/seed changes:

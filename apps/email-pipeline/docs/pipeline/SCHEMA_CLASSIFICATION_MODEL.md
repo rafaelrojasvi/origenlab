@@ -102,7 +102,7 @@ Operator status (read-only): `scripts/qa/operator_status.py`.
 `scripts/ops/run_post_send_2026_06_01_refresh.sh` (report-only; `ORIGENLAB_STRICT_PROSPECTOS_DRIFT=1` for `--strict`).  
 Drift is not a send-safety failure; export gates remain authoritative.
 
-**Institution grouping (read-model audit):** `uv run python scripts/qa/audit_institution_grouping.py` — domain-level cards are for **read-only exploration** only (not send gates). The audit tags ESP/platform/noise domains with `do_not_promote_to_institution` and emits conservative `alias_seed_candidates.csv` (`proposed_manual_review`). **Alias policy:** [`INSTITUTION_ALIAS_POLICY.md`](INSTITUTION_ALIAS_POLICY.md) — no production alias table yet; ~26% of proposed seeds passed conservative review.
+**Institution grouping (read-model audit):** `uv run python scripts/qa/audit_institution_grouping.py` — domain-level cards are for **read-only exploration** only (not send gates). The audit tags ESP/platform/noise domains with `do_not_promote_to_institution` and emits conservative `alias_seed_candidates.csv` (`proposed_manual_review`). **Alias policy:** [`INSTITUTION_ALIAS_POLICY.md`](INSTITUTION_ALIAS_POLICY.md) — no production alias table yet; ~26% of proposed seeds passed conservative review. **Explorer spec:** [`INSTITUTION_EXPLORER_SPEC.md`](INSTITUTION_EXPLORER_SPEC.md) — GET-only card model and rollout (not implemented).
 
 ---
 
