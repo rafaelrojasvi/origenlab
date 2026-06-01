@@ -8,6 +8,11 @@ from psycopg import Connection
 
 from origenlab_email_pipeline.postgres_dashboard_api.db import fetch_all, fetch_one, table_exists
 from origenlab_email_pipeline.postgres_dashboard_api.outbound_lists import DEFAULT_MAX_LIMIT
+from origenlab_email_pipeline.lead_research.lead_research_operational_overlay import (
+    apply_operational_overlay_to_prospect,
+    load_operational_indexes_from_postgres,
+    summarize_prospects_for_dashboard,
+)
 from origenlab_email_pipeline.postgres_dashboard_api.schemas import (
     LEAD_RESEARCH_DISCLAIMER,
     LeadProspectBlockReasonRow,
@@ -111,7 +116,14 @@ def list_lead_prospects(
         f"{_LIST_SELECT} {where} ORDER BY final_score DESC, organization_name LIMIT %s",
         [*params, lim],
     )
-    items = [LeadProspectListItem.model_validate(dict(r)) for r in rows]
+    emails = [str(r.get("email") or "") for r in rows]
+    indexes = load_operational_indexes_from_postgres(conn, emails=emails)
+    items = [
+        LeadProspectListItem.model_validate(
+            apply_operational_overlay_to_prospect(dict(r), indexes),
+        )
+        for r in rows
+    ]
     return LeadProspectsListResponse(
         table_available=True,
         items=items,
@@ -144,6 +156,12 @@ def get_lead_prospect(conn: Connection, *, prospect_key: str) -> LeadProspectDet
     )
     if not row:
         return LeadProspectDetailResponse(table_available=True, disclaimer=LEAD_RESEARCH_DISCLAIMER)
+
+    indexes = load_operational_indexes_from_postgres(
+        conn,
+        emails=[str(row.get("email") or "")],
+    )
+    row = apply_operational_overlay_to_prospect(dict(row), indexes)
 
     evidence_rows = fetch_all(
         conn,
@@ -193,30 +211,20 @@ def get_lead_research_summary(conn: Connection) -> LeadResearchSummaryResponse:
     if not _table_available(conn):
         return LeadResearchSummaryResponse(table_available=False, disclaimer=LEAD_RESEARCH_DISCLAIMER)
 
-    agg = fetch_one(
+    rows = fetch_all(
         conn,
         """
-        SELECT
-          COUNT(*) AS total,
-          COUNT(*) FILTER (WHERE NOT is_blocked) AS review_count,
-          COUNT(*) FILTER (WHERE is_blocked) AS blocked_count,
-          COUNT(*) FILTER (WHERE classification = 'net_new_safe_review') AS net_new_safe,
-          COUNT(*) FILTER (
-            WHERE source_type = 'gmail_historico' AND NOT is_blocked
-          ) AS gmail_historico,
-          COUNT(*) FILTER (
-            WHERE source_type = 'followup_antiguo' AND NOT is_blocked
-          ) AS followup_antiguo,
-          COUNT(*) FILTER (WHERE source_type = 'caso_activo') AS caso_activo,
-          COUNT(*) FILTER (WHERE classification = 'public_tender_review') AS public_tender_review,
-          COUNT(*) FILTER (WHERE classification = 'same_domain_contacted_review') AS same_domain_review,
-          COUNT(*) FILTER (WHERE classification = 'research_only_contact_needed') AS research_needed
+        SELECT prospect_key, classification, status, is_blocked, source_type, email
         FROM lead_intel.prospect
         """,
         [],
     )
-    if not agg:
+    if not rows:
         return LeadResearchSummaryResponse(table_available=True, disclaimer=LEAD_RESEARCH_DISCLAIMER)
+
+    indexes = load_operational_indexes_from_postgres(conn)
+    overlaid = [apply_operational_overlay_to_prospect(dict(r), indexes) for r in rows]
+    agg = summarize_prospects_for_dashboard(overlaid)
 
     return LeadResearchSummaryResponse(
         table_available=True,
@@ -224,9 +232,9 @@ def get_lead_research_summary(conn: Connection) -> LeadResearchSummaryResponse:
         review_count=int(agg["review_count"]),
         blocked_count=int(agg["blocked_count"]),
         net_new_safe=int(agg["net_new_safe"]),
-        gmail_historico=int(agg.get("gmail_historico") or 0),
-        followup_antiguo=int(agg.get("followup_antiguo") or 0),
-        caso_activo=int(agg.get("caso_activo") or 0),
+        gmail_historico=int(agg["gmail_historico"]),
+        followup_antiguo=int(agg["followup_antiguo"]),
+        caso_activo=int(agg["caso_activo"]),
         public_tender_review=int(agg["public_tender_review"]),
         same_domain_review=int(agg["same_domain_review"]),
         research_needed=int(agg["research_needed"]),

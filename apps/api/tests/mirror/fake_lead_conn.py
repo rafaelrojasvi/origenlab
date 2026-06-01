@@ -348,6 +348,25 @@ class LeadFakeConn(MirrorFakeConn):
             key = str(p[0])
             return _FakeCursor([b for b in self.block_reasons if b["prospect_key"] == key])
 
+        if (
+            "prospect_key, classification, status, is_blocked, source_type, email"
+            in s
+            and "from lead_intel.prospect" in s
+        ):
+            return _FakeCursor(
+                [
+                    {
+                        "prospect_key": r["prospect_key"],
+                        "classification": r["classification"],
+                        "status": r["status"],
+                        "is_blocked": r["is_blocked"],
+                        "source_type": r.get("source_type"),
+                        "email": r.get("email"),
+                    }
+                    for r in self.prospects
+                ]
+            )
+
         if "count(*) as total" in s and "filter (where" in s:
             total = len(self.prospects)
             review = sum(1 for r in self.prospects if not r["is_blocked"])

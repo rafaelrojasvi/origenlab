@@ -8,6 +8,12 @@ from typing import Any
 from origenlab_email_pipeline.lead_research.lead_research_mirror_safety import (
     assert_mirror_row_safe,
 )
+from origenlab_email_pipeline.lead_research.lead_research_operational_overlay import (
+    apply_operational_overlay_to_prospect,
+    load_operational_indexes_from_sqlite,
+    overlay_block_reasons_for_prospects,
+    overlay_recommendations_for_prospects,
+)
 from origenlab_email_pipeline.lead_research.lead_research_schema import lead_research_tables_exist
 
 
@@ -86,8 +92,17 @@ def load_lead_research_mirror_payload(conn: sqlite3.Connection) -> dict[str, lis
         assert_mirror_row_safe(d, table="block_reason")
         block_reasons.append(d)
 
+    indexes = load_operational_indexes_from_sqlite(conn)
+    overlaid: list[dict[str, Any]] = []
+    for p in prospects:
+        updated = apply_operational_overlay_to_prospect(p, indexes)
+        assert_mirror_row_safe(updated, table="prospect")
+        overlaid.append(updated)
+    block_reasons = overlay_block_reasons_for_prospects(overlaid, block_reasons)
+    recommendations = overlay_recommendations_for_prospects(overlaid, recommendations)
+
     return {
-        "prospects": prospects,
+        "prospects": overlaid,
         "evidence": evidence,
         "recommendations": recommendations,
         "block_reasons": block_reasons,
