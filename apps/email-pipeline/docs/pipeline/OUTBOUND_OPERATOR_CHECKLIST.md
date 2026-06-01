@@ -9,6 +9,8 @@ Use this for **repeatable** cold-outreach batch prep — not as a substitute for
 2. **Confirm the SQLite path** — same DB the mart/leads stack expects (`ORIGENLAB_SQLITE_PATH` or your explicit `--db`).
 3. **Remember:** passing readiness + gate checks means “not auto-blocked by policy,” not “validated buyer” or “safe to bulk send.”
 
+**After bulk NDR/contacted refreshes:** run read-only [`audit_prospectos_safety_drift.py`](../../scripts/qa/audit_prospectos_safety_drift.py) to measure raw Prospectos vs operational sidecar drift ([`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md)); report-only by default.
+
 ## Archive lane (warm revival)
 
 | Step | Command (from `apps/email-pipeline/`) |

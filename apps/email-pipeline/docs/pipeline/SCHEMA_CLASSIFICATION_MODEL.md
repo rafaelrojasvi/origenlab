@@ -96,6 +96,10 @@ Use after campaigns, NDR waves, or suppression changes:
 
 Operator status (read-only): `scripts/qa/operator_status.py`.
 
+**Prospectos drift (read-only):** after bulk NDR/contacted refreshes, run  
+`uv run python scripts/qa/audit_prospectos_safety_drift.py` — writes  
+`reports/out/active/current/prospectos_safety_drift_<YYYY_MM_DD>/` (gitignored). Use `--strict` only for CI guardrails.
+
 ---
 
 ## 6. Do not change yet
