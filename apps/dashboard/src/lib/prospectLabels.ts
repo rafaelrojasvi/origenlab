@@ -13,6 +13,8 @@ export const CLASSIFICATION_LABELS: Record<string, string> = {
   already_contacted_block: "No contactar: ya contactado",
   bounced_block: "No contactar: rebote",
   suppressed_block: "No contactar: suprimido",
+  manual_outreach_sent: "Contactado (outreach manual)",
+  bounced_suppressed: "Rebotado / suprimido",
   supplier_or_internal_block: "No contactar: proveedor / interno",
 };
 
@@ -214,6 +216,18 @@ export function prospectDecisionBanner(
         tone: "caution",
         testId: "prospect-decision-banner",
       };
+    case "manual_outreach_sent":
+      return {
+        label: "Contactado — esperar respuesta; no reenviar ahora",
+        tone: "caution",
+        testId: "prospect-decision-banner",
+      };
+    case "bounced_suppressed":
+      return {
+        label: "No contactar",
+        tone: "blocked",
+        testId: "prospect-decision-banner",
+      };
     default:
       return {
         label: "Acción sugerida: revisar antes de contactar",
@@ -255,6 +269,12 @@ export function prospectTableBadge(row: LeadProspectListItemUi): ProspectTableBa
   }
   if (row.classification === "active_case_hold") {
     return { label: "Hold personalizado", className: "bg-slate-200 text-slate-900 border-slate-300" };
+  }
+  if (row.classification === "manual_outreach_sent") {
+    return { label: "Contactado", className: "bg-emerald-100 text-emerald-950 border-emerald-200" };
+  }
+  if (row.classification === "bounced_suppressed") {
+    return { label: "Rebotado", className: "bg-red-100 text-red-900 border-red-200" };
   }
   return null;
 }

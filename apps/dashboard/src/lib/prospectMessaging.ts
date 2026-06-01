@@ -118,6 +118,14 @@ export function buildMessagePreview(
     };
   }
 
+  if (prospect.classification === "manual_outreach_sent") {
+    return {
+      kind: "none",
+      title: "Ya contactado recientemente",
+      note: "Outreach manual enviado. Esperar respuesta antes de reenviar.",
+    };
+  }
+
   if (prospect.classification === "research_only_contact_needed") {
     return {
       kind: "none",
