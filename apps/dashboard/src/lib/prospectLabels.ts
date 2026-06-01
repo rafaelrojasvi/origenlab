@@ -16,6 +16,7 @@ export const CLASSIFICATION_LABELS: Record<string, string> = {
   manual_outreach_sent: "Contactado (outreach manual)",
   bounced_suppressed: "Rebotado / suprimido",
   supplier_or_internal_block: "No contactar: proveedor / interno",
+  legacy_contact_review: "Base antigua 2016–2019 — revisión",
 };
 
 export const SOURCE_TYPE_LABELS: Record<string, string> = {
@@ -23,6 +24,7 @@ export const SOURCE_TYPE_LABELS: Record<string, string> = {
   gmail_historico: "Gmail histórico",
   followup_antiguo: "Follow-up antiguo",
   caso_activo: "Caso activo",
+  legacy_2016_2019: "Base antigua 2016–2019",
 };
 
 export const BUYER_TYPE_LABELS: Record<string, string> = {
@@ -96,6 +98,11 @@ export function prospectOriginChip(row: LeadProspectListItemUi): ProspectTableBa
         return { label: "Caso activo", className: "bg-slate-200 text-slate-900 border-slate-300" };
       case "deepsearch":
         return { label: "DeepSearch", className: "bg-teal-50 text-teal-900 border-teal-200" };
+      case "legacy_2016_2019":
+        return {
+          label: "Base antigua 2016–2019",
+          className: "bg-amber-50 text-amber-950 border-amber-200",
+        };
       default:
         break;
     }

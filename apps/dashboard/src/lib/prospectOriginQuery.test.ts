@@ -19,4 +19,10 @@ describe("leadProspectsQueryFromOrigin", () => {
       leadProspectsQueryFromOrigin("same_domain_contacted_review", { limit: 50 }),
     ).toEqual({ limit: 50, classification: "same_domain_contacted_review" });
   });
+
+  it("maps legacy workbook to source_type", () => {
+    expect(
+      leadProspectsQueryFromOrigin("legacy_2016_2019", { limit: 50 }),
+    ).toEqual({ limit: 50, source_type: "legacy_2016_2019" });
+  });
 });

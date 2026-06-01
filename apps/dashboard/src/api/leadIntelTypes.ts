@@ -127,6 +127,7 @@ export type ProspectOriginFilter =
   | "gmail_historico"
   | "followup_antiguo"
   | "caso_activo"
+  | "legacy_2016_2019"
   | "same_domain_contacted_review"
   | "research_only_contact_needed"
   | "public_tender_review"

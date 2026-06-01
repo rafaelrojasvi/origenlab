@@ -176,6 +176,7 @@ export function ProspectosPage() {
             <option value="gmail_historico">Gmail histórico</option>
             <option value="followup_antiguo">Follow-up antiguo</option>
             <option value="caso_activo">Caso activo</option>
+            <option value="legacy_2016_2019">Base antigua 2016–2019</option>
             <option value="same_domain_contacted_review">Mismo dominio / revisar historial</option>
             <option value="research_only_contact_needed">Falta email</option>
             <option value="public_tender_review">Licitación</option>

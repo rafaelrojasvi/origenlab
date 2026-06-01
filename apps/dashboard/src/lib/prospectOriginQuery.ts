@@ -5,6 +5,7 @@ const SOURCE_TYPE_ORIGINS = new Set<ProspectOriginFilter>([
   "gmail_historico",
   "followup_antiguo",
   "caso_activo",
+  "legacy_2016_2019",
 ]);
 
 /** Map UI “Origen” filter to mirror list query params. */
