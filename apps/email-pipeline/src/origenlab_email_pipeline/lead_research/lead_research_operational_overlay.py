@@ -206,7 +206,13 @@ def overlay_block_reasons_for_prospects(
     prospects: list[dict[str, Any]],
     original: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Replace block reasons for prospects whose overlay changed classification."""
+    """Replace block reasons when operational overlay changes classification.
+
+  Raw SQLite ``lead_research_block_reason`` rows for contacted/manual and
+  same-domain review reasons are dropped; bounced prospects get a single
+  ``Rebotado / suprimido`` row. Mirror verify must compare Postgres to these
+  built counts, not raw SQLite totals.
+  """
     overlay_keys = {
         p["prospect_key"]
         for p in prospects

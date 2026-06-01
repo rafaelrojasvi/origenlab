@@ -233,6 +233,17 @@ def test_gmail_historico_in_kpi_after_source_type_set(overlay_db: sqlite3.Connec
     assert agg["gmail_historico"] >= 1
 
 
+def test_built_block_reason_count_differs_from_raw_sqlite(overlay_db: sqlite3.Connection) -> None:
+    """Mirror block_reason rows are rebuilt on overlay; raw SQLite totals are not authoritative."""
+    from origenlab_email_pipeline.lead_research.lead_research_builder import (
+        sqlite_lead_research_counts,
+    )
+
+    raw = sqlite_lead_research_counts(overlay_db)
+    built = len(load_lead_research_mirror_payload(overlay_db)["block_reasons"])
+    assert built != raw["block_reasons"]
+
+
 def test_suppression_wins_over_contacted() -> None:
     idx = load_operational_indexes_from_sqlite(sqlite3.connect(":memory:"))
     # build indexes manually

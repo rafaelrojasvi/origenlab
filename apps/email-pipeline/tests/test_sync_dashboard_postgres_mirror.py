@@ -759,8 +759,14 @@ def test_alembic_migration_defines_commercial_deal_mirror() -> None:
 
 
 def test_alembic_head_matches_db1_api_read_model_chain() -> None:
-    path = REPO / "alembic" / "versions" / "20260527_0019_catalog_mirror.py"
-    assert path.is_file()
-    assert EXPECTED_ALEMBIC_HEAD == "20260528_0021"
-    text = path.read_text(encoding="utf-8")
-    assert "catalog.product" in text
+    assert EXPECTED_ALEMBIC_HEAD == "20260531_0022"
+    catalog_path = REPO / "alembic" / "versions" / "20260527_0019_catalog_mirror.py"
+    assert catalog_path.is_file()
+    assert "catalog.product" in catalog_path.read_text(encoding="utf-8")
+    origin_path = REPO / "alembic" / "versions" / "20260531_0022_lead_intel_prospect_origin.py"
+    assert origin_path.is_file()
+    origin_text = origin_path.read_text(encoding="utf-8")
+    assert "lead_intel.prospect" in origin_text
+    assert "source_type" in origin_text
+    assert "gmail_first_contacted_at" in origin_text
+    assert "gmail_latest_subject_safe" in origin_text

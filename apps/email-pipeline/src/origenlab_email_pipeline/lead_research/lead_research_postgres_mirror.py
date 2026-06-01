@@ -59,6 +59,37 @@ def postgres_lead_intel_counts(cur: Any) -> dict[str, int]:
     return out
 
 
+def lead_research_mirror_built_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """Row counts after operational overlay — same payload sync writes to Postgres."""
+    payload = load_lead_research_mirror_payload(conn)
+    return {key: len(payload[key]) for key in payload}
+
+
+# SQLite table counts use plural keys; Postgres mirror table names are singular.
+_BUILT_TO_PG_COUNT_KEYS: tuple[tuple[str, str], ...] = (
+    ("prospects", "prospect"),
+    ("evidence", "evidence"),
+    ("recommendations", "recommendation"),
+    ("block_reasons", "block_reason"),
+)
+
+
+def compare_lead_research_mirror_counts(
+    built_counts: dict[str, int],
+    pg_counts: dict[str, int],
+) -> list[str]:
+    """Return human-readable errors when Postgres row counts diverge from built mirror."""
+    errors: list[str] = []
+    for built_key, pg_key in _BUILT_TO_PG_COUNT_KEYS:
+        built_n = int(built_counts.get(built_key) or 0)
+        pg_n = int(pg_counts.get(pg_key) or 0)
+        if built_n != pg_n:
+            errors.append(
+                f"{pg_key} count mismatch built={built_n} postgres={pg_n}"
+            )
+    return errors
+
+
 def sync_lead_research_postgres_mirror(
     pg_url: str,
     sqlite_path: Path,

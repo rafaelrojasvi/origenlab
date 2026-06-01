@@ -18,6 +18,8 @@ from origenlab_email_pipeline.lead_research.lead_research_mirror_safety import (
     assert_mirror_text_safe,
 )
 from origenlab_email_pipeline.lead_research.lead_research_postgres_mirror import (
+    compare_lead_research_mirror_counts,
+    lead_research_mirror_built_counts,
     pg_lead_intel_tables_exist,
     postgres_lead_intel_counts,
 )
@@ -61,28 +63,20 @@ def main() -> int:
 
     conn = connect_sqlite_readonly(sqlite_path)
     try:
-        sqlite_counts = sqlite_lead_research_counts(conn)
+        sqlite_counts_raw = sqlite_lead_research_counts(conn)
+        built_counts = lead_research_mirror_built_counts(conn)
     finally:
         conn.close()
 
     errors: list[str] = []
+    pg_counts: dict[str, int] = {}
     with psycopg.connect(pg_url) as pg_conn:
         with pg_conn.cursor() as cur:
             if not pg_lead_intel_tables_exist(cur):
                 errors.append("Postgres lead_intel.prospect table missing")
             else:
                 pg_counts = postgres_lead_intel_counts(cur)
-                if sqlite_counts.get("prospects") != pg_counts.get("prospect"):
-                    errors.append(
-                        f"prospect count mismatch sqlite={sqlite_counts.get('prospects')} "
-                        f"postgres={pg_counts.get('prospect')}"
-                    )
-                if sqlite_counts.get("evidence") != pg_counts.get("evidence"):
-                    errors.append("evidence count mismatch")
-                if sqlite_counts.get("recommendations") != pg_counts.get("recommendation"):
-                    errors.append("recommendation count mismatch")
-                if sqlite_counts.get("block_reasons") != pg_counts.get("block_reason"):
-                    errors.append("block_reason count mismatch")
+                errors.extend(compare_lead_research_mirror_counts(built_counts, pg_counts))
 
                 if args.scan_text:
                     for table, cols in _TEXT_COLS.items():
@@ -106,7 +100,13 @@ def main() -> int:
                     if col in FORBIDDEN_MIRROR_KEYS:
                         errors.append(f"forbidden column present: {col}")
 
-    report = {"ok": not errors, "errors": errors, "sqlite_counts": sqlite_counts}
+    report = {
+        "ok": not errors,
+        "errors": errors,
+        "sqlite_counts_raw": sqlite_counts_raw,
+        "built_counts": built_counts,
+        "postgres_counts": pg_counts,
+    }
     print(json.dumps(report, indent=2, ensure_ascii=False))
     if args.json_out:
         args.json_out.write_text(json.dumps(report, indent=2), encoding="utf-8")
