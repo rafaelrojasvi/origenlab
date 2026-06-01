@@ -27,8 +27,14 @@ _RECIPIENT_LINE_HINTS = (
     "delivery to the following recipient",
     "entrega fall",
     "no se pudo entregar",
+    "no se entregó",
+    "no se entrego",
     "no se ha podido entregar",
     "mensaje no pudo ser entregado",
+    "wasn't delivered",
+    "was not delivered",
+    "se bloqueó tu mensaje",
+    "se bloqueo tu mensaje",
     "usuario desconocido",
     "unknown user",
     "user unknown",
@@ -95,6 +101,55 @@ _SYSTEM_OR_INTERNAL_SUBSTRINGS = (
 
 _SYSTEM_EMAIL_PREFIXES = ("mailer-daemon@", "postmaster@", "double-bounce@")
 
+# Stop parsing before quoted / forwarded original (avoid BCC lists in campaign body).
+_QUOTED_ORIGINAL_BOUNDARY_RE = re.compile(
+    r"(?im)"
+    r"(?:^-{3,}\s*original message\b"
+    r"|^-{3,}\s*mensaje original\b"
+    r"|^={3,}\s*forwarded message\b"
+    r"|^\s*original message\s*$"
+    r"|^\s*mensaje reenviado\s*$)",
+)
+
+# Gmail web/UI DSN templates: one capture group = failed mailbox (DSN narrative only).
+_GMAIL_FAILURE_TEMPLATE_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"tu mensaje no se entreg[oó]\s+a\s+<?([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})>?",
+        re.I,
+    ),
+    re.compile(
+        r"your message (?:wasn't|was not|couldn't|could not be) delivered to\s+"
+        r"<?([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})>?",
+        re.I,
+    ),
+    re.compile(
+        r"se bloque[oó]\s+tu mensaje para\s+<?([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})>?",
+        re.I,
+    ),
+    re.compile(
+        r"your message (?:was )?blocked (?:for|to)\s+<?([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})>?",
+        re.I,
+    ),
+)
+
+
+def _dsn_narrative_portion(text: str) -> str:
+    """Return NDR narrative only; exclude quoted original message bodies."""
+    m = _QUOTED_ORIGINAL_BOUNDARY_RE.search(text)
+    if m:
+        return text[: m.start()]
+    return text
+
+
+def _extract_gmail_template_recipients(dsn_text: str) -> list[str]:
+    ordered: list[str] = []
+    for pat in _GMAIL_FAILURE_TEMPLATE_RES:
+        for m in pat.finditer(dsn_text):
+            e = _norm_email(m.group(1))
+            if e and _is_plausible_failed_rcpt(e):
+                ordered.append(e)
+    return ordered
+
 
 def _norm_email(addr: str) -> str | None:
     s = (addr or "").strip().strip("<>").strip().lower()
@@ -137,39 +192,39 @@ def extract_failed_recipients_from_ndr(text: str | None) -> list[str]:
     if not text:
         return []
     raw = text if len(text) <= 500_000 else text[:500_000]
+    dsn = _dsn_narrative_portion(raw)
     ordered: list[str] = []
 
-    for m in _FINAL_RCPT_RE.finditer(raw):
+    for m in _FINAL_RCPT_RE.finditer(dsn):
         e = _norm_email(m.group(1))
         if e and _is_plausible_failed_rcpt(e):
             ordered.append(e)
 
-    for m in _X_FAILED_RE.finditer(raw):
+    for m in _X_FAILED_RE.finditer(dsn):
         for part in re.split(r"[\s,;]+", m.group(1)):
             e = _norm_email(part)
             if e and _is_plausible_failed_rcpt(e):
                 ordered.append(e)
 
-    for m in _ORIG_RCPT_RE.finditer(raw):
+    for m in _ORIG_RCPT_RE.finditer(dsn):
         e = _norm_email(m.group(1))
         if e and _is_plausible_failed_rcpt(e):
             ordered.append(e)
 
+    # Gmail UI templates only when standard DSN headers did not name the failed RCPT.
     if not ordered:
-        lines = raw.splitlines()
-        carry = False
-        for line in lines:
+        ordered.extend(_extract_gmail_template_recipients(dsn))
+
+    if not ordered:
+        for line in dsn.splitlines():
             low_line = line.lower()
-            if any(h in low_line for h in _RECIPIENT_LINE_HINTS):
-                carry = True
-            if not carry:
+            if not any(h in low_line for h in _RECIPIENT_LINE_HINTS):
                 continue
             for addr in EMAIL_RE.findall(line):
                 e = _norm_email(addr)
                 if e and _is_plausible_failed_rcpt(e):
                     ordered.append(e)
-            if carry and "@" in line and EMAIL_RE.findall(line):
-                carry = False
+                    break
 
     seen: set[str] = set()
     out: list[str] = []
