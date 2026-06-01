@@ -7,6 +7,7 @@ import {
 } from "./prospectLabels";
 import { buildPorQueImporta, buildMessagePreview } from "./prospectMessaging";
 import type { LeadProspectDetailUi } from "../api/leadIntelTypes";
+import { defaultLeadOriginFields } from "../test/fixtures/leadIntelFixtures";
 
 describe("prospectLabels", () => {
   it("translates buyer_type tokens", () => {
@@ -40,6 +41,7 @@ describe("prospectLabels", () => {
 
 describe("prospectMessaging", () => {
   const base: LeadProspectDetailUi = {
+    ...defaultLeadOriginFields,
     prospect_key: "x",
     organization_name: "Test Org",
     contact_name: null,

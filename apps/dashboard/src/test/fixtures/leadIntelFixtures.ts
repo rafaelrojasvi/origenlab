@@ -1,8 +1,28 @@
 import type {
   LeadProspectDetailResponseUi,
+  LeadProspectDetailUi,
   LeadProspectsListUi,
   LeadResearchSummaryUi,
 } from "../../api/leadIntelTypes";
+
+export const defaultLeadOriginFields: Pick<
+  LeadProspectDetailUi,
+  | "source_type"
+  | "dataset_label"
+  | "gmail_first_contacted_at"
+  | "gmail_last_contacted_at"
+  | "gmail_sent_count"
+  | "gmail_received_count"
+  | "gmail_latest_subject_safe"
+> = {
+  source_type: "deepsearch",
+  dataset_label: "Investigación DeepSearch",
+  gmail_first_contacted_at: null,
+  gmail_last_contacted_at: null,
+  gmail_sent_count: null,
+  gmail_received_count: null,
+  gmail_latest_subject_safe: null,
+};
 
 export function leadSummaryFixture(): LeadResearchSummaryUi {
   return {
@@ -177,6 +197,7 @@ export function leadNetNewDetailFixture(): LeadProspectDetailResponseUi {
     read_only: true,
     disclaimer: "",
     prospect: {
+      ...defaultLeadOriginFields,
       prospect_key: "acme",
       organization_name: "Acme Labs",
       contact_name: "María",
@@ -214,6 +235,7 @@ export function leadBiorenDetailFixture(): LeadProspectDetailResponseUi {
     read_only: true,
     disclaimer: "",
     prospect: {
+      ...defaultLeadOriginFields,
       prospect_key: "bioren",
       organization_name: "BIOREN-UFRO",
       contact_name: null,
@@ -260,6 +282,7 @@ export function lead5mSameDomainDetailFixture(): LeadProspectDetailResponseUi {
     read_only: true,
     disclaimer: "",
     prospect: {
+      ...defaultLeadOriginFields,
       prospect_key: "5m",
       organization_name: "5M S.A.",
       contact_name: "Alejandra Cid",
@@ -306,6 +329,7 @@ export function leadBlockedDetailFixture(): LeadProspectDetailResponseUi {
     read_only: true,
     disclaimer: "",
     prospect: {
+      ...defaultLeadOriginFields,
       prospect_key: "blocked",
       organization_name: "Blocked Co",
       contact_name: null,
@@ -347,6 +371,7 @@ export function leadTenderDetailFixture(): LeadProspectDetailResponseUi {
     read_only: true,
     disclaimer: "",
     prospect: {
+      ...defaultLeadOriginFields,
       prospect_key: "tender",
       organization_name: "Hospital Demo",
       contact_name: null,
