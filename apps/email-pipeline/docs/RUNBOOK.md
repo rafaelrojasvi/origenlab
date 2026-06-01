@@ -766,6 +766,8 @@ uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
 4. Optionally ingest Sent later as independent evidence (`05_workspace_gmail_imap_to_sqlite.py`).
 5. Run `scripts/qa/check_outbound_readiness.py` and/or your gate audit before next export.
 
+**Full post-send refresh orchestrator (2026-06-01 window):** [`scripts/ops/run_post_send_2026_06_01_refresh.sh`](../scripts/ops/run_post_send_2026_06_01_refresh.sh) runs safety memory, contacted audit, mirror, digest, verifiers, then **report-only** [`audit_prospectos_safety_drift.py`](../scripts/qa/audit_prospectos_safety_drift.py). After that refresh, review `reports/out/active/current/prospectos_safety_drift_<date>/` — **drift is not a send-safety failure**; export gates remain authoritative ([`pipeline/SCHEMA_CLASSIFICATION_MODEL.md`](pipeline/SCHEMA_CLASSIFICATION_MODEL.md)). Set `ORIGENLAB_STRICT_PROSPECTOS_DRIFT=1` only when drift thresholds should fail the script.
+
 **Recommended before importing or sending DeepSearch contacts (read-only checks):**
 
 1. Ingest latest Sent so SQLite reflects what the mailbox actually sent (discover the label first if needed):

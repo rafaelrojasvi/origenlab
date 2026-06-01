@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Post-send refresh: manual outreach + mom additional sends (read-only Gmail ingest).
+#
+# One-off orchestrator for 2026-06-01 campaign window. When cloning for the next
+# post-send wave, copy this pattern (ingest → NDR → contacted → safety → mirror →
+# digest → Prospectos drift audit). See audit_prospectos_safety_drift.py.
 set -eo pipefail
 
 PIPE="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -70,4 +74,14 @@ echo "== 11) Mirror verify =="
 uv run python scripts/qa/verify_outbound_sidecar_postgres_mirror.py --json-out /tmp/outbound_sidecar_mirror_verify.json || true
 uv run python scripts/qa/verify_lead_research_postgres_mirror.py || true
 
-echo "Done. Reports: ${OUT}/post_send_*_2026-06-01.*"
+echo "== 12) Prospectos safety drift audit (report-only; optional strict) =="
+DRIFT_ARGS=()
+if [[ "${ORIGENLAB_STRICT_PROSPECTOS_DRIFT:-0}" == "1" ]]; then
+  DRIFT_ARGS=(--strict)
+  echo "  STRICT: ORIGENLAB_STRICT_PROSPECTOS_DRIFT=1 — drift thresholds fail this step."
+else
+  echo "  Report-only (set ORIGENLAB_STRICT_PROSPECTOS_DRIFT=1 to fail on drift thresholds)."
+fi
+uv run python scripts/qa/audit_prospectos_safety_drift.py "${DRIFT_ARGS[@]}"
+
+echo "Done. Reports: ${OUT}/post_send_*_2026-06-01.* and ${OUT}/prospectos_safety_drift_*"

@@ -98,7 +98,9 @@ Operator status (read-only): `scripts/qa/operator_status.py`.
 
 **Prospectos drift (read-only):** after bulk NDR/contacted refreshes, run  
 `uv run python scripts/qa/audit_prospectos_safety_drift.py` — writes  
-`reports/out/active/current/prospectos_safety_drift_<YYYY_MM_DD>/` (gitignored). Use `--strict` only for CI guardrails.
+`reports/out/active/current/prospectos_safety_drift_<YYYY_MM_DD>/` (gitignored). Included as step 12 in  
+`scripts/ops/run_post_send_2026_06_01_refresh.sh` (report-only; `ORIGENLAB_STRICT_PROSPECTOS_DRIFT=1` for `--strict`).  
+Drift is not a send-safety failure; export gates remain authoritative.
 
 ---
 
