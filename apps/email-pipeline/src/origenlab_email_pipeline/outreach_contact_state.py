@@ -204,6 +204,19 @@ def fetch_outreach_contact_state_row(
     return dict(zip(cols, row))
 
 
+def delete_outreach_contact_state_row(conn: sqlite3.Connection, contact_email: str) -> bool:
+    """Remove one outreach row; returns True if a row was deleted."""
+    try:
+        key = normalize_contact_email_for_outreach(contact_email)
+    except ValueError:
+        return False
+    cur = conn.execute(
+        "DELETE FROM outreach_contact_state WHERE contact_email_norm = ?",
+        (key,),
+    )
+    return int(cur.rowcount or 0) > 0
+
+
 def upsert_outreach_contact_state(
     conn: sqlite3.Connection,
     *,

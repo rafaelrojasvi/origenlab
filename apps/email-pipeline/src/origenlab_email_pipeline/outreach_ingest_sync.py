@@ -14,6 +14,7 @@ from datetime import date, timedelta, timezone
 
 from origenlab_email_pipeline.business_mart import emails_in
 from origenlab_email_pipeline.email_business_filters import classify_email
+from origenlab_email_pipeline.ndr_bounce_extraction import extract_failed_recipients_from_ndr
 
 # Spanish / English phrases in Gmail-hosted DSN snippets (body may be short).
 _EXTRA_BOUNCE_SUBJECT_FRAGMENTS = (
@@ -109,6 +110,25 @@ def _batch_hits_in_blob(blob: str, batch_norms: frozenset[str]) -> set[str]:
     return hit
 
 
+def _batch_hits_from_ndr_dsn(blob: str, batch_norms: frozenset[str]) -> set[str]:
+    """Match batch emails only when parsed as failed RCPT from the NDR/DSN body.
+
+    Avoids suppressing the visible To of a BCC campaign send when the NDR only
+    reports failure for a BCC recipient quoted in the original message headers.
+    """
+    if not blob or not batch_norms:
+        return set()
+    failed = set(extract_failed_recipients_from_ndr(blob))
+    hits = {em for em in failed if em in batch_norms}
+    if hits:
+        return hits
+    # Fallback: single unambiguous batch mention in diagnostic text (legacy tests).
+    in_blob = _batch_hits_in_blob(blob, batch_norms)
+    if len(in_blob) == 1:
+        return in_blob
+    return set()
+
+
 def classify_ndr_suppression_reason(blob: str) -> str:
     """``bounce_no_such_user`` when diagnostic text looks like unknown mailbox; else ``bounce_other``."""
     b = (blob or "").lower()
@@ -184,7 +204,7 @@ def scan_batch_against_ingested_bounces(
         extra_bounce = any((x in subj_l) or (x in body_l) for x in _EXTRA_BOUNCE_SUBJECT_FRAGMENTS)
         if not cl.get("is_bounce") and not extra_bounce:
             continue
-        hits = _batch_hits_in_blob(blob, batch_norms)
+        hits = _batch_hits_from_ndr_dsn(blob, batch_norms)
         if not hits:
             continue
         reason = classify_ndr_suppression_reason(blob)

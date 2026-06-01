@@ -8,6 +8,7 @@ from pathlib import Path
 
 from origenlab_email_pipeline.db import connect, init_schema
 from origenlab_email_pipeline.outreach_ingest_sync import (
+    _batch_hits_from_ndr_dsn,
     apply_bounce_batch_scan,
     classify_ndr_suppression_reason,
     load_batch_emails_from_file,
@@ -153,6 +154,44 @@ def test_apply_writes_suppression_and_contacted(tmp_path) -> None:
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "qa" / "sync_outreach_batch_from_ingested_bounces.py"
+
+
+def test_bcc_visible_to_not_suppressed_when_ndr_only_for_bcc_recipient(tmp_path) -> None:
+    """NDR for dfuente@durandin.cl must not suppress visible To mle@mlelab.cl in quoted headers."""
+    db_path = tmp_path / "t.sqlite"
+    conn = connect(db_path)
+    init_schema(conn)
+    body = (
+        "Your message to dfuente@durandin.cl couldn't be delivered.\n"
+        "dfuente wasn't found at durandin.cl.\n\n"
+        "--- Original message ---\n"
+        "To: mle@mlelab.cl\n"
+        "Bcc: dfuente@durandin.cl\n"
+        "Subject: CYBERDAY OrigenLab\n"
+    )
+    conn.execute(
+        """
+        INSERT INTO emails (
+          source_file, folder, message_id, subject, sender, recipients,
+          date_raw, date_iso, body, attachment_count, has_attachments
+        ) VALUES (
+          'gmail:contacto@origenlab.cl/INBOX', 'INBOX', '<ndr-cyber-bcc>',
+          'Undeliverable: CYBERDAY OrigenLab — equipos de laboratorio seleccionados hasta el 7 de junio',
+          'postmaster@corp.onmicrosoft.com', 'contacto@origenlab.cl',
+          '', ?, ?, 0, 0
+        )
+        """,
+        (_utc_iso_days_ago(1), body),
+    )
+    conn.commit()
+    batch = ["mle@mlelab.cl", "dfuente@durandin.cl"]
+    r = scan_batch_against_ingested_bounces(conn, batch, since_days=7, source_like="gmail:%")
+    assert "dfuente@durandin.cl" in r.bad
+    assert "mle@mlelab.cl" not in r.bad
+    assert "mle@mlelab.cl" in r.good
+    hits = _batch_hits_from_ndr_dsn(body, frozenset(batch))
+    assert hits == {"dfuente@durandin.cl"}
+    conn.close()
 
 
 def test_sync_outreach_batch_cli_json(tmp_path) -> None:
