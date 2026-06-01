@@ -48,6 +48,7 @@ Postgres mirror reporting and Dashboard operator routes are served by **[`apps/a
   - [`pipeline/BUSINESS_FILTERING.md`](pipeline/BUSINESS_FILTERING.md)
   - [`pipeline/SCHEMA_OWNERSHIP.md`](pipeline/SCHEMA_OWNERSHIP.md#m-schema-orchestrated)
   - [`pipeline/SCHEMA_CLASSIFICATION_MODEL.md`](pipeline/SCHEMA_CLASSIFICATION_MODEL.md) — evidence / safety / workflow layers; send-gate rule
+  - [`pipeline/INSTITUTION_ALIAS_POLICY.md`](pipeline/INSTITUTION_ALIAS_POLICY.md) — alias decision checkpoint (no production table yet; explorer-only)
   - Read-only QA: [`../scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py) — domain/org institution grouping audit (reports under `reports/out/active/current/`)
   - [`pipeline/PHASE2_EMAIL_PIPELINE.md`](pipeline/PHASE2_EMAIL_PIPELINE.md)
 - Leads:
