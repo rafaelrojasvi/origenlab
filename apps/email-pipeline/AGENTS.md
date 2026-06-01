@@ -16,7 +16,8 @@
    uv run python scripts/qa/operator_status.py
    ```
 8. **Classification layers & send gates:** [`docs/pipeline/SCHEMA_CLASSIFICATION_MODEL.md`](docs/pipeline/SCHEMA_CLASSIFICATION_MODEL.md) — evidence vs safety vs workflow; never gate sends on `lead_research_prospect.classification` alone.
-9. Optional context: [`docs/OUTBOUND_SOURCE_OF_TRUTH.md`](docs/OUTBOUND_SOURCE_OF_TRUTH.md), [`reports/out/active/current/code_quality_simplification_audit_20260519.md`](reports/out/active/current/code_quality_simplification_audit_20260519.md).
+9. **Safety checkpoint (pause marker):** [`docs/pipeline/CURRENT_SAFETY_CHECKPOINT.md`](docs/pipeline/CURRENT_SAFETY_CHECKPOINT.md) — safe loop before outreach; golden rules; what not to build next.
+10. Optional context: [`docs/OUTBOUND_SOURCE_OF_TRUTH.md`](docs/OUTBOUND_SOURCE_OF_TRUTH.md), [`reports/out/active/current/code_quality_simplification_audit_20260519.md`](reports/out/active/current/code_quality_simplification_audit_20260519.md).
 
 ## Hard rules (non-negotiable)
 

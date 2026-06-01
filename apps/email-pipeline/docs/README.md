@@ -16,6 +16,7 @@ Postgres mirror reporting and Dashboard operator routes are served by **[`apps/a
 
 ## Agent-first start
 
+- **[`pipeline/CURRENT_SAFETY_CHECKPOINT.md`](pipeline/CURRENT_SAFETY_CHECKPOINT.md)** — **pause marker**: safe loop, golden rules, what not to do next (read before restarting work)
 - **[`SCRIPT_MAP.md`](SCRIPT_MAP.md)** — **canonical operator map** (daily outbound lanes, core / ops / lab / break-glass, workspace prep stories)
 - **[`OPERATOR_CHEAT_SHEET.md`](OPERATOR_CHEAT_SHEET.md)** — short **“which script should I run?”** aid; not a substitute for **`SCRIPT_MAP.md`** / **`RUNBOOK.md`**
 - Deep Research automation (review-ready only, **daily cadence**): [`DEEP_RESEARCH_AUTOMATION_PLAN.md`](DEEP_RESEARCH_AUTOMATION_PLAN.md) and [`../scripts/research/run_deep_research_prospecting.py`](../scripts/research/run_deep_research_prospecting.py) (supports `--sector`, `--day-rotation`, and optional read-only `--run-contacted-coverage-check`; still stops before send)
@@ -48,6 +49,7 @@ Postgres mirror reporting and Dashboard operator routes are served by **[`apps/a
   - [`pipeline/BUSINESS_FILTERING.md`](pipeline/BUSINESS_FILTERING.md)
   - [`pipeline/SCHEMA_OWNERSHIP.md`](pipeline/SCHEMA_OWNERSHIP.md#m-schema-orchestrated)
   - [`pipeline/SCHEMA_CLASSIFICATION_MODEL.md`](pipeline/SCHEMA_CLASSIFICATION_MODEL.md) — evidence / safety / workflow layers; send-gate rule
+  - [`pipeline/CURRENT_SAFETY_CHECKPOINT.md`](pipeline/CURRENT_SAFETY_CHECKPOINT.md) — pause marker; safe outreach loop; do-not-next list
   - [`pipeline/INSTITUTION_ALIAS_POLICY.md`](pipeline/INSTITUTION_ALIAS_POLICY.md) — alias decision checkpoint (no production table yet; explorer-only)
   - [`pipeline/INSTITUTION_EXPLORER_SPEC.md`](pipeline/INSTITUTION_EXPLORER_SPEC.md) — read-only institution explorer product spec (not implemented)
   - Read-only QA: [`../scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py) — domain/org institution grouping audit (reports under `reports/out/active/current/`)
