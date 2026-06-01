@@ -90,8 +90,8 @@ def sqlite_outbound_sidecar_counts(conn: sqlite3.Connection) -> dict[str, int]:
     return out
 
 
-def sqlite_lead_research_segment_counts(conn: sqlite3.Connection) -> dict[str, int]:
-    """Blocked and net-new-safe counts from SQLite lead_research_prospect."""
+def sqlite_lead_research_segment_counts_raw(conn: sqlite3.Connection) -> dict[str, int]:
+    """Blocked and net-new-safe from raw ``lead_research_prospect`` (pre operational overlay)."""
     if not _table_exists(conn, "lead_research_prospect"):
         return {"lead_blocked": 0, "lead_net_new_safe": 0}
     return {
@@ -112,6 +112,15 @@ def sqlite_lead_research_segment_counts(conn: sqlite3.Connection) -> dict[str, i
             """,
         ),
     }
+
+
+def sqlite_lead_research_mirror_segment_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """Blocked / net-new-safe after overlay — must match Postgres ``lead_intel.prospect``."""
+    from origenlab_email_pipeline.lead_research.lead_research_postgres_mirror import (
+        lead_research_mirror_built_segment_counts,
+    )
+
+    return lead_research_mirror_built_segment_counts(conn)
 
 
 def count_contacted_exact_csv_rows(path: Path) -> int | None:
@@ -210,9 +219,14 @@ def compare_outbound_sidecar_mirror(
     include_lead_research: bool = False,
     sqlite_lead: dict[str, int] | None = None,
     postgres_lead: dict[str, int] | None = None,
+    sqlite_lead_raw: dict[str, int] | None = None,
     contacted_exact_csv_count: int | None = None,
 ) -> dict[str, Any]:
-    """Return verification report; ok=False when any mirrored count diverges."""
+    """Return verification report; ok=False when any mirrored count diverges.
+
+    ``sqlite_lead`` must be overlaid mirror segment counts (same view as lead_intel sync).
+    ``sqlite_lead_raw`` is optional diagnostics only; not used for pass/fail.
+    """
     errors: list[str] = []
     parity_keys = (
         "email_suppression_total",
@@ -250,6 +264,8 @@ def compare_outbound_sidecar_mirror(
     if include_lead_research:
         report["sqlite_lead_segments"] = sqlite_lead
         report["postgres_lead_segments"] = postgres_lead
+        if sqlite_lead_raw is not None:
+            report["sqlite_lead_segments_raw"] = sqlite_lead_raw
     if contacted_exact_csv_count is not None:
         report["contacted_exact_csv_rows"] = contacted_exact_csv_count
     return report

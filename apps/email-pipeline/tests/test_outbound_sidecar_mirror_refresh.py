@@ -10,10 +10,26 @@ from pathlib import Path
 
 import pytest
 
+from origenlab_email_pipeline.contact_email_suppression import (
+    ensure_contact_email_suppression_table,
+)
+from origenlab_email_pipeline.lead_research.lead_research_schema import ensure_lead_research_tables
 from origenlab_email_pipeline.outbound_sidecar_mirror_verify import (
     compare_outbound_sidecar_mirror,
     count_contacted_exact_csv_rows,
+    sqlite_lead_research_mirror_segment_counts,
+    sqlite_lead_research_segment_counts_raw,
     sqlite_outbound_sidecar_counts,
+)
+from origenlab_email_pipeline.outreach_contact_state import ensure_outreach_contact_state_table
+
+from test_lead_research_operational_overlay import (
+    GIBA,
+    HANNELORE,
+    MFBARRAR,
+    _mark_contacted,
+    _mark_suppressed,
+    _seed_same_domain_prospects,
 )
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -196,6 +212,73 @@ def test_outbound_helper_failure_stops_with_nonzero_exit(tmp_path: Path) -> None
     )
     assert cp.returncode == 1
     assert "Outbound sidecar mirror verify failed" in cp.stderr
+
+
+def test_compare_lead_segments_ok_when_postgres_matches_built_overlay() -> None:
+    report = compare_outbound_sidecar_mirror(
+        _sidecar_parity_counts(),
+        _sidecar_parity_counts(),
+        include_lead_research=True,
+        sqlite_lead={"lead_blocked": 28, "lead_net_new_safe": 0},
+        postgres_lead={"lead_blocked": 28, "lead_net_new_safe": 0},
+        sqlite_lead_raw={"lead_blocked": 35, "lead_net_new_safe": 0},
+    )
+    assert report["ok"] is True
+    assert report["sqlite_lead_segments_raw"]["lead_blocked"] == 35
+
+
+def test_compare_lead_segments_fails_when_postgres_stale() -> None:
+    report = compare_outbound_sidecar_mirror(
+        _sidecar_parity_counts(),
+        _sidecar_parity_counts(),
+        include_lead_research=True,
+        sqlite_lead={"lead_blocked": 28, "lead_net_new_safe": 0},
+        postgres_lead={"lead_blocked": 35, "lead_net_new_safe": 0},
+    )
+    assert report["ok"] is False
+    assert any("lead_blocked" in e for e in report["errors"])
+
+
+def test_compare_suppression_counts_still_require_exact_raw_parity() -> None:
+    sqlite_counts = _sidecar_parity_counts()
+    postgres_counts = dict(sqlite_counts)
+    postgres_counts["email_suppression_total"] = postgres_counts["email_suppression_total"] - 1
+    report = compare_outbound_sidecar_mirror(
+        sqlite_counts,
+        postgres_counts,
+        include_lead_research=True,
+        sqlite_lead={"lead_blocked": 1, "lead_net_new_safe": 0},
+        postgres_lead={"lead_blocked": 1, "lead_net_new_safe": 0},
+    )
+    assert report["ok"] is False
+    assert any("email_suppression_total" in e for e in report["errors"])
+
+
+def _sidecar_parity_counts() -> dict[str, int]:
+    return {
+        "email_suppression_total": 10,
+        "bounce_suppressions": 4,
+        "domain_suppression_total": 2,
+        "outreach_state_total": 20,
+        "outreach_contacted": 15,
+        "contacted_sidecar_distinct_emails": 12,
+    }
+
+
+def test_raw_blocked_count_can_differ_from_mirror_segment_counts(tmp_path: Path) -> None:
+    db = tmp_path / "lead.sqlite"
+    conn = sqlite3.connect(db)
+    ensure_lead_research_tables(conn)
+    ensure_outreach_contact_state_table(conn)
+    ensure_contact_email_suppression_table(conn)
+    _seed_same_domain_prospects(conn)
+    _mark_contacted(conn, GIBA, "manual_prospect_outreach_2026_06_01")
+    _mark_suppressed(conn, HANNELORE)
+    _mark_suppressed(conn, MFBARRAR)
+    raw = sqlite_lead_research_segment_counts_raw(conn)
+    built = sqlite_lead_research_mirror_segment_counts(conn)
+    conn.close()
+    assert raw["lead_blocked"] != built["lead_blocked"]
 
 
 def test_refresh_and_outbound_helper_syntax_check() -> None:

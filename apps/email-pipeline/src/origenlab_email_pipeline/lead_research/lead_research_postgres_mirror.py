@@ -74,6 +74,21 @@ _BUILT_TO_PG_COUNT_KEYS: tuple[tuple[str, str], ...] = (
 )
 
 
+def lead_research_mirror_built_segment_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """Blocked / net-new-safe counts from overlaid prospects (parity with lead_intel mirror)."""
+    if not lead_research_tables_exist(conn):
+        return {"lead_blocked": 0, "lead_net_new_safe": 0}
+    prospects = load_lead_research_mirror_payload(conn)["prospects"]
+    return {
+        "lead_blocked": sum(1 for p in prospects if p.get("is_blocked")),
+        "lead_net_new_safe": sum(
+            1
+            for p in prospects
+            if not p.get("is_blocked") and p.get("classification") == "net_new_safe_review"
+        ),
+    }
+
+
 def compare_lead_research_mirror_counts(
     built_counts: dict[str, int],
     pg_counts: dict[str, int],

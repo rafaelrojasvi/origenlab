@@ -22,7 +22,8 @@ from origenlab_email_pipeline.outbound_sidecar_mirror_verify import (
     count_contacted_exact_csv_rows,
     postgres_lead_research_segment_counts,
     postgres_outbound_sidecar_counts,
-    sqlite_lead_research_segment_counts,
+    sqlite_lead_research_mirror_segment_counts,
+    sqlite_lead_research_segment_counts_raw,
     sqlite_outbound_sidecar_counts,
 )
 
@@ -71,9 +72,11 @@ def main() -> int:
     conn = connect_sqlite_readonly(sqlite_path)
     try:
         sqlite_counts = sqlite_outbound_sidecar_counts(conn)
-        sqlite_lead = (
-            sqlite_lead_research_segment_counts(conn) if args.include_lead_research else None
-        )
+        sqlite_lead = None
+        sqlite_lead_raw = None
+        if args.include_lead_research:
+            sqlite_lead = sqlite_lead_research_mirror_segment_counts(conn)
+            sqlite_lead_raw = sqlite_lead_research_segment_counts_raw(conn)
     finally:
         conn.close()
 
@@ -94,6 +97,7 @@ def main() -> int:
         include_lead_research=args.include_lead_research,
         sqlite_lead=sqlite_lead,
         postgres_lead=postgres_lead,
+        sqlite_lead_raw=sqlite_lead_raw,
         contacted_exact_csv_count=contacted_exact_csv_count,
     )
 
