@@ -1,6 +1,10 @@
 /** Operator-facing copy for Prospectos drawer (no API changes). */
 
-import type { LeadProspectDetailResponseUi, LeadProspectDetailUi } from "../api/leadIntelTypes";
+import type {
+  LeadProspectDetailResponseUi,
+  LeadProspectDetailUi,
+  LeadProspectRecommendationUi,
+} from "../api/leadIntelTypes";
 import { hasProspectEmail, prospectBuyerTypeLabel } from "./prospectLabels";
 
 export interface PorQueImportaContent {
@@ -10,7 +14,7 @@ export interface PorQueImportaContent {
 }
 
 export interface MessagePreviewContent {
-  kind: "net_new" | "same_domain_followup" | "public_tender" | "none";
+  kind: "net_new" | "same_domain_followup" | "gmail_draft" | "public_tender" | "none";
   title: string;
   subject?: string;
   body?: string;
@@ -90,7 +94,10 @@ export function buildPorQueImporta(
   };
 }
 
-export function buildMessagePreview(prospect: LeadProspectDetailUi): MessagePreviewContent {
+export function buildMessagePreview(
+  prospect: LeadProspectDetailUi,
+  recommendation?: LeadProspectRecommendationUi | null,
+): MessagePreviewContent {
   if (prospect.is_blocked) {
     return { kind: "none", title: "No hay mensaje sugerido", note: "Prospecto bloqueado." };
   }
@@ -122,6 +129,30 @@ export function buildMessagePreview(prospect: LeadProspectDetailUi): MessagePrev
   const org = prospect.organization_name;
   const topic = firstProductTopic(prospect.product_angle);
   const angle = prospect.spanish_message_angle?.trim();
+
+  if (
+    prospect.classification === "old_gmail_prospect_review" ||
+    prospect.classification === "old_followup_review"
+  ) {
+    const subject = recommendation?.suggested_subject?.trim();
+    const body = recommendation?.suggested_body_preview?.trim();
+    if (subject && body) {
+      return {
+        kind: "gmail_draft",
+        title: "Borrador sugerido (solo vista — no envía desde el panel)",
+        subject,
+        body,
+        note:
+          recommendation?.safety_note ??
+          "Revisión humana requerida. Ajustar tono y datos antes de contactar.",
+      };
+    }
+    return {
+      kind: "none",
+      title: "Sin borrador cargado",
+      note: "Revisar historial Gmail y redactar mensaje manualmente.",
+    };
+  }
 
   if (prospect.classification === "same_domain_contacted_review") {
     return {
@@ -179,5 +210,9 @@ export function buildMessagePreview(prospect: LeadProspectDetailUi): MessagePrev
 }
 
 export function shouldShowMessageSection(preview: MessagePreviewContent): boolean {
-  return preview.kind === "net_new" || preview.kind === "same_domain_followup";
+  return (
+    preview.kind === "net_new" ||
+    preview.kind === "same_domain_followup" ||
+    preview.kind === "gmail_draft"
+  );
 }

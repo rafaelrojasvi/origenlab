@@ -7,6 +7,7 @@ import {
   leadBlockedDetailFixture,
   leadListFixture,
   leadNetNewDetailFixture,
+  leadGmailHistoricoDetailFixture,
   leadSummaryFixture,
   leadTenderDetailFixture,
 } from "../test/fixtures/leadIntelFixtures";
@@ -33,6 +34,7 @@ describe("ProspectosPage", () => {
       if (key === "tender") return leadTenderDetailFixture();
       if (key === "bioren") return leadBiorenDetailFixture();
       if (key === "acme") return leadNetNewDetailFixture();
+      if (key === "gmail-hist") return leadGmailHistoricoDetailFixture();
       return leadBlockedDetailFixture();
     });
   });
@@ -44,9 +46,13 @@ describe("ProspectosPage", () => {
   it("renders KPIs and table without send buttons", async () => {
     render(<ProspectosPage />);
     await waitFor(() => {
-      expect(screen.getByText("Net-new seguros")).toBeTruthy();
+      const kpis = screen.getByTestId("prospectos-kpis");
+      expect(within(kpis).getByText("Nuevos investigados")).toBeTruthy();
+      expect(within(kpis).getByText("Gmail histórico")).toBeTruthy();
       expect(screen.getByText("Acme Labs")).toBeTruthy();
     });
+    expect(screen.getByTestId("prospectos-page")).toBeTruthy();
+    expect(screen.getByTestId("prospectos-origin-filter")).toBeTruthy();
     expect(screen.getByText("Nuevo seguro")).toBeTruthy();
     expect(screen.getAllByText("No contactar").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /enviar/i })).toBeNull();
@@ -156,6 +162,31 @@ describe("ProspectosPage", () => {
       expect(within(chips).getByText("Nuevo según investigación")).toBeTruthy();
     });
     expect(screen.queryByText("lead_status=net_new_candidate")).toBeNull();
+  });
+
+  it("shows origin chip for gmail historico row", async () => {
+    render(<ProspectosPage />);
+    await waitFor(() => expect(screen.getByText("Gmail Hist Co")).toBeTruthy());
+    expect(screen.getAllByTestId("prospect-origin-chip").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText("Gmail Hist Co"));
+    await waitFor(() => {
+      expect(screen.getByTestId("prospect-gmail-history")).toBeTruthy();
+      expect(screen.getByTestId("prospect-source-type-label").textContent).toMatch(/Gmail histórico/i);
+      expect(screen.getByTestId("prospect-message-preview")).toBeTruthy();
+    });
+  });
+
+  it("origin filter gmail_historico calls API with source_type", async () => {
+    render(<ProspectosPage />);
+    await waitFor(() => expect(screen.getByTestId("prospectos-origin-filter")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("prospectos-origin-filter"), {
+      target: { value: "gmail_historico" },
+    });
+    await waitFor(() => {
+      expect(vi.mocked(fetchLeadProspectsMirror)).toHaveBeenCalledWith(
+        expect.objectContaining({ source_type: "gmail_historico" }),
+      );
+    });
   });
 
   it("public tender shows tender instruction not cold email", async () => {

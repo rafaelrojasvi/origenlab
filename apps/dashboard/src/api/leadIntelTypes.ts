@@ -19,6 +19,13 @@ export interface LeadProspectListItemUi {
   evidence_url: string | null;
   is_blocked: boolean;
   campaign_bucket: string | null;
+  source_type: string | null;
+  dataset_label: string | null;
+  gmail_first_contacted_at: string | null;
+  gmail_last_contacted_at: string | null;
+  gmail_sent_count: number | null;
+  gmail_received_count: number | null;
+  gmail_latest_subject_safe: string | null;
 }
 
 export interface LeadProspectEvidenceUi {
@@ -68,6 +75,13 @@ export interface LeadProspectDetailUi {
   status: string;
   campaign_bucket: string | null;
   is_blocked: boolean;
+  source_type: string | null;
+  dataset_label: string | null;
+  gmail_first_contacted_at: string | null;
+  gmail_last_contacted_at: string | null;
+  gmail_sent_count: number | null;
+  gmail_received_count: number | null;
+  gmail_latest_subject_safe: string | null;
 }
 
 export interface LeadProspectsListUi {
@@ -96,6 +110,9 @@ export interface LeadResearchSummaryUi {
   review_count: number;
   blocked_count: number;
   net_new_safe: number;
+  gmail_historico: number;
+  followup_antiguo: number;
+  caso_activo: number;
   public_tender_review: number;
   same_domain_review: number;
   research_needed: number;
@@ -104,9 +121,22 @@ export interface LeadResearchSummaryUi {
   disclaimer: string;
 }
 
+export type ProspectOriginFilter =
+  | ""
+  | "deepsearch"
+  | "gmail_historico"
+  | "followup_antiguo"
+  | "caso_activo"
+  | "same_domain_contacted_review"
+  | "research_only_contact_needed"
+  | "public_tender_review"
+  | "blocked";
+
 export interface LeadProspectsListQuery {
   q?: string;
   classification?: string;
+  source_type?: string;
+  blocked_only?: boolean;
   sector?: string;
   region?: string;
   buyer_type?: string;

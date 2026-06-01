@@ -7,10 +7,20 @@ export const CLASSIFICATION_LABELS: Record<string, string> = {
   same_domain_contacted_review: "Revisar historial previo",
   public_tender_review: "Licitación / compra pública",
   research_only_contact_needed: "Falta contacto directo",
+  old_gmail_prospect_review: "Gmail histórico — revisión",
+  old_followup_review: "Follow-up antiguo — revisión",
+  active_case_hold: "Caso activo — hold personalizado",
   already_contacted_block: "No contactar: ya contactado",
   bounced_block: "No contactar: rebote",
   suppressed_block: "No contactar: suprimido",
   supplier_or_internal_block: "No contactar: proveedor / interno",
+};
+
+export const SOURCE_TYPE_LABELS: Record<string, string> = {
+  deepsearch: "Investigación DeepSearch",
+  gmail_historico: "Gmail histórico",
+  followup_antiguo: "Follow-up antiguo",
+  caso_activo: "Caso activo",
 };
 
 export const BUYER_TYPE_LABELS: Record<string, string> = {
@@ -65,6 +75,30 @@ export interface ProspectDecisionBanner {
 
 export function prospectClassificationLabel(code: string): string {
   return CLASSIFICATION_LABELS[code] ?? code.replaceAll("_", " ");
+}
+
+export function prospectSourceTypeLabel(sourceType: string | null | undefined): string {
+  if (!sourceType?.trim()) return "—";
+  return SOURCE_TYPE_LABELS[sourceType] ?? sourceType.replaceAll("_", " ");
+}
+
+export function prospectOriginChip(row: LeadProspectListItemUi): ProspectTableBadge {
+  const source = row.source_type?.trim();
+  if (source && SOURCE_TYPE_LABELS[source]) {
+    switch (source) {
+      case "gmail_historico":
+        return { label: "Gmail histórico", className: "bg-sky-100 text-sky-950 border-sky-200" };
+      case "followup_antiguo":
+        return { label: "Follow-up antiguo", className: "bg-violet-100 text-violet-950 border-violet-200" };
+      case "caso_activo":
+        return { label: "Caso activo", className: "bg-slate-200 text-slate-900 border-slate-300" };
+      case "deepsearch":
+        return { label: "DeepSearch", className: "bg-teal-50 text-teal-900 border-teal-200" };
+      default:
+        break;
+    }
+  }
+  return { label: prospectSourceTypeLabel(source), className: "bg-slate-100 text-slate-800 border-slate-200" };
 }
 
 export function prospectBuyerTypeLabel(buyerType: string | null | undefined): string {
@@ -162,6 +196,24 @@ export function prospectDecisionBanner(
         tone: "caution",
         testId: "prospect-decision-banner",
       };
+    case "old_gmail_prospect_review":
+      return {
+        label: "Acción sugerida: revisar historial Gmail antes de presentación",
+        tone: "caution",
+        testId: "prospect-decision-banner",
+      };
+    case "old_followup_review":
+      return {
+        label: "Acción sugerida: seguimiento personalizado (no correo frío)",
+        tone: "caution",
+        testId: "prospect-decision-banner",
+      };
+    case "active_case_hold":
+      return {
+        label: "Hold personalizado — no envío genérico ni campaña masiva",
+        tone: "caution",
+        testId: "prospect-decision-banner",
+      };
     default:
       return {
         label: "Acción sugerida: revisar antes de contactar",
@@ -194,6 +246,15 @@ export function prospectTableBadge(row: LeadProspectListItemUi): ProspectTableBa
   }
   if (row.classification === "research_only_contact_needed") {
     return { label: "Falta email", className: "bg-amber-100 text-amber-950 border-amber-200" };
+  }
+  if (row.classification === "old_gmail_prospect_review") {
+    return { label: "Gmail histórico", className: "bg-sky-100 text-sky-950 border-sky-200" };
+  }
+  if (row.classification === "old_followup_review") {
+    return { label: "Follow-up antiguo", className: "bg-violet-100 text-violet-950 border-violet-200" };
+  }
+  if (row.classification === "active_case_hold") {
+    return { label: "Hold personalizado", className: "bg-slate-200 text-slate-900 border-slate-300" };
   }
   return null;
 }

@@ -34,6 +34,8 @@ export function mirrorLeadProspectsUrl(query: LeadProspectsListQuery = {}): stri
   };
   if (query.q?.trim()) params.q = query.q.trim();
   if (query.classification?.trim()) params.classification = query.classification.trim();
+  if (query.source_type?.trim()) params.source_type = query.source_type.trim();
+  if (query.blocked_only) params.blocked_only = true;
   if (query.sector?.trim()) params.sector = query.sector.trim();
   if (query.region?.trim()) params.region = query.region.trim();
   if (query.buyer_type?.trim()) params.buyer_type = query.buyer_type.trim();

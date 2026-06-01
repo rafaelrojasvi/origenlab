@@ -9,6 +9,7 @@ import {
   prospectCampaignBucketLabel,
   prospectClassificationLabel,
   prospectDecisionBanner,
+  prospectSourceTypeLabel,
 } from "../../lib/prospectLabels";
 import { buildMessagePreview, buildPorQueImporta, shouldShowMessageSection } from "../../lib/prospectMessaging";
 
@@ -92,13 +93,20 @@ export function ProspectosDrawer({
     [p, detail],
   );
 
-  const messagePreview = useMemo(() => (p ? buildMessagePreview(p) : null), [p]);
+  const messagePreview = useMemo(
+    () => (p ? buildMessagePreview(p, detail?.recommendation) : null),
+    [p, detail?.recommendation],
+  );
 
   const primaryEvidenceUrl =
     p?.evidence_url ?? detail?.evidence?.[0]?.evidence_url ?? null;
   const primaryEvidenceNote =
     p?.evidence_note ?? detail?.evidence?.[0]?.evidence_note ?? null;
   const primarySource = p?.source ?? detail?.evidence?.[0]?.source ?? null;
+
+  const isGmailOrigin =
+    p?.source_type === "gmail_historico" || p?.source_type === "followup_antiguo";
+  const isDeepsearchOrigin = !p?.source_type || p.source_type === "deepsearch";
 
   return (
     <div
@@ -144,6 +152,50 @@ export function ProspectosDrawer({
               >
                 {decision.label}
               </p>
+
+              <section data-testid="prospect-origin-section">
+                <h3 className="text-sm font-semibold text-brand-900">Origen del prospecto</h3>
+                <dl className="mt-2 grid gap-1 text-sm">
+                  <div>
+                    <dt className="text-[var(--color-muted)]">Origen</dt>
+                    <dd data-testid="prospect-source-type-label">
+                      {prospectSourceTypeLabel(p.source_type)}
+                    </dd>
+                  </div>
+                  {p.dataset_label ? (
+                    <div>
+                      <dt className="text-[var(--color-muted)]">Fuente / dataset</dt>
+                      <dd>{p.dataset_label}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </section>
+
+              {isGmailOrigin ? (
+                <section data-testid="prospect-gmail-history">
+                  <h3 className="text-sm font-semibold text-brand-900">Historial Gmail</h3>
+                  <dl className="mt-2 grid gap-1 text-sm">
+                    <div>
+                      <dt className="text-[var(--color-muted)]">Primer contacto</dt>
+                      <dd>{p.gmail_first_contacted_at ?? "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--color-muted)]">Último contacto</dt>
+                      <dd>{p.gmail_last_contacted_at ?? "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--color-muted)]">Enviados / recibidos</dt>
+                      <dd>
+                        {p.gmail_sent_count ?? "—"} / {p.gmail_received_count ?? "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--color-muted)]">Último asunto (redactado)</dt>
+                      <dd>{p.gmail_latest_subject_safe ?? "—"}</dd>
+                    </div>
+                  </dl>
+                </section>
+              ) : null}
 
               <section>
                 <h3 className="text-sm font-semibold text-brand-900">Organización y contacto</h3>
@@ -224,14 +276,28 @@ export function ProspectosDrawer({
                 ) : null}
               </section>
 
-              <section>
-                <h3 className="text-sm font-semibold text-brand-900">Evidencia</h3>
-                <EvidenceBlock
-                  source={primarySource}
-                  evidenceUrl={primaryEvidenceUrl}
-                  evidenceNote={primaryEvidenceNote}
-                />
-              </section>
+              {isDeepsearchOrigin ? (
+                <section>
+                  <h3 className="text-sm font-semibold text-brand-900">Evidencia pública (DeepSearch)</h3>
+                  <EvidenceBlock
+                    source={primarySource}
+                    evidenceUrl={primaryEvidenceUrl}
+                    evidenceNote={primaryEvidenceNote}
+                  />
+                  <p className="mt-2 text-sm text-[var(--color-muted)]">
+                    Sector: {p.sector ?? "—"} · Región: {p.region ?? "—"} · Score: {p.final_score}
+                  </p>
+                </section>
+              ) : (
+                <section>
+                  <h3 className="text-sm font-semibold text-brand-900">Evidencia</h3>
+                  <EvidenceBlock
+                    source={primarySource}
+                    evidenceUrl={primaryEvidenceUrl}
+                    evidenceNote={primaryEvidenceNote}
+                  />
+                </section>
+              )}
 
               <section>
                 <h3 className="text-sm font-semibold text-brand-900">Estado de seguridad</h3>
@@ -250,14 +316,19 @@ export function ProspectosDrawer({
                     <p className="mt-1 text-sm text-[var(--color-muted)]">{messagePreview.note}</p>
                   ) : null}
                   {shouldShowMessageSection(messagePreview) && messagePreview.subject && messagePreview.body ? (
-                    <pre
-                      className="mt-2 whitespace-pre-wrap rounded-lg border border-[var(--color-border)] bg-slate-50 p-3 text-xs"
-                      data-testid="prospect-message-preview"
-                    >
-                      {messagePreview.subject}
-                      {"\n\n"}
-                      {messagePreview.body}
-                    </pre>
+                    <>
+                      <p className="mt-2 text-xs text-sky-900">
+                        Borrador sugerido — solo vista / copiar. No hay envío desde este panel.
+                      </p>
+                      <pre
+                        className="mt-2 whitespace-pre-wrap rounded-lg border border-[var(--color-border)] bg-slate-50 p-3 text-xs"
+                        data-testid="prospect-message-preview"
+                      >
+                        {messagePreview.subject}
+                        {"\n\n"}
+                        {messagePreview.body}
+                      </pre>
+                    </>
                   ) : null}
                 </section>
               ) : null}

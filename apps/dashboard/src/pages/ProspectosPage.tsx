@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { LeadProspectDetailResponseUi, LeadProspectListItemUi, LeadProspectsListQuery } from "../api/leadIntelTypes";
+import type {
+  LeadProspectDetailResponseUi,
+  LeadProspectListItemUi,
+  LeadProspectsListQuery,
+  LeadResearchSummaryUi,
+  ProspectOriginFilter,
+} from "../api/leadIntelTypes";
 import {
   fetchLeadProspectDetailMirror,
   fetchLeadProspectsMirror,
@@ -7,12 +13,13 @@ import {
 } from "../api/mirrorLeadIntelClient";
 import { ProspectosDrawer } from "../components/prospectos/ProspectosDrawer";
 import { OperatorApiError } from "../api/operatorClient";
+import { leadProspectsQueryFromOrigin } from "../lib/prospectOriginQuery";
 import {
   prospectContactCell,
   prospectClassificationLabel,
+  prospectOriginChip,
   prospectTableBadge,
 } from "../lib/prospectLabels";
-import type { LeadResearchSummaryUi } from "../api/leadIntelTypes";
 
 function formatLoadError(label: string, e: unknown): string {
   if (e instanceof OperatorApiError) {
@@ -36,7 +43,7 @@ function KpiCard({ label, value }: { label: string; value: number }) {
 export function ProspectosPage() {
   const [summary, setSummary] = useState<LeadResearchSummaryUi | null>(null);
   const [searchInput, setSearchInput] = useState("");
-  const [classification, setClassification] = useState("");
+  const [originFilter, setOriginFilter] = useState<ProspectOriginFilter>("");
   const [sector, setSector] = useState("");
   const [region, setRegion] = useState("");
   const [campaignBucket, setCampaignBucket] = useState("");
@@ -55,18 +62,17 @@ export function ProspectosPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const buildQuery = useCallback((): LeadProspectsListQuery => {
-    const q: LeadProspectsListQuery = {
+    const base: LeadProspectsListQuery = {
       limit: 100,
-      include_blocked: showBlocked,
+      include_blocked: showBlocked || originFilter === "blocked",
     };
-    if (searchInput.trim()) q.q = searchInput.trim();
-    if (classification) q.classification = classification;
-    if (sector.trim()) q.sector = sector.trim();
-    if (region.trim()) q.region = region.trim();
-    if (campaignBucket) q.campaign_bucket = campaignBucket;
-    if (minScore.trim()) q.min_score = Number(minScore);
-    return q;
-  }, [searchInput, classification, sector, region, campaignBucket, minScore, showBlocked]);
+    if (searchInput.trim()) base.q = searchInput.trim();
+    if (sector.trim()) base.sector = sector.trim();
+    if (region.trim()) base.region = region.trim();
+    if (campaignBucket) base.campaign_bucket = campaignBucket;
+    if (minScore.trim()) base.min_score = Number(minScore);
+    return leadProspectsQueryFromOrigin(originFilter, base);
+  }, [searchInput, originFilter, sector, region, campaignBucket, minScore, showBlocked]);
 
   const loadList = useCallback(async (query: LeadProspectsListQuery) => {
     setListLoading(true);
@@ -108,26 +114,34 @@ export function ProspectosPage() {
 
   const priorHistoryWarning = useMemo(() => {
     if (!summary) return false;
-    return summary.same_domain_review >= 3 || summary.blocked_count >= 5;
+    return (
+      summary.same_domain_review >= 3 ||
+      summary.gmail_historico >= 1 ||
+      summary.followup_antiguo >= 1 ||
+      summary.blocked_count >= 5
+    );
   }, [summary]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="prospectos-page">
       <header>
         <h1 className="text-2xl font-semibold text-brand-900">Prospectos</h1>
         <p className="mt-1 text-sm text-[var(--color-muted)]">
-          Nuevas oportunidades de clientes · revisión humana · no envía correos
+          Mesa única de revisión comercial · DeepSearch, Gmail histórico, follow-up y casos activos ·
+          solo lectura
         </p>
         {disclaimer ? <p className="mt-2 text-xs text-sky-900">{disclaimer}</p> : null}
       </header>
 
       {summary?.table_available ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard label="En revisión" value={summary.review_count} />
-          <KpiCard label="Net-new seguros" value={summary.net_new_safe} />
-          <KpiCard label="Licitaciones públicas" value={summary.public_tender_review} />
-          <KpiCard label="Mismo dominio / revisar" value={summary.same_domain_review} />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="prospectos-kpis">
+          <KpiCard label="En revisión total" value={summary.review_count} />
+          <KpiCard label="Nuevos investigados" value={summary.net_new_safe} />
+          <KpiCard label="Gmail histórico" value={summary.gmail_historico} />
+          <KpiCard label="Follow-up antiguo" value={summary.followup_antiguo} />
+          <KpiCard label="Mismo dominio" value={summary.same_domain_review} />
           <KpiCard label="Falta email" value={summary.research_needed} />
+          <KpiCard label="Licitaciones" value={summary.public_tender_review} />
           <KpiCard label="Bloqueados" value={summary.blocked_count} />
         </div>
       ) : null}
@@ -151,16 +165,21 @@ export function ProspectosPage() {
             className="min-w-[200px] flex-1 rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
           />
           <select
-            value={classification}
-            onChange={(e) => setClassification(e.target.value)}
+            value={originFilter}
+            onChange={(e) => setOriginFilter(e.target.value as ProspectOriginFilter)}
             className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
-            aria-label="Clasificación"
+            aria-label="Origen"
+            data-testid="prospectos-origin-filter"
           >
-            <option value="">Todas las clasificaciones</option>
-            <option value="net_new_safe_review">Prospecto nuevo seguro</option>
-            <option value="same_domain_contacted_review">Mismo dominio</option>
-            <option value="public_tender_review">Licitación pública</option>
-            <option value="research_only_contact_needed">Falta contacto</option>
+            <option value="">Todos los orígenes</option>
+            <option value="deepsearch">Investigación DeepSearch</option>
+            <option value="gmail_historico">Gmail histórico</option>
+            <option value="followup_antiguo">Follow-up antiguo</option>
+            <option value="caso_activo">Caso activo</option>
+            <option value="same_domain_contacted_review">Mismo dominio / revisar historial</option>
+            <option value="research_only_contact_needed">Falta email</option>
+            <option value="public_tender_review">Licitación</option>
+            <option value="blocked">Bloqueado</option>
           </select>
           <input
             placeholder="Sector"
@@ -185,6 +204,7 @@ export function ProspectosPage() {
             <option value="public_tender">Licitación pública</option>
             <option value="university">Universidad</option>
             <option value="same_domain">Mismo dominio</option>
+            <option value="active_case">Caso activo</option>
           </select>
           <input
             placeholder="Score mínimo"
@@ -225,27 +245,36 @@ export function ProspectosPage() {
           <thead className="border-b border-[var(--color-border)] bg-slate-50 text-xs uppercase text-[var(--color-muted)]">
             <tr>
               <th className="px-4 py-3">Organización</th>
+              <th className="px-4 py-3">Origen</th>
               <th className="px-4 py-3">Contacto</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Score</th>
               <th className="px-4 py-3">Sector</th>
-              <th className="px-4 py-3">Ángulo</th>
               <th className="px-4 py-3">Próxima acción</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((row) => (
-              <tr
-                key={row.prospect_key}
-                className="cursor-pointer border-b border-[var(--color-border)] hover:bg-brand-50/40"
-                onClick={() => setSelectedKey(row.prospect_key)}
-              >
-                <td className="px-4 py-3 font-medium">{row.organization_name}</td>
-                <td className="px-4 py-3 text-sm">{prospectContactCell(row)}</td>
-                <td className="px-4 py-3">
-                  {(() => {
-                    const badge = prospectTableBadge(row);
-                    return badge ? (
+            {items.map((row) => {
+              const origin = prospectOriginChip(row);
+              const badge = prospectTableBadge(row);
+              return (
+                <tr
+                  key={row.prospect_key}
+                  className="cursor-pointer border-b border-[var(--color-border)] hover:bg-brand-50/40"
+                  onClick={() => setSelectedKey(row.prospect_key)}
+                >
+                  <td className="px-4 py-3 font-medium">{row.organization_name}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${origin.className}`}
+                      data-testid="prospect-origin-chip"
+                    >
+                      {origin.label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{prospectContactCell(row)}</td>
+                  <td className="px-4 py-3">
+                    {badge ? (
                       <span
                         className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge.className}`}
                       >
@@ -253,15 +282,14 @@ export function ProspectosPage() {
                       </span>
                     ) : (
                       <span className="text-sm">{prospectClassificationLabel(row.classification)}</span>
-                    );
-                  })()}
-                </td>
-                <td className="px-4 py-3">{row.final_score}</td>
-                <td className="px-4 py-3 max-w-[10rem] truncate">{row.sector ?? "—"}</td>
-                <td className="px-4 py-3 max-w-[12rem] truncate">{row.product_angle ?? "—"}</td>
-                <td className="px-4 py-3 max-w-[14rem] truncate">{row.recommended_next_action ?? "—"}</td>
-              </tr>
-            ))}
+                    )}
+                  </td>
+                  <td className="px-4 py-3">{row.final_score}</td>
+                  <td className="px-4 py-3 max-w-[10rem] truncate">{row.sector ?? "—"}</td>
+                  <td className="px-4 py-3 max-w-[14rem] truncate">{row.recommended_next_action ?? "—"}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
