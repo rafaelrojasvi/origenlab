@@ -157,7 +157,7 @@ Not part of the two daily workflows: archive batch builders (**`build_archive_se
 
 ### Do not remove (safety-critical)
 
-**Gate:** `candidate_export_gate` / `GateContext` policy. **Memory:** `outreach_contact_state`. **Truth:** Gmail Sent rows in **`emails`**, suppression tables, **`validate_campaign_csvs` / `csv_contracts`**, **`export_do_not_repeat_master`**, **`import_lead_contact_research_csv`** (precision lane DB apply), **`mark_sent_batch_contacted`** / post-send. Detail: [`SCRIPT_MAP.md`](SCRIPT_MAP.md#do-not-remove-safety-critical).
+**Gate:** `candidate_export_gate` / `GateContext` policy. **Memory:** `outreach_contact_state`. **Truth:** Gmail Sent rows in **`emails`**, suppression tables, **`validate_campaign_csvs` / `csv_contracts`**, **`export_do_not_repeat_master`**, **`import_lead_contact_research_csv`** (precision lane DB apply), **`mark_sent_batch_contacted`** / post-send. **Layer model & send-gate rule:** [`pipeline/SCHEMA_CLASSIFICATION_MODEL.md`](pipeline/SCHEMA_CLASSIFICATION_MODEL.md). Detail: [`SCRIPT_MAP.md`](SCRIPT_MAP.md#do-not-remove-safety-critical).
 
 <a id="m-eprun-path"></a>
 ## Path and command policy

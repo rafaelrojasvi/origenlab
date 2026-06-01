@@ -6,6 +6,8 @@ Last reviewed: 2026-04-15
 
 Single reference for how outbound decisions should use SQLite layers, operator state, and gate policy.
 
+**Layer model (evidence / safety / workflow / UI):** [`pipeline/SCHEMA_CLASSIFICATION_MODEL.md`](pipeline/SCHEMA_CLASSIFICATION_MODEL.md) — includes the **golden send-gate rule** (do not use `lead_research_prospect.classification` alone).
+
 ## Canonical operator CLIs (do not bypass)
 
 From `apps/email-pipeline/`:

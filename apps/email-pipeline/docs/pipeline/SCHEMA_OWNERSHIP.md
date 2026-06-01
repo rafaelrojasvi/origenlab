@@ -2,7 +2,7 @@
 
 Canonical map of **who defines DDL**, **who ALTERs**, **who rebuilds row data**, and **whether ownership is clean or split**. For ordering when applying multiple layers, see `migrate_sqlite_schema` in [`src/origenlab_email_pipeline/sqlite_migrate.py`](../../src/origenlab_email_pipeline/sqlite_migrate.py).
 
-Outbound lane/source-of-truth usage guidance (operator model, not DDL ownership) lives in [`../OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md).
+Outbound lane/source-of-truth usage guidance (operator model, not DDL ownership) lives in [`../OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md). **Classification layers and send gates:** [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md).
 
 <a id="m-schema-orchestrated"></a>
 ## Orchestrated order (optional entrypoint)
