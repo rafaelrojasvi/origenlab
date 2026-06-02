@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TATIANA_PKG = REPO_ROOT / "src" / "origenlab_email_pipeline" / "tatiana_copilot"
+PKG_ROOT = REPO_ROOT / "src" / "origenlab_email_pipeline"
+TATIANA_PKG = PKG_ROOT / "tatiana_copilot"
+
+# Non-Streamlit production modules must not import streamlit_* (Streamlit retirement S1+).
+_NON_STREAMLIT_PRODUCTION_PATHS = [
+    PKG_ROOT / "classification_postgres_mirror.py",
+]
 
 # Tatiana must not own eligibility or archive batch integration; avoid coupling to parent streamlit_* modules.
 _FORBIDDEN_FROM = re.compile(
@@ -47,4 +53,17 @@ def test_tatiana_copilot_import_boundaries(path: Path) -> None:
     assert not bad, (
         "tatiana_copilot must not import gate/archive/parent streamlit modules "
         f"(see docs/pipeline/PACKAGE_DOMAINS.md). Violations:\n" + "\n".join(bad)
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    _NON_STREAMLIT_PRODUCTION_PATHS,
+    ids=lambda p: str(p.relative_to(REPO_ROOT)),
+)
+def test_non_streamlit_production_modules_do_not_import_streamlit(path: Path) -> None:
+    bad = _violations_in_file(path)
+    assert not bad, (
+        f"{path.name} must not import streamlit_* modules; use canonical_operational_sql "
+        f"or other neutral read modules. Violations:\n" + "\n".join(bad)
     )
