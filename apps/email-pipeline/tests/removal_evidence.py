@@ -12,16 +12,6 @@ MONOREPO = REPO.parents[1]
 
 DEPRECATED_REMOVAL_TARGETS: tuple[dict[str, str], ...] = (
     {
-        "path": "scripts/ops/run_post_send_2026_06_01_refresh.sh",
-        "replacement": "pipeline/POST_SEND_SAFE_LOOP.md step-by-step",
-        "suggested_phase": "5",
-    },
-    {
-        "path": "scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh",
-        "replacement": "pipeline/POST_SEND_SAFE_LOOP.md step-by-step",
-        "suggested_phase": "5",
-    },
-    {
         "path": "scripts/qa/build_buyer_opportunity_queue.py",
         "replacement": "build_equipment_first_opportunity_queue.py + build_equipment_first_operator_queue.py",
         "suggested_phase": "5",
@@ -58,6 +48,19 @@ DEPRECATED_REMOVAL_TARGETS: tuple[dict[str, str], ...] = (
     },
 )
 
+REMOVED_PHASE5A_TARGETS: tuple[dict[str, str], ...] = (
+    {
+        "path": "scripts/ops/run_post_send_2026_06_01_refresh.sh",
+        "replacement": "docs/pipeline/POST_SEND_SAFE_LOOP.md step-by-step loop",
+        "removed_phase": "5A",
+    },
+    {
+        "path": "scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh",
+        "replacement": "docs/pipeline/POST_SEND_SAFE_LOOP.md step-by-step loop",
+        "removed_phase": "5A",
+    },
+)
+
 REFACTOR_PHASE3_TARGETS: tuple[dict[str, str], ...] = (
     {"path": "scripts/mart/build_business_mart.py", "note": "Split main() → src; tests in test_build_business_mart.py"},
     {
@@ -75,8 +78,6 @@ REFACTOR_PHASE3_TARGETS: tuple[dict[str, str], ...] = (
 )
 
 _TEST_LOCK_PATTERNS: dict[str, str] = {
-    "scripts/ops/run_post_send_2026_06_01_refresh.sh": "run_post_send_2026_06_01",
-    "scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh": "run_manual_outreach_2026_06_01",
     "scripts/qa/build_buyer_opportunity_queue.py": "build_buyer_opportunity_queue",
     "scripts/tools/flag_reported_non_delivery_from_contacto.py": "flag_reported_non_delivery",
     "scripts/leads/advanced/export_archive_outreach_candidates.py": "export_archive_outreach_candidates",
@@ -151,7 +152,7 @@ def build_removal_evidence_markdown() -> str:
         "Owner: email-pipeline-maintainers",
         "Last reviewed: 2026-06-02",
         "",
-        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. **No scripts were deleted** in Phase 2.",
+        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed the two dated 2026-06-01 post-send shell orchestrators.",
         "",
         "Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`",
         "",
@@ -169,6 +170,19 @@ def build_removal_evidence_markdown() -> str:
             f"| `{rel}` | {'yes' if rc.in_script_map else 'no'} | "
             f"{'yes' if rc.test_locked else 'no'} | {rc.docs} | {rc.tests} | {rc.scripts} | "
             f"{row['replacement']} | {row['suggested_phase']} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Removed in Phase 5A (2026-06-02)",
+            "",
+            "| Path | Replacement | Removed phase |",
+            "|------|-------------|---------------|",
+        ]
+    )
+    for row in REMOVED_PHASE5A_TARGETS:
+        lines.append(
+            f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
         )
     lines.extend(
         [

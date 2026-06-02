@@ -60,7 +60,7 @@ Add **`--write-outbound-summary`** to emit `<stem>_outbound_summary.json` next t
 
 - Update **blocker memory** so the next run does not re-offer the same contacts: Sent ingest for `contacto@origenlab.cl`, and/or [`mark_outreach_state.py`](../../scripts/leads/mark_outreach_state.py) (preview first, then **`--apply`** with operator, source, reason) / Streamlit sidecars for `outreach_contact_state`, plus suppression when appropriate.
 - Keep the **CLI-produced CSV/JSON** (and readiness JSON if you ran it) as the record of what was selected for that batch.
-- **After post-send refresh** (e.g. [`run_post_send_2026_06_01_refresh.sh`](../../scripts/ops/run_post_send_2026_06_01_refresh.sh)): review the Prospectos drift report under `prospectos_safety_drift_<date>/`. **Drift is not a send-safety failure** — raw `lead_research_prospect` can lag suppressions/contacted state; export gates and sidecars remain authoritative ([`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md)).
+- **After post-send refresh** (follow [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md)): review the Prospectos drift report under `prospectos_safety_drift_<date>/`. **Drift is not a send-safety failure** — raw `lead_research_prospect` can lag suppressions/contacted state; export gates and sidecars remain authoritative ([`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md)).
 
 ## What is **not** source of truth
 

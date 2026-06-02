@@ -269,8 +269,8 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/build_buyer_opportunity_queue.py` | DEPRECATED | **LEGACY_DO_NOT_USE** — use `build_equipment_first_opportunity_queue.py` + `build_equipment_first_operator_queue.py` |
 | `scripts/tools/flag_reported_non_delivery_from_contacto.py` | DEPRECATED | Prefer **`flag_ndr_bounces_from_contacto.py`** + [`build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) |
 | `scripts/leads/advanced/export_archive_outreach_candidates.py` | DEPRECATED | Prefer **`build_archive_send_batch.py --audit-only`** (thin wrapper kept for custom `--out`) |
-| `scripts/ops/run_post_send_2026_06_01_refresh.sh` | DEPRECATED | **2026-06-01 one-off** — step 2 can run **broad NDR `--apply`**; follow [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) instead |
-| `scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh` | DEPRECATED | **2026-06-01 manual wave** orchestrator — historical; do not reuse for new sends |
+
+**Removed Phase 5A (2026-06-02):** `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` — use [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) step-by-step instead.
 
 ---
 
@@ -326,8 +326,6 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | [`scripts/qa/operator_status.py`](../scripts/qa/operator_status.py) | Operator READY / freshness | **Read-only** | LISTO / mirror_ok ≠ send approval |
 | [`scripts/qa/run_daily_health_report.py`](../scripts/qa/run_daily_health_report.py) | Daily health summary (NDR dry-run, drift, mirror JSON) | **Read-only** | Output under `reports/out/active/current/daily_health_report_*` (gitignored); verdict READY / REVIEW_NEEDED / BLOCKED |
 | [`scripts/qa/build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) | Build NDR human-review batches + suggested allowlists | **Read-only** | Output under `reports/out/active/current/ndr_review_queue_*`; no suppression apply |
-| [`scripts/ops/run_post_send_2026_06_01_refresh.sh`](../scripts/ops/run_post_send_2026_06_01_refresh.sh) | **DEPRECATED** 2026-06-01 orchestrator | Mixed | **Do not reuse** — see [Deprecated & historical paths](#deprecated--historical-paths-deprecated) |
-| [`scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh`](../scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh) | **DEPRECATED** 2026-06-01 manual wave | Mixed | Historical shell driver — follow `POST_SEND_SAFE_LOOP.md` for new waves |
 
 ---
 
