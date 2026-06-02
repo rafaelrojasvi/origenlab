@@ -182,7 +182,7 @@ Not part of the two daily workflows: archive batch builders (**`build_archive_se
 
 - Working directory: `apps/email-pipeline/` (from monorepo root: `cd apps/email-pipeline`).
 - **Prefer `uv run python scripts/...` (or `uv run bash ...`)** from that directory so the project package and env match CI and [`scripts/README.md`](../scripts/README.md). Paths like `scripts/qa/publish_gate.py` are part of the operational contract; if you relocate scripts, update [`SCHEMA_OWNERSHIP.md`](pipeline/SCHEMA_OWNERSHIP.md) and **`tests/test_critical_script_paths.py`** together.
-- **Lead-account tools** — **canonical:** `scripts/leads/advanced/*` (`build_lead_account_rollup.py`, `match_lead_accounts_to_existing_orgs.py`, etc.). Root `scripts/*.py` names are **`COMPATIBILITY_WRAPPER` / `COMPATIBILITY_ONLY`** — not preferred for new commands ([`SCRIPT_MAP.md`](SCRIPT_MAP.md#lead-account-scripts-canonical-vs-root-wrappers), [`scripts/README.md`](../scripts/README.md)).
+- **Lead-account tools** — **canonical:** `scripts/leads/advanced/*` (`build_lead_account_rollup.py`, `match_lead_accounts_to_existing_orgs.py`, etc.). Root `scripts/*.py` wrappers were **removed in Phase 5B** ([`SCRIPT_MAP.md`](SCRIPT_MAP.md#lead-account-scripts-canonical), [`scripts/README.md`](../scripts/README.md)).
 - Prefer environment variables over machine-specific paths (`ORIGENLAB_SQLITE_PATH`, `ORIGENLAB_REPORTS_DIR`, `.env` from [`.env.example`](../.env.example)).
 - Sensitive outputs and large artifacts stay **outside** git (default data root `~/data/origenlab-email/` — see [`DATA_LOCATIONS.md`](DATA_LOCATIONS.md#m-epdata-root)).
 
