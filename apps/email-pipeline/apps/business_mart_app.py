@@ -58,10 +58,6 @@ from origenlab_email_pipeline.read.suppliers_browse import (
     supplier_browse_ready,
 )
 from origenlab_email_pipeline.tatiana_copilot.borrador_support import contact_suppression_reason_label
-from origenlab_email_pipeline.streamlit_api_preview import (
-    primary_sidebar_pages,
-    render_api_preview_page,
-)
 from origenlab_email_pipeline.streamlit_page_status import render_kpi_metric, render_page_status
 from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
     SESSION_CI_TODAY_HINT,
@@ -2470,7 +2466,7 @@ def main() -> None:
             st.session_state["sidebar_nav_page"] = st.session_state.pop(SESSION_START_PAGE)
         page = st.radio(
             "Ir a",
-            primary_sidebar_pages(PRIMARY_SIDEBAR_PAGES),
+            PRIMARY_SIDEBAR_PAGES,
             key="sidebar_nav_page",
             label_visibility="collapsed",
         )
@@ -2485,10 +2481,6 @@ def main() -> None:
 
     with st.expander("Fuente de datos (técnico)"):
         st.code(str(db_path))
-
-    if page == "API preview":
-        render_api_preview_page()
-        return
 
     conn = _connect_ro(db_path)
     try:
