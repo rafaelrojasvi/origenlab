@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ApiBackend } from "../../api/operatorTypes";
 import type { WarmCaseCategory, WarmCaseItem, WarmCaseStatus } from "../../api/commercialTypes";
-import {
-  DEFAULT_CLIENT_PAGE_SIZE,
-  formatWarmCasesTableFooter,
-  paginateSlice,
-  type ClientPageSizeOption,
-} from "../../lib/clientTablePagination";
+import { formatWarmCasesTableFooter } from "../../lib/clientTablePagination";
+import { useClientTablePagination } from "../../lib/useClientTablePagination";
 import { warmCasesSourceLabel } from "../../lib/dataSourceLabel";
 import {
   clearWarmCaseTableFilters,
@@ -75,8 +71,6 @@ export function WarmCasesTable({
     ...initialFilters,
   });
   const [selectedCase, setSelectedCase] = useState<WarmCaseItem | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<ClientPageSizeOption>(DEFAULT_CLIENT_PAGE_SIZE);
 
   const sourceLabel = meta
     ? warmCasesSourceLabel(backend, meta.data_source)
@@ -89,9 +83,7 @@ export function WarmCasesTable({
   const loadedCount = items.length;
   const presetLabel = WARM_VIEW_PRESET_LABELS[filters.preset];
 
-  useEffect(() => {
-    setPage(1);
-  }, [
+  const { pageSize, setPage, setPageSize, pagination } = useClientTablePagination(visibleRows, [
     filters.search,
     filters.status,
     filters.category,
@@ -101,18 +93,7 @@ export function WarmCasesTable({
     loadedCount,
   ]);
 
-  const pagination = useMemo(
-    () => paginateSlice(visibleRows, page, pageSize),
-    [visibleRows, page, pageSize],
-  );
-
   const pagedRows = pagination.slice;
-
-  useEffect(() => {
-    if (page !== pagination.page) {
-      setPage(pagination.page);
-    }
-  }, [pagination.page, page]);
 
   const footerLabel = formatWarmCasesTableFooter({
     from: pagination.from,
@@ -364,10 +345,7 @@ export function WarmCasesTable({
             totalPages={pagination.totalPages}
             pageSize={pageSize}
             onPageChange={setPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size);
-              setPage(1);
-            }}
+            onPageSizeChange={setPageSize}
           />
         ) : null}
         <p className="border-t border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-muted)]">

@@ -1,6 +1,6 @@
 # Codebase simplification audit — email-pipeline, API, dashboard integration
 
-**Status:** read-only audit (Phase 0); **Phase 1 doc map** applied 2026-06-02 in [`SCRIPT_MAP.md`](../SCRIPT_MAP.md) and [`RUNBOOK.md`](../RUNBOOK.md) (docs only)  
+**Status:** read-only audit (Phase 0); **Phase 1 doc map** (2026-06-02); **Phase 2 tests + removal evidence** (2026-06-02) — see [`PHASE2_SCRIPT_REMOVAL_EVIDENCE_20260602.md`](PHASE2_SCRIPT_REMOVAL_EVIDENCE_20260602.md)  
 **Date:** 2026-06-02  
 **Scope:** `apps/email-pipeline/scripts/{ingest,qa,mart,leads,tools,ops}`, `src/origenlab_email_pipeline`, `apps/api`, docs/tests that lock script paths, dashboard ↔ API integration  
 **Authority for daily ops (unchanged):** [`SCRIPT_MAP.md`](../SCRIPT_MAP.md), [`RUNBOOK.md`](../RUNBOOK.md), [`reports/out/active/current/manifest.json`](../../reports/out/active/current/manifest.json)

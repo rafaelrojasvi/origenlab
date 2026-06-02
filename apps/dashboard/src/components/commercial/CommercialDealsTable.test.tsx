@@ -97,7 +97,9 @@ describe("CommercialDealsTable", () => {
       <CommercialDealsTable data={sampleDeal} loading={false} error={null} onRetry={() => {}} />,
     );
     expect(container.querySelectorAll("a[href]").length).toBe(0);
-    expect(container.querySelectorAll("button").length).toBe(0);
+    const tbody = container.querySelector("tbody");
+    expect(tbody?.querySelectorAll("a[href]").length).toBe(0);
+    expect(tbody?.querySelectorAll("button").length).toBe(0);
   });
 
   it("does not render forbidden private fields", () => {

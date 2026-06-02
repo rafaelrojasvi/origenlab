@@ -319,7 +319,9 @@ describe("WarmCasesTable", () => {
       />,
     );
     expect(document.querySelectorAll("tbody tr")).toHaveLength(15);
-    within(screen.getByTestId("table-pagination-bar")).getByText(/Página 1 de 2/);
+    const nav = within(screen.getByTestId("table-pagination-nav"));
+    expect(nav.getByRole("button", { name: "Página 1" }).getAttribute("aria-current")).toBe("page");
+    expect(nav.getByRole("button", { name: "Página 2" })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Filas por página"), { target: { value: "all" } });
     expect(document.querySelectorAll("tbody tr")).toHaveLength(20);
   });

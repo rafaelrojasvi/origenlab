@@ -16,7 +16,8 @@ _SCRIPT = REPO / "scripts" / "mart" / "build_business_mart.py"
 
 
 def test_build_business_mart_source_imports_counter() -> None:
-    text = _SCRIPT.read_text(encoding="utf-8")
+    contact_org = REPO / "src" / "origenlab_email_pipeline" / "core" / "mart" / "contact_org_builder.py"
+    text = contact_org.read_text(encoding="utf-8")
     assert "from collections import Counter" in text or "Counter, defaultdict" in text
     assert "doc_aggs.doc_counts_by_email.get(int(email_id), Counter())" in text
 

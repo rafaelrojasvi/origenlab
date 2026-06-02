@@ -15,6 +15,8 @@ import { ProspectosDrawer } from "../components/prospectos/ProspectosDrawer";
 import { OperatorApiError } from "../api/operatorClient";
 import { leadProspectsQueryFromOrigin } from "../lib/prospectOriginQuery";
 import { formatProspectosTableFooter } from "../lib/clientTablePagination";
+import { useClientTablePagination } from "../lib/useClientTablePagination";
+import { TablePaginationBar } from "../components/commercial/TablePaginationBar";
 import {
   prospectContactCell,
   prospectClassificationLabel,
@@ -123,9 +125,37 @@ export function ProspectosPage() {
     );
   }, [summary]);
 
+  const { pageSize, setPage, setPageSize, pagination } = useClientTablePagination(items, [
+    searchInput,
+    originFilter,
+    sector,
+    region,
+    campaignBucket,
+    minScore,
+    showBlocked,
+    items.length,
+  ]);
+
+  const pagedItems = pagination.slice;
+
   const listFooter = useMemo(
-    () => formatProspectosTableFooter({ loaded: items.length, total }),
-    [items.length, total],
+    () =>
+      formatProspectosTableFooter({
+        from: pagination.from,
+        to: pagination.to,
+        loaded: items.length,
+        apiTotal: total,
+        page: pagination.page,
+        totalPages: pagination.totalPages,
+      }),
+    [
+      pagination.from,
+      pagination.to,
+      pagination.page,
+      pagination.totalPages,
+      items.length,
+      total,
+    ],
   );
 
   return (
@@ -257,7 +287,7 @@ export function ProspectosPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map((row) => {
+            {pagedItems.map((row) => {
               const origin = prospectOriginChip(row);
               const badge = prospectTableBadge(row);
               return (
@@ -295,6 +325,16 @@ export function ProspectosPage() {
             })}
           </tbody>
         </table>
+        {items.length > 0 && !listLoading ? (
+          <TablePaginationBar
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            disabled={listLoading}
+          />
+        ) : null}
         <div
           className="border-t border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-muted)]"
           data-testid="prospectos-table-footer"

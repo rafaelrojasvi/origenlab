@@ -71,7 +71,9 @@ describe("CatalogPage", () => {
   it("loads nine catalog products with real category names", async () => {
     render(<CatalogPage />);
     await waitFor(() => {
-      expect(screen.getByText("9 productos catalogados")).toBeTruthy();
+      expect(screen.getByTestId("catalog-table-footer").textContent).toMatch(
+        /Mostrando .* de 9/,
+      );
       expect(screen.getAllByText("Reactor de laboratorio").length).toBeGreaterThan(0);
     });
     const table = screen.getByRole("table");
@@ -80,7 +82,9 @@ describe("CatalogPage", () => {
 
   it("brand filter chip toggles off and Limpiar filtros resets", async () => {
     render(<CatalogPage />);
-    await waitFor(() => screen.getByText("9 productos catalogados"));
+    await waitFor(() =>
+      expect(screen.getByTestId("catalog-table-footer").textContent).toMatch(/de 9/),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "IKA", pressed: false }));
     await waitFor(() => {
@@ -209,7 +213,9 @@ describe("CatalogPage", () => {
 
   it("rendered UI preserves common Spanish words and blocks artifacts", async () => {
     render(<CatalogPage />);
-    await waitFor(() => screen.getByText("9 productos catalogados"));
+    await waitFor(() =>
+      expect(screen.getByTestId("catalog-table-footer").textContent).toMatch(/de 9/),
+    );
     fireEvent.click(screen.getByRole("button", { name: /Abrir ficha de CRTOP Lab Reactor/i }));
     await screen.findByRole("dialog");
 
