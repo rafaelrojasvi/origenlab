@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import streamlit as st
 
-MIRROR_LABEL = "Postgres mirror / eventually consistent"
-
 PAGE_STATUS_PRESETS: dict[str, dict[str, str]] = {
     "Inicio": {
         "source": "Gmail Workspace **contacto@origenlab.cl** (`gmail:contacto@origenlab.cl/…`); KPIs de contactos/org/señales **operativos** (no mart completo)",
@@ -74,10 +72,6 @@ PAGE_STATUS_PRESETS: dict[str, dict[str, str]] = {
     "Oportunidades": {
         "source": "Vista derivada del mart",
         "freshness": "Derivada de señales heurísticas reconstruidas",
-    },
-    "API preview": {
-        "source": f"API FastAPI Slice 1 (GET) — **{MIRROR_LABEL}**",
-        "freshness": "Al pulsar «Actualizar desde API»; no sustituye SQLite operativo",
     },
 }
 

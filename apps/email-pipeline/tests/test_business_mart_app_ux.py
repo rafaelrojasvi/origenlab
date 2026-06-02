@@ -30,14 +30,12 @@ def test_sidebar_includes_clasificacion_comercial() -> None:
     assert "PRIMARY_SIDEBAR_PAGES" in APP_SOURCE
 
 
-def test_sidebar_api_preview_wired_when_enabled() -> None:
-    assert "primary_sidebar_pages" in APP_SOURCE
-    assert "render_api_preview_page" in APP_SOURCE
-    assert 'page == "API preview"' in APP_SOURCE
-    from origenlab_email_pipeline.streamlit_api_preview import primary_sidebar_pages
-
-    base = ["Inicio", "Outbound / No repetir"]
-    assert "API preview" not in primary_sidebar_pages(base)
+def test_sidebar_does_not_include_api_preview() -> None:
+    assert "streamlit_api_preview" not in APP_SOURCE
+    assert "render_api_preview_page" not in APP_SOURCE
+    assert 'page == "API preview"' not in APP_SOURCE
+    assert "API preview" not in APP_SOURCE
+    assert "PRIMARY_SIDEBAR_PAGES" in APP_SOURCE
 
 
 def test_inicio_uses_canonical_operational_kpis_not_full_mart_headline() -> None:
@@ -46,13 +44,6 @@ def test_inicio_uses_canonical_operational_kpis_not_full_mart_headline() -> None
     assert 'render_kpi_metric("Contactos (mart)"' not in APP_SOURCE
     assert "canonical_only=True" in APP_SOURCE
     assert "Atajos exploratorios (mart)" not in APP_SOURCE
-
-
-def test_sidebar_api_preview_appears_with_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8001")
-    from origenlab_email_pipeline.streamlit_api_preview import primary_sidebar_pages
-
-    assert "API preview" in primary_sidebar_pages(["Inicio"])
 
 
 def test_date_prefix_and_days_since_helpers():
@@ -316,7 +307,6 @@ def test_page_status_values_cover_key_client_pages() -> None:
         "Proveedores",
         "Candidatos comerciales",
         "Oportunidades",
-        "API preview",
     }
     assert expected_pages.issubset(set(PAGE_STATUS_PRESETS.keys()))
     for page in expected_pages:
