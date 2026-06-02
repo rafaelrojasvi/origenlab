@@ -14,6 +14,9 @@ TATIANA_PKG = PKG_ROOT / "tatiana_copilot"
 # Non-Streamlit production modules must not import streamlit_* (Streamlit retirement S1+).
 _NON_STREAMLIT_PRODUCTION_PATHS = [
     PKG_ROOT / "classification_postgres_mirror.py",
+    PKG_ROOT / "operator_copy_es.py",
+    PKG_ROOT / "tatiana_copilot" / "borrador_support.py",
+    *sorted((PKG_ROOT / "read").rglob("*.py")),
 ]
 
 # Tatiana must not own eligibility or archive batch integration; avoid coupling to parent streamlit_* modules.
@@ -63,7 +66,8 @@ def test_tatiana_copilot_import_boundaries(path: Path) -> None:
 )
 def test_non_streamlit_production_modules_do_not_import_streamlit(path: Path) -> None:
     bad = _violations_in_file(path)
-    assert not bad, (
-        f"{path.name} must not import streamlit_* modules; use canonical_operational_sql "
-        f"or other neutral read modules. Violations:\n" + "\n".join(bad)
-    )
+        assert not bad, (
+        f"{path.relative_to(PKG_ROOT)} must not import streamlit_* modules; use read/*, "
+        f"operator_copy_es, canonical_operational_sql, or other neutral read modules. "
+        "Violations:\n" + "\n".join(bad)
+        )
