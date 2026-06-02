@@ -15,6 +15,9 @@ from origenlab_email_pipeline.contact_email_suppression import (
     validate_contact_email_suppression_payload,
 )
 from origenlab_email_pipeline.lead_research.lead_research_schema import ensure_lead_research_tables
+from origenlab_email_pipeline.lead_research.lead_research_operational_overlay import (
+    CLASS_SAME_DOMAIN_CONTACTED_REVIEW,
+)
 from origenlab_email_pipeline.lead_research.prospectos_safety_drift import (
     run_prospectos_safety_drift_audit,
 )
@@ -147,6 +150,25 @@ def drift_db(tmp_path: Path) -> Path:
         is_blocked=0,
     )
 
+    _insert_prospect(
+        conn,
+        batch_id=batch_id,
+        prospect_key="falta-domain-contacted",
+        email=None,
+        classification="research_only_contact_needed",
+        status="research_needed",
+        is_blocked=0,
+        domain="client.cl",
+    )
+    upsert_outreach_contact_state(
+        conn,
+        payload=validate_outreach_contact_state_payload(
+            contact_email="other@client.cl",
+            state="contacted",
+            source="test",
+        ),
+    )
+
     conn.commit()
     conn.close()
     return db
@@ -212,9 +234,26 @@ def test_reports_missing_email_rows(drift_db: Path, tmp_path: Path) -> None:
     finally:
         conn.close()
 
-    assert result.summary["prospects_missing_email"] == 1
-    assert len(result.missing_email) == 1
-    assert result.missing_email[0]["prospect_key"] == "no-email"
+    assert result.summary["prospects_missing_email"] == 2
+    assert len(result.missing_email) == 2
+
+
+def test_empty_email_same_domain_overlay_in_drift_audit(drift_db: Path, tmp_path: Path) -> None:
+    from origenlab_email_pipeline.lead_research.lead_research_mirror_read_model import (
+        load_lead_research_mirror_payload,
+    )
+
+    conn = sqlite3.connect(drift_db)
+    try:
+        row = next(
+            p
+            for p in load_lead_research_mirror_payload(conn)["prospects"]
+            if p["prospect_key"] == "falta-domain-contacted"
+        )
+    finally:
+        conn.close()
+    assert row["classification"] == CLASS_SAME_DOMAIN_CONTACTED_REVIEW
+    assert not row.get("email")
 
 
 def test_no_db_writes(drift_db: Path, tmp_path: Path) -> None:
@@ -228,7 +267,7 @@ def test_no_db_writes(drift_db: Path, tmp_path: Path) -> None:
         after = conn.execute("SELECT COUNT(*) FROM lead_research_prospect").fetchone()[0]
     finally:
         conn.close()
-    assert before == after == 4
+    assert before == after == 5
 
 
 def test_deterministic_summary_and_sort(drift_db: Path, tmp_path: Path) -> None:

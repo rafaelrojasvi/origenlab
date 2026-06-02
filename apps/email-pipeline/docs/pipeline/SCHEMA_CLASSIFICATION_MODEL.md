@@ -130,6 +130,10 @@ Without explicit approval and a migration plan:
 | Document email vs domain suppression precedence (§3) | Done |
 | RUNBOOK / AGENTS link for discoverability | Linked from parent docs |
 
+### Prospectos display overlay (empty email + same-domain evidence)
+
+Raw `lead_research_prospect` rows may have **no email** while `outreach_contact_state` or Gmail sent fields show **same-domain** contact. The operational overlay (`lead_research_operational_overlay.py`) upgrades those rows to **`same_domain_contacted_review`** for mirror/dashboard only — **not** send approval and **not** a raw-table backfill. Suppression (exact or domain) still wins.
+
 ### P1 — consistency / readability (future code)
 
 | Item | Notes |
