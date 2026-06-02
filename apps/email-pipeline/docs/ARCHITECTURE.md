@@ -50,7 +50,7 @@ So the **lead** and **`contact_master`** export paths share one policy module (`
 <a id="m-eparch-package-surface"></a>
 ## Python package surface (`origenlab_email_pipeline`)
 
-The library root is still **mostly flat** (many modules at one level). **Exceptions:** commercial intelligence v1 under [`commercial/`](../src/origenlab_email_pipeline/commercial/) (root `commercial_intel_*` **shims**); operational trust only under [`operational_trust/`](../src/origenlab_email_pipeline/operational_trust/) (package facade). **Domain ownership** and **allowed dependencies** are documented in [`pipeline/PACKAGE_DOMAINS.md`](pipeline/PACKAGE_DOMAINS.md). Highlights:
+The library root is still **mostly flat** (many modules at one level). **Exceptions:** commercial intelligence v1 under [`commercial/`](../src/origenlab_email_pipeline/commercial/); operational trust only under [`operational_trust/`](../src/origenlab_email_pipeline/operational_trust/) (package facade). **Domain ownership** and **allowed dependencies** are documented in [`pipeline/PACKAGE_DOMAINS.md`](pipeline/PACKAGE_DOMAINS.md). Highlights:
 
 - **`candidate_export_gate.py`** and **`marketing_export_context.py`** are **stable anchors** — shared by archive batch, lead queue, Streamlit Cola, and audits; avoid relocating without a migration plan.
 - **`lead_*` vs `leads_*`:** plural ≈ pipeline/DDL bundle; singular ≈ master-row identity, provenance, accounts (details in that doc).

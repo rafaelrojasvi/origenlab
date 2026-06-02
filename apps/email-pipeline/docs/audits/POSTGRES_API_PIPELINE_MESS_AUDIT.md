@@ -162,7 +162,7 @@ Stages below map to your requested numbering. **“Daily-use”** follows `SCRIP
 
 | | |
 |--|--|
-| **Files** | `scripts/mart/build_business_mart.py`, `scripts/commercial/build_commercial_intel_v1.py`, `scripts/reports/*`, `src/origenlab_email_pipeline/business_mart.py`, `commercial_intel_queries.py` |
+| **Files** | `scripts/mart/build_business_mart.py`, `scripts/commercial/build_commercial_intel_v1.py`, `scripts/reports/*`, `src/origenlab_email_pipeline/business_mart.py`, `commercial/commercial_intel_queries.py` |
 | **Output** | Derived tables + HTML/JSON reports |
 | **DB writes** | **Yes** (rebuild patterns) |
 | **Cadence** | **Occasional / maintenance** |

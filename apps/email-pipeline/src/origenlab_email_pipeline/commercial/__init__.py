@@ -7,7 +7,7 @@ Implementation modules:
 - ``commercial_intel_rules`` — deterministic signal derivation
 - ``commercial_intel_review`` — candidate queue export and review actions
 
-**Compatibility:** root-level ``origenlab_email_pipeline.commercial_intel_*`` modules
-remain as thin re-export shims. Prefer ``origenlab_email_pipeline.commercial.commercial_intel_*``
-(or the shims) for imports; behavior is identical.
+**Compatibility:** import from ``origenlab_email_pipeline.commercial.commercial_intel_*``
+(or ``from origenlab_email_pipeline.commercial import commercial_intel_schema``).
+Root-level ``commercial_intel_*`` shims were removed in Phase 5I (2026-06).
 """

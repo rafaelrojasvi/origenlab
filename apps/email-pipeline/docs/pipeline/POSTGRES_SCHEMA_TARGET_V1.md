@@ -6,7 +6,7 @@ Last reviewed: 2026-04-19
 
 ## 1. Purpose
 
-The OrigenLab email pipeline today uses a **single SQLite file** as the operational database. DDL is spread across Python modules (`db.py`, `business_mart_schema.py`, `leads_schema.py`, `commercial_intel_schema.py`, etc.); see the internal schema inventory derived from those modules.
+The OrigenLab email pipeline today uses a **single SQLite file** as the operational database. DDL is spread across Python modules (`db.py`, `business_mart_schema.py`, `leads_schema.py`, `commercial/commercial_intel_schema.py`, etc.); see the internal schema inventory derived from those modules.
 
 **This document does not change runtime behavior.** SQLite remains the operational store until an explicit cutover.
 
