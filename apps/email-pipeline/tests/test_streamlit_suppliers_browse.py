@@ -8,7 +8,7 @@ from pathlib import Path
 from openpyxl import Workbook
 
 from origenlab_email_pipeline.business_mart_schema import BUSINESS_MART_SCHEMA_SQL
-from origenlab_email_pipeline.streamlit_suppliers_browse import (
+from origenlab_email_pipeline.read.suppliers_browse import (
     SupplierBrowseFilters,
     build_suppliers_browse_sql,
     fetch_suppliers_browse_df,

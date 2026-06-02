@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from origenlab_email_pipeline.streamlit_borrador_support import (
+from origenlab_email_pipeline.tatiana_copilot.borrador_support import (
     contact_suppression_reason_label,
     fmt_marketing_variant,
 )

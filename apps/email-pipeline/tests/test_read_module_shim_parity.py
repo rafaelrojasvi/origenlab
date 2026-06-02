@@ -1,39 +1,66 @@
-"""Streamlit retirement S2: neutral read modules and shim re-export identity."""
+"""Streamlit retirement Phase 5E: neutral read modules remain; S2 shims removed."""
 
 from __future__ import annotations
 
-import origenlab_email_pipeline.operator_copy_es as operator_copy
-import origenlab_email_pipeline.read.leads_browse as leads_browse
-import origenlab_email_pipeline.read.suppliers_browse as suppliers_browse
-import origenlab_email_pipeline.read.today_workspace as today_workspace
-import origenlab_email_pipeline.streamlit_borrador_support as borrador_shim
-import origenlab_email_pipeline.streamlit_leads_browse as leads_shim
-import origenlab_email_pipeline.streamlit_prioridad_copy as copy_shim
-import origenlab_email_pipeline.streamlit_suppliers_browse as suppliers_shim
-import origenlab_email_pipeline.streamlit_today_workspace as today_shim
-import origenlab_email_pipeline.tatiana_copilot.borrador_support as borrador_support
+from importlib import import_module
+from pathlib import Path
+
+import pytest
+
+PKG = Path(__file__).resolve().parents[1] / "src" / "origenlab_email_pipeline"
+
+_REMOVED_SHIMS = (
+    "streamlit_leads_browse",
+    "streamlit_suppliers_browse",
+    "streamlit_today_workspace",
+    "streamlit_borrador_support",
+    "streamlit_prioridad_copy",
+)
 
 
-def test_leads_browse_shim_reexports() -> None:
-    for name in leads_shim.__all__:
-        assert getattr(leads_shim, name) is getattr(leads_browse, name)
+@pytest.mark.parametrize("module_name", _REMOVED_SHIMS)
+def test_phase5e_streamlit_shim_modules_removed(module_name: str) -> None:
+    assert not (PKG / f"{module_name}.py").is_file(), module_name
 
 
-def test_suppliers_browse_shim_reexports() -> None:
-    for name in suppliers_shim.__all__:
-        assert getattr(suppliers_shim, name) is getattr(suppliers_browse, name)
+def test_leads_browse_neutral_exports() -> None:
+    mod = import_module("origenlab_email_pipeline.read.leads_browse")
+    for name in (
+        "LeadBrowseFilters",
+        "build_leads_browse_query",
+        "fetch_lead_account_rollups_df",
+        "fetch_leads_browse_df",
+        "lead_browse_filter_options",
+        "lead_browse_ready",
+    ):
+        assert callable(getattr(mod, name))
 
 
-def test_today_workspace_shim_reexports() -> None:
-    for name in today_shim.__all__:
-        assert getattr(today_shim, name) is getattr(today_workspace, name)
+def test_suppliers_browse_neutral_exports() -> None:
+    mod = import_module("origenlab_email_pipeline.read.suppliers_browse")
+    for name in (
+        "SupplierBrowseFilters",
+        "build_suppliers_browse_sql",
+        "fetch_suppliers_browse_df",
+        "supplier_browse_filter_options",
+        "supplier_browse_ready",
+    ):
+        assert callable(getattr(mod, name))
 
 
-def test_operator_copy_shim_reexports() -> None:
-    for name in copy_shim.__all__:
-        assert getattr(copy_shim, name) is getattr(operator_copy, name)
+def test_today_workspace_neutral_exports() -> None:
+    mod = import_module("origenlab_email_pipeline.read.today_workspace")
+    for name in mod.__all__:
+        assert hasattr(mod, name)
 
 
-def test_borrador_support_shim_reexports() -> None:
-    for name in borrador_shim.__all__:
-        assert getattr(borrador_shim, name) is getattr(borrador_support, name)
+def test_operator_copy_neutral_exports() -> None:
+    mod = import_module("origenlab_email_pipeline.operator_copy_es")
+    for name in mod.__all__:
+        assert hasattr(mod, name)
+
+
+def test_borrador_support_neutral_exports() -> None:
+    mod = import_module("origenlab_email_pipeline.tatiana_copilot.borrador_support")
+    for name in mod.__all__:
+        assert hasattr(mod, name)

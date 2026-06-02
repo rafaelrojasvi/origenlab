@@ -27,14 +27,7 @@ from origenlab_email_pipeline.outbound_sent_preflight import (
     probe_sent_history,
     sent_preflight_failure_detail_lines,
 )
-from origenlab_email_pipeline.streamlit_borrador_support import (
-    contact_suppression_reason_label,
-    fmt_marketing_variant,
-    load_existing_pilot_batch,
-    pilot_batch_signature,
-)
-from origenlab_email_pipeline.streamlit_page_status import render_kpi_metric, render_page_status
-from origenlab_email_pipeline.streamlit_prioridad_copy import (
+from origenlab_email_pipeline.operator_copy_es import (
     borrador_visibility_origin_es,
     cases_row_visibility_badges_es,
     marketing_row_visibility_badges_es,
@@ -45,6 +38,20 @@ from origenlab_email_pipeline.streamlit_prioridad_copy import (
     today_row_operational_destination_es,
     today_row_visibility_hint_es,
 )
+from origenlab_email_pipeline.read.today_workspace import (
+    TodayWorkspaceRow,
+    TodayWorkspaceSpec,
+    apply_today_row_handoff,
+    gather_today_workspace_rows,
+    source_label_es,
+)
+from origenlab_email_pipeline.tatiana_copilot.borrador_support import (
+    contact_suppression_reason_label,
+    fmt_marketing_variant,
+    load_existing_pilot_batch,
+    pilot_batch_signature,
+)
+from origenlab_email_pipeline.streamlit_page_status import render_kpi_metric, render_page_status
 from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
     SESSION_BORRADOR_HANDOFF_EMAIL_ID,
     SESSION_BORRADOR_ORIGEN_CASO,
@@ -53,13 +60,6 @@ from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
     SESSION_TODAY_HANDOFF_CASO_EMAIL_ID,
     apply_marketing_queue_row_to_borrador_session,
     navigate_to_page,
-)
-from origenlab_email_pipeline.streamlit_today_workspace import (
-    TodayWorkspaceRow,
-    TodayWorkspaceSpec,
-    apply_today_row_handoff,
-    gather_today_workspace_rows,
-    source_label_es,
 )
 from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
     CANONICAL_BASE_PRESENTATION_EMAIL_ES,
