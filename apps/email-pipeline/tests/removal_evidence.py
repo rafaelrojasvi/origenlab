@@ -26,26 +26,6 @@ DEPRECATED_REMOVAL_TARGETS: tuple[dict[str, str], ...] = (
         "replacement": "build_archive_send_batch.py --audit-only",
         "suggested_phase": "5",
     },
-    {
-        "path": "scripts/build_lead_account_rollup.py",
-        "replacement": "scripts/leads/advanced/build_lead_account_rollup.py",
-        "suggested_phase": "4–5",
-    },
-    {
-        "path": "scripts/match_lead_accounts_to_existing_orgs.py",
-        "replacement": "scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py",
-        "suggested_phase": "4–5",
-    },
-    {
-        "path": "scripts/validate_lead_account_rollup.py",
-        "replacement": "scripts/leads/advanced/validate_lead_account_rollup.py",
-        "suggested_phase": "4–5",
-    },
-    {
-        "path": "scripts/audit_lead_org_quality.py",
-        "replacement": "scripts/leads/advanced/audit_lead_org_quality.py",
-        "suggested_phase": "4–5",
-    },
 )
 
 REMOVED_PHASE5A_TARGETS: tuple[dict[str, str], ...] = (
@@ -58,6 +38,29 @@ REMOVED_PHASE5A_TARGETS: tuple[dict[str, str], ...] = (
         "path": "scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh",
         "replacement": "docs/pipeline/POST_SEND_SAFE_LOOP.md step-by-step loop",
         "removed_phase": "5A",
+    },
+)
+
+REMOVED_PHASE5B_TARGETS: tuple[dict[str, str], ...] = (
+    {
+        "path": "scripts/build_lead_account_rollup.py",
+        "replacement": "scripts/leads/advanced/build_lead_account_rollup.py",
+        "removed_phase": "5B",
+    },
+    {
+        "path": "scripts/match_lead_accounts_to_existing_orgs.py",
+        "replacement": "scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py",
+        "removed_phase": "5B",
+    },
+    {
+        "path": "scripts/validate_lead_account_rollup.py",
+        "replacement": "scripts/leads/advanced/validate_lead_account_rollup.py",
+        "removed_phase": "5B",
+    },
+    {
+        "path": "scripts/audit_lead_org_quality.py",
+        "replacement": "scripts/leads/advanced/audit_lead_org_quality.py",
+        "removed_phase": "5B",
     },
 )
 
@@ -81,10 +84,6 @@ _TEST_LOCK_PATTERNS: dict[str, str] = {
     "scripts/qa/build_buyer_opportunity_queue.py": "build_buyer_opportunity_queue",
     "scripts/tools/flag_reported_non_delivery_from_contacto.py": "flag_reported_non_delivery",
     "scripts/leads/advanced/export_archive_outreach_candidates.py": "export_archive_outreach_candidates",
-    "scripts/build_lead_account_rollup.py": "build_lead_account_rollup.py",
-    "scripts/match_lead_accounts_to_existing_orgs.py": "match_lead_accounts_to_existing_orgs",
-    "scripts/validate_lead_account_rollup.py": "validate_lead_account_rollup",
-    "scripts/audit_lead_org_quality.py": "audit_lead_org_quality",
 }
 
 
@@ -152,7 +151,7 @@ def build_removal_evidence_markdown() -> str:
         "Owner: email-pipeline-maintainers",
         "Last reviewed: 2026-06-02",
         "",
-        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed the two dated 2026-06-01 post-send shell orchestrators.",
+        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account compatibility wrappers.",
         "",
         "Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`",
         "",
@@ -181,6 +180,19 @@ def build_removal_evidence_markdown() -> str:
         ]
     )
     for row in REMOVED_PHASE5A_TARGETS:
+        lines.append(
+            f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
+        )
+    lines.extend(
+        [
+            "",
+            "## Removed in Phase 5B (2026-06-02)",
+            "",
+            "| Path | Replacement | Removed phase |",
+            "|------|-------------|---------------|",
+        ]
+    )
+    for row in REMOVED_PHASE5B_TARGETS:
         lines.append(
             f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
         )

@@ -4,7 +4,7 @@ Status: generated reference (read-only audit)
 Owner: email-pipeline-maintainers
 Last reviewed: 2026-06-02
 
-**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed the two dated 2026-06-01 post-send shell orchestrators.
+**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account compatibility wrappers.
 
 Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`
 
@@ -17,10 +17,6 @@ Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_
 | `scripts/qa/build_buyer_opportunity_queue.py` | yes | yes | 4 | 6 | 1 | build_equipment_first_opportunity_queue.py + build_equipment_first_operator_queue.py | 5 |
 | `scripts/tools/flag_reported_non_delivery_from_contacto.py` | yes | no | 4 | 4 | 1 | flag_ndr_bounces_from_contacto.py (NDR) + human review queue | 5 |
 | `scripts/leads/advanced/export_archive_outreach_candidates.py` | yes | yes | 5 | 5 | 1 | build_archive_send_batch.py --audit-only | 5 |
-| `scripts/build_lead_account_rollup.py` | yes | yes | 10 | 8 | 5 | scripts/leads/advanced/build_lead_account_rollup.py | 4–5 |
-| `scripts/match_lead_accounts_to_existing_orgs.py` | yes | yes | 9 | 6 | 6 | scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py | 4–5 |
-| `scripts/validate_lead_account_rollup.py` | yes | yes | 6 | 6 | 3 | scripts/leads/advanced/validate_lead_account_rollup.py | 4–5 |
-| `scripts/audit_lead_org_quality.py` | yes | yes | 6 | 6 | 3 | scripts/leads/advanced/audit_lead_org_quality.py | 4–5 |
 
 ## Removed in Phase 5A (2026-06-02)
 
@@ -28,6 +24,15 @@ Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_
 |------|-------------|---------------|
 | `scripts/ops/run_post_send_2026_06_01_refresh.sh` | docs/pipeline/POST_SEND_SAFE_LOOP.md step-by-step loop | 5A |
 | `scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh` | docs/pipeline/POST_SEND_SAFE_LOOP.md step-by-step loop | 5A |
+
+## Removed in Phase 5B (2026-06-02)
+
+| Path | Replacement | Removed phase |
+|------|-------------|---------------|
+| `scripts/build_lead_account_rollup.py` | scripts/leads/advanced/build_lead_account_rollup.py | 5B |
+| `scripts/match_lead_accounts_to_existing_orgs.py` | scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py | 5B |
+| `scripts/validate_lead_account_rollup.py` | scripts/leads/advanced/validate_lead_account_rollup.py | 5B |
+| `scripts/audit_lead_org_quality.py` | scripts/leads/advanced/audit_lead_org_quality.py | 5B |
 
 ## Phase 3 refactor targets (keep entrypoints; lock behavior first)
 

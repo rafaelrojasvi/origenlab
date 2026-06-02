@@ -16,7 +16,7 @@ Outbound lane/source-of-truth usage guidance (operator model, not DDL ownership)
 
 Callers may still use `ensure_leads_tables()` / `ensure_lead_account_tables()` alone; defaults preserve prior behavior (backfill + view refresh).
 
-**Phase 2 adoption:** [`build_business_mart.py`](../../scripts/mart/build_business_mart.py), [`match_leads_to_mart.py`](../../scripts/leads/match_leads_to_mart.py), [`build_lead_account_rollup.py`](../../scripts/leads/advanced/build_lead_account_rollup.py), and [`match_lead_accounts_to_existing_orgs.py`](../../scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py) call `migrate_sqlite_schema` with the appropriate `SchemaLayer` set. Thin wrappers at [`scripts/build_lead_account_rollup.py`](../../scripts/build_lead_account_rollup.py) and [`scripts/match_lead_accounts_to_existing_orgs.py`](../../scripts/match_lead_accounts_to_existing_orgs.py) keep shorter paths working. Operational one-shot: [`scripts/pipeline/run_aligned_stack.sh`](../../scripts/pipeline/run_aligned_stack.sh).
+**Phase 2 adoption:** [`build_business_mart.py`](../../scripts/mart/build_business_mart.py), [`match_leads_to_mart.py`](../../scripts/leads/match_leads_to_mart.py), [`build_lead_account_rollup.py`](../../scripts/leads/advanced/build_lead_account_rollup.py), and [`match_lead_accounts_to_existing_orgs.py`](../../scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py) call `migrate_sqlite_schema` with the appropriate `SchemaLayer` set. Operational one-shot: [`scripts/pipeline/run_aligned_stack.sh`](../../scripts/pipeline/run_aligned_stack.sh).
 
 ---
 

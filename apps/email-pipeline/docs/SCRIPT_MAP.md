@@ -22,9 +22,9 @@ Detail: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-reports-out-cleanup) · [`CRUD_SAFETY.
 
 **Stage 6E1 (Tatiana / lab):** **boundary doc only** — see [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md). Lab / Tatiana / `scripts/ml` are **not** the daily outbound lanes. **Parked Postgres/API/pilots index:** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md). Source-quality planner (`plan_source_quality.py`) labels the `tatiana_lab` bucket for the paths listed there. Future **6E2** may refactor large Tatiana modules; 6E1 does **not** move or change implementation.
 
-**Lead-account root shims:** four files under `scripts/*.py` are **`COMPATIBILITY_WRAPPER` / `COMPATIBILITY_ONLY`** — retained for bookmarks and old one-liners; **not preferred** for new operator commands or agent prompts. **Canonical implementations:** `scripts/leads/advanced/*` (table below). **Do not delete** wrappers until doc/test references migrate. Pure env redaction utilities: [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py).
+**Lead-account scripts:** use **`scripts/leads/advanced/*`** only in new docs, runbooks, and agent prompts. Root-level compatibility wrappers were **removed in Phase 5B** (2026-06-02). Pure env redaction utilities: [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py).
 
-**Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints (including the reports-out archive tool), asserts top-of-file warnings on the break-glass set (aligned to tables below), and checks the four root compatibility wrappers. [`test_lead_compatibility_wrappers.py`](../tests/test_lead_compatibility_wrappers.py) locks wrapper→canonical mapping and SCRIPT_MAP labeling. Regressions require updating those tests for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
+**Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints (including the reports-out archive tool) and asserts top-of-file warnings on the break-glass set (aligned to tables below). [`test_lead_compatibility_wrappers.py`](../tests/test_lead_compatibility_wrappers.py) locks canonical lead-account paths under `scripts/leads/advanced/`. Regressions require updating those tests for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
 
 **Canonical campaign workspace:** fresh inputs and outputs for the two outbound lanes belong in **`reports/out/active/current/`**. Other paths under `reports/out/active/` (and most of `reports/out/archive/`) are **evidence, history, or ad-hoc exports** — not the default place to pick up “today’s” CSV for DeepSearch or send lists. Keep only intentional root reference files in `active/` (`outreach_contacted_all.csv`, `all_known_marketing_contacts_dedup.csv`) because some scripts use them as default auxiliary inputs. (Stage 6C1) Volume marketing **processing** helpers for ``process_broad_marketing_contacts`` live in ``core.outbound.broad_marketing_contacts``; the **script** remains the supported entrypoint (CSV contracts unchanged). (Stage 6C2) **Do-not-repeat master** merge/summary formatting for ``export_do_not_repeat_master.py`` lives in ``core.outbound.do_not_repeat_master``; the **script** remains the daily entrypoint; **read-only** on SQLite; output filenames and JSON/CSV contract unchanged.
 
@@ -60,16 +60,18 @@ If you only care about the **two daily outbound lanes**, prefer **`prepare_outbo
 
 ---
 
-## Lead-account scripts: canonical vs root wrappers
+## Lead-account scripts (canonical)
 
-**Operator rule:** In **new** docs, runbooks, and agent prompts, use **`scripts/leads/advanced/…`** only. Root paths below are **COMPATIBILITY_WRAPPER** — same behavior via delegation; **not preferred** for new commands.
+**Operator rule:** In **new** docs, runbooks, and agent prompts, use **`scripts/leads/advanced/…`** only.
 
-| Tag | Root path (COMPATIBILITY_ONLY) | Canonical target (use this) | Notes |
-|-----|-------------------------------|-----------------------------|--------|
-| `COMPATIBILITY_WRAPPER` | [`scripts/build_lead_account_rollup.py`](../scripts/build_lead_account_rollup.py) | [`scripts/leads/advanced/build_lead_account_rollup.py`](../scripts/leads/advanced/build_lead_account_rollup.py) | Rebuilds `lead_account_*`; break-glass DELETE pattern on rollup |
-| `COMPATIBILITY_WRAPPER` | [`scripts/match_lead_accounts_to_existing_orgs.py`](../scripts/match_lead_accounts_to_existing_orgs.py) | [`scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py`](../scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py) | Match accounts → `organization_master` |
-| `COMPATIBILITY_WRAPPER` | [`scripts/validate_lead_account_rollup.py`](../scripts/validate_lead_account_rollup.py) | [`scripts/leads/advanced/validate_lead_account_rollup.py`](../scripts/leads/advanced/validate_lead_account_rollup.py) | Rollup sanity checks |
-| `COMPATIBILITY_WRAPPER` | [`scripts/audit_lead_org_quality.py`](../scripts/audit_lead_org_quality.py) | [`scripts/leads/advanced/audit_lead_org_quality.py`](../scripts/leads/advanced/audit_lead_org_quality.py) | Org name quality audit |
+| Tag | Path | Notes |
+|-----|------|--------|
+| `OPS_MAINT` / break-glass | [`scripts/leads/advanced/build_lead_account_rollup.py`](../scripts/leads/advanced/build_lead_account_rollup.py) | Rebuilds `lead_account_*`; break-glass DELETE pattern on rollup |
+| `OPS_MAINT` | [`scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py`](../scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py) | Match accounts → `organization_master` |
+| `OPS_MAINT` | [`scripts/leads/advanced/validate_lead_account_rollup.py`](../scripts/leads/advanced/validate_lead_account_rollup.py) | Rollup sanity checks |
+| `OPS_MAINT` | [`scripts/leads/advanced/audit_lead_org_quality.py`](../scripts/leads/advanced/audit_lead_org_quality.py) | Org name quality audit |
+
+**Removed Phase 5B (2026-06-02):** root wrappers `build_lead_account_rollup.py`, `match_lead_accounts_to_existing_orgs.py`, `validate_lead_account_rollup.py`, and `audit_lead_org_quality.py` under `scripts/` — use the `scripts/leads/advanced/…` paths above.
 
 Detail: [`leads/LEAD_ACCOUNT_LAYER.md`](leads/LEAD_ACCOUNT_LAYER.md) · [`../scripts/README.md`](../scripts/README.md#lead-account-rollup-and-mart-matching).
 

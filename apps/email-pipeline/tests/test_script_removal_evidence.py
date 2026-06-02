@@ -10,6 +10,7 @@ from removal_evidence import (
     DEPRECATED_REMOVAL_TARGETS,
     REFACTOR_PHASE3_TARGETS,
     REMOVED_PHASE5A_TARGETS,
+    REMOVED_PHASE5B_TARGETS,
     build_removal_evidence_markdown,
     reference_counts,
     write_removal_evidence_report,
@@ -28,6 +29,9 @@ def test_generate_removal_evidence_report() -> None:
     for row in REMOVED_PHASE5A_TARGETS:
         assert row["path"] in body
         assert "Removed in Phase 5A" in body
+    for row in REMOVED_PHASE5B_TARGETS:
+        assert row["path"] in body
+        assert "Removed in Phase 5B" in body
 
 
 def test_deprecated_targets_listed_in_script_map() -> None:
@@ -44,9 +48,22 @@ def test_phase5a_removed_shells_documented_in_script_map() -> None:
         assert not (REPO / row["path"]).is_file(), row["path"]
 
 
+def test_phase5b_removed_wrappers_documented_in_script_map() -> None:
+    smap = (REPO / "docs/SCRIPT_MAP.md").read_text(encoding="utf-8")
+    assert "scripts/leads/advanced" in smap
+    for row in REMOVED_PHASE5B_TARGETS:
+        assert Path(row["path"]).name in smap or "Phase 5B" in smap, row["path"]
+        assert not (REPO / row["path"]).is_file(), row["path"]
+
+
 @pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5A_TARGETS])
 def test_phase5a_removed_shells_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5A removed: {rel}"
+
+
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5B_TARGETS])
+def test_phase5b_removed_wrappers_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5B removed: {rel}"
 
 
 def test_refactor_phase3_targets_documented() -> None:
@@ -57,7 +74,7 @@ def test_refactor_phase3_targets_documented() -> None:
 
 @pytest.mark.parametrize("rel", [r["path"] for r in DEPRECATED_REMOVAL_TARGETS])
 def test_deprecated_script_file_still_exists(rel: str) -> None:
-    assert (REPO / rel).is_file(), f"Phase 2 must not delete: {rel}"
+    assert (REPO / rel).is_file(), f"deprecated target must remain on disk: {rel}"
 
 
 def test_evidence_markdown_has_table_rows() -> None:
@@ -83,5 +100,3 @@ def test_deprecated_python_scripts_use_phase4_stderr_helpers() -> None:
         REPO / "scripts/leads/advanced/export_archive_outreach_candidates.py"
     ).read_text(encoding="utf-8")
     assert "print_script_deprecation_warning" in archive
-    wrapper = (REPO / "scripts/build_lead_account_rollup.py").read_text(encoding="utf-8")
-    assert "print_wrapper_deprecation_warning" in wrapper or "_script_warnings" in wrapper

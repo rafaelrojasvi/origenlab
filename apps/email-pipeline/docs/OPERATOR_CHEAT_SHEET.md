@@ -18,7 +18,7 @@ Short answers for day-to-day work. **Canonical procedures and tables:** [`SCRIPT
 
 **Daily runtime truth (default):** **SQLite** + ingested **Gmail Sent** + anti-repeat CSVs (`do_not_repeat_master`, `outreach_contacted_all`) — not Postgres, not the React dashboard, not API mirrors. **Opportunity workflow:** equipment-first queues (`equipment_first_operator_queue_*`, `buyer_opportunity_ab_queue_*`). See [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md) for what is optional.
 
-**Lead-account / advanced paths:** Use canonical **`scripts/leads/advanced/*`** in new docs and agent prompts. Root-level `scripts/build_lead_account_rollup.py` (and three siblings) are **`COMPATIBILITY_WRAPPER` / `COMPATIBILITY_ONLY`** — kept for compatibility, **not preferred** for new commands. See [`SCRIPT_MAP.md`](SCRIPT_MAP.md#lead-account-scripts-canonical-vs-root-wrappers).
+**Lead-account / advanced paths:** Use canonical **`scripts/leads/advanced/*`** in new docs and agent prompts. Root-level wrappers were **removed in Phase 5B** — see [`SCRIPT_MAP.md`](SCRIPT_MAP.md#lead-account-scripts-canonical).
 
 ---
 
