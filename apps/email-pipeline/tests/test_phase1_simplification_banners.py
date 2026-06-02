@@ -35,6 +35,25 @@ def test_legacy_builder_header_contains_legacy_do_not_use() -> None:
     assert _LEGACY_RE.search(head), "expected LEGACY_DO_NOT_USE in file header"
 
 
+def test_legacy_builder_emits_deprecation_warning_on_help() -> None:
+    import os
+    import subprocess
+    import sys
+
+    r = subprocess.run(
+        [sys.executable, str(_LEGACY_BUILDER), "--help"],
+        cwd=str(REPO),
+        env={**os.environ, "PYTHONPATH": str(REPO / "src")},
+        capture_output=True,
+        text=True,
+        timeout=90,
+        check=False,
+    )
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "DEPRECATED" in r.stderr, r.stderr
+    assert "build_equipment_first_opportunity_queue.py" in r.stderr, r.stderr
+
+
 def test_parked_migrate_scripts_header_contains_experimental_parked() -> None:
     for rel in _PARKED_MIGRATE:
         head = (REPO / rel).read_text(encoding="utf-8")[:_HEAD]

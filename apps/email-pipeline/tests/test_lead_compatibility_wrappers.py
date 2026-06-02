@@ -74,6 +74,26 @@ def test_help_entrypoints_do_not_list_root_wrappers() -> None:
     assert not overlap, f"root wrappers must not be daily --help entrypoints: {overlap}"
 
 
+@pytest.mark.parametrize("wrapper,canonical", list(LEAD_ACCOUNT_COMPAT_WRAPPERS.items()))
+def test_wrapper_emits_deprecation_warning_on_help(wrapper: str, canonical: str) -> None:
+    import os
+    import subprocess
+    import sys
+
+    r = subprocess.run(
+        [sys.executable, str(REPO / wrapper), "--help"],
+        cwd=str(REPO),
+        env={**os.environ, "PYTHONPATH": str(REPO / "src")},
+        capture_output=True,
+        text=True,
+        timeout=90,
+        check=False,
+    )
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "COMPATIBILITY_WRAPPER" in r.stderr, r.stderr
+    assert canonical in r.stderr, r.stderr
+
+
 def test_critical_paths_include_both_wrapper_and_canonical() -> None:
     """Wrappers stay on disk; canonical paths are the implementation contract."""
     src = (REPO / "tests/test_critical_script_paths.py").read_text(encoding="utf-8")

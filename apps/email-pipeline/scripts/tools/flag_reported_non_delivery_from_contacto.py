@@ -36,6 +36,7 @@ from origenlab_email_pipeline.contact_email_suppression import (
     validate_contact_email_suppression_payload,
 )
 from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
+from origenlab_email_pipeline.core.safety import print_script_deprecation_warning
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.reported_non_delivery_signals import text_suggests_reported_non_delivery
 
@@ -54,6 +55,14 @@ def _is_internal_or_system_sender(sender: str) -> bool:
 
 
 def main() -> int:
+    print_script_deprecation_warning(
+        "scripts/tools/flag_reported_non_delivery_from_contacto.py",
+        replacement="scripts/tools/flag_ndr_bounces_from_contacto.py for DSN/NDR bounce detection",
+        note=(
+            'Human "reported non-delivery" inbound replies are legacy/manual-review behavior; '
+            "review matches carefully before --apply."
+        ),
+    )
     ap = argparse.ArgumentParser(
         description="Flag contacts who wrote (.Spanish/English.) that they did not receive our mail."
     )

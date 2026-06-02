@@ -10,14 +10,25 @@
 
 from __future__ import annotations
 
+import importlib.util
 import runpy
 import sys
 from pathlib import Path
+
+_WARNINGS = Path(__file__).resolve().parent / "_script_warnings.py"
+_spec = importlib.util.spec_from_file_location("_script_warnings", _WARNINGS)
+assert _spec and _spec.loader
+_sw = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_sw)
 
 _IMPLEMENTATION = (
     Path(__file__).resolve().parent / "leads" / "advanced" / "match_lead_accounts_to_existing_orgs.py"
 )
 
 if __name__ == "__main__":
+    _sw.print_wrapper_deprecation_warning(
+        "scripts/match_lead_accounts_to_existing_orgs.py",
+        "scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py",
+    )
     sys.argv[0] = str(_IMPLEMENTATION)
     runpy.run_path(str(_IMPLEMENTATION), run_name="__main__")
