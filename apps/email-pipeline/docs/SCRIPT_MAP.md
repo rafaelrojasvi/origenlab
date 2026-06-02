@@ -257,7 +257,21 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/verify_lead_research_postgres_mirror.py` | OPS_MIGRATE | Lead research mirror parity |
 | `scripts/qa/verify_catalog_postgres_mirror.py` | OPS_MIGRATE | Catalog mirror parity |
 | `scripts/qa/verify_commercial_deals_postgres_mirror.py` | OPS_MIGRATE | Commercial deals mirror parity |
+| `scripts/catalog/build_catalog_sqlite.py` | OPS_MIGRATE | Build SQLite `catalog_*` from seed (opt-in before catalog Postgres sync; [`REFRESH_RENDER_DASHBOARD_ONCE.md`](REFRESH_RENDER_DASHBOARD_ONCE.md)) |
+| `scripts/sync/sync_lead_research_postgres_mirror.py` | OPS_MIGRATE | SQLite `lead_research_*` → Postgres `lead_intel.*` (opt-in mirror load) |
+| `scripts/sync/load_equipment_opportunity_mirror.py` | OPS_MIGRATE | Equipment-first operator queue CSV → Postgres `commercial.equipment_opportunity*` (opt-in; dry-run default) |
 | `scripts/ops/cloud_postgres_url.py` | OPS_CORE | **Read-only** CLI: validate/redact Postgres URL for ops shell scripts (`validate`, `host-db`, `shell-prepare`) |
+
+---
+
+## Scripts infrastructure (internal — not operator entrypoints)
+
+Shared helpers imported by other `scripts/` CLIs; not daily outbound or mirror operator paths.
+
+| Path | Tag | Role |
+|------|-----|------|
+| `scripts/_bootstrap.py` | INFRASTRUCTURE | `sys.path` bootstrap for script entrypoints |
+| `scripts/_script_warnings.py` | INFRASTRUCTURE | Phase 4 stderr deprecation banners (`print_wrapper_deprecation_warning`) |
 
 ---
 

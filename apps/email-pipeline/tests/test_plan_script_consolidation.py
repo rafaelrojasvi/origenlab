@@ -75,6 +75,72 @@ def test_classify_bootstrap_infrastructure() -> None:
     b = m.classify("_bootstrap.py", "_bootstrap.py", "_bootstrap.py", "x", 5, {}, set())
     assert b == "infrastructure_core"
     assert m.action_for("infrastructure_core", True, "_bootstrap.py") == "keep"
+    assert (
+        m.classify("_script_warnings.py", "_script_warnings.py", "_script_warnings.py", "x", 5, {}, set())
+        == "infrastructure_core"
+    )
+
+
+def test_classify_ops_migrate_postgres_mirror_scripts() -> None:
+    m = _load()
+    mpath = REPO / "docs" / "SCRIPT_MAP.md"
+    tset = m.parse_map_tags(mpath)
+    assert (
+        m.classify(
+            "qa/verify_dashboard_postgres_mirror.py",
+            "verify_dashboard_postgres_mirror.py",
+            "qa",
+            "x",
+            10,
+            tset,
+            set(),
+        )
+        == "audit_readonly"
+    )
+    assert (
+        m.classify(
+            "sync/sync_lead_research_postgres_mirror.py",
+            "sync_lead_research_postgres_mirror.py",
+            "sync",
+            "x",
+            10,
+            tset,
+            set(),
+        )
+        == "migration"
+    )
+    assert (
+        m.classify(
+            "catalog/build_catalog_sqlite.py",
+            "build_catalog_sqlite.py",
+            "catalog",
+            "x",
+            10,
+            tset,
+            set(),
+        )
+        == "maintenance"
+    )
+
+
+def test_phase5l_registered_scripts_not_unknown() -> None:
+    mod = _load()
+    rows = mod.scan(REPO / "scripts", REPO / "docs" / "SCRIPT_MAP.md", app_root=REPO)
+    by_path = {r.path: r.primary_bucket for r in rows}
+    phase5l = {
+        "scripts/_script_warnings.py",
+        "scripts/catalog/build_catalog_sqlite.py",
+        "scripts/qa/verify_catalog_postgres_mirror.py",
+        "scripts/qa/verify_commercial_deals_postgres_mirror.py",
+        "scripts/qa/verify_dashboard_postgres_mirror.py",
+        "scripts/qa/verify_lead_research_postgres_mirror.py",
+        "scripts/qa/verify_outbound_sidecar_postgres_mirror.py",
+        "scripts/sync/load_equipment_opportunity_mirror.py",
+        "scripts/sync/sync_lead_research_postgres_mirror.py",
+    }
+    for path in phase5l:
+        assert path in by_path, path
+        assert by_path[path] != "unknown", f"{path} still unknown: {by_path[path]}"
 
 
 def test_classify_chilecompra_and_supplier_workbook() -> None:
@@ -98,19 +164,22 @@ def test_classify_chilecompra_and_supplier_workbook() -> None:
     assert m.action_for("maintenance", False, "validate_supplier_workbook.py") == "keep_maintenance"
 
 
-def test_classify_compatibility_root_wrappers() -> None:
+def test_classify_root_lead_account_rollup_is_maintenance_not_wrapper() -> None:
+    """Phase 5B removed root compatibility wrappers; advanced path is canonical."""
     m = _load()
+    mpath = REPO / "docs" / "SCRIPT_MAP.md"
+    tset = m.parse_map_tags(mpath)
     b = m.classify(
+        "leads/advanced/build_lead_account_rollup.py",
         "build_lead_account_rollup.py",
-        "build_lead_account_rollup.py",
-        "build_lead_account_rollup.py",
+        "leads",
         "x",
-        20,
-        {},
+        200,
+        tset,
         set(),
     )
-    assert b == "compatibility_wrapper"
-    assert m.action_for("compatibility_wrapper", True, "build_lead_account_rollup.py") == "keep"
+    assert b == "maintenance"
+    assert b != "compatibility_wrapper"
 
 
 def test_subprocess_and_json(

@@ -178,7 +178,7 @@ def classify(
         return "break_glass"
     if p0 in ("tatiana", "dataset", "ml") or rel.startswith("leads/campaigns/"):
         return "lab_archive"
-    if rel == "_bootstrap.py":
+    if rel == "_bootstrap.py" or rel == "_script_warnings.py":
         return "infrastructure_core"
     if rel == "validate_supplier_workbook.py":
         return "maintenance"
@@ -192,7 +192,13 @@ def classify(
         return "daily"
     if rel in core:
         return "core_operator"
-    if rel in audit or (rel in mig and "validate" in rel):
+    if rel in mig:
+        if p0 == "sync" or base.startswith(("sync_", "load_")):
+            return "migration"
+        if p0 == "catalog":
+            return "maintenance"
+        return "audit_readonly"
+    if rel in audit:
         return "audit_readonly"
     if rel in maint:
         return "maintenance"
@@ -212,7 +218,7 @@ def classify(
     if p0 == "tools" and base == "inspect_sqlite.py":
         return "audit_readonly"
     if p0 in (
-        "mart", "commercial", "reports", "validation", "ingest", "pipeline", "leads", "tools",
+        "mart", "commercial", "catalog", "reports", "validation", "ingest", "pipeline", "leads", "tools",
     ) or p0.startswith("import_supplier") or (base and base.startswith("import_supplier")):
         return "maintenance"
     return "unknown"
