@@ -235,7 +235,7 @@ def test_signal_label_returns_business_friendly_spanish():
 
 
 def test_fmt_marketing_variant_labels() -> None:
-    from origenlab_email_pipeline.streamlit_borrador_support import fmt_marketing_variant
+    from origenlab_email_pipeline.tatiana_copilot.borrador_support import fmt_marketing_variant
     from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
         MARKETING_VARIANT_FOLLOWUP,
         MARKETING_VARIANT_GENERAL,
@@ -248,7 +248,7 @@ def test_fmt_marketing_variant_labels() -> None:
 
 
 def test_load_existing_pilot_batch_reads_csv_and_case_json(tmp_path: Path) -> None:
-    from origenlab_email_pipeline.streamlit_borrador_support import load_existing_pilot_batch
+    from origenlab_email_pipeline.tatiana_copilot.borrador_support import load_existing_pilot_batch
 
     batch = tmp_path / "pilot_batch"
     batch.mkdir()
@@ -271,7 +271,7 @@ def test_load_existing_pilot_batch_reads_csv_and_case_json(tmp_path: Path) -> No
 
 def test_load_existing_pilot_batch_orders_cases_like_csv_not_glob(tmp_path: Path) -> None:
     """Filenames sort as c1 before c2, but CSV lists c2 first — cases must follow CSV."""
-    from origenlab_email_pipeline.streamlit_borrador_support import load_existing_pilot_batch
+    from origenlab_email_pipeline.tatiana_copilot.borrador_support import load_existing_pilot_batch
 
     batch = tmp_path / "pilot_batch_order"
     batch.mkdir()
@@ -446,7 +446,7 @@ def test_quick_action_main_smoke_default_inicio(monkeypatch):
     monkeypatch.setattr(app, "load_inicio_recent_canonical_rows", lambda *_a, **_k: [])
 
     monkeypatch.setattr(
-        "origenlab_email_pipeline.streamlit_today_workspace.gather_today_workspace_rows",
+        "origenlab_email_pipeline.read.today_workspace.gather_today_workspace_rows",
         lambda *_a, **_k: [],
     )
 

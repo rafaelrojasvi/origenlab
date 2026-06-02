@@ -44,20 +44,20 @@ from origenlab_email_pipeline.lead_contact_research import (
     validate_contact_research_payload,
 )
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables_ddl_base
-from origenlab_email_pipeline.streamlit_leads_browse import (
+from origenlab_email_pipeline.read.leads_browse import (
     LeadBrowseFilters,
     fetch_lead_account_rollups_df,
     fetch_leads_browse_df,
     lead_browse_filter_options,
     lead_browse_ready,
 )
-from origenlab_email_pipeline.streamlit_suppliers_browse import (
+from origenlab_email_pipeline.read.suppliers_browse import (
     SupplierBrowseFilters,
     fetch_suppliers_browse_df,
     supplier_browse_filter_options,
     supplier_browse_ready,
 )
-from origenlab_email_pipeline.streamlit_borrador_support import contact_suppression_reason_label
+from origenlab_email_pipeline.tatiana_copilot.borrador_support import contact_suppression_reason_label
 from origenlab_email_pipeline.streamlit_api_preview import (
     primary_sidebar_pages,
     render_api_preview_page,
@@ -1562,7 +1562,7 @@ def render_inicio_page(conn: sqlite3.Connection, db_path: Path) -> None:
         "(sin mailer-daemon / dominios ESP del archivo completo)."
     )
     try:
-        from origenlab_email_pipeline.streamlit_today_workspace import TodayWorkspaceSpec, gather_today_workspace_rows
+        from origenlab_email_pipeline.read.today_workspace import TodayWorkspaceSpec, gather_today_workspace_rows
 
         rows = gather_today_workspace_rows(
             conn,

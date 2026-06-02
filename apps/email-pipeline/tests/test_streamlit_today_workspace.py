@@ -12,7 +12,7 @@ from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
     SESSION_OPP_SIGNAL_FILTER,
     SESSION_TODAY_HANDOFF_CASO_EMAIL_ID,
 )
-from origenlab_email_pipeline.streamlit_today_workspace import (
+from origenlab_email_pipeline.read.today_workspace import (
     TIER_CANDIDATO_NEEDS_REVIEW,
     TIER_CASO_SENAL_POSITIVA,
     TIER_CUENTA_DORMIDA,

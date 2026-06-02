@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from origenlab_email_pipeline.streamlit_prioridad_copy import (
+from origenlab_email_pipeline.operator_copy_es import (
     PRIORIDAD_DEL_DIA_GROUP_TITLE,
     PRIORIDAD_GROUP_NAV_CAPTION_ES,
     borrador_visibility_origin_es,

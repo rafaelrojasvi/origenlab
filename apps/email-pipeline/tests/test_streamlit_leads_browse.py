@@ -9,7 +9,7 @@ import pandas as pd
 from origenlab_email_pipeline.business_mart_schema import BUSINESS_MART_SCHEMA_SQL
 from origenlab_email_pipeline.lead_accounts_schema import ensure_lead_account_tables
 from origenlab_email_pipeline.leads_schema import ensure_leads_tables_ddl_base, finalize_lead_master_source_keys
-from origenlab_email_pipeline.streamlit_leads_browse import (
+from origenlab_email_pipeline.read.leads_browse import (
     LeadBrowseFilters,
     build_leads_browse_query,
     fetch_lead_account_rollups_df,

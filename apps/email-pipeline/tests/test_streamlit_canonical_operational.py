@@ -12,7 +12,7 @@ from origenlab_email_pipeline.streamlit_canonical_dashboard_sql import (
     count_canonical_operational_opportunity_signals,
     canonical_emails_where,
 )
-from origenlab_email_pipeline.streamlit_today_workspace import (
+from origenlab_email_pipeline.read.today_workspace import (
     TodayWorkspaceSpec,
     gather_today_workspace_rows,
 )
