@@ -9,17 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from removal_evidence import DEPRECATED_REMOVAL_TARGETS, REMOVED_PHASE5B_TARGETS
+from removal_evidence import DEPRECATED_REMOVAL_TARGETS, REMOVED_PHASE5B_TARGETS, REMOVED_PHASE5C_TARGETS
 
 REPO = Path(__file__).resolve().parents[1]
 _SRC = REPO / "src"
 
 _PYTHON_HELP_TARGETS: tuple[tuple[str, str, str], ...] = (
-    (
-        "scripts/qa/build_buyer_opportunity_queue.py",
-        "DEPRECATED",
-        "build_equipment_first_opportunity_queue.py",
-    ),
     (
         "scripts/tools/flag_reported_non_delivery_from_contacto.py",
         "DEPRECATED",
@@ -33,6 +28,11 @@ _PYTHON_HELP_TARGETS: tuple[tuple[str, str, str], ...] = (
 )
 
 _SHELL_BANNER_TARGETS: tuple[tuple[str, str], ...] = ()
+
+_EQUIPMENT_FIRST_CANONICAL: tuple[str, ...] = (
+    "scripts/qa/build_equipment_first_opportunity_queue.py",
+    "scripts/qa/build_equipment_first_operator_queue.py",
+)
 
 
 def _env() -> dict[str, str]:
@@ -84,6 +84,17 @@ def test_phase5a_removed_shells_no_longer_expect_deprecation_banner() -> None:
 @pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5B_TARGETS])
 def test_phase5b_removed_root_wrappers_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5B removed: {rel}"
+
+
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5C_TARGETS])
+def test_phase5c_removed_buyer_queue_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5C removed: {rel}"
+
+
+@pytest.mark.parametrize("rel", _EQUIPMENT_FIRST_CANONICAL)
+def test_equipment_first_replacement_scripts_help_exits_zero(rel: str) -> None:
+    r = _run_help(rel)
+    assert r.returncode == 0, r.stderr + r.stdout
 
 
 def test_all_phase2_deprecated_targets_have_runtime_or_shell_banner() -> None:

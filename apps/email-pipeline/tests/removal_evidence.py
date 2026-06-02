@@ -12,11 +12,6 @@ MONOREPO = REPO.parents[1]
 
 DEPRECATED_REMOVAL_TARGETS: tuple[dict[str, str], ...] = (
     {
-        "path": "scripts/qa/build_buyer_opportunity_queue.py",
-        "replacement": "build_equipment_first_opportunity_queue.py + build_equipment_first_operator_queue.py",
-        "suggested_phase": "5",
-    },
-    {
         "path": "scripts/tools/flag_reported_non_delivery_from_contacto.py",
         "replacement": "flag_ndr_bounces_from_contacto.py (NDR) + human review queue",
         "suggested_phase": "5",
@@ -25,6 +20,17 @@ DEPRECATED_REMOVAL_TARGETS: tuple[dict[str, str], ...] = (
         "path": "scripts/leads/advanced/export_archive_outreach_candidates.py",
         "replacement": "build_archive_send_batch.py --audit-only",
         "suggested_phase": "5",
+    },
+)
+
+REMOVED_PHASE5C_TARGETS: tuple[dict[str, str], ...] = (
+    {
+        "path": "scripts/qa/build_buyer_opportunity_queue.py",
+        "replacement": (
+            "scripts/qa/build_equipment_first_opportunity_queue.py + "
+            "scripts/qa/build_equipment_first_operator_queue.py"
+        ),
+        "removed_phase": "5C",
     },
 )
 
@@ -81,7 +87,6 @@ REFACTOR_PHASE3_TARGETS: tuple[dict[str, str], ...] = (
 )
 
 _TEST_LOCK_PATTERNS: dict[str, str] = {
-    "scripts/qa/build_buyer_opportunity_queue.py": "build_buyer_opportunity_queue",
     "scripts/tools/flag_reported_non_delivery_from_contacto.py": "flag_reported_non_delivery",
     "scripts/leads/advanced/export_archive_outreach_candidates.py": "export_archive_outreach_candidates",
 }
@@ -130,7 +135,7 @@ def reference_counts(rel_path: str) -> ReferenceCounts:
     critical = (REPO / "tests/test_critical_script_paths.py").read_text(encoding="utf-8", errors="replace")
     test_locked = lock_pat in critical or any(
         lock_pat in (REPO / "tests" / p).read_text(encoding="utf-8", errors="replace")
-        for p in ("test_lead_compatibility_wrappers.py", "test_build_buyer_opportunity_queue.py")
+        for p in ("test_lead_compatibility_wrappers.py",)
         if (REPO / "tests" / p).is_file()
     )
 
@@ -151,7 +156,7 @@ def build_removal_evidence_markdown() -> str:
         "Owner: email-pipeline-maintainers",
         "Last reviewed: 2026-06-02",
         "",
-        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account compatibility wrappers.",
+        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder.",
         "",
         "Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`",
         "",
@@ -193,6 +198,19 @@ def build_removal_evidence_markdown() -> str:
         ]
     )
     for row in REMOVED_PHASE5B_TARGETS:
+        lines.append(
+            f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
+        )
+    lines.extend(
+        [
+            "",
+            "## Removed in Phase 5C (2026-06-02)",
+            "",
+            "| Path | Replacement | Removed phase |",
+            "|------|-------------|---------------|",
+        ]
+    )
+    for row in REMOVED_PHASE5C_TARGETS:
         lines.append(
             f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
         )

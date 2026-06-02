@@ -40,7 +40,7 @@ The following are **optional**. None are needed for:
 1. **Do not run** `alembic upgrade`, `sqlite_*_to_postgres.py --replace`, or `sync_dashboard_postgres_mirror.py` **without explicit approval**.
 2. **Do not run** `refresh_operational_dashboard_stack.py` (or the full dashboard refresh chain in [`RUNBOOK.md`](RUNBOOK.md)) **without explicit approval**.
 3. **Do not assume** Postgres or API is installed, migrated, or running for send/export decisions — use **SQLite** + `operator_status.py`.
-4. **Do not use** [`LEGACY_DO_NOT_USE`](SCRIPT_MAP.md) scripts (e.g. `build_buyer_opportunity_queue.py`) for current operator work — see manifest `legacy_do_not_use`.
+4. **Do not use** stale legacy artifacts (`buyer_opportunity_crosscheck_*`, `tender_buyer_outreach_queue_*`) for current operator work — see manifest `legacy_do_not_use`. Legacy `build_buyer_opportunity_queue.py` was removed in Phase 5C; use `build_equipment_first_*`.
 
 ---
 

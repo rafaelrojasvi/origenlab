@@ -31,12 +31,13 @@
     }
   ],
   "legacy_do_not_use": {
-    "scripts": ["scripts/qa/build_buyer_opportunity_queue.py"],
+    "scripts": [],
     "artifacts_glob": [
       "buyer_opportunity_crosscheck_*",
       "tender_buyer_outreach_queue_*"
     ],
-    "replacement": "scripts/qa/build_equipment_first_operator_queue.py"
+    "replacement": "scripts/qa/build_equipment_first_operator_queue.py",
+    "removed_scripts": ["scripts/qa/build_buyer_opportunity_queue.py"]
   },
   "known_warnings": [
     "FastLab (contacto@fastlab.cl): outreach_state not_contacted (corrected 2026-05-19) — no Gmail Sent row.",
