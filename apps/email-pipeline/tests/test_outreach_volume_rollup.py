@@ -1,3 +1,5 @@
+"""Tests for outreach volume rollup library and CLI."""
+
 from __future__ import annotations
 
 import csv
@@ -8,6 +10,11 @@ import sqlite3
 import subprocess
 import sys
 from pathlib import Path
+
+from origenlab_email_pipeline.qa.outreach_volume_rollup import (
+    ROLLUP_CSV_FIELDS,
+    build_outreach_volume_rollup,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "qa" / "export_outreach_volume_rollup.py"
@@ -47,7 +54,9 @@ def _run(
 
 def _read_rollup(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as f:
-        return list(csv.DictReader(f))
+        reader = csv.DictReader(f)
+        assert reader.fieldnames == list(ROLLUP_CSV_FIELDS)
+        return list(reader)
 
 
 def _seed_db(db: Path) -> None:
@@ -138,6 +147,67 @@ def _seed_db(db: Path) -> None:
     )
     conn.commit()
     conn.close()
+
+
+def test_rollup_csv_columns_locked() -> None:
+    assert ROLLUP_CSV_FIELDS == (
+        "source_kind",
+        "source_name",
+        "file_path_or_db_source",
+        "campaign_tag",
+        "row_count",
+        "unique_email_count",
+        "sent_count",
+        "contacted_state_count",
+        "overlap_sent_and_state_count",
+        "earliest_date",
+        "latest_date",
+        "notes",
+    )
+
+
+def test_build_outreach_volume_rollup_library(tmp_path: Path) -> None:
+    db = tmp_path / "t.sqlite"
+    _seed_db(db)
+    active = tmp_path / "active"
+    out_dir = active / "current"
+    out_dir.mkdir(parents=True)
+    result = build_outreach_volume_rollup(
+        db_path=db,
+        reports_out_dir=active,
+        out_dir=out_dir,
+        repo_root=REPO,
+        gmail_user="contacto@origenlab.cl",
+        sent_folders=("[Gmail]/Enviados",),
+    )
+    assert result.rollup_csv_path.is_file()
+    assert result.summary_json_path.is_file()
+    rows = _read_rollup(result.rollup_csv_path)
+    assert len(rows) == 2
+    by_kind = {r["source_kind"]: r for r in rows}
+    assert set(by_kind) == {"gmail_sent", "outreach_contact_state"}
+    assert result.sent_email_count == 2
+    assert result.state_email_count == 2
+    assert result.summary["totals"]["overlap_sent_and_contacted_state"] == 1
+
+
+def test_cli_help() -> None:
+    env = {**os.environ, "PYTHONPATH": str(REPO / "src")}
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT), "--help"],
+        cwd=str(REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert r.returncode == 0
+    assert "--db" in r.stdout
+    assert "--reports-out-dir" in r.stdout
+    assert "--out-dir" in r.stdout
+    assert "--gmail-user" in r.stdout
+    assert "--sent-folder" in r.stdout
 
 
 def test_rolls_up_gmail_and_state(tmp_path: Path) -> None:
