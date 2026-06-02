@@ -24,7 +24,7 @@ from origenlab_email_pipeline.mart_core_postgres_migrate import (
     participant_emails_from_row,
     table_specs_for_group,
 )
-from origenlab_email_pipeline.streamlit_canonical_dashboard_sql import (
+from origenlab_email_pipeline.canonical_operational_sql import (
     count_canonical_operational_contacts,
     count_canonical_operational_opportunity_signals,
     count_canonical_operational_organizations,
