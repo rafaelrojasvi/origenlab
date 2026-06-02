@@ -34,7 +34,6 @@ from origenlab_email_pipeline.archive_send_batch_builder import (
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "leads" / "build_archive_send_batch.py"
-EXPORT_AUDIT_SCRIPT = REPO / "scripts" / "leads" / "advanced" / "export_archive_outreach_candidates.py"
 
 
 def _seed_db(path: Path, *, with_sent_preflight: bool = True) -> None:
@@ -1225,59 +1224,6 @@ def test_build_archive_send_batch_audit_only_writes_audit_files(tmp_path: Path) 
     assert result.summary["outbound_run"]["lane"] == "archive"
     audit_sum = json.loads((out_dir / AUDIT_SUMMARY_JSON_NAME).read_text(encoding="utf-8"))
     assert "outbound_run" in audit_sum
-
-
-def test_export_archive_outreach_candidates_wrapper_matches_builder_audit_csv(tmp_path: Path) -> None:
-    db = tmp_path / "t.sqlite"
-    _seed_db(db)
-    out_builder = tmp_path / "from_builder"
-    out_wrapper_csv = tmp_path / "from_wrapper.csv"
-
-    conn = sqlite3.connect(str(db))
-    conn.row_factory = sqlite3.Row
-    try:
-        build_archive_send_batch(
-            conn=conn,
-            db_path=db,
-            out_dir=out_builder,
-            gmail_user="contacto@origenlab.cl",
-            fetch_cap=1000,
-            audit_limit=500,
-            shortlist_limit=25,
-            sent_folders=("[Gmail]/Enviados",),
-            strict_contact_graph_noise=True,
-            audit_only=True,
-            sent_folder_defaults_used=False,
-        )
-    finally:
-        conn.close()
-
-    run = subprocess.run(
-        [
-            sys.executable,
-            str(EXPORT_AUDIT_SCRIPT),
-            "--db",
-            str(db),
-            "--out",
-            str(out_wrapper_csv),
-            "--limit",
-            "500",
-            "--fetch-cap",
-            "1000",
-            "--gmail-user",
-            "contacto@origenlab.cl",
-        ],
-        cwd=str(REPO),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert run.returncode == 0, run.stderr + run.stdout
-
-    a = _read_csv(out_builder / AUDIT_CSV_NAME)
-    b = _read_csv(out_wrapper_csv)
-    assert {r["contact_email"] for r in a} == {r["contact_email"] for r in b}
-    assert len(a) == len(b)
 
 
 def test_build_archive_send_batch_cli_audit_only(tmp_path: Path) -> None:

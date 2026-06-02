@@ -268,7 +268,8 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | Path | Tag | Replacement / notes |
 |------|-----|---------------------|
 | `scripts/tools/flag_reported_non_delivery_from_contacto.py` | DEPRECATED | Prefer **`flag_ndr_bounces_from_contacto.py`** + [`build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) |
-| `scripts/leads/advanced/export_archive_outreach_candidates.py` | DEPRECATED | Prefer **`build_archive_send_batch.py --audit-only`** (thin wrapper kept for custom `--out`) |
+
+**Removed Phase 5D (2026-06-02):** `scripts/leads/advanced/export_archive_outreach_candidates.py` — use [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) `--audit-only`.
 
 **Removed Phase 5C (2026-06-02):** `scripts/qa/build_buyer_opportunity_queue.py` — use `build_equipment_first_opportunity_queue.py` + `build_equipment_first_operator_queue.py`.
 
@@ -304,7 +305,6 @@ These are **not** the volume or precision daily lanes; see [`dataset/TATIANA_PIL
 | `scripts/qa/export_all_known_marketing_contacts.py` | OPS_CORE | Known-marketing dedup export across active/archive/reference sources (includes contacted-all by default) |
 | `scripts/leads/advanced/prepare_active_workspace.py` | CONSOLIDATE | **Different** from `prepare_outbound_campaign_workspace.py` — see [Two workspace prep stories](#two-workspace-prep-stories-do-not-confuse) |
 | `scripts/leads/advanced/export_marketing_from_contact_master.py` | ARCHIVE_LANE | Exploratory `contact_master` export |
-| `scripts/leads/advanced/export_archive_outreach_candidates.py` | DEPRECATED | **Audit-only** wrapper — prefer `build_archive_send_batch.py --audit-only` |
 | `scripts/qa/sync_outreach_batch_from_ingested_bounces.py` | BREAK_GLASS | Bounce-driven sync — review evidence; **`--apply`** mutates state |
 
 Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match) are **OPS_MAINT** — see [`RUNBOOK.md`](RUNBOOK.md) and [`scripts/README.md`](../scripts/README.md).

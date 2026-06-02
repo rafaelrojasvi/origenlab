@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from removal_evidence import DEPRECATED_REMOVAL_TARGETS, REMOVED_PHASE5B_TARGETS, REMOVED_PHASE5C_TARGETS
+from removal_evidence import (
+    DEPRECATED_REMOVAL_TARGETS,
+    REMOVED_PHASE5B_TARGETS,
+    REMOVED_PHASE5C_TARGETS,
+    REMOVED_PHASE5D_TARGETS,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 _SRC = REPO / "src"
@@ -20,11 +25,6 @@ _PYTHON_HELP_TARGETS: tuple[tuple[str, str, str], ...] = (
         "DEPRECATED",
         "flag_ndr_bounces_from_contacto.py",
     ),
-    (
-        "scripts/leads/advanced/export_archive_outreach_candidates.py",
-        "DEPRECATED",
-        "build_archive_send_batch.py --audit-only",
-    ),
 )
 
 _SHELL_BANNER_TARGETS: tuple[tuple[str, str], ...] = ()
@@ -33,6 +33,8 @@ _EQUIPMENT_FIRST_CANONICAL: tuple[str, ...] = (
     "scripts/qa/build_equipment_first_opportunity_queue.py",
     "scripts/qa/build_equipment_first_operator_queue.py",
 )
+
+_ARCHIVE_CANONICAL = "scripts/leads/build_archive_send_batch.py"
 
 
 def _env() -> dict[str, str]:
@@ -91,10 +93,21 @@ def test_phase5c_removed_buyer_queue_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5C removed: {rel}"
 
 
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5D_TARGETS])
+def test_phase5d_removed_archive_audit_wrapper_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5D removed: {rel}"
+
+
 @pytest.mark.parametrize("rel", _EQUIPMENT_FIRST_CANONICAL)
 def test_equipment_first_replacement_scripts_help_exits_zero(rel: str) -> None:
     r = _run_help(rel)
     assert r.returncode == 0, r.stderr + r.stdout
+
+
+def test_build_archive_send_batch_replacement_help_exits_zero() -> None:
+    r = _run_help(_ARCHIVE_CANONICAL)
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "--audit-only" in r.stdout or "--audit-only" in r.stderr
 
 
 def test_all_phase2_deprecated_targets_have_runtime_or_shell_banner() -> None:

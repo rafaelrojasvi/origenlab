@@ -30,7 +30,6 @@ REPO = Path(__file__).resolve().parents[1]
         "scripts/leads/add_manual_contact_suppressions.py",
         "scripts/ingest/05_workspace_gmail_imap_to_sqlite.py",
         # Demoted paths: implementations + folder READMEs (layout contract)
-        "scripts/leads/advanced/export_archive_outreach_candidates.py",
         "scripts/leads/advanced/README.md",
         "scripts/leads/campaigns/README.md",
         # Lead-account: canonical implementations under scripts/leads/advanced/
