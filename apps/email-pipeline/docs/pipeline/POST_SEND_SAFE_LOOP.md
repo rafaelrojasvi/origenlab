@@ -57,6 +57,9 @@ Writes `reports/out/active/current/daily_health_report_<YYYY_MM_DD>/` with verdi
 | **Exact-email only** | NDR apply writes `contact_email_suppression` per address — **not** domain suppression. |
 | **Delay DSNs** | Subjects with `Notification (Delay)` / `(delay)` are **skipped** — wait for final failure NDR. |
 | **Unparsed NDR** | No recipient extracted → no suppression from that row. |
+| **Canonical tool** | [`flag_ndr_bounces_from_contacto.py`](../../scripts/tools/flag_ndr_bounces_from_contacto.py) — dry-run, then targeted `--emails-file` + `--only-code` + `--apply`. |
+| **Legacy (deprecated)** | [`flag_reported_non_delivery_from_contacto.py`](../../scripts/tools/flag_reported_non_delivery_from_contacto.py) — **do not use** for new waves; see [`SCRIPT_MAP.md`](../SCRIPT_MAP.md#ndr-suppression-tooling-canonical-vs-legacy). |
+| **Review helper** | [`build_ndr_review_queue.py`](../../scripts/qa/build_ndr_review_queue.py) — read-only batches/allowlists; **no** suppression writes. |
 
 Example (after review):
 

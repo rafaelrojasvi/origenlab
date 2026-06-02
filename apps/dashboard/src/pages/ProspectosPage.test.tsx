@@ -125,6 +125,29 @@ describe("ProspectosPage", () => {
     expect(screen.queryByText(/https:\/\/www\.ufro\.cl/i)).toBeNull();
   });
 
+  it("empty-email same_domain shows contactado por dominio not falta email", async () => {
+    vi.mocked(fetchLeadProspectsMirror).mockResolvedValue({
+      ...leadListFixture(),
+      items: [
+        {
+          ...leadListFixture().items[0],
+          prospect_key: "inia",
+          organization_name: "INIA La Platina",
+          email: null,
+          domain: "inia.cl",
+          classification: "same_domain_contacted_review",
+          status: "same_domain_review",
+        },
+      ],
+    });
+    render(<ProspectosPage />);
+    await waitFor(() => expect(screen.getByText("INIA La Platina")).toBeTruthy());
+    expect(screen.getByText("Revisar historial")).toBeTruthy();
+    expect(screen.getByText(/Contactado por dominio — sin email en fila/i)).toBeTruthy();
+    const row = screen.getByText("INIA La Platina").closest("tr");
+    expect(row?.textContent).not.toMatch(/Falta email/);
+  });
+
   it("5M same_domain shows revisar historial and follow-up wording not cold email", async () => {
     vi.mocked(fetchLeadProspectsMirror).mockResolvedValue({
       ...leadListFixture(),

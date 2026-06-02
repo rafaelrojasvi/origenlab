@@ -4,7 +4,8 @@ import type { LeadProspectDetailUi, LeadProspectListItemUi } from "../api/leadIn
 
 export const CLASSIFICATION_LABELS: Record<string, string> = {
   net_new_safe_review: "Prospecto nuevo seguro",
-  same_domain_contacted_review: "Revisar historial previo",
+  same_domain_contacted_review: "Revisar historial",
+  contacted_by_domain_review: "Contactado por dominio",
   public_tender_review: "Licitación / compra pública",
   research_only_contact_needed: "Falta contacto directo",
   old_gmail_prospect_review: "Gmail histórico — revisión",
@@ -286,8 +287,18 @@ export function prospectTableBadge(row: LeadProspectListItemUi): ProspectTableBa
   return null;
 }
 
+export function prospectEmptyEmailDisplayHint(classification: string): string | null {
+  if (classification === "same_domain_contacted_review") {
+    return "No hay email en la fila, pero existe contacto previo con el mismo dominio.";
+  }
+  return null;
+}
+
 export function prospectContactCell(row: LeadProspectListItemUi): string {
   if (!row.email?.trim()) {
+    if (row.classification === "same_domain_contacted_review") {
+      return "Contactado por dominio — sin email en fila";
+    }
     return "Sin email — investigar contacto";
   }
   const name = row.contact_name?.trim();

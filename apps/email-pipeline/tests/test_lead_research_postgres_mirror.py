@@ -82,7 +82,7 @@ def test_sync_dry_run_reports_built_counts(tmp_path: Path) -> None:
     db = _seed_sqlite(tmp_path)
     result = sync_lead_research_postgres_mirror("postgresql://u:p@localhost/db", db, dry_run=True)
     assert result["built_counts"]["prospects"] == 5
-    assert result["built_counts"]["block_reasons"] == result["sqlite_counts"]["block_reasons"]
+    assert result["built_counts"]["block_reasons"] <= result["sqlite_counts"]["block_reasons"]
 
 
 def test_overlay_can_reduce_block_reasons_vs_raw_sqlite(tmp_path: Path) -> None:

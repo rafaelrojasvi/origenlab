@@ -60,8 +60,9 @@ export function buildPorQueImporta(
       `${prospect.organization_name} aparece en investigación pública, pero aún no hay correo directo. ` +
       "Conviene ubicar responsable de laboratorio, compras o contacto institucional antes de escribir.";
   } else if (prospect.classification === "same_domain_contacted_review") {
-    porQueInteresante =
-      "El dominio ya tiene historial con OrigenLab. Vale la pena revisar si conviene un seguimiento a otra persona o esperar respuesta.";
+    porQueInteresante = !hasProspectEmail(prospect)
+      ? "No hay email en la fila, pero el dominio ya tiene contacto previo con OrigenLab. Revisar historial antes de cualquier acción."
+      : "El dominio ya tiene historial con OrigenLab. Vale la pena revisar si conviene un seguimiento a otra persona o esperar respuesta.";
   } else if (prospect.classification === "public_tender_review") {
     porQueInteresante =
       "Oportunidad de compra pública: priorizar lectura de bases, requisitos técnicos y equivalencia antes que un correo frío.";
@@ -110,7 +111,7 @@ export function buildMessagePreview(
     };
   }
 
-  if (!hasProspectEmail(prospect)) {
+  if (!hasProspectEmail(prospect) && prospect.classification !== "same_domain_contacted_review") {
     return {
       kind: "none",
       title: "No hay email directo disponible",

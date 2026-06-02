@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from origenlab_email_pipeline.contact_domain_suppression import (
+    ensure_contact_domain_suppression_table,
+)
 from origenlab_email_pipeline.contact_email_suppression import (
     ensure_contact_email_suppression_table,
     upsert_contact_email_suppression,
@@ -19,8 +22,11 @@ from origenlab_email_pipeline.lead_research.lead_research_mirror_read_model impo
 from origenlab_email_pipeline.lead_research.lead_research_operational_overlay import (
     CLASS_BOUNCED_SUPPRESSED,
     CLASS_MANUAL_OUTREACH_SENT,
+    CLASS_RESEARCH_ONLY,
+    CLASS_SAME_DOMAIN_CONTACTED_REVIEW,
     STATUS_BOUNCED_SUPPRESSED,
     STATUS_MANUAL_CONTACTED,
+    STATUS_SAME_DOMAIN_REVIEW,
     apply_operational_overlay_to_prospect,
     load_operational_indexes_from_sqlite,
     summarize_prospects_for_dashboard,
@@ -242,6 +248,94 @@ def test_built_block_reason_count_differs_from_raw_sqlite(overlay_db: sqlite3.Co
     raw = sqlite_lead_research_counts(overlay_db)
     built = len(load_lead_research_mirror_payload(overlay_db)["block_reasons"])
     assert built != raw["block_reasons"]
+
+
+def _insert_empty_email_prospect(
+    conn: sqlite3.Connection,
+    *,
+    prospect_key: str,
+    domain: str,
+    gmail_sent_count: int = 0,
+) -> None:
+    batch_id = int(conn.execute("SELECT id FROM lead_research_batch LIMIT 1").fetchone()[0])
+    conn.execute(
+        """
+        INSERT INTO lead_research_prospect (
+          batch_id, prospect_key, organization_name, email, domain,
+          input_priority_score, final_score, classification, status,
+          campaign_bucket, is_blocked, is_active, created_at, source_type, dataset_label,
+          gmail_sent_count
+        ) VALUES (?, ?, ?, NULL, ?, 0, 70, ?, 'research_needed', 'other', 0, 1, datetime('now'), 'deepsearch', 'test', ?)
+        """,
+        (batch_id, prospect_key, prospect_key, domain, CLASS_RESEARCH_ONLY, gmail_sent_count),
+    )
+
+
+def test_empty_email_same_domain_contacted_becomes_review(overlay_db: sqlite3.Connection) -> None:
+    _insert_empty_email_prospect(overlay_db, prospect_key="inia-empty-email", domain="inia.cl")
+    overlay_db.commit()
+    _mark_contacted(overlay_db, "oficinadepartesdn@inia.cl", "manual_outreach")
+    payload = load_lead_research_mirror_payload(overlay_db)
+    row = next(p for p in payload["prospects"] if p["prospect_key"] == "inia-empty-email")
+    assert row["classification"] == CLASS_SAME_DOMAIN_CONTACTED_REVIEW
+    assert row["status"] == STATUS_SAME_DOMAIN_REVIEW
+    assert row["is_blocked"] is False
+    assert row["email"] in (None, "")
+
+
+def test_empty_email_without_evidence_stays_falta(overlay_db: sqlite3.Connection) -> None:
+    _insert_empty_email_prospect(
+        overlay_db, prospect_key="no-evidence-empty", domain="sinhistorial.cl"
+    )
+    overlay_db.commit()
+    payload = load_lead_research_mirror_payload(overlay_db)
+    row = next(p for p in payload["prospects"] if p["prospect_key"] == "no-evidence-empty")
+    assert row["classification"] == CLASS_RESEARCH_ONLY
+
+
+def test_empty_email_domain_suppression_wins(overlay_db: sqlite3.Connection) -> None:
+    ensure_contact_domain_suppression_table(overlay_db)
+    overlay_db.execute(
+        """
+        INSERT INTO contact_domain_suppression (domain_norm, suppression_reason_text, updated_at, updated_by)
+        VALUES ('blocked-domain.cl', 'test', datetime('now'), 'test')
+        """
+    )
+    _insert_empty_email_prospect(
+        overlay_db,
+        prospect_key="domain-blocked-empty",
+        domain="blocked-domain.cl",
+        gmail_sent_count=3,
+    )
+    _mark_contacted(overlay_db, "someone@blocked-domain.cl", "manual")
+    overlay_db.commit()
+    payload = load_lead_research_mirror_payload(overlay_db)
+    row = next(p for p in payload["prospects"] if p["prospect_key"] == "domain-blocked-empty")
+    assert row["classification"] == CLASS_BOUNCED_SUPPRESSED
+    assert row["is_blocked"] is True
+
+
+def test_same_domain_empty_email_not_net_new_safe(overlay_db: sqlite3.Connection) -> None:
+    _mark_contacted(overlay_db, GIBA, "test")
+    overlay_db.commit()
+    indexes = load_operational_indexes_from_sqlite(overlay_db)
+    out = apply_operational_overlay_to_prospect(
+        {
+            "prospect_key": "y",
+            "email": None,
+            "domain": "udec.cl",
+            "classification": CLASS_RESEARCH_ONLY,
+            "status": "research_needed",
+            "is_blocked": False,
+            "gmail_sent_count": 0,
+        },
+        indexes,
+    )
+    agg = summarize_prospects_for_dashboard([out])
+    assert out["classification"] == CLASS_SAME_DOMAIN_CONTACTED_REVIEW
+    assert agg["net_new_safe"] == 0
+    assert agg["same_domain_review"] == 1
+    assert agg["research_needed"] == 0
 
 
 def test_suppression_wins_over_contacted() -> None:
