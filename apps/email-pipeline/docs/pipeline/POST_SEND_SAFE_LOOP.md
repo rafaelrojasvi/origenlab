@@ -77,7 +77,7 @@ Allowlist files under `reports/in/` are **gitignored** — do not commit.
 
 ## Historical orchestrator (removed Phase 5A)
 
-The **2026-06-01 one-off** shell drivers `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` were **removed** in Phase 5A. They ran **broad NDR `--apply`** in some steps — do not recreate that pattern. For new waves, follow **this doc** and use targeted allowlists.
+The **2026-06-01 one-off** shell drivers `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` were **removed** in Phase 5A. The dated QA scripts `build_manual_outreach_2026_06_01_digest.py` and `apply_manual_outreach_2026_06_01_corrections.py` (and the frozen recipient registry module) were **removed** in Phase 5K — use **`build_post_send_digest.py`** (step 7 below) instead. Those removed shells ran **broad NDR `--apply`** in some steps — do not recreate that pattern. For new waves, follow **this doc** and use targeted allowlists.
 
 ---
 

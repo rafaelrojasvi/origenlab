@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
-from origenlab_email_pipeline.campaigns.manual_outreach_2026_06_01 import FailureType
+from typing import Literal
+
 from origenlab_email_pipeline.ndr_bounce_extraction import bounce_suppression_code_from_ndr_text
+
+FailureType = Literal[
+    "no_such_user",
+    "domain_not_found",
+    "group_or_permission",
+    "remote_server_misconfigured",
+    "unknown",
+]
 
 _DOMAIN_NOT_FOUND_HINTS = (
     "domain not found",

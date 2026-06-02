@@ -241,8 +241,8 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/build_presentacion_prospectos_merge.py` | OPS_MAINT | Merge presentation prospectos inputs with lead-research overlay (reports) |
 | `scripts/qa/build_cyber_outreach_campaign.py` | OPS_MAINT | Cyber-day outreach campaign package builder (files + gate audit; not daily lane) |
 | `scripts/qa/build_cyber_campaign_context_audit.py` | OPS_MAINT | Cyber campaign context / evidence audit (read-only) |
-| `scripts/qa/build_manual_outreach_2026_06_01_digest.py` | OPS_MAINT | **2026-06-01 wave** — read-only post-send digest for manual outreach |
-| `scripts/qa/apply_manual_outreach_2026_06_01_corrections.py` | **BREAK_GLASS** | **2026-06-01 wave** — targeted suppression/state corrections; **`--apply`** mutates SQLite; not a generic tool |
+
+**Removed Phase 5K (2026-06-02):** `manual_outreach_2026_06_01.py`, `build_manual_outreach_2026_06_01_digest.py`, and `apply_manual_outreach_2026_06_01_corrections.py` — use [`build_post_send_digest.py`](../scripts/qa/build_post_send_digest.py) and [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) instead.
 
 ---
 
@@ -374,7 +374,6 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | **`--replace-source`** deletes existing rows for that Gmail `source_file` before reinsert — [details](#gmail-ingest-replace-source) |
 | `scripts/tools/flag_ndr_bounces_from_contacto.py` | **`--apply`** writes `contact_email_suppression`; broad apply = all scan matches; prefer `--emails-file` + `--only-code` ([`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md)) |
 | `scripts/tools/flag_reported_non_delivery_from_contacto.py` | **DEPRECATED** — prefer `flag_ndr_bounces_from_contacto.py`; **`--apply`** writes suppressions |
-| `scripts/qa/apply_manual_outreach_2026_06_01_corrections.py` | **2026-06-01 wave** — targeted SQLite corrections with **`--apply`** |
 | `scripts/validation/extract_attachment_text.py` | May **delete** `attachment_extracts` during rebuild patterns |
 | `scripts/tools/archive_reports_out_generated.py` | **`--apply`** **moves** files under `reports/out` to `archive/manual_cleanup/…` (no deletes) |
 

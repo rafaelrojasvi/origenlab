@@ -4,7 +4,7 @@ Status: generated reference (read-only audit)
 Owner: email-pipeline-maintainers
 Last reviewed: 2026-06-02
 
-**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper.
+**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper; Phase **5K** removed 2026-06-01 manual outreach registry and dated QA scripts.
 
 Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`
 
@@ -43,6 +43,14 @@ Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_
 | Path | Replacement | Removed phase |
 |------|-------------|---------------|
 | `scripts/leads/advanced/export_archive_outreach_candidates.py` | scripts/leads/build_archive_send_batch.py --audit-only | 5D |
+
+## Removed in Phase 5K (2026-06-02)
+
+| Path | Replacement | Removed phase |
+|------|-------------|---------------|
+| `src/origenlab_email_pipeline/campaigns/manual_outreach_2026_06_01.py` | scripts/qa/build_post_send_digest.py + docs/pipeline/POST_SEND_SAFE_LOOP.md | 5K |
+| `scripts/qa/build_manual_outreach_2026_06_01_digest.py` | scripts/qa/build_post_send_digest.py | 5K |
+| `scripts/qa/apply_manual_outreach_2026_06_01_corrections.py` | docs/pipeline/POST_SEND_SAFE_LOOP.md + generic suppression tools | 5K |
 
 ## Phase 3 refactor targets (keep entrypoints; lock behavior first)
 
