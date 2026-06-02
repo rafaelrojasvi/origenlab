@@ -7,8 +7,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from origenlab_email_pipeline.qa.ndr_review_queue import (
+    APPLY_ONLY_CODE_BATCH_A,
+    APPLY_ONLY_CODE_BATCH_B,
+    apply_only_code_for_batch,
     build_ndr_review_queue,
     classify_ndr_candidate,
+    write_approved_allowlist_template,
 )
 
 
@@ -195,6 +199,41 @@ def test_already_suppressed_excluded_from_allowlists(tmp_path: Path) -> None:
     )
     assert "a@example.cl" not in result.allowlist_batch_a
     assert "b@example.cl" in result.allowlist_batch_b
+
+
+def test_apply_only_code_per_batch() -> None:
+    assert apply_only_code_for_batch("A") == APPLY_ONLY_CODE_BATCH_A
+    assert apply_only_code_for_batch("B") == APPLY_ONLY_CODE_BATCH_B
+
+
+def test_allowlist_batch_headers_use_correct_only_code(tmp_path: Path) -> None:
+    db = tmp_path / "t_allow.txt"
+    _seed_db(db)
+    out = tmp_path / "out"
+    build_ndr_review_queue(
+        sqlite_path=db,
+        out_dir=out,
+        since_days=2,
+        date_label="2026_06_02",
+    )
+    a_txt = (out / "apply_allowlist_batch_a.txt").read_text(encoding="utf-8")
+    b_txt = (out / "apply_allowlist_batch_b.txt").read_text(encoding="utf-8")
+    assert f"--only-code {APPLY_ONLY_CODE_BATCH_A}" in a_txt
+    assert f"--only-code {APPLY_ONLY_CODE_BATCH_B}" in b_txt
+    assert f"--only-code {APPLY_ONLY_CODE_BATCH_A}" not in b_txt
+
+
+def test_approved_allowlist_template_headers(tmp_path: Path) -> None:
+    path_a = tmp_path / "apply_allowlist_batch_a_APPROVED_TEMPLATE.txt"
+    path_b = tmp_path / "apply_allowlist_batch_b_APPROVED_TEMPLATE.txt"
+    write_approved_allowlist_template(path_a, "A", ["a@example.cl"])
+    write_approved_allowlist_template(path_b, "B", ["b@example.cl"])
+    a_txt = path_a.read_text(encoding="utf-8")
+    b_txt = path_b.read_text(encoding="utf-8")
+    assert f"--only-code {APPLY_ONLY_CODE_BATCH_A}" in a_txt
+    assert f"--only-code {APPLY_ONLY_CODE_BATCH_B}" in b_txt
+    assert "approves Batch A" in a_txt
+    assert "approves Batch B" in b_txt
 
 
 def test_allowlist_files_only_unsuppressed(tmp_path: Path) -> None:

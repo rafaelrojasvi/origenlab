@@ -17,6 +17,19 @@ from origenlab_email_pipeline.ndr_contacto_scan import scan_ndr_planned_recipien
 BatchName = Literal["A", "B", "C", "D", "E"]
 NDR_SCAN_LIMIT = 50_000
 
+# Targeted apply codes per human-review batch (exact-email only; never domain suppression).
+APPLY_ONLY_CODE_BATCH_A = "bounce_no_such_user"
+APPLY_ONLY_CODE_BATCH_B = "bounce_other"
+
+
+def apply_only_code_for_batch(batch: BatchName) -> str:
+    """Return ``--only-code`` value for targeted NDR apply on batch A or B."""
+    if batch == "A":
+        return APPLY_ONLY_CODE_BATCH_A
+    if batch == "B":
+        return APPLY_ONLY_CODE_BATCH_B
+    raise ValueError(f"batch {batch!r} has no apply allowlist (held batches C–E)")
+
 
 def default_date_label(when: date | None = None) -> str:
     d = when or date.today()
@@ -327,11 +340,15 @@ def _write_outputs(result: NdrReviewQueueResult) -> None:
         out_dir / "batch_e_parser_uncertain.csv",
         [r for r in rows if r["batch"] == "E"],
     )
-    _write_allowlist(out_dir / "apply_allowlist_batch_a.txt", result.allowlist_batch_a, "bounce_no_such_user")
+    _write_allowlist(
+        out_dir / "apply_allowlist_batch_a.txt",
+        result.allowlist_batch_a,
+        APPLY_ONLY_CODE_BATCH_A,
+    )
     _write_allowlist(
         out_dir / "apply_allowlist_batch_b.txt",
         result.allowlist_batch_b,
-        "bounce_no_such_user",
+        APPLY_ONLY_CODE_BATCH_B,
     )
 
 
@@ -354,14 +371,47 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _write_allowlist(path: Path, emails: list[str], only_code: str) -> None:
-    lines = [
-        "# SUGGESTED allowlist only — DO NOT APPLY WITHOUT OPERATOR APPROVAL",
-        "# Use with: --emails-file <this-file> --only-code " + only_code + " --apply",
-        "# Never run broad --apply.",
-        "",
-    ]
-    lines.extend(emails)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text(_allowlist_file_text(only_code=only_code, emails=emails, approved=False), encoding="utf-8")
+
+
+def write_approved_allowlist_template(
+    path: Path,
+    batch: BatchName,
+    emails: list[str],
+) -> None:
+    """Write post-approval allowlist for manual review packs (batch A or B only)."""
+    if batch not in ("A", "B"):
+        raise ValueError(f"approved allowlist only for batch A or B, not {batch!r}")
+    only_code = apply_only_code_for_batch(batch)
+    path.write_text(
+        _allowlist_file_text(only_code=only_code, emails=emails, approved=True, batch=batch),
+        encoding="utf-8",
+    )
+
+
+def _allowlist_file_text(
+    *,
+    only_code: str,
+    emails: list[str],
+    approved: bool,
+    batch: BatchName | None = None,
+) -> str:
+    if approved:
+        assert batch in ("A", "B")
+        header = [
+            f"# Only use after operator approves Batch {batch}.",
+            f"# Targeted apply only: --emails-file <this-file> --only-code {only_code} --apply",
+            "# Never run broad --apply. Exact-email only — never domain suppression.",
+            "",
+        ]
+    else:
+        header = [
+            "# SUGGESTED allowlist only — DO NOT APPLY WITHOUT OPERATOR APPROVAL",
+            f"# Use with: --emails-file <this-file> --only-code {only_code} --apply",
+            "# Never run broad --apply.",
+            "",
+        ]
+    return "\n".join(header + emails) + "\n"
 
 
 def _format_no_apply_md() -> str:
@@ -408,8 +458,10 @@ def _format_summary_md(result: NdrReviewQueueResult) -> str:
             "",
             "## Suggested allowlists (unsuppressed only)",
             "",
-            f"- `apply_allowlist_batch_a.txt`: {summary['allowlist_batch_a_count']}",
-            f"- `apply_allowlist_batch_b.txt`: {summary['allowlist_batch_b_count']}",
+            f"- `apply_allowlist_batch_a.txt`: {summary['allowlist_batch_a_count']} "
+            f"(`--only-code {APPLY_ONLY_CODE_BATCH_A}`)",
+            f"- `apply_allowlist_batch_b.txt`: {summary['allowlist_batch_b_count']} "
+            f"(`--only-code {APPLY_ONLY_CODE_BATCH_B}`)",
             "",
             "No suppressions are applied by this report.",
             "",
