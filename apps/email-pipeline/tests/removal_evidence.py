@@ -16,10 +16,13 @@ DEPRECATED_REMOVAL_TARGETS: tuple[dict[str, str], ...] = (
         "replacement": "flag_ndr_bounces_from_contacto.py (NDR) + human review queue",
         "suggested_phase": "5",
     },
+)
+
+REMOVED_PHASE5D_TARGETS: tuple[dict[str, str], ...] = (
     {
         "path": "scripts/leads/advanced/export_archive_outreach_candidates.py",
-        "replacement": "build_archive_send_batch.py --audit-only",
-        "suggested_phase": "5",
+        "replacement": "scripts/leads/build_archive_send_batch.py --audit-only",
+        "removed_phase": "5D",
     },
 )
 
@@ -88,7 +91,6 @@ REFACTOR_PHASE3_TARGETS: tuple[dict[str, str], ...] = (
 
 _TEST_LOCK_PATTERNS: dict[str, str] = {
     "scripts/tools/flag_reported_non_delivery_from_contacto.py": "flag_reported_non_delivery",
-    "scripts/leads/advanced/export_archive_outreach_candidates.py": "export_archive_outreach_candidates",
 }
 
 
@@ -156,7 +158,7 @@ def build_removal_evidence_markdown() -> str:
         "Owner: email-pipeline-maintainers",
         "Last reviewed: 2026-06-02",
         "",
-        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder.",
+        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper.",
         "",
         "Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`",
         "",
@@ -211,6 +213,19 @@ def build_removal_evidence_markdown() -> str:
         ]
     )
     for row in REMOVED_PHASE5C_TARGETS:
+        lines.append(
+            f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
+        )
+    lines.extend(
+        [
+            "",
+            "## Removed in Phase 5D (2026-06-02)",
+            "",
+            "| Path | Replacement | Removed phase |",
+            "|------|-------------|---------------|",
+        ]
+    )
+    for row in REMOVED_PHASE5D_TARGETS:
         lines.append(
             f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
         )

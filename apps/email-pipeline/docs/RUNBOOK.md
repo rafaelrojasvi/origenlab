@@ -937,8 +937,7 @@ Use a deterministic, read-only queue export to target research where high/medium
 
 **Demoted / advanced:**
 
-- [`export_archive_outreach_candidates.py`](../scripts/leads/advanced/export_archive_outreach_candidates.py) — legacy **audit-only** wrapper (prints a note to stderr); prefer `--audit-only` on the builder.
-- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export; not the default archive path (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)).
+- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export; not the default archive path (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)). Archive audit-only work uses [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) `--audit-only` (Phase 5D removed legacy wrapper).
 
 ### Manual HTML outreach batch (packaging only)
 
