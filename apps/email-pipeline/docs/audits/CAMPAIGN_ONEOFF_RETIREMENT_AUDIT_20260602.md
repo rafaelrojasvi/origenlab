@@ -19,7 +19,7 @@ The `campaigns/` package mixes **three distinct layers**:
 | **Generic post-send reporting** | `post_send_digest.py`, `build_post_send_digest.py` | **Keep (D)** — wired into `POST_SEND_SAFE_LOOP`, `daily_health_report`; still has hardcoded `REPORT_DATE = "2026-06-01"` |
 | **2026-06-01 wave one-offs** | `manual_outreach_2026_06_01.py`, dated digest + corrections scripts | **Removal candidate (C)** — registry of fixed recipients; wave-specific break-glass |
 
-**Phase 5J recommendation:** **Do not delete anything in Phase 5J.** The only **grouped removal with strong evidence** is **Phase 5K batch K1** (2026-06-01 registry + dated scripts), after a small **FailureType decouple** prep step.
+**Phase 5J recommendation:** **Do not delete anything in Phase 5J.** The only **grouped removal with strong evidence** was **Phase 5K batch K1** — **completed 2026-06-02**.
 
 **Do not batch-remove** cyber or presentacion modules: they have **~3–7 dedicated test files each**, cross-imports (`presentacion` → `cyber_campaign_gate`), and `lead_research/presentacion_prospectos_merge.py` dependency.
 

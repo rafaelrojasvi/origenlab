@@ -13,6 +13,7 @@ from removal_evidence import (
     REMOVED_PHASE5B_TARGETS,
     REMOVED_PHASE5C_TARGETS,
     REMOVED_PHASE5D_TARGETS,
+    REMOVED_PHASE5K_TARGETS,
     build_removal_evidence_markdown,
     reference_counts,
     write_removal_evidence_report,
@@ -40,6 +41,9 @@ def test_generate_removal_evidence_report() -> None:
     for row in REMOVED_PHASE5D_TARGETS:
         assert row["path"] in body
         assert "Removed in Phase 5D" in body
+    for row in REMOVED_PHASE5K_TARGETS:
+        assert row["path"] in body
+        assert "Removed in Phase 5K" in body
 
 
 def test_deprecated_targets_listed_in_script_map() -> None:
@@ -82,6 +86,15 @@ def test_phase5d_removed_archive_wrapper_documented_in_script_map() -> None:
         assert not (REPO / row["path"]).is_file(), row["path"]
 
 
+def test_phase5k_removed_manual_outreach_oneoffs_documented_in_script_map() -> None:
+    smap = (REPO / "docs/SCRIPT_MAP.md").read_text(encoding="utf-8")
+    assert "build_post_send_digest.py" in smap
+    assert "POST_SEND_SAFE_LOOP.md" in smap
+    for row in REMOVED_PHASE5K_TARGETS:
+        assert Path(row["path"]).name in smap or "Phase 5K" in smap, row["path"]
+        assert not (REPO / row["path"]).is_file(), row["path"]
+
+
 @pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5A_TARGETS])
 def test_phase5a_removed_shells_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5A removed: {rel}"
@@ -102,6 +115,11 @@ def test_phase5d_removed_archive_wrapper_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5D removed: {rel}"
 
 
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5K_TARGETS])
+def test_phase5k_removed_manual_outreach_oneoffs_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5K removed: {rel}"
+
+
 def test_refactor_phase3_targets_documented() -> None:
     audit = (REPO / "docs/audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md").read_text(encoding="utf-8")
     for row in REFACTOR_PHASE3_TARGETS:
@@ -118,6 +136,7 @@ def test_evidence_markdown_has_table_rows() -> None:
     assert "| `scripts/tools/flag_reported_non_delivery_from_contacto.py` |" in md
     assert "Removed in Phase 5C" in md
     assert "Removed in Phase 5D" in md
+    assert "Removed in Phase 5K" in md
 
 
 def test_reference_counts_returns_non_negative() -> None:
