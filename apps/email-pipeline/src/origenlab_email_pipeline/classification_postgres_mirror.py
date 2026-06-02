@@ -14,7 +14,7 @@ from origenlab_email_pipeline.email_classification_qa import (
 )
 from origenlab_email_pipeline.marketing_supplier_domains import supplier_email_domains
 from origenlab_email_pipeline.mart_core_postgres_migrate import connect_sqlite_readonly
-from origenlab_email_pipeline.streamlit_canonical_dashboard_sql import (
+from origenlab_email_pipeline.canonical_operational_sql import (
     load_canonical_gmail_classification_sample,
 )
 
