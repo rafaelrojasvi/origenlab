@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-05-19
+Last reviewed: 2026-06-02
 
 **This document is the canonical operator map** for outbound and campaign work. It is **navigation and safety labeling only** — behavior lives in code and in [`RUNBOOK.md`](RUNBOOK.md).
 
@@ -230,6 +230,25 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 
 ---
 
+## Post-send safe loop (procedure + scripts)
+
+**Canonical steps:** [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) — run after new Sent mail, NDRs, or suppression changes. Mirror-only is **not** sufficient when Gmail evidence changed.
+
+| Path | Role | Mutates? | Notes |
+|------|------|----------|--------|
+| [`scripts/ingest/05_workspace_gmail_imap_to_sqlite.py`](../scripts/ingest/05_workspace_gmail_imap_to_sqlite.py) | Read-only Gmail IMAP → `emails` | SQLite insert | No Gmail send; use `--skip-duplicate-message-id`; no `--replace-source` in safe loops |
+| [`scripts/tools/flag_ndr_bounces_from_contacto.py`](../scripts/tools/flag_ndr_bounces_from_contacto.py) | NDR scan; optional suppression apply | SQLite **only with `--apply`** | **Dry-run default.** Preferred apply: `--emails-file PATH --only-code CODE --apply` (allowlist must match scan evidence). **Broad `--apply` without filters = break-glass** (all planned recipients). Delay DSN subjects skipped. Exact-email only — not domain suppression. |
+| [`scripts/leads/audit_contacted_universe.py`](../scripts/leads/audit_contacted_universe.py) | Rebuild exclusion CSVs from SQLite | Writes `reports/out/` only | Run before post-send digest |
+| [`scripts/qa/refresh_outbound_safety_memory.py`](../scripts/qa/refresh_outbound_safety_memory.py) | Safety exports + validation chain | SQLite read; `reports/out/` writes | Daily / post-send |
+| [`scripts/qa/build_post_send_digest.py`](../scripts/qa/build_post_send_digest.py) | Post-send digest CSV/MD/JSON | **Read-only** analysis | Output under `reports/out/active/current/` (gitignored) — not source of truth |
+| [`scripts/ops/refresh_render_dashboard_once.sh`](../scripts/ops/refresh_render_dashboard_once.sh) | Postgres mirror refresh | Postgres mirror load | Post-send: `RUN_GMAIL_INGEST=0`, `RUN_LEAD_RESEARCH_MIRROR=1`, `RUN_OUTBOUND_SIDECAR_MIRROR=1` |
+| [`scripts/qa/audit_prospectos_safety_drift.py`](../scripts/qa/audit_prospectos_safety_drift.py) | Raw `lead_research_prospect` vs safety sidecars | **Read-only** | Report under `reports/out/`; optional `--strict`; drift ≠ send failure |
+| [`scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py) | Institution/domain grouping audit | **Read-only** | Presentation/strategy only — **not** send safety; gitignored reports |
+| [`scripts/qa/operator_status.py`](../scripts/qa/operator_status.py) | Operator READY / freshness | **Read-only** | LISTO / mirror_ok ≠ send approval |
+| [`scripts/ops/run_post_send_2026_06_01_refresh.sh`](../scripts/ops/run_post_send_2026_06_01_refresh.sh) | **Historical** 2026-06-01 orchestrator | Mixed | **Do not blindly reuse** — step 2 still runs **broad NDR `--apply`**. Clone steps from `POST_SEND_SAFE_LOOP.md` instead. |
+
+---
+
 ## Break-glass scripts (BREAK_GLASS)
 
 **File headers:** scripts in this table include a prominent **`SAFETY` / `SAFETY (break-glass)`** comment block at the top of the source file (in addition to this doc).
@@ -253,7 +272,7 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | `scripts/maintenance/dedupe_canonical_gmail_messages.py` | **DELETE** duplicate canonical Gmail `emails` — dry-run default; `--apply --ack-sqlite-backup` |
 | `scripts/leads/advanced/build_lead_account_rollup.py` | **DELETE** + rebuild `lead_account_*` |
 | `scripts/qa/sync_outreach_batch_from_ingested_bounces.py` | **`--apply`** updates suppressions / state |
-| `scripts/tools/flag_ndr_bounces_from_contacto.py` | **`--apply`** writes suppressions |
+| `scripts/tools/flag_ndr_bounces_from_contacto.py` | **`--apply`** writes `contact_email_suppression`; broad apply = all scan matches; prefer `--emails-file` + `--only-code` ([`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md)) |
 | `scripts/tools/flag_reported_non_delivery_from_contacto.py` | **`--apply`** writes suppressions |
 | `scripts/validation/extract_attachment_text.py` | May **delete** `attachment_extracts` during rebuild patterns |
 | `scripts/tools/archive_reports_out_generated.py` | **`--apply`** **moves** files under `reports/out` to `archive/manual_cleanup/…` (no deletes) |
@@ -283,6 +302,7 @@ Outbound / campaign regression tests live under `tests/` (e.g. `test_run_current
 
 ## Related docs
 
+- [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) — canonical post-send / NDR procedure
 - [`RUNBOOK.md`](RUNBOOK.md) — full procedures, mailbox ingest, Docker, publish gate
 - [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md) — lane semantics
 - [`scripts/README.md`](../scripts/README.md) — folder map and QA table

@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Post-send refresh: manual outreach + mom additional sends (read-only Gmail ingest).
 #
-# One-off orchestrator for 2026-06-01 campaign window. When cloning for the next
-# post-send wave, copy this pattern (ingest → NDR → contacted → safety → mirror →
-# digest → Prospectos drift audit). See audit_prospectos_safety_drift.py.
+# HISTORICAL ONE-OFF — 2026-06-01 campaign window only.
+# Canonical procedure for new post-send work: docs/pipeline/POST_SEND_SAFE_LOOP.md
+# (do not copy this file blindly; step 2 still uses broad NDR --apply — see warning below).
+#
+# When cloning for a future wave, follow POST_SEND_SAFE_LOOP.md: ingest → NDR dry-run →
+# targeted allowlist apply → contacted → safety → digest → mirror → drift audit.
 set -eo pipefail
 
 PIPE="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -26,6 +29,21 @@ echo "$INBOX_STATS"
 echo "$SENT_STATS"
 
 echo "== 2) NDR scan → exact contact_email_suppression =="
+cat <<'WARN' >&2
+*** NDR APPLY WARNING (historical script — read before continuing) ***
+  This one-off still runs BROAD: flag_ndr_bounces_from_contacto.py --apply
+  That applies ALL planned NDR recipients in the scan window — break-glass behavior.
+
+  For new work, do NOT use broad --apply by default:
+    1) Dry-run first (omit --apply).
+    2) Review recipients; build an allowlist (one email per line).
+    3) Apply only with: --emails-file PATH --only-code CODE --apply
+       (exact-email only; no domain suppression).
+    4) Skip delay DSNs; stop for operator review if unsure.
+
+  Canonical doc: docs/pipeline/POST_SEND_SAFE_LOOP.md
+***
+WARN
 uv run python scripts/tools/flag_ndr_bounces_from_contacto.py \
   --since-days "$SINCE_DAYS" --apply
 

@@ -6,7 +6,7 @@ Last reviewed: 2026-06-01
 
 **Stop here for this thread.** Safety/control-plane documentation and read-only audits are in place. Do not restart feature work in the wrong layer.
 
-Related: [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`INSTITUTION_ALIAS_POLICY.md`](INSTITUTION_ALIAS_POLICY.md) · [`INSTITUTION_EXPLORER_SPEC.md`](INSTITUTION_EXPLORER_SPEC.md) · [`RUNBOOK.md`](../RUNBOOK.md) · [`OUTBOUND_OPERATOR_CHECKLIST.md`](OUTBOUND_OPERATOR_CHECKLIST.md)
+Related: [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md) · [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`INSTITUTION_ALIAS_POLICY.md`](INSTITUTION_ALIAS_POLICY.md) · [`INSTITUTION_EXPLORER_SPEC.md`](INSTITUTION_EXPLORER_SPEC.md) · [`RUNBOOK.md`](../RUNBOOK.md) · [`OUTBOUND_OPERATOR_CHECKLIST.md`](OUTBOUND_OPERATOR_CHECKLIST.md)
 
 ---
 
@@ -58,7 +58,9 @@ Run only when there is **new Sent mail, NDR/bounces, or suppression changes**:
 8. **Prospectos drift audit** — report-only; drift ≠ send failure.
 9. **Operator status** — expect **READY** / **mirror_ok** before trusting dashboard.
 
-Orchestrator (optional): `scripts/ops/run_post_send_2026_06_01_refresh.sh` — see [`RUNBOOK.md`](../RUNBOOK.md).
+**Canonical procedure:** [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md) (step-by-step commands).
+
+Historical one-off (broad NDR `--apply` in step 2 — do not copy blindly): `scripts/ops/run_post_send_2026_06_01_refresh.sh`.
 
 ---
 
@@ -70,7 +72,7 @@ From `apps/email-pipeline/` unless noted. Paths relative to that app.
 | --- | --- | --- |
 | Operator doctor | `uv run python scripts/qa/operator_status.py` | Read-only verdict first |
 | Gmail ingest | `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Read-only IMAP; Sent folder per RUNBOOK |
-| NDR flag / apply | `uv run python scripts/tools/flag_ndr_bounces_from_contacto.py` | Dry-run default; `--apply` needs approval |
+| NDR flag / apply | `uv run python scripts/tools/flag_ndr_bounces_from_contacto.py` | Dry-run default; targeted `--emails-file` + `--only-code` + `--apply`; broad `--apply` is break-glass — see [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md) |
 | Contacted universe | `uv run python scripts/leads/audit_contacted_universe.py` | Refreshes exclusion CSVs |
 | Safety memory | `uv run python scripts/qa/refresh_outbound_safety_memory.py` | DNR / contacted exports + checks |
 | Post-send digest | `uv run python scripts/qa/build_post_send_digest.py` | **After** contacted audit |

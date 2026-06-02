@@ -86,7 +86,7 @@ Canonical export CLIs: [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRU
 Use after campaigns, NDR waves, or suppression changes:
 
 1. **Ingest Gmail** (if needed) — read-only IMAP: `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` (Sent + INBOX per RUNBOOK).
-2. **Flag / apply exact NDR suppressions** (operator-approved only) — `scripts/tools/flag_ndr_bounces_from_contacto.py` (`--apply` is break-glass).
+2. **Flag / apply exact NDR suppressions** (operator-approved only) — `scripts/tools/flag_ndr_bounces_from_contacto.py` (dry-run default; targeted `--emails-file` + `--only-code` + `--apply`; broad `--apply` is break-glass — [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md)).
 3. **`scripts/leads/audit_contacted_universe.py`** — refreshes exclusion CSVs including `bounced_emails_for_exclusion.csv`.
 4. **`scripts/qa/refresh_outbound_safety_memory.py`** — exports + readiness checks.
 5. **Rebuild marts / prospect read models** (if needed) — `build_business_mart.py`, lead research builder, presentation/cyber merge scripts per campaign.
