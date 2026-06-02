@@ -60,8 +60,6 @@ Run only when there is **new Sent mail, NDR/bounces, or suppression changes**:
 
 **Canonical procedure:** [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md) (step-by-step commands).
 
-Historical one-off (broad NDR `--apply` in step 2 — do not copy blindly): `scripts/ops/run_post_send_2026_06_01_refresh.sh`.
-
 ---
 
 ## D. Commands checklist

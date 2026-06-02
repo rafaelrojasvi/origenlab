@@ -9,6 +9,7 @@ import pytest
 from removal_evidence import (
     DEPRECATED_REMOVAL_TARGETS,
     REFACTOR_PHASE3_TARGETS,
+    REMOVED_PHASE5A_TARGETS,
     build_removal_evidence_markdown,
     reference_counts,
     write_removal_evidence_report,
@@ -24,6 +25,9 @@ def test_generate_removal_evidence_report() -> None:
     assert "Phase 2 — script removal evidence" in body
     for row in DEPRECATED_REMOVAL_TARGETS:
         assert row["path"] in body
+    for row in REMOVED_PHASE5A_TARGETS:
+        assert row["path"] in body
+        assert "Removed in Phase 5A" in body
 
 
 def test_deprecated_targets_listed_in_script_map() -> None:
@@ -32,11 +36,17 @@ def test_deprecated_targets_listed_in_script_map() -> None:
         assert Path(row["path"]).name in smap or row["path"] in smap, row["path"]
 
 
-def test_dated_ops_shells_marked_deprecated_in_script_map() -> None:
+def test_phase5a_removed_shells_documented_in_script_map() -> None:
     smap = (REPO / "docs/SCRIPT_MAP.md").read_text(encoding="utf-8")
-    assert "run_post_send_2026_06_01_refresh.sh" in smap
-    assert "DEPRECATED" in smap
-    assert "run_manual_outreach_2026_06_01_post_send_refresh.sh" in smap
+    assert "POST_SEND_SAFE_LOOP.md" in smap
+    for row in REMOVED_PHASE5A_TARGETS:
+        assert Path(row["path"]).name in smap or "Phase 5A" in smap, row["path"]
+        assert not (REPO / row["path"]).is_file(), row["path"]
+
+
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5A_TARGETS])
+def test_phase5a_removed_shells_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5A removed: {rel}"
 
 
 def test_refactor_phase3_targets_documented() -> None:

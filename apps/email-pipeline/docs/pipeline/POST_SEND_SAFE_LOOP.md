@@ -75,9 +75,9 @@ Allowlist files under `reports/in/` are **gitignored** — do not commit.
 
 ---
 
-## Historical orchestrator (do not copy blindly)
+## Historical orchestrator (removed Phase 5A)
 
-[`scripts/ops/run_post_send_2026_06_01_refresh.sh`](../../scripts/ops/run_post_send_2026_06_01_refresh.sh) is a **2026-06-01 one-off**. It still runs **broad NDR `--apply`** in step 2. For new waves, follow **this doc** and use targeted allowlists — do not assume that shell is the canonical apply path.
+The **2026-06-01 one-off** shell drivers `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` were **removed** in Phase 5A. They ran **broad NDR `--apply`** in some steps — do not recreate that pattern. For new waves, follow **this doc** and use targeted allowlists.
 
 ---
 

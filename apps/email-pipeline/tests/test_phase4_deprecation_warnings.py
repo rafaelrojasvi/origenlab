@@ -45,17 +45,7 @@ _WRAPPER_HELP_TARGETS: tuple[tuple[str, str], ...] = (
     ("scripts/audit_lead_org_quality.py", "scripts/leads/advanced/audit_lead_org_quality.py"),
 )
 
-_SHELL_BANNER_TARGETS: tuple[tuple[str, str], ...] = (
-    (
-        "scripts/ops/run_post_send_2026_06_01_refresh.sh",
-        "docs/pipeline/POST_SEND_SAFE_LOOP.md",
-    ),
-    (
-        "scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh",
-        "docs/pipeline/POST_SEND_SAFE_LOOP.md",
-    ),
-)
-
+_SHELL_BANNER_TARGETS: tuple[tuple[str, str], ...] = ()
 
 def _env() -> dict[str, str]:
     return {**os.environ, "PYTHONPATH": str(_SRC)}
@@ -103,6 +93,15 @@ def test_deprecated_shell_scripts_print_banner_near_top(rel: str, replacement_ne
     assert "*** DEPRECATED:" in head, rel
     assert replacement_needle in head, rel
     assert "cat >&2 <<'DEPREC'" in head, rel
+
+
+def test_phase5a_removed_shells_no_longer_expect_deprecation_banner() -> None:
+    """Phase 5A deleted dated orchestrators; POST_SEND_SAFE_LOOP.md is canonical."""
+    for rel in (
+        "scripts/ops/run_post_send_2026_06_01_refresh.sh",
+        "scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh",
+    ):
+        assert not (REPO / rel).is_file(), rel
 
 
 def test_all_phase2_deprecated_targets_have_runtime_or_shell_banner() -> None:
