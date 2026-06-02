@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-import origenlab_email_pipeline.canonical_operational_sql as canonical_sql
-import origenlab_email_pipeline.streamlit_canonical_dashboard_sql as streamlit_shim
 from origenlab_email_pipeline.canonical_operational_sql import (
     count_canonical_duplicate_message_id_groups,
     count_canonical_missing_message_id,
@@ -17,11 +15,6 @@ from origenlab_email_pipeline.canonical_operational_sql import (
     load_canonical_gmail_classification_sample,
     load_inicio_recent_canonical_rows,
 )
-
-
-def test_shim_reexports_same_callables_as_canonical_module() -> None:
-    for name in canonical_sql.__all__:
-        assert getattr(streamlit_shim, name) is getattr(canonical_sql, name)
 
 
 def _mk(tmp_path: Path) -> sqlite3.Connection:

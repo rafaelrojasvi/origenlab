@@ -74,7 +74,7 @@ from origenlab_email_pipeline.streamlit_prioridad_pages import (
 )
 from origenlab_email_pipeline.outbound_core import resolve_outbound_gmail_user, resolve_outbound_sent_folders
 from origenlab_email_pipeline.outbound_readiness_check import assess_outbound_readiness
-from origenlab_email_pipeline.streamlit_canonical_dashboard_sql import (
+from origenlab_email_pipeline.canonical_operational_sql import (
     count_archive_mart_table,
     count_canonical_attachments,
     count_canonical_duplicate_message_id_groups,

@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from origenlab_email_pipeline.contacto_gmail_source import CONTACTO_GMAIL_SOURCE_PREFIX
-from origenlab_email_pipeline.streamlit_canonical_dashboard_sql import (
+from origenlab_email_pipeline.canonical_operational_sql import (
     count_archive_mart_table,
     count_canonical_operational_contacts,
     count_canonical_operational_opportunity_signals,
