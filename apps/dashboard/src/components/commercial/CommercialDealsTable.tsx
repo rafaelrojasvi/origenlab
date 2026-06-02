@@ -10,7 +10,10 @@ import {
   marginStatusLabel,
   reconciliationStatusLabel,
 } from "../../lib/commercialDealFormat";
+import { formatPagedFooterLabel } from "../../lib/clientTablePagination";
+import { useClientTablePagination } from "../../lib/useClientTablePagination";
 import { TableSection } from "./TableSection";
+import { TablePaginationBar } from "./TablePaginationBar";
 
 function StatusCell({ raw, label }: { raw: string; label: string }) {
   if (!raw || label === "—") {
@@ -88,6 +91,20 @@ export function CommercialDealsTable({
 }) {
   const tableAvailable = data?.table_available ?? false;
   const items = data?.items ?? [];
+  const apiTotal = data?.total ?? items.length;
+  const { pageSize, setPage, setPageSize, pagination } = useClientTablePagination(items, [
+    items.length,
+    apiTotal,
+  ]);
+  const pagedItems = pagination.slice;
+  const dealsFooter = formatPagedFooterLabel({
+    from: pagination.from,
+    to: pagination.to,
+    visibleTotal: pagination.visibleTotal,
+    page: pagination.page,
+    totalPages: pagination.totalPages,
+    extraParts: apiTotal > items.length ? [`API total ${apiTotal} negocios`] : undefined,
+  });
   const showEmpty = !loading && !error && (!tableAvailable || items.length === 0);
   const showTable = !loading && !error && tableAvailable && items.length > 0;
 
@@ -137,11 +154,26 @@ export function CommercialDealsTable({
               </tr>
             </thead>
             <tbody>
-              {items.map((row, index) => (
+              {pagedItems.map((row, index) => (
                 <DealRow key={`${row.client_org_name}-${row.supplier_org_name}-${index}`} row={row} />
               ))}
             </tbody>
           </table>
+          {items.length > 0 ? (
+            <TablePaginationBar
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          ) : null}
+          <p
+            className="border-t border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-muted)]"
+            data-testid="commercial-deals-table-footer"
+          >
+            {dealsFooter}
+          </p>
         </div>
       ) : null}
     </TableSection>

@@ -1,0 +1,118 @@
+"""Phase 4: stderr deprecation banners on deprecated script entrypoints."""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from removal_evidence import (
+    DEPRECATED_REMOVAL_TARGETS,
+    REMOVED_PHASE5B_TARGETS,
+    REMOVED_PHASE5C_TARGETS,
+    REMOVED_PHASE5D_TARGETS,
+)
+
+REPO = Path(__file__).resolve().parents[1]
+_SRC = REPO / "src"
+
+_PYTHON_HELP_TARGETS: tuple[tuple[str, str, str], ...] = (
+    (
+        "scripts/tools/flag_reported_non_delivery_from_contacto.py",
+        "DEPRECATED",
+        "flag_ndr_bounces_from_contacto.py",
+    ),
+)
+
+_SHELL_BANNER_TARGETS: tuple[tuple[str, str], ...] = ()
+
+_EQUIPMENT_FIRST_CANONICAL: tuple[str, ...] = (
+    "scripts/qa/build_equipment_first_opportunity_queue.py",
+    "scripts/qa/build_equipment_first_operator_queue.py",
+)
+
+_ARCHIVE_CANONICAL = "scripts/leads/build_archive_send_batch.py"
+
+
+def _env() -> dict[str, str]:
+    return {**os.environ, "PYTHONPATH": str(_SRC)}
+
+
+def _run_help(rel: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(REPO / rel), "--help"],
+        cwd=str(REPO),
+        env=_env(),
+        capture_output=True,
+        text=True,
+        timeout=90,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize("rel,category,replacement_needle", _PYTHON_HELP_TARGETS)
+def test_deprecated_python_scripts_warn_on_help(
+    rel: str, category: str, replacement_needle: str,
+) -> None:
+    r = _run_help(rel)
+    assert r.returncode == 0, r.stderr + r.stdout
+    err = r.stderr
+    assert category in err, err
+    assert replacement_needle in err, err
+    assert "not for new operator work" in err.lower() or "not preferred" in err.lower(), err
+
+
+@pytest.mark.parametrize("rel,replacement_needle", _SHELL_BANNER_TARGETS)
+def test_deprecated_shell_scripts_print_banner_near_top(rel: str, replacement_needle: str) -> None:
+    text = (REPO / rel).read_text(encoding="utf-8")
+    head = text[:2_000]
+    assert "*** DEPRECATED:" in head, rel
+    assert replacement_needle in head, rel
+    assert "cat >&2 <<'DEPREC'" in head, rel
+
+
+def test_phase5a_removed_shells_no_longer_expect_deprecation_banner() -> None:
+    """Phase 5A deleted dated orchestrators; POST_SEND_SAFE_LOOP.md is canonical."""
+    for rel in (
+        "scripts/ops/run_post_send_2026_06_01_refresh.sh",
+        "scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh",
+    ):
+        assert not (REPO / rel).is_file(), rel
+
+
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5B_TARGETS])
+def test_phase5b_removed_root_wrappers_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5B removed: {rel}"
+
+
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5C_TARGETS])
+def test_phase5c_removed_buyer_queue_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5C removed: {rel}"
+
+
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5D_TARGETS])
+def test_phase5d_removed_archive_audit_wrapper_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5D removed: {rel}"
+
+
+@pytest.mark.parametrize("rel", _EQUIPMENT_FIRST_CANONICAL)
+def test_equipment_first_replacement_scripts_help_exits_zero(rel: str) -> None:
+    r = _run_help(rel)
+    assert r.returncode == 0, r.stderr + r.stdout
+
+
+def test_build_archive_send_batch_replacement_help_exits_zero() -> None:
+    r = _run_help(_ARCHIVE_CANONICAL)
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "--audit-only" in r.stdout or "--audit-only" in r.stderr
+
+
+def test_all_phase2_deprecated_targets_have_runtime_or_shell_banner() -> None:
+    """Every remaining DEPRECATED_REMOVAL_TARGETS path is covered by Phase 4 stderr tests."""
+    covered = {t[0] for t in _PYTHON_HELP_TARGETS}
+    covered |= {t[0] for t in _SHELL_BANNER_TARGETS}
+    for row in DEPRECATED_REMOVAL_TARGETS:
+        assert row["path"] in covered, row["path"]

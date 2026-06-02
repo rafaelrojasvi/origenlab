@@ -249,7 +249,7 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
 
     await navigateTo("Catálogo");
     await waitFor(() => {
-      screen.getByText("9 productos catalogados");
+      expect(screen.getByTestId("catalog-table-footer").textContent).toMatch(/de 9/);
       screen.getByText("CRTOP Lab Reactor OLT-HP-5L");
     });
   });

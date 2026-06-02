@@ -57,6 +57,9 @@ Writes `reports/out/active/current/daily_health_report_<YYYY_MM_DD>/` with verdi
 | **Exact-email only** | NDR apply writes `contact_email_suppression` per address — **not** domain suppression. |
 | **Delay DSNs** | Subjects with `Notification (Delay)` / `(delay)` are **skipped** — wait for final failure NDR. |
 | **Unparsed NDR** | No recipient extracted → no suppression from that row. |
+| **Canonical tool** | [`flag_ndr_bounces_from_contacto.py`](../../scripts/tools/flag_ndr_bounces_from_contacto.py) — dry-run, then targeted `--emails-file` + `--only-code` + `--apply`. |
+| **Legacy (deprecated)** | [`flag_reported_non_delivery_from_contacto.py`](../../scripts/tools/flag_reported_non_delivery_from_contacto.py) — **do not use** for new waves; see [`SCRIPT_MAP.md`](../SCRIPT_MAP.md#ndr-suppression-tooling-canonical-vs-legacy). |
+| **Review helper** | [`build_ndr_review_queue.py`](../../scripts/qa/build_ndr_review_queue.py) — read-only batches/allowlists; **no** suppression writes. |
 
 Example (after review):
 
@@ -72,9 +75,9 @@ Allowlist files under `reports/in/` are **gitignored** — do not commit.
 
 ---
 
-## Historical orchestrator (do not copy blindly)
+## Historical orchestrator (removed Phase 5A)
 
-[`scripts/ops/run_post_send_2026_06_01_refresh.sh`](../../scripts/ops/run_post_send_2026_06_01_refresh.sh) is a **2026-06-01 one-off**. It still runs **broad NDR `--apply`** in step 2. For new waves, follow **this doc** and use targeted allowlists — do not assume that shell is the canonical apply path.
+The **2026-06-01 one-off** shell drivers `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` were **removed** in Phase 5A. They ran **broad NDR `--apply`** in some steps — do not recreate that pattern. For new waves, follow **this doc** and use targeted allowlists.
 
 ---
 

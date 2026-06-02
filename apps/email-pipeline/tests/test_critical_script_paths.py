@@ -30,10 +30,9 @@ REPO = Path(__file__).resolve().parents[1]
         "scripts/leads/add_manual_contact_suppressions.py",
         "scripts/ingest/05_workspace_gmail_imap_to_sqlite.py",
         # Demoted paths: implementations + folder READMEs (layout contract)
-        "scripts/leads/advanced/export_archive_outreach_candidates.py",
         "scripts/leads/advanced/README.md",
         "scripts/leads/campaigns/README.md",
-        # Lead-account: implementations under scripts/leads/advanced/; thin wrappers at scripts/*.py
+        # Lead-account: canonical implementations under scripts/leads/advanced/
         "scripts/leads/advanced/build_lead_account_rollup.py",
         "scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py",
         "scripts/leads/advanced/validate_lead_account_rollup.py",
@@ -42,10 +41,6 @@ REPO = Path(__file__).resolve().parents[1]
         "scripts/leads/import_operator_outreach_blocklist.py",
         "scripts/leads/build_manual_html_outreach_batch.py",
         "scripts/leads/advanced/audit_emails_export_gate.py",
-        "scripts/build_lead_account_rollup.py",
-        "scripts/match_lead_accounts_to_existing_orgs.py",
-        "scripts/validate_lead_account_rollup.py",
-        "scripts/audit_lead_org_quality.py",
     ],
 )
 def test_critical_script_path_exists(rel: str) -> None:

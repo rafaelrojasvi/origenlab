@@ -1,9 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatPagedFooterLabel,
   formatProspectosTableFooter,
   formatWarmCasesTableFooter,
+  getVisiblePageNumbers,
   paginateSlice,
 } from "./clientTablePagination";
+
+describe("getVisiblePageNumbers", () => {
+  it("lists every page when count is small", () => {
+    expect(getVisiblePageNumbers(2, 4)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("inserts ellipsis for large page counts", () => {
+    expect(getVisiblePageNumbers(6, 12)).toEqual([1, "ellipsis", 5, 6, 7, "ellipsis", 12]);
+  });
+
+  it("returns a single page when totalPages is 1", () => {
+    expect(getVisiblePageNumbers(1, 1)).toEqual([1]);
+  });
+});
 
 describe("paginateSlice", () => {
   const rows = Array.from({ length: 20 }, (_, i) => i);
@@ -29,6 +45,19 @@ describe("paginateSlice", () => {
     expect(r.slice).toHaveLength(0);
     expect(r.from).toBe(0);
     expect(r.to).toBe(0);
+  });
+});
+
+describe("formatPagedFooterLabel", () => {
+  it("includes range, page, and solo lectura", () => {
+    const label = formatPagedFooterLabel({
+      from: 1,
+      to: 15,
+      visibleTotal: 44,
+      page: 1,
+      totalPages: 3,
+    });
+    expect(label).toBe("Mostrando 1–15 de 44 · Página 1 de 3 · solo lectura");
   });
 });
 
@@ -65,17 +94,30 @@ describe("formatWarmCasesTableFooter", () => {
 });
 
 describe("formatProspectosTableFooter", () => {
-  it("shows loaded vs total", () => {
+  it("shows paged range with loaded vs API total", () => {
     const { primary, truncationNote } = formatProspectosTableFooter({
+      from: 1,
+      to: 15,
       loaded: 50,
-      total: 71,
+      apiTotal: 71,
+      page: 1,
+      totalPages: 4,
     });
-    expect(primary).toBe("Mostrando 1–50 de 71 prospectos · solo lectura");
+    expect(primary).toBe(
+      "Mostrando 1–15 de 50 cargados · API total 71 · Página 1 de 4 · solo lectura",
+    );
     expect(truncationNote).toMatch(/más resultados/);
   });
 
   it("omits truncation note when all loaded", () => {
-    const { truncationNote } = formatProspectosTableFooter({ loaded: 10, total: 10 });
+    const { truncationNote } = formatProspectosTableFooter({
+      from: 1,
+      to: 10,
+      loaded: 10,
+      apiTotal: 10,
+      page: 1,
+      totalPages: 1,
+    });
     expect(truncationNote).toBeUndefined();
   });
 });

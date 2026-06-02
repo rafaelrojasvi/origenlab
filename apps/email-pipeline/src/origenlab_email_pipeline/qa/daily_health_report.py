@@ -12,6 +12,10 @@ from typing import Any, Literal
 
 from origenlab_email_pipeline.business_mart import domain_of
 from origenlab_email_pipeline.lead_research.lead_research_operational_overlay import (
+    CLASS_RESEARCH_ONLY,
+    CLASS_SAME_DOMAIN_CONTACTED_REVIEW,
+    apply_operational_overlay_to_prospect,
+    load_operational_indexes_from_sqlite,
     normalize_prospect_email,
 )
 from origenlab_email_pipeline.lead_research.prospectos_safety_drift import (
@@ -170,17 +174,19 @@ def _domains_with_contacted_outreach(conn: sqlite3.Connection) -> set[str]:
 def collect_falta_email_stale_display_rows(
     conn: sqlite3.Connection,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Prospect rows still Falta-email in raw form but with contacted/sent evidence."""
+    """Rows still showing Falta email after overlay despite same-domain evidence (should be rare)."""
     raw = load_raw_active_prospects(conn)
-    contacted_domains = _domains_with_contacted_outreach(conn)
+    indexes = load_operational_indexes_from_sqlite(conn)
+    contacted_domains = indexes.domains_with_contacted
     stale: list[dict[str, Any]] = []
     raw_falta = 0
+    overlay_same_domain = 0
     for prospect in raw:
         email = normalize_prospect_email(prospect.get("email"))
         if email:
             continue
         classification = str(prospect.get("classification") or "")
-        if classification != "research_only_contact_needed":
+        if classification != CLASS_RESEARCH_ONLY:
             continue
         raw_falta += 1
         domain = (str(prospect.get("domain") or "").strip().lower()) or ""
@@ -193,7 +199,13 @@ def collect_falta_email_stale_display_rows(
             evidence.append("gmail_sent_count")
         if gmail_last:
             evidence.append("gmail_last_contacted_at")
+        overlay = apply_operational_overlay_to_prospect(dict(prospect), indexes)
+        if overlay.get("classification") == CLASS_SAME_DOMAIN_CONTACTED_REVIEW:
+            overlay_same_domain += 1
+            continue
         if not evidence:
+            continue
+        if overlay.get("classification") != CLASS_RESEARCH_ONLY:
             continue
         stale.append(
             {
@@ -201,18 +213,20 @@ def collect_falta_email_stale_display_rows(
                 "organization_name": prospect.get("organization_name"),
                 "domain": domain,
                 "raw_classification": classification,
+                "overlay_classification": overlay.get("classification"),
                 "raw_status": prospect.get("status"),
                 "evidence": ";".join(evidence),
                 "gmail_sent_count": gmail_sent,
                 "gmail_last_contacted_at": gmail_last,
-                "recommended_action": "populate_email_or_same_domain_review",
+                "recommended_action": "overlay_should_have_upgraded",
             }
         )
     stale.sort(key=lambda r: (str(r.get("domain") or ""), str(r.get("prospect_key") or "")))
     counts = {
         "raw_falta_email_count": raw_falta,
+        "falta_email_overlay_same_domain_count": overlay_same_domain,
         "falta_email_stale_display_count": len(stale),
-        "falta_email_truly_missing_count": raw_falta - len(stale),
+        "falta_email_truly_missing_count": raw_falta - overlay_same_domain - len(stale),
     }
     return stale, counts
 

@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-02
+Last reviewed: 2026-06-02 (Phase 1 simplification map — see [`audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md`](audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md))
 
 **This document is the canonical operator map** for outbound and campaign work. It is **navigation and safety labeling only** — behavior lives in code and in [`RUNBOOK.md`](RUNBOOK.md).
 
@@ -12,11 +12,19 @@ Last reviewed: 2026-06-02
 
 **Stage 6D1 (reports / `reports/out`):** path **classification** and planner aggregations are shared in [`core/reports_out.py`](../src/origenlab_email_pipeline/core/reports_out.py); [`plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) and [`archive_reports_out_generated.py`](../scripts/tools/archive_reports_out_generated.py) remain the **operator entrypoints**; archiver **dry-run** default and move-only semantics are unchanged in intent.
 
+**Canonical `reports/out` cleanup flow (plan → move → verify):**
+
+1. [`scripts/qa/plan_reports_out_cleanup.py`](../scripts/qa/plan_reports_out_cleanup.py) — **read-only** scan; buckets (`active_current`, `client_pack_latest`, tmp/lab/archive, …); **no file changes**.
+2. [`scripts/tools/archive_reports_out_generated.py`](../scripts/tools/archive_reports_out_generated.py) — **dry-run** default; **`--apply`** + `--archive-slug` **moves** selected generated files to `archive/manual_cleanup/…` (**no deletes**).
+3. [`scripts/qa/check_reports_out_active_hygiene.py`](../scripts/qa/check_reports_out_active_hygiene.py) — warn/fail if `reports/out/active/` has unexpected generated artifacts outside `current/`.
+
+Detail: [`RUNBOOK.md`](RUNBOOK.md#m-eprun-reports-out-cleanup) · [`CRUD_SAFETY.md`](CRUD_SAFETY.md).
+
 **Stage 6E1 (Tatiana / lab):** **boundary doc only** — see [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md). Lab / Tatiana / `scripts/ml` are **not** the daily outbound lanes. **Parked Postgres/API/pilots index:** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md). Source-quality planner (`plan_source_quality.py`) labels the `tatiana_lab` bucket for the paths listed there. Future **6E2** may refactor large Tatiana modules; 6E1 does **not** move or change implementation.
 
-**Lead-account root shims:** four files under `scripts/*.py` are **`COMPATIBILITY_WRAPPER` / `COMPATIBILITY_ONLY`** — retained for bookmarks and old one-liners; **not preferred** for new operator commands or agent prompts. **Canonical implementations:** `scripts/leads/advanced/*` (table below). **Do not delete** wrappers until doc/test references migrate. Pure env redaction utilities: [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py).
+**Lead-account scripts:** use **`scripts/leads/advanced/*`** only in new docs, runbooks, and agent prompts. Root-level compatibility wrappers were **removed in Phase 5B** (2026-06-02). Pure env redaction utilities: [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py).
 
-**Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints (including the reports-out archive tool), asserts top-of-file warnings on the break-glass set (aligned to tables below), and checks the four root compatibility wrappers. [`test_lead_compatibility_wrappers.py`](../tests/test_lead_compatibility_wrappers.py) locks wrapper→canonical mapping and SCRIPT_MAP labeling. Regressions require updating those tests for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
+**Contracts (tests, not a second truth):** [`test_operator_entrypoint_contracts.py`](../tests/test_operator_entrypoint_contracts.py) runs ``--help`` on the **named** daily/ingest/QA/planner entrypoints (including the reports-out archive tool) and asserts top-of-file warnings on the break-glass set (aligned to tables below). [`test_lead_compatibility_wrappers.py`](../tests/test_lead_compatibility_wrappers.py) locks canonical lead-account paths under `scripts/leads/advanced/`. Regressions require updating those tests for intentional path/contract changes; **deleting** scripts is still a **separate** approved change.
 
 **Canonical campaign workspace:** fresh inputs and outputs for the two outbound lanes belong in **`reports/out/active/current/`**. Other paths under `reports/out/active/` (and most of `reports/out/archive/`) are **evidence, history, or ad-hoc exports** — not the default place to pick up “today’s” CSV for DeepSearch or send lists. Keep only intentional root reference files in `active/` (`outreach_contacted_all.csv`, `all_known_marketing_contacts_dedup.csv`) because some scripts use them as default auxiliary inputs. (Stage 6C1) Volume marketing **processing** helpers for ``process_broad_marketing_contacts`` live in ``core.outbound.broad_marketing_contacts``; the **script** remains the supported entrypoint (CSV contracts unchanged). (Stage 6C2) **Do-not-repeat master** merge/summary formatting for ``export_do_not_repeat_master.py`` lives in ``core.outbound.do_not_repeat_master``; the **script** remains the daily entrypoint; **read-only** on SQLite; output filenames and JSON/CSV contract unchanged.
 
@@ -52,16 +60,18 @@ If you only care about the **two daily outbound lanes**, prefer **`prepare_outbo
 
 ---
 
-## Lead-account scripts: canonical vs root wrappers
+## Lead-account scripts (canonical)
 
-**Operator rule:** In **new** docs, runbooks, and agent prompts, use **`scripts/leads/advanced/…`** only. Root paths below are **COMPATIBILITY_WRAPPER** — same behavior via delegation; **not preferred** for new commands.
+**Operator rule:** In **new** docs, runbooks, and agent prompts, use **`scripts/leads/advanced/…`** only.
 
-| Tag | Root path (COMPATIBILITY_ONLY) | Canonical target (use this) | Notes |
-|-----|-------------------------------|-----------------------------|--------|
-| `COMPATIBILITY_WRAPPER` | [`scripts/build_lead_account_rollup.py`](../scripts/build_lead_account_rollup.py) | [`scripts/leads/advanced/build_lead_account_rollup.py`](../scripts/leads/advanced/build_lead_account_rollup.py) | Rebuilds `lead_account_*`; break-glass DELETE pattern on rollup |
-| `COMPATIBILITY_WRAPPER` | [`scripts/match_lead_accounts_to_existing_orgs.py`](../scripts/match_lead_accounts_to_existing_orgs.py) | [`scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py`](../scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py) | Match accounts → `organization_master` |
-| `COMPATIBILITY_WRAPPER` | [`scripts/validate_lead_account_rollup.py`](../scripts/validate_lead_account_rollup.py) | [`scripts/leads/advanced/validate_lead_account_rollup.py`](../scripts/leads/advanced/validate_lead_account_rollup.py) | Rollup sanity checks |
-| `COMPATIBILITY_WRAPPER` | [`scripts/audit_lead_org_quality.py`](../scripts/audit_lead_org_quality.py) | [`scripts/leads/advanced/audit_lead_org_quality.py`](../scripts/leads/advanced/audit_lead_org_quality.py) | Org name quality audit |
+| Tag | Path | Notes |
+|-----|------|--------|
+| `OPS_MAINT` / break-glass | [`scripts/leads/advanced/build_lead_account_rollup.py`](../scripts/leads/advanced/build_lead_account_rollup.py) | Rebuilds `lead_account_*`; break-glass DELETE pattern on rollup |
+| `OPS_MAINT` | [`scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py`](../scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py) | Match accounts → `organization_master` |
+| `OPS_MAINT` | [`scripts/leads/advanced/validate_lead_account_rollup.py`](../scripts/leads/advanced/validate_lead_account_rollup.py) | Rollup sanity checks |
+| `OPS_MAINT` | [`scripts/leads/advanced/audit_lead_org_quality.py`](../scripts/leads/advanced/audit_lead_org_quality.py) | Org name quality audit |
+
+**Removed Phase 5B (2026-06-02):** root wrappers `build_lead_account_rollup.py`, `match_lead_accounts_to_existing_orgs.py`, `validate_lead_account_rollup.py`, and `audit_lead_org_quality.py` under `scripts/` — use the `scripts/leads/advanced/…` paths above.
 
 Detail: [`leads/LEAD_ACCOUNT_LAYER.md`](leads/LEAD_ACCOUNT_LAYER.md) · [`../scripts/README.md`](../scripts/README.md#lead-account-rollup-and-mart-matching).
 
@@ -132,8 +142,26 @@ Dry-run import first if your wrapper allows it without `--apply`; see [`RUNBOOK.
 | **CONSOLIDATE** | Overlaps another script’s job; docs pick a primary story. |
 | **ARCHIVE_LANE** | Archive (`contact_master`) batch lane — still supported, not “daily mental model”. |
 | **BREAK_GLASS** | Can send, purge, rebuild destructively, or **`--apply`** with high blast radius — see table below. |
+| **DEPRECATED** | Historical, superseded, or one-off wave tooling — **retained** for audit/replay; **not** for new operator work. |
 
 Legacy tags **KEEP_CORE** / **KEEP_AUDIT** in older prose map loosely to **OPS_CORE** / **OPS_AUDIT**.
+
+**Operator health commands:** when to run `make doctor`, `make audit`, `operator_status.py`, `check_outbound_readiness.py`, `run_daily_health_report.py`, and `GET /operator/status` — see [`RUNBOOK.md`](RUNBOOK.md#m-eprun-operator-health-matrix).
+
+---
+
+## NDR suppression tooling (canonical vs legacy)
+
+**Canonical post-send path:** [`scripts/tools/flag_ndr_bounces_from_contacto.py`](../scripts/tools/flag_ndr_bounces_from_contacto.py) — dry-run default; **targeted** apply only after human review:
+
+- Preferred: `--emails-file PATH --only-code CODE --apply` (allowlist must match scan evidence).
+- **Broad `--apply`** without `--emails-file` / `--only-code` = **break-glass** (all planned recipients from scan).
+
+**Human-review helper (read-only):** [`scripts/qa/build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) — batches + suggested allowlists under `reports/out/active/current/ndr_review_queue_*`; **does not** write suppressions.
+
+**Legacy / deprecation candidate:** [`scripts/tools/flag_reported_non_delivery_from_contacto.py`](../scripts/tools/flag_reported_non_delivery_from_contacto.py) — older reported-NDR scanner; **do not use** for new post-send work unless you confirm no overlap with `flag_ndr_bounces_from_contacto.py`. No broad or automatic suppression writes.
+
+Procedure: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md#ndr-apply-rules).
 
 ---
 
@@ -154,7 +182,7 @@ Legacy tags **KEEP_CORE** / **KEEP_AUDIT** in older prose map loosely to **OPS_C
 | `scripts/leads/import_lead_contact_research_csv.py` | OPS_CORE | Applies reviewed DeepSearch into **`lead_contact_research`** | DB writes (precision lane); **dry-run unless `--apply`** |
 | `scripts/leads/export_next_marketing_recipients.py` | OPS_DAILY | **`send_ready.csv`** from `lead_master` + shared gate | Lead send list |
 | `scripts/leads/mark_sent_batch_contacted.py` | OPS_DAILY | Post-send **`outreach_contact_state`** updates | Sidecar only |
-| `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | OPS_DAILY | Gmail → **`emails`** (Sent / inbox) | Required for Sent-history truth |
+| `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | OPS_DAILY | Gmail → **`emails`** (Sent / inbox) | Required for Sent-history truth. Default: append + optional `--skip-duplicate-message-id`. **`--replace-source`** = **BREAK_GLASS** — deletes existing rows for that mailbox `source_file` before reinsert; see [Gmail ingest `--replace-source`](#gmail-ingest-replace-source) |
 
 **Optional send (BREAK_GLASS):** `scripts/qa/send_inline_html_email_via_gmail_api.py` — can send real mail; not auto-run. See below.
 
@@ -182,7 +210,6 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/check_reports_out_active_hygiene.py` | OPS_AUDIT | Warn/fail when `reports/out/active/` contains unexpected generated artifacts outside `current/` |
 | `scripts/qa/build_equipment_first_opportunity_queue.py` | OPS_AUDIT | Equipment-first filter from `Licitacion_Publicada.csv` → `equipment_first_opportunity_queue_*.csv` (read-only on Gmail; writes reports only) |
 | `scripts/qa/build_equipment_first_operator_queue.py` | OPS_AUDIT | Canonical operator queue + aligned `buyer_opportunity_ab_queue_*.csv` from equipment-first opportunity CSV (read-only cross-check vs DNR/Sent in SQLite) |
-| `scripts/qa/build_buyer_opportunity_queue.py` | OPS_AUDIT | **LEGACY_DO_NOT_USE** — file header + docstring; legacy buyer/private-lab A/B cross-check **superseded** by `build_equipment_first_*`; retained for audit/tests only; stale `buyer_opportunity_crosscheck_*` must not drive export |
 | `scripts/qa/operator_status.py` | OPS_AUDIT | **Read-only** operator snapshot: SQLite/Sent freshness, DNR files, canonical `active/current`, manifest warnings, verdict READY/CAUTION/BLOCKED |
 | `scripts/qa/build_equipment_deepsearch_vetted_queue.py` | OPS_AUDIT | Gate `equipment_deep_research_opportunities_*.csv` → vetted queue (equipment-first + DNR/Sent/state); fails clearly if input missing |
 | `scripts/qa/validate_sqlite_archive_for_postgres.py` | OPS_MIGRATE | Read-only / pre-migrate validation |
@@ -191,8 +218,62 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/audit_canonical_gmail_duplicates.py` | OPS_AUDIT | Read-only: duplicate `message_id` analysis within canonical Gmail rows |
 | `scripts/maintenance/dedupe_canonical_gmail_messages.py` | **BREAK_GLASS** | **DELETE** duplicate canonical Gmail `emails` — dry-run default; `--apply --ack-sqlite-backup` |
 | `scripts/qa/publish_gate.py` | OPS_AUDIT | Publication / trust gate (broader than outbound) |
+| `scripts/qa/run_daily_health_report.py` | OPS_AUDIT | **Read-only** combined health snapshot (NDR dry-run, drift, mirror JSON hints); verdict READY / REVIEW_NEEDED / BLOCKED; output `daily_health_report_*` under `active/current/` |
+| `scripts/qa/build_ndr_review_queue.py` | OPS_AUDIT | **Read-only** NDR human-review batches + suggested allowlists; no `--apply` |
+| `scripts/qa/build_post_send_digest.py` | OPS_AUDIT | **Read-only** post-send digest (run **after** `audit_contacted_universe.py` in post-send loop) |
+| `scripts/qa/audit_prospectos_safety_drift.py` | OPS_AUDIT | Raw `lead_research_prospect` vs safety sidecars — drift ≠ send failure |
+| `scripts/qa/audit_institution_grouping.py` | OPS_AUDIT | Institution/domain grouping — **not** send safety |
+| `scripts/qa/smoke_dashboard_api_readiness.py` | OPS_AUDIT | **Read-only** HTTP smoke against deployed `apps/api` (:8001); debugging / deploy check only |
 
 **Overlap note:** **`export_do_not_repeat_master.py`** (operator *input list*) vs **`export_outreach_volume_rollup.py`** (*metrics*). Different jobs; do not delete one thinking it replaces the other.
+
+---
+
+## Ops — campaign wave tooling (OPS_MAINT / dated)
+
+**Not** the two daily outbound lanes. Use only when running a **named campaign wave** with explicit operator approval. Outputs are usually under `reports/out/` (gitignored).
+
+| Path | Tag | Role |
+|------|-----|------|
+| `scripts/qa/build_presentacion_origenlab_review.py` | OPS_MAINT | Presentation campaign — review queue / human triage artifacts |
+| `scripts/qa/build_presentacion_origenlab_quality.py` | OPS_MAINT | Presentation campaign — quality scoring / gate-style checks on cohort |
+| `scripts/qa/build_presentacion_batch1_presend_audit.py` | OPS_MAINT | Presentation batch 1 — **pre-send** audit (read-only reports) |
+| `scripts/qa/build_presentacion_prospectos_merge.py` | OPS_MAINT | Merge presentation prospectos inputs with lead-research overlay (reports) |
+| `scripts/qa/build_cyber_outreach_campaign.py` | OPS_MAINT | Cyber-day outreach campaign package builder (files + gate audit; not daily lane) |
+| `scripts/qa/build_cyber_campaign_context_audit.py` | OPS_MAINT | Cyber campaign context / evidence audit (read-only) |
+| `scripts/qa/build_manual_outreach_2026_06_01_digest.py` | OPS_MAINT | **2026-06-01 wave** — read-only post-send digest for manual outreach |
+| `scripts/qa/apply_manual_outreach_2026_06_01_corrections.py` | **BREAK_GLASS** | **2026-06-01 wave** — targeted suppression/state corrections; **`--apply`** mutates SQLite; not a generic tool |
+
+---
+
+## Ops — Postgres mirror verify (OPS_MIGRATE / parked)
+
+**Optional** Postgres path only ([`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md)). Verifiers are **read-only** on mirror tables; they do **not** load mirrors (use `scripts/sync/*` + `scripts/ops/refresh_render_dashboard_once.sh`).
+
+| Path | Tag | Role |
+|------|-----|------|
+| `scripts/qa/verify_dashboard_postgres_mirror.py` | OPS_MIGRATE | Dashboard mart mirror parity checks |
+| `scripts/qa/verify_outbound_sidecar_postgres_mirror.py` | OPS_MIGRATE | Outbound sidecar mirror parity |
+| `scripts/qa/verify_lead_research_postgres_mirror.py` | OPS_MIGRATE | Lead research mirror parity |
+| `scripts/qa/verify_catalog_postgres_mirror.py` | OPS_MIGRATE | Catalog mirror parity |
+| `scripts/qa/verify_commercial_deals_postgres_mirror.py` | OPS_MIGRATE | Commercial deals mirror parity |
+| `scripts/ops/cloud_postgres_url.py` | OPS_CORE | **Read-only** CLI: validate/redact Postgres URL for ops shell scripts (`validate`, `host-db`, `shell-prepare`) |
+
+---
+
+## Deprecated & historical paths (DEPRECATED)
+
+**Retained on disk** for audit, tests, and replay — **do not delete** in Phase 1. Prefer canonical replacements in new runbooks and agent prompts.
+
+| Path | Tag | Replacement / notes |
+|------|-----|---------------------|
+| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | DEPRECATED | Prefer **`flag_ndr_bounces_from_contacto.py`** + [`build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) |
+
+**Removed Phase 5D (2026-06-02):** `scripts/leads/advanced/export_archive_outreach_candidates.py` — use [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) `--audit-only`.
+
+**Removed Phase 5C (2026-06-02):** `scripts/qa/build_buyer_opportunity_queue.py` — use `build_equipment_first_opportunity_queue.py` + `build_equipment_first_operator_queue.py`.
+
+**Removed Phase 5A (2026-06-02):** `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` — use [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) step-by-step instead.
 
 ---
 
@@ -247,7 +328,23 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | [`scripts/qa/operator_status.py`](../scripts/qa/operator_status.py) | Operator READY / freshness | **Read-only** | LISTO / mirror_ok ≠ send approval |
 | [`scripts/qa/run_daily_health_report.py`](../scripts/qa/run_daily_health_report.py) | Daily health summary (NDR dry-run, drift, mirror JSON) | **Read-only** | Output under `reports/out/active/current/daily_health_report_*` (gitignored); verdict READY / REVIEW_NEEDED / BLOCKED |
 | [`scripts/qa/build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) | Build NDR human-review batches + suggested allowlists | **Read-only** | Output under `reports/out/active/current/ndr_review_queue_*`; no suppression apply |
-| [`scripts/ops/run_post_send_2026_06_01_refresh.sh`](../scripts/ops/run_post_send_2026_06_01_refresh.sh) | **Historical** 2026-06-01 orchestrator | Mixed | **Do not blindly reuse** — step 2 still runs **broad NDR `--apply`**. Clone steps from `POST_SEND_SAFE_LOOP.md` instead. |
+
+---
+
+<a id="gmail-ingest-replace-source"></a>
+
+## Gmail ingest: `--replace-source` (BREAK_GLASS)
+
+**Script:** [`scripts/ingest/05_workspace_gmail_imap_to_sqlite.py`](../scripts/ingest/05_workspace_gmail_imap_to_sqlite.py)
+
+| Mode | Behavior |
+|------|----------|
+| **Normal daily ingest** (no `--replace-source`) | Fetches messages and **inserts** into `emails`. Use **`--skip-duplicate-message-id`** in post-send / safe loops to avoid re-processing the same `message_id`. |
+| **`--replace-source`** | **Deletes all existing `emails` rows** whose `source_file` matches the ingested mailbox label (`gmail:<user>/<folder>`) **before** inserting fetched messages. Use only for an **intentional refresh** of that folder’s SQLite copy (e.g. repair after a bad partial run). |
+
+**Not used in:** [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) (explicit: no `--replace-source` in safe loops).
+
+**Not the same as:** full-table wipe (`02_mbox_to_sqlite.py` deletes **all** emails) or mart rebuild (`build_business_mart.py`).
 
 ---
 
@@ -274,8 +371,10 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | `scripts/maintenance/dedupe_canonical_gmail_messages.py` | **DELETE** duplicate canonical Gmail `emails` — dry-run default; `--apply --ack-sqlite-backup` |
 | `scripts/leads/advanced/build_lead_account_rollup.py` | **DELETE** + rebuild `lead_account_*` |
 | `scripts/qa/sync_outreach_batch_from_ingested_bounces.py` | **`--apply`** updates suppressions / state |
+| `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | **`--replace-source`** deletes existing rows for that Gmail `source_file` before reinsert — [details](#gmail-ingest-replace-source) |
 | `scripts/tools/flag_ndr_bounces_from_contacto.py` | **`--apply`** writes `contact_email_suppression`; broad apply = all scan matches; prefer `--emails-file` + `--only-code` ([`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md)) |
-| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | **`--apply`** writes suppressions |
+| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | **DEPRECATED** — prefer `flag_ndr_bounces_from_contacto.py`; **`--apply`** writes suppressions |
+| `scripts/qa/apply_manual_outreach_2026_06_01_corrections.py` | **2026-06-01 wave** — targeted SQLite corrections with **`--apply`** |
 | `scripts/validation/extract_attachment_text.py` | May **delete** `attachment_extracts` during rebuild patterns |
 | `scripts/tools/archive_reports_out_generated.py` | **`--apply`** **moves** files under `reports/out` to `archive/manual_cleanup/…` (no deletes) |
 

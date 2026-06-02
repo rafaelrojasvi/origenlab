@@ -1,4 +1,4 @@
-"""Smoke: lead-account wrappers and canonical scripts start (``--help`` exit 0)."""
+"""Smoke: canonical lead-account scripts start (``--help`` exit 0)."""
 
 from __future__ import annotations
 
@@ -15,13 +15,9 @@ REPO = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize(
     "rel",
     [
-        "scripts/build_lead_account_rollup.py",
         "scripts/leads/advanced/build_lead_account_rollup.py",
-        "scripts/match_lead_accounts_to_existing_orgs.py",
         "scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py",
-        "scripts/validate_lead_account_rollup.py",
         "scripts/leads/advanced/validate_lead_account_rollup.py",
-        "scripts/audit_lead_org_quality.py",
         "scripts/leads/advanced/audit_lead_org_quality.py",
     ],
 )

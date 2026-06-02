@@ -10,6 +10,26 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "qa" / "export_email_conversation_intelligence.py"
 
+LOCKED_REAL_CLIENT_COLUMNS = [
+    "organization",
+    "domain",
+    "contact_email",
+    "contact_name",
+    "sector",
+    "region",
+    "city",
+    "first_outbound_date",
+    "first_inbound_date",
+    "last_interaction_date",
+    "sent_count",
+    "received_count",
+    "status",
+    "product_or_need",
+    "summary",
+    "recommended_next_action",
+    "confidence",
+]
+
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -230,7 +250,13 @@ def test_export_email_conversation_intelligence_outputs(tmp_path: Path) -> None:
 
     with real_csv.open(newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
+    assert rows
+    assert list(rows[0].keys()) == LOCKED_REAL_CLIENT_COLUMNS
     assert any(r["contact_email"] == "ana@cliente.cl" for r in rows)
+    ana = next(r for r in rows if r["contact_email"] == "ana@cliente.cl")
+    assert int(ana["sent_count"]) >= 1
+    assert int(ana["received_count"]) >= 1
+    assert ana["status"] in {"hot_opportunity", "warm_opportunity", "needs_follow_up", "quoted_or_info_sent", "unknown"}
 
     with noise_csv.open(newline="", encoding="utf-8") as f:
         noise = list(csv.DictReader(f))

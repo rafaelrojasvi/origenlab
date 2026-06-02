@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-05-19
+Last reviewed: 2026-06-02
 
 Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.). **Outbound script index + classifications:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
@@ -14,8 +14,10 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 | **Gmail ingest / Streamlit** | [Primary mailbox](#m-eprun-mailbox-primary) · [Post–Gmail ingest](#m-eprun-post-gmail-ingest) | SQLite freshness, mart on host |
 | **Optional dashboard (parked)** | [Dashboard preview stack](#m-eprun-dashboard-optional) | React panel over Postgres mirror — **explicit approval only** |
 | **Postgres DDL / migrate loaders** | [Optional PostgreSQL](#m-eprun-postgres-optional) | Scratch DB trials — not daily truth |
+| **Which status command?** | [Operator health matrix](#m-eprun-operator-health-matrix) | `make doctor` vs `make audit` vs health report vs API |
+| **`reports/out` cleanup** | [`reports/out` cleanup flow](#m-eprun-reports-out-cleanup) | Plan → archive moves → hygiene check |
 
-**Parked index:** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md). **Dashboard UX design (future CLI modes):** [`dashboard_stack_simplification_design_20260519.md`](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md).
+**Parked index:** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md). **Dashboard UX design (future CLI modes):** [`dashboard_stack_simplification_design_20260519.md`](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md). **Simplification audit (Phase 1 map):** [`audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md`](audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md).
 
 <a id="m-eprun-daily-outbound"></a>
 ## Daily outbound — two lanes
@@ -29,17 +31,33 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 | Sent / already contacted | Canonical Gmail ingested into SQLite `emails` (`[Gmail]/Enviados`) |
 | Anti-repeat / DNR | `refresh_outbound_safety_memory.py` → `do_not_repeat_master`, `outreach_contacted_all`, etc. |
 | Equipment-first tenders | `equipment_first_operator_queue_*` under `reports/out/active/current/` |
-| Read-only doctor | `operator_status.py`, `check_outbound_readiness.py`, `make doctor` |
+| Read-only doctor | See [Operator health matrix](#m-eprun-operator-health-matrix) |
 
-**Not daily truth:** Postgres dashboard mirror, FastAPI, React (`manifest.json`: `postgres_status` / `api_status` = `parked`).
+**Not daily truth:** Postgres dashboard mirror, FastAPI, React (`manifest.json`: `postgres_status` / `api_status` = `parked`). **LISTO / READY on dashboard or API is not send approval.**
 
-### Routine read-only check
+<a id="m-eprun-operator-health-matrix"></a>
+### Operator health matrix (which command when)
+
+All commands below are **read-only** on SQLite (no send, no `--apply`, no Gmail write). Run from `apps/email-pipeline/` unless noted.
+
+| Command | What it checks | Before campaign | Before send | After send | Dashboard refresh | Debugging only |
+|---------|----------------|-----------------|-------------|------------|-------------------|----------------|
+| **`make doctor`** | `operator_status.py` then `check_reproducibility.py` (env, paths, manifest hints) | ✓ quick sanity | ✓ | ✓ (light) | — | ✓ new machine / clone |
+| **`uv run python scripts/qa/operator_status.py`** | SQLite/Sent freshness, DNR files, `active/current` manifest, verdict **READY / CAUTION / BLOCKED** | ✓ | ✓ | ✓ | optional | ✓ default “how are we?” |
+| **`make audit`** | `operator_status.py` then `check_outbound_readiness.py` | ✓ | **✓ recommended** | ✓ | — | ✓ |
+| **`uv run python scripts/qa/check_outbound_readiness.py`** | Sent-folder coverage, sidecars, mart freshness, optional commercial checks; verdict `ready` / `ready_with_warnings` / `not_ready` | optional | **✓** | ✓ before next export | — | ✓ `--json-out` |
+| **`uv run python scripts/qa/run_daily_health_report.py`** | Bundled snapshot: NDR **dry-run**, prospectos drift, mirror verify JSON paths; verdict READY / REVIEW_NEEDED / BLOCKED | optional | optional | ✓ (does **not** replace full [post-send loop](pipeline/POST_SEND_SAFE_LOOP.md)) | ✓ mirror hints | ✓ |
+| **`GET /operator/status`** (`apps/api` **:8001**) | Same underlying report as `operator_status.py` for Dashboard Today | — | — | — | **✓** UI polling | ✓ HTTP/integration |
+| **`uv run python scripts/qa/smoke_dashboard_api_readiness.py`** | HTTP smoke vs deployed API (local or prod URL) | — | — | — | ✓ after deploy | **✓** only |
+
+**Not substitutes for post-send safety:** `run_daily_health_report.py` and API status do **not** ingest Gmail, apply NDR suppressions, or run `refresh_outbound_safety_memory.py`. After sends, follow [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md).
+
+**Makefile shortcuts:**
 
 ```bash
 cd apps/email-pipeline
-uv run python scripts/qa/operator_status.py
-# or: make doctor   # operator_status + check_reproducibility
-# or: make audit    # operator_status + check_outbound_readiness
+make doctor    # operator_status + check_reproducibility
+make audit     # operator_status + check_outbound_readiness
 ```
 
 For a **planned** safety refresh (ingest + CSV exports), use `make safety-refresh` (prints commands; does not run ingest automatically) or the [anti-repeat sequence](#canonical-anti-repeat-auxiliary-refresh-sequence) below.
@@ -164,7 +182,7 @@ Not part of the two daily workflows: archive batch builders (**`build_archive_se
 
 - Working directory: `apps/email-pipeline/` (from monorepo root: `cd apps/email-pipeline`).
 - **Prefer `uv run python scripts/...` (or `uv run bash ...`)** from that directory so the project package and env match CI and [`scripts/README.md`](../scripts/README.md). Paths like `scripts/qa/publish_gate.py` are part of the operational contract; if you relocate scripts, update [`SCHEMA_OWNERSHIP.md`](pipeline/SCHEMA_OWNERSHIP.md) and **`tests/test_critical_script_paths.py`** together.
-- **Lead-account tools** — **canonical:** `scripts/leads/advanced/*` (`build_lead_account_rollup.py`, `match_lead_accounts_to_existing_orgs.py`, etc.). Root `scripts/*.py` names are **`COMPATIBILITY_WRAPPER` / `COMPATIBILITY_ONLY`** — not preferred for new commands ([`SCRIPT_MAP.md`](SCRIPT_MAP.md#lead-account-scripts-canonical-vs-root-wrappers), [`scripts/README.md`](../scripts/README.md)).
+- **Lead-account tools** — **canonical:** `scripts/leads/advanced/*` (`build_lead_account_rollup.py`, `match_lead_accounts_to_existing_orgs.py`, etc.). Root `scripts/*.py` wrappers were **removed in Phase 5B** ([`SCRIPT_MAP.md`](SCRIPT_MAP.md#lead-account-scripts-canonical), [`scripts/README.md`](../scripts/README.md)).
 - Prefer environment variables over machine-specific paths (`ORIGENLAB_SQLITE_PATH`, `ORIGENLAB_REPORTS_DIR`, `.env` from [`.env.example`](../.env.example)).
 - Sensitive outputs and large artifacts stay **outside** git (default data root `~/data/origenlab-email/` — see [`DATA_LOCATIONS.md`](DATA_LOCATIONS.md#m-epdata-root)).
 
@@ -174,6 +192,10 @@ Not part of the two daily workflows: archive batch builders (**`build_archive_se
 ## Primary mailbox path (Google Workspace Gmail)
 
 For **live** mail for **contacto@origenlab.cl** on **Google Workspace**, the operational ingest path is **[`05_workspace_gmail_imap_to_sqlite.py`](../scripts/ingest/05_workspace_gmail_imap_to_sqlite.py)** with OAuth (see [`docs/ingest/WORKSPACE_GMAIL_IMAP.md`](ingest/WORKSPACE_GMAIL_IMAP.md)). Messages are stored in **`emails`** with **`source_file`** values like **`gmail:contacto@origenlab.cl/...`** (see **Source-of-truth tiers** below).
+
+**Normal ingest:** fetches messages and **inserts** (use **`--skip-duplicate-message-id`** in post-send loops). **Do not** use **`--replace-source`** in daily or post-send safe loops.
+
+**`--replace-source` (break-glass / intentional folder refresh only):** deletes **all** existing `emails` rows for that mailbox’s `source_file` (`gmail:<user>/<folder>`) **before** reinserting fetched messages. Use only when you deliberately need to rebuild SQLite’s copy of one folder—not for routine Sent refresh. Detail: [`SCRIPT_MAP.md` — Gmail ingest `--replace-source`](SCRIPT_MAP.md#gmail-ingest-replace-source).
 
 **Titan (password IMAP)** via **[`04_imap_to_sqlite.py`](../scripts/ingest/04_imap_to_sqlite.py)** ([`docs/ingest/IMAP_CONTACTO.md`](ingest/IMAP_CONTACTO.md)) remains supported for legacy or alternate hosts; those rows use **`imap:...`** prefixes.
 
@@ -189,6 +211,17 @@ In **Streamlit** ([`apps/business_mart_app.py`](../apps/business_mart_app.py)), 
 | **Do not** | Full mbox reload via **`02_mbox_to_sqlite.py`** | **Deletes all `emails` rows** before reload — never run against production unless intentional and backed up. |
 
 Read-only segmentation audit: **[`scripts/qa/audit_canonical_contacto_gmail.py`](../scripts/qa/audit_canonical_contacto_gmail.py)**.
+
+<a id="m-eprun-reports-out-cleanup"></a>
+### `reports/out` cleanup flow (plan → move → verify)
+
+Use when reducing generated clutter **without** deleting `active/current/` campaign artifacts by mistake.
+
+1. **Plan (read-only):** `uv run python scripts/qa/plan_reports_out_cleanup.py` — classifies paths into buckets; writes no changes.
+2. **Archive moves (optional):** `uv run python scripts/tools/archive_reports_out_generated.py` — **dry-run** default; add **`--apply`** and **`--archive-slug`** to move selected files into `archive/manual_cleanup/…` (**no deletes**).
+3. **Hygiene check:** `uv run python scripts/qa/check_reports_out_active_hygiene.py` — warns/fails if unexpected generated files sit outside `reports/out/active/current/`.
+
+Index: [`SCRIPT_MAP.md`](SCRIPT_MAP.md) (Stage 6D1) · [`CRUD_SAFETY.md`](CRUD_SAFETY.md).
 
 ---
 
@@ -768,7 +801,7 @@ uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
 
 **Canonical post-send procedure:** [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) (ingest → NDR dry-run → targeted allowlist apply → safety → mirror → verifiers).
 
-**Historical orchestrator (2026-06-01 — broad NDR `--apply`; do not copy blindly):** [`scripts/ops/run_post_send_2026_06_01_refresh.sh`](../scripts/ops/run_post_send_2026_06_01_refresh.sh). After any refresh, review `reports/out/active/current/prospectos_safety_drift_<date>/` — **drift is not a send-safety failure**; export gates remain authoritative ([`pipeline/SCHEMA_CLASSIFICATION_MODEL.md`](pipeline/SCHEMA_CLASSIFICATION_MODEL.md)). Set `ORIGENLAB_STRICT_PROSPECTOS_DRIFT=1` only when drift thresholds should fail the script.
+After any post-send refresh, review `reports/out/active/current/prospectos_safety_drift_<date>/` — **drift is not a send-safety failure**; export gates remain authoritative ([`pipeline/SCHEMA_CLASSIFICATION_MODEL.md`](pipeline/SCHEMA_CLASSIFICATION_MODEL.md)). Set `ORIGENLAB_STRICT_PROSPECTOS_DRIFT=1` only when drift thresholds should fail the drift audit script.
 
 **Recommended before importing or sending DeepSearch contacts (read-only checks):**
 
@@ -904,8 +937,7 @@ Use a deterministic, read-only queue export to target research where high/medium
 
 **Demoted / advanced:**
 
-- [`export_archive_outreach_candidates.py`](../scripts/leads/advanced/export_archive_outreach_candidates.py) — legacy **audit-only** wrapper (prints a note to stderr); prefer `--audit-only` on the builder.
-- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export; not the default archive path (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)).
+- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export; not the default archive path (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)). Archive audit-only work uses [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) `--audit-only` (Phase 5D removed legacy wrapper).
 
 ### Manual HTML outreach batch (packaging only)
 

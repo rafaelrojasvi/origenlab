@@ -8,7 +8,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 _HEAD = 8_000
 
-_LEGACY_BUILDER = REPO / "scripts/qa/build_buyer_opportunity_queue.py"
+_EQUIPMENT_FIRST_BUILDER = REPO / "scripts/qa/build_equipment_first_opportunity_queue.py"
+_EQUIPMENT_FIRST_OPERATOR = REPO / "scripts/qa/build_equipment_first_operator_queue.py"
+_LEGACY_BUYER_QUEUE = REPO / "scripts/qa/build_buyer_opportunity_queue.py"
 _PARKED_MIGRATE = (
     "scripts/migrate/sqlite_archive_to_postgres.py",
     "scripts/migrate/sqlite_document_master_to_postgres.py",
@@ -23,16 +25,19 @@ _DEDUPE = REPO / "scripts/maintenance/dedupe_canonical_gmail_messages.py"
 _MAKEFILE = REPO / "Makefile"
 _EXPERIMENTAL_PARKED_DOC = REPO / "docs/EXPERIMENTAL_PARKED.md"
 
-_LEGACY_RE = re.compile(r"LEGACY_DO_NOT_USE", re.IGNORECASE)
 _PARKED_RE = re.compile(r"EXPERIMENTAL_PARKED|DASHBOARD_ONLY", re.IGNORECASE)
 _SAFETY_RE = re.compile(
     r"(?i)(BREAK-?GLASS|#+\s*SAFETY|SAFETY\s*[\(—:])",
 )
 
 
-def test_legacy_builder_header_contains_legacy_do_not_use() -> None:
-    head = _LEGACY_BUILDER.read_text(encoding="utf-8")[:_HEAD]
-    assert _LEGACY_RE.search(head), "expected LEGACY_DO_NOT_USE in file header"
+def test_phase5c_legacy_buyer_queue_removed() -> None:
+    assert not _LEGACY_BUYER_QUEUE.is_file(), "Phase 5C removed build_buyer_opportunity_queue.py"
+
+
+def test_equipment_first_replacement_scripts_exist() -> None:
+    assert _EQUIPMENT_FIRST_BUILDER.is_file()
+    assert _EQUIPMENT_FIRST_OPERATOR.is_file()
 
 
 def test_parked_migrate_scripts_header_contains_experimental_parked() -> None:

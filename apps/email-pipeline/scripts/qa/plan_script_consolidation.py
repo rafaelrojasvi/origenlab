@@ -21,15 +21,8 @@ _READ_ONLY_QA: frozenset[str] = frozenset(
     }
 )
 
-# Root-level ``scripts/<name>.py`` shims → ``scripts/leads/advanced/`` (planner label; SCRIPT_MAP is canonical)
-_ROOT_COMPATIBILITY_WRAPPERS: frozenset[str] = frozenset(
-    {
-        "audit_lead_org_quality.py",
-        "build_lead_account_rollup.py",
-        "match_lead_accounts_to_existing_orgs.py",
-        "validate_lead_account_rollup.py",
-    }
-)
+# Root-level ``scripts/<name>.py`` shims removed in Phase 5B; canonical paths are under scripts/leads/advanced/
+_ROOT_COMPATIBILITY_WRAPPERS: frozenset[str] = frozenset()
 
 _TTABLE = re.compile(
     r"^\s*\|\s*`?(scripts/[\w./-]+\.py)`?\s*\|\s*([A-Z0-9_]+)\s*\|",

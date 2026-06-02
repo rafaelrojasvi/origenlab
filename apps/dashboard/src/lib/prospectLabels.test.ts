@@ -4,6 +4,8 @@ import {
   parseRiskFlagChips,
   prospectBuyerTypeLabel,
   prospectClassificationLabel,
+  prospectContactCell,
+  prospectEmptyEmailDisplayHint,
 } from "./prospectLabels";
 import { buildPorQueImporta, buildMessagePreview } from "./prospectMessaging";
 import type { LeadProspectDetailUi } from "../api/leadIntelTypes";
@@ -17,8 +19,23 @@ describe("prospectLabels", () => {
   });
 
   it("translates classification labels", () => {
-    expect(prospectClassificationLabel("same_domain_contacted_review")).toBe(
-      "Revisar historial previo",
+    expect(prospectClassificationLabel("same_domain_contacted_review")).toBe("Revisar historial");
+  });
+
+  it("empty email same-domain contact cell and hint", () => {
+    expect(
+      prospectContactCell({
+        ...defaultLeadOriginFields,
+        prospect_key: "x",
+        organization_name: "INIA",
+        email: null,
+        classification: "same_domain_contacted_review",
+        status: "same_domain_review",
+        is_blocked: false,
+      } as never),
+    ).toBe("Contactado por dominio — sin email en fila");
+    expect(prospectEmptyEmailDisplayHint("same_domain_contacted_review")).toMatch(
+      /mismo dominio/i,
     );
   });
 
@@ -110,6 +127,18 @@ describe("prospectMessaging", () => {
     expect(preview.kind).toBe("none");
     expect(preview.body).toBeUndefined();
     expect(preview.note).toMatch(/buscar responsable/i);
+  });
+
+  it("same_domain without email still shows follow-up draft", () => {
+    const preview = buildMessagePreview({
+      ...base,
+      organization_name: "INIA La Platina",
+      email: null,
+      classification: "same_domain_contacted_review",
+      status: "same_domain_review",
+    });
+    expect(preview.kind).toBe("same_domain_followup");
+    expect(preview.note).toMatch(/dominio|historial/i);
   });
 
   it("same_domain shows follow-up not cold email", () => {

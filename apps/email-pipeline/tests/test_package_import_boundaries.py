@@ -66,7 +66,8 @@ def test_tatiana_copilot_import_boundaries(path: Path) -> None:
 )
 def test_non_streamlit_production_modules_do_not_import_streamlit(path: Path) -> None:
     bad = _violations_in_file(path)
-    assert not bad, (
+        assert not bad, (
         f"{path.relative_to(PKG_ROOT)} must not import streamlit_* modules; use read/*, "
-        f"operator_copy_es, canonical_operational_sql, etc. Violations:\n" + "\n".join(bad)
-    )
+        f"operator_copy_es, canonical_operational_sql, or other neutral read modules. "
+        "Violations:\n" + "\n".join(bad)
+        )

@@ -99,7 +99,7 @@ Operator status (read-only): `scripts/qa/operator_status.py`.
 **Prospectos drift (read-only):** after bulk NDR/contacted refreshes, run  
 `uv run python scripts/qa/audit_prospectos_safety_drift.py` — writes  
 `reports/out/active/current/prospectos_safety_drift_<YYYY_MM_DD>/` (gitignored). Included as step 12 in  
-`scripts/ops/run_post_send_2026_06_01_refresh.sh` (report-only; `ORIGENLAB_STRICT_PROSPECTOS_DRIFT=1` for `--strict`).  
+[`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md) (report-only; `ORIGENLAB_STRICT_PROSPECTOS_DRIFT=1` for `--strict`).  
 Drift is not a send-safety failure; export gates remain authoritative.
 
 **Institution grouping (read-model audit):** `uv run python scripts/qa/audit_institution_grouping.py` — domain-level cards are for **read-only exploration** only (not send gates). The audit tags ESP/platform/noise domains with `do_not_promote_to_institution` and emits conservative `alias_seed_candidates.csv` (`proposed_manual_review`). **Alias policy:** [`INSTITUTION_ALIAS_POLICY.md`](INSTITUTION_ALIAS_POLICY.md) — no production alias table yet; ~26% of proposed seeds passed conservative review. **Explorer spec:** [`INSTITUTION_EXPLORER_SPEC.md`](INSTITUTION_EXPLORER_SPEC.md) — GET-only card model and rollout (not implemented).
@@ -129,6 +129,10 @@ Without explicit approval and a migration plan:
 | Document refresh order (§5) | Done |
 | Document email vs domain suppression precedence (§3) | Done |
 | RUNBOOK / AGENTS link for discoverability | Linked from parent docs |
+
+### Prospectos display overlay (empty email + same-domain evidence)
+
+Raw `lead_research_prospect` rows may have **no email** while `outreach_contact_state` or Gmail sent fields show **same-domain** contact. The operational overlay (`lead_research_operational_overlay.py`) upgrades those rows to **`same_domain_contacted_review`** for mirror/dashboard only — **not** send approval and **not** a raw-table backfill. Suppression (exact or domain) still wins.
 
 ### P1 — consistency / readability (future code)
 

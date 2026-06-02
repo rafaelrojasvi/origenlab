@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import type { ApiBackend } from "../../api/operatorTypes";
 import type { EquipmentOpportunityItem } from "../../api/commercialTypes";
-import { formatTableCountLabel } from "../../lib/clientTableView";
+import { formatPagedFooterLabel } from "../../lib/clientTablePagination";
+import { useClientTablePagination } from "../../lib/useClientTablePagination";
+import { TablePaginationBar } from "./TablePaginationBar";
 import {
   DEFAULT_EQUIPMENT_FILTERS,
   applyEquipmentTableView,
@@ -51,6 +53,12 @@ export function EquipmentOpportunitiesTable({
     : equipmentSourceLabel(backend, "active_current_csv");
 
   const visibleRows = useMemo(() => applyEquipmentTableView(items, filters), [items, filters]);
+  const { pageSize, setPage, setPageSize, pagination } = useClientTablePagination(visibleRows, [
+    filters.search,
+    filters.sort,
+    items.length,
+  ]);
+  const pagedRows = pagination.slice;
   const filtersActive = equipmentFiltersActive(filters);
   const loadedCount = items.length;
   const apiCount = meta?.count ?? loadedCount;
@@ -147,7 +155,7 @@ export function EquipmentOpportunitiesTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
-            {visibleRows.map((row, index) => (
+            {pagedRows.map((row, index) => (
               <tr
                 key={`eq-${row.priority_rank}-${row.codigo_licitacion || index}`}
                 className="align-top hover:bg-slate-50/80"
@@ -209,14 +217,30 @@ export function EquipmentOpportunitiesTable({
             ))}
           </tbody>
         </table>
-        <p className="border-t border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-muted)]">
-          {formatTableCountLabel({
-            visible: visibleRows.length,
-            loaded: loadedCount,
-            apiTotal: apiCount,
-            filtered: filtersActive,
-            noun: "opportunities",
-            extra: campaignExtra,
+        {visibleRows.length > 0 ? (
+          <TablePaginationBar
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        ) : null}
+        <p
+          className="border-t border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-muted)]"
+          data-testid="equipment-table-footer"
+        >
+          {formatPagedFooterLabel({
+            from: pagination.from,
+            to: pagination.to,
+            visibleTotal: pagination.visibleTotal,
+            page: pagination.page,
+            totalPages: pagination.totalPages,
+            extraParts: [
+              ...(filtersActive && visibleRows.length < loadedCount ? ["filtros activos"] : []),
+              ...(apiCount !== loadedCount ? [`API reportó ${apiCount}`] : []),
+              ...(campaignExtra ? [campaignExtra] : []),
+            ],
           })}
         </p>
       </div>

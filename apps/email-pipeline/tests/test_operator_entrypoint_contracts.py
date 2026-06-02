@@ -1,4 +1,4 @@
-"""Operator-contract tests: daily/planner CLIs --help, break-glass headers, compatibility wrappers.
+"""Operator-contract tests: daily/planner CLIs --help and break-glass headers.
 
 No production DB, Gmail, or --apply. Subprocess is limited to ``--help`` on safe entrypoints.
 """
@@ -60,13 +60,6 @@ _BREAK_HEADER = re.compile(
     r"(?i)(BREAK-?GLASS|DANGEROUS|#+\s*SAFETY|SAFETY\s*[\(—:]|^#\s*[- ]*SAFETY)",
 )
 
-_COMPAT_WRAPPERS: tuple[str, ...] = (
-    "scripts/audit_lead_org_quality.py",
-    "scripts/build_lead_account_rollup.py",
-    "scripts/match_lead_accounts_to_existing_orgs.py",
-    "scripts/validate_lead_account_rollup.py",
-)
-
 
 def _env() -> dict[str, str]:
     return {**os.environ, "PYTHONPATH": str(_SRC)}
@@ -100,14 +93,3 @@ def test_break_glass_files_contain_safety_mention() -> None:
         text = p.read_text(encoding="utf-8", errors="replace")
         head = text[: 25_000]  # noqa: SIM201
         assert _BREAK_HEADER.search(head), f"expected SAFETY / break-glass / DANGEROUS in top of {rel}"
-
-
-def test_compatibility_wrappers_text_and_path() -> None:
-    for rel in _COMPAT_WRAPPERS:
-        p = REPO / rel
-        assert p.is_file()
-        t = p.read_text(encoding="utf-8", errors="replace").lower()
-        assert "compatibility_wrapper" in t or "compatibility_only" in t, rel
-        assert "leads/advanced" in t or "leads\\advanced" in t, rel
-        assert "not preferred" in t or "no behavior" in t, rel
-        assert "runpy" in t or "delegate" in t or "implementation" in t, rel

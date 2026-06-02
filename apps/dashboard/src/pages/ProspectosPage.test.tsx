@@ -43,7 +43,7 @@ describe("ProspectosPage", () => {
     vi.clearAllMocks();
   });
 
-  it("shows footer with loaded vs API total", async () => {
+  it("shows footer with loaded vs API total and numbered pagination", async () => {
     const list = leadListFixture();
     vi.mocked(fetchLeadProspectsMirror).mockResolvedValue({
       ...list,
@@ -52,12 +52,14 @@ describe("ProspectosPage", () => {
     render(<ProspectosPage />);
     await waitFor(() => {
       const footer = screen.getByTestId("prospectos-table-footer");
-      expect(footer.textContent).toContain("de 71 prospectos");
+      expect(footer.textContent).toContain("cargados");
+      expect(footer.textContent).toContain("API total 71");
       expect(footer.textContent).toContain("solo lectura");
     });
     expect(screen.getByTestId("prospectos-table-footer").textContent).toMatch(
       /más resultados que los cargados/,
     );
+    expect(screen.getByTestId("table-pagination-bar")).toBeTruthy();
   });
 
   it("renders KPIs and table without send buttons", async () => {
@@ -123,6 +125,29 @@ describe("ProspectosPage", () => {
     expect(screen.queryByTestId("prospect-message-preview")).toBeNull();
     expect(screen.getAllByTestId("prospect-evidence-link")[0]?.textContent).toMatch(/Abrir evidencia/);
     expect(screen.queryByText(/https:\/\/www\.ufro\.cl/i)).toBeNull();
+  });
+
+  it("empty-email same_domain shows contactado por dominio not falta email", async () => {
+    vi.mocked(fetchLeadProspectsMirror).mockResolvedValue({
+      ...leadListFixture(),
+      items: [
+        {
+          ...leadListFixture().items[0],
+          prospect_key: "inia",
+          organization_name: "INIA La Platina",
+          email: null,
+          domain: "inia.cl",
+          classification: "same_domain_contacted_review",
+          status: "same_domain_review",
+        },
+      ],
+    });
+    render(<ProspectosPage />);
+    await waitFor(() => expect(screen.getByText("INIA La Platina")).toBeTruthy());
+    expect(screen.getByText("Revisar historial")).toBeTruthy();
+    expect(screen.getByText(/Contactado por dominio — sin email en fila/i)).toBeTruthy();
+    const row = screen.getByText("INIA La Platina").closest("tr");
+    expect(row?.textContent).not.toMatch(/Falta email/);
   });
 
   it("5M same_domain shows revisar historial and follow-up wording not cold email", async () => {

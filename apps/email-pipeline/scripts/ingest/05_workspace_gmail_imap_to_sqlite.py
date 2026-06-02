@@ -25,13 +25,7 @@ from __future__ import annotations
 
 import argparse
 import imaplib
-import re
 import sys
-from collections import Counter
-from datetime import datetime, timedelta, timezone
-from email import policy
-from email.message import Message
-from email.parser import BytesParser
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -39,98 +33,19 @@ if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
 from origenlab_email_pipeline.config import load_settings
-from origenlab_email_pipeline.db import connect, init_schema, insert_attachment, insert_email
-from origenlab_email_pipeline.parse_mbox import (
-    body_content,
-    date_iso_from_msg,
-    extract_body_structured,
-    extract_full_and_top_reply,
-    recipients_header,
-    walk_attachments,
+from origenlab_email_pipeline.db import connect, init_schema
+from origenlab_email_pipeline.ingest.gmail_imap import (
+    format_error_counts,
+    imap_select_folder,
+    ingest_gmail_folder,
+    list_mailbox_names,
+    search_uids,
 )
 
 try:
     from tqdm import tqdm
 except ImportError:
     tqdm = None  # type: ignore[misc, assignment]
-
-
-def _source_label(user: str, folder: str) -> str:
-    return f"gmail:{user}/{folder}"
-
-
-# imaplib passes mailbox names to the wire unquoted; `[Gmail]/Sent Mail` then parses as BAD.
-_IMAP_SIMPLE_MAILBOX = re.compile(r"[A-Za-z0-9._+-]+")
-
-
-def _imap_select_folder(mail: imaplib.IMAP4_SSL, folder: str, *, readonly: bool):
-    mbox = folder if _IMAP_SIMPLE_MAILBOX.fullmatch(folder) else mail._quote(folder)
-    return mail.select(mbox, readonly=readonly)
-
-
-def _mailbox_name_from_list_line(line: bytes) -> str:
-    """Decode mailbox name from one IMAP LIST untagged payload (Gmail: flags + delimiter + name)."""
-    if not line or not line.strip():
-        return ""
-    s = line.decode("utf-8", "replace").strip()
-    sep = ') "/" '
-    idx = s.find(sep)
-    rest = s[idx + len(sep) :].strip() if idx >= 0 else s
-    if idx < 0:
-        m = re.search(r'"((?:[^"\\]|\\.)*)"\s*$', s)
-        if m:
-            inner = m.group(1).replace("\\\\", "\\").replace('\\"', '"')
-            return inner
-        return ""
-    if rest.startswith('"'):
-        out: list[str] = []
-        i = 1
-        while i < len(rest):
-            c = rest[i]
-            if c == "\\":
-                i += 1
-                if i < len(rest):
-                    out.append(rest[i])
-                i += 1
-            elif c == '"':
-                return "".join(out)
-            else:
-                out.append(c)
-                i += 1
-        return "".join(out)
-    return rest.split()[0] if rest else ""
-
-
-def _search_uids(mail: imaplib.IMAP4_SSL, *, since_days: int | None) -> list[bytes]:
-    if since_days is not None and since_days > 0:
-        dt = datetime.now(timezone.utc) - timedelta(days=since_days)
-        since = dt.strftime("%d-%b-%Y")
-        typ, data = mail.uid("SEARCH", None, "SINCE", since)
-    else:
-        typ, data = mail.uid("SEARCH", None, "ALL")
-    if typ != "OK" or not data or not data[0]:
-        return []
-    return data[0].split()
-
-
-def _fetch_rfc822(mail: imaplib.IMAP4_SSL, uid: bytes) -> bytes | None:
-    typ, data = mail.uid("FETCH", uid, "(BODY.PEEK[])")
-    if typ != "OK" or not data:
-        return None
-    for item in data:
-        if isinstance(item, tuple) and len(item) >= 2:
-            return item[1] if isinstance(item[1], (bytes, bytearray)) else None
-    return None
-
-
-def _message_from_bytes(raw: bytes) -> Message:
-    return BytesParser(policy=policy.default).parsebytes(raw)
-
-
-def _fmt_error_counts(counter: Counter[str], *, top_n: int = 5) -> str:
-    if not counter:
-        return "(none)"
-    return ", ".join(f"{name}={count}" for name, count in counter.most_common(top_n))
 
 
 def main() -> int:
@@ -150,6 +65,7 @@ def main() -> int:
     ap.add_argument("--folder", default="INBOX", help="Gmail IMAP folder (default INBOX)")
     ap.add_argument("--since-days", type=int, default=None)
     ap.add_argument("--max-messages", type=int, default=0)
+    # Break-glass: deletes existing rows for this mailbox source_file before reinsert.
     ap.add_argument("--replace-source", action="store_true")
     ap.add_argument("--skip-duplicate-message-id", action="store_true")
     ap.add_argument("--db", type=Path, default=None)
@@ -204,143 +120,73 @@ def main() -> int:
         return 1
 
     if args.list_folders:
-        typ, dat = mail.list()
-        if typ != "OK":
+        try:
+            for mb in list_mailbox_names(mail):
+                print(mb)
+        except imaplib.IMAP4.error:
             print("IMAP LIST failed.", file=sys.stderr)
+            return 1
+        finally:
             try:
                 mail.logout()
             except Exception:
                 pass
-            return 1
-        names: list[str] = []
-        for item in dat or []:
-            if not item:
-                continue
-            raw = item if isinstance(item, (bytes, bytearray)) else str(item).encode()
-            mb = _mailbox_name_from_list_line(bytes(raw))
-            if mb:
-                names.append(mb)
-        names.sort()
-        for mb in names:
-            print(mb)
-        try:
-            mail.logout()
-        except Exception:
-            pass
         return 0
 
-    source_file = _source_label(user, args.folder)
+    inserted = 0
+    skipped_dup = 0
+    skipped_fetch = 0
+    message_errors = 0
+    attachment_errors = 0
+    message_error_types = None
+    attachment_error_types = None
+    uids: list[bytes] = []
 
     conn = connect(db_path)
     try:
         init_schema(conn)
 
-        existing_mids: set[str] = set()
-        if args.skip_duplicate_message_id:
-            cur = conn.execute(
-                "SELECT message_id FROM emails WHERE message_id IS NOT NULL AND trim(message_id) != ''"
-            )
-            existing_mids = {str(r[0]).strip().lower() for r in cur.fetchall() if r[0]}
-
-        if args.replace_source:
-            conn.execute("DELETE FROM emails WHERE source_file = ?", (source_file,))
-            conn.commit()
-
-        uids: list[bytes] = []
         try:
-            typ, _ = _imap_select_folder(mail, args.folder, readonly=True)
+            typ, _ = imap_select_folder(mail, args.folder, readonly=True)
             if typ != "OK":
-                print(
-                    f"Could not select folder {args.folder!r}. "
-                    "Gmail label names depend on account language. "
-                    "Run the same command with --list-folders and use the exact line for --folder.",
-                    file=sys.stderr,
-                )
-                return 1
+                raise imaplib.IMAP4.error(f"select failed: {args.folder!r}")
 
-            uids = _search_uids(mail, since_days=args.since_days)
+            uids = search_uids(mail, since_days=args.since_days)
             if args.max_messages and args.max_messages > 0 and len(uids) > args.max_messages:
                 uids = uids[-args.max_messages :]
 
-            iterator = uids
+            uid_iter = uids
             if tqdm is not None:
-                iterator = tqdm(uids, desc=f"Gmail {args.folder}", unit="msg")
+                uid_iter = tqdm(uids, desc=f"Gmail {args.folder}", unit="msg")
 
-            inserted = 0
-            skipped_dup = 0
-            skipped_fetch = 0
-            message_errors = 0
-            attachment_errors = 0
-            message_error_types: Counter[str] = Counter()
-            attachment_error_types: Counter[str] = Counter()
-
-            for uid in iterator:
-                try:
-                    raw = _fetch_rfc822(mail, uid)
-                    if not raw:
-                        skipped_fetch += 1
-                        continue
-                    msg = _message_from_bytes(raw)
-                    mid = msg.get("Message-ID")
-                    mid_norm = (mid or "").strip().lower()
-                    if args.skip_duplicate_message_id and mid_norm and mid_norm in existing_mids:
-                        skipped_dup += 1
-                        continue
-
-                    body, body_html = body_content(msg)
-                    structured = extract_body_structured(msg)
-                    full_body_clean, top_reply_clean = extract_full_and_top_reply(structured)
-                    attachments = walk_attachments(msg)
-                    email_id = insert_email(
-                        conn,
-                        source_file=source_file,
-                        folder=args.folder,
-                        message_id=mid,
-                        subject=msg.get("Subject"),
-                        sender=msg.get("From"),
-                        recipients=recipients_header(msg),
-                        date_raw=msg.get("Date"),
-                        date_iso=date_iso_from_msg(msg),
-                        body=body,
-                        body_html=body_html,
-                        body_text_raw=structured["body_text_raw"],
-                        body_text_clean=structured["body_text_clean"],
-                        body_source_type=structured["body_source_type"],
-                        body_has_plain=structured["body_has_plain"],
-                        body_has_html=structured["body_has_html"],
-                        full_body_clean=full_body_clean,
-                        top_reply_clean=top_reply_clean,
-                        attachment_count=len(attachments),
-                        has_attachments=bool(attachments),
-                    )
-                    if mid_norm:
-                        existing_mids.add(mid_norm)
-                    for att in attachments:
-                        try:
-                            insert_attachment(
-                                conn,
-                                email_id=email_id,
-                                part_index=att["part_index"],
-                                filename=att["filename"],
-                                content_type=att["content_type"],
-                                content_disposition=att["content_disposition"],
-                                size_bytes=att["size_bytes"],
-                                content_id=att["content_id"],
-                                is_inline=att["is_inline"],
-                                sha256=att["sha256"],
-                                saved_path=att["saved_path"],
-                                created_at=None,
-                            )
-                        except Exception as exc:
-                            attachment_errors += 1
-                            attachment_error_types[type(exc).__name__] += 1
-                    inserted += 1
-                except Exception as exc:
-                    message_errors += 1
-                    message_error_types[type(exc).__name__] += 1
-                    continue
-
-            conn.commit()
+            result = ingest_gmail_folder(
+                conn,
+                mail,
+                user=user,
+                folder=args.folder,
+                since_days=args.since_days,
+                max_messages=args.max_messages,
+                replace_source=args.replace_source,
+                skip_duplicate_message_id=args.skip_duplicate_message_id,
+                uid_iter=uid_iter,
+                folder_already_selected=True,
+            )
+            inserted = result.inserted
+            skipped_dup = result.skipped_dup
+            skipped_fetch = result.skipped_fetch
+            message_errors = result.message_errors
+            attachment_errors = result.attachment_errors
+            message_error_types = result.message_error_types
+            attachment_error_types = result.attachment_error_types
+            uids = result.uids
+        except imaplib.IMAP4.error:
+            print(
+                f"Could not select folder {args.folder!r}. "
+                "Gmail label names depend on account language. "
+                "Run the same command with --list-folders and use the exact line for --folder.",
+                file=sys.stderr,
+            )
+            return 1
         finally:
             try:
                 mail.logout()
@@ -354,10 +200,10 @@ def main() -> int:
         f"Gmail IMAP summary: uids={len(uids)} inserted={inserted} skipped_dup_mid={skipped_dup} "
         f"skipped_fetch={skipped_fetch} message_errors={message_errors} attachment_errors={attachment_errors}"
     )
-    if message_errors:
-        print("Top message error types:", _fmt_error_counts(message_error_types))
-    if attachment_errors:
-        print("Top attachment error types:", _fmt_error_counts(attachment_error_types))
+    if message_errors and message_error_types is not None:
+        print("Top message error types:", format_error_counts(message_error_types))
+    if attachment_errors and attachment_error_types is not None:
+        print("Top attachment error types:", format_error_counts(attachment_error_types))
     return 0 if message_errors == 0 or inserted > 0 else 1
 
 

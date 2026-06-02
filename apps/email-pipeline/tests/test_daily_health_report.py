@@ -236,8 +236,8 @@ def test_falta_email_stale_detection(tmp_path: Path) -> None:
     conn = sqlite3.connect(db)
     rows, counts = dhr.collect_falta_email_stale_display_rows(conn)
     conn.close()
-    assert counts["falta_email_stale_display_count"] == 1
-    assert rows[0]["prospect_key"] == "k1"
+    assert counts["falta_email_overlay_same_domain_count"] == 1
+    assert counts["falta_email_stale_display_count"] == 0
 
 
 def test_exit_code_fail_on_blocked() -> None:

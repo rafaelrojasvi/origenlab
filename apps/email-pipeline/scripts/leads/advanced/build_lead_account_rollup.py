@@ -9,10 +9,9 @@
 Does not modify external_leads_raw or lead_master. Clears and repopulates:
 lead_account_master, lead_account_aliases, lead_account_membership.
 
-Run ``scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py`` (or ``scripts/match_lead_accounts_to_existing_orgs.py``) after this to refresh mart links.
+Run ``scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py`` after this to refresh mart links.
 
-Implementation path: ``scripts/leads/advanced/``; ``scripts/build_lead_account_rollup.py`` remains a
-compatibility wrapper.
+Implementation path: ``scripts/leads/advanced/`` (canonical operator entrypoint).
 """
 
 from __future__ import annotations

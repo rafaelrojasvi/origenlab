@@ -14,6 +14,9 @@ import {
   catalogEquipmentClassLabel,
   primaryCategoryLabel,
 } from "../lib/catalogFormat";
+import { formatPagedFooterLabel } from "../lib/clientTablePagination";
+import { useClientTablePagination } from "../lib/useClientTablePagination";
+import { TablePaginationBar } from "../components/commercial/TablePaginationBar";
 
 const ALL_BRANDS = ["CRTOP", "Hielscher", "IKA", "Ollital", "Ortoalresa", "SERVA"] as const;
 
@@ -153,6 +156,30 @@ export function CatalogPage() {
   useEffect(() => {
     void loadList(appliedQuery);
   }, [appliedQuery, loadList]);
+
+  const { pageSize, setPage, setPageSize, pagination } = useClientTablePagination(items, [
+    items.length,
+    appliedQuery.q,
+    appliedQuery.brand,
+    appliedQuery.equipment_class,
+    appliedQuery.category_key,
+  ]);
+
+  const pagedItems = pagination.slice;
+
+  const catalogFooter = useMemo(
+    () =>
+      formatPagedFooterLabel({
+        from: pagination.from,
+        to: pagination.to,
+        visibleTotal: pagination.visibleTotal,
+        page: pagination.page,
+        totalPages: pagination.totalPages,
+        extraParts:
+          total > items.length ? [`API total ${total} productos`] : undefined,
+      }),
+    [pagination, total, items.length],
+  );
 
   const equipmentClassOptions = useMemo(() => {
     const values = new Set<string>();
@@ -471,7 +498,7 @@ export function CatalogPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">
-              {items.map((item) => {
+              {pagedItems.map((item) => {
                 const rowDetail = detailsByKey[item.product_key] ?? null;
                 return (
                   <tr
@@ -507,8 +534,20 @@ export function CatalogPage() {
               })}
             </tbody>
           </table>
-          <p className="border-t border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-muted)]">
-            {total} producto{total === 1 ? "" : "s"} catalogado{total === 1 ? "" : "s"}
+          {items.length > 0 ? (
+            <TablePaginationBar
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          ) : null}
+          <p
+            className="border-t border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-muted)]"
+            data-testid="catalog-table-footer"
+          >
+            {catalogFooter}
           </p>
         </div>
       ) : null}
