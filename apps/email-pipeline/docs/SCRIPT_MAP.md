@@ -246,6 +246,7 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | [`scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py) | Institution/domain grouping audit | **Read-only** | Presentation/strategy only — **not** send safety; gitignored reports |
 | [`scripts/qa/operator_status.py`](../scripts/qa/operator_status.py) | Operator READY / freshness | **Read-only** | LISTO / mirror_ok ≠ send approval |
 | [`scripts/qa/run_daily_health_report.py`](../scripts/qa/run_daily_health_report.py) | Daily health summary (NDR dry-run, drift, mirror JSON) | **Read-only** | Output under `reports/out/active/current/daily_health_report_*` (gitignored); verdict READY / REVIEW_NEEDED / BLOCKED |
+| [`scripts/qa/build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) | Build NDR human-review batches + suggested allowlists | **Read-only** | Output under `reports/out/active/current/ndr_review_queue_*`; no suppression apply |
 | [`scripts/ops/run_post_send_2026_06_01_refresh.sh`](../scripts/ops/run_post_send_2026_06_01_refresh.sh) | **Historical** 2026-06-01 orchestrator | Mixed | **Do not blindly reuse** — step 2 still runs **broad NDR `--apply`**. Clone steps from `POST_SEND_SAFE_LOOP.md` instead. |
 
 ---
