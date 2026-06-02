@@ -43,6 +43,23 @@ describe("ProspectosPage", () => {
     vi.clearAllMocks();
   });
 
+  it("shows footer with loaded vs API total", async () => {
+    const list = leadListFixture();
+    vi.mocked(fetchLeadProspectsMirror).mockResolvedValue({
+      ...list,
+      total: 71,
+    });
+    render(<ProspectosPage />);
+    await waitFor(() => {
+      const footer = screen.getByTestId("prospectos-table-footer");
+      expect(footer.textContent).toContain("de 71 prospectos");
+      expect(footer.textContent).toContain("solo lectura");
+    });
+    expect(screen.getByTestId("prospectos-table-footer").textContent).toMatch(
+      /más resultados que los cargados/,
+    );
+  });
+
   it("renders KPIs and table without send buttons", async () => {
     render(<ProspectosPage />);
     await waitFor(() => {

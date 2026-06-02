@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { normalizeWarmCaseItem } from "../../api/commercialParse";
 import type { WarmCaseItem } from "../../api/commercialTypes";
@@ -239,11 +239,11 @@ describe("WarmCasesTable", () => {
       />,
     );
     screen.getByText(/vista: Clientes reales/);
-    screen.getByText(/Mostrando 2 de 2 casos cargados/);
+    screen.getByText(/Mostrando 1–2 de 2 casos/);
     fireEvent.change(screen.getByLabelText("Buscar casos tibios"), {
       target: { value: "buyer@acme" },
     });
-    screen.getByText(/Mostrando 1 de 2 casos cargados/);
+    screen.getByText(/Mostrando 1 de 1 casos/);
     screen.getByText(/filtros activos/);
   });
 
@@ -272,7 +272,56 @@ describe("WarmCasesTable", () => {
     screen.getByText("buyer@acme.cl");
     fireEvent.click(screen.getByLabelText("Ocultar contactos internos de OrigenLab"));
     screen.getByText("contacto@origenlab.cl");
-    screen.getByText(/Mostrando 2 de 2 casos cargados/);
+    screen.getByText(/Mostrando 1–2 de 2 casos/);
+  });
+
+  it("section footer shows global warm queue total, not vague API reportó", () => {
+    const paymentRows = [
+      { ...row, case_id: "p1", category: "payment_admin" as const },
+      { ...row, case_id: "p2", category: "payment_received" as const, contact_email: "pay2@bank.cl" },
+    ];
+    render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={paymentRows}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 44 }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+        sectionName="Pagos"
+        globalQueueTotal={44}
+        showViewPresets={false}
+        initialFilters={{ preset: "todo", hideInternalContacts: false }}
+      />,
+    );
+    screen.getByText(/Mostrando 1–2 de 2 en Pagos/);
+    screen.getByText(/44 casos tibios en cola global/);
+    expect(screen.queryByText(/API reportó/)).toBeNull();
+  });
+
+  it("paginates to 15 rows by default", () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      ...row,
+      case_id: `case-${i}`,
+      contact_email: `user${i}@acme.cl`,
+    }));
+    render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={many}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 20 }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+        initialFilters={{ preset: "todo", hideInternalContacts: false }}
+      />,
+    );
+    expect(document.querySelectorAll("tbody tr")).toHaveLength(15);
+    within(screen.getByTestId("table-pagination-bar")).getByText(/Página 1 de 2/);
+    fireEvent.change(screen.getByLabelText("Filas por página"), { target: { value: "all" } });
+    expect(document.querySelectorAll("tbody tr")).toHaveLength(20);
   });
 
   const auditRows: WarmCaseItem[] = [

@@ -93,15 +93,25 @@ function normalizeToken(raw: string): string {
 }
 
 /** Etiqueta visible; no expone el token técnico en la UI. */
+export const UNMAPPED_OPERATOR_TOKEN_TITLE =
+  "Etiqueta no mapeada en la interfaz; revisar token técnico si se repite.";
+
 export function formatOperatorToken(
   raw: string | null | undefined,
   kind: OperatorLabelKind,
-): { label: string; raw: string } {
+): { label: string; raw: string; title?: string } {
   const token = normalizeToken(raw || "");
   if (!token) {
     return { label: "—", raw: "" };
   }
   const table = TABLES[kind];
-  const label = table[token] ?? "Sin clasificar";
-  return { label, raw: token };
+  const mapped = table[token];
+  if (mapped) {
+    return { label: mapped, raw: token };
+  }
+  return {
+    label: "Sin clasificar",
+    raw: token,
+    title: `${UNMAPPED_OPERATOR_TOKEN_TITLE} (${token})`,
+  };
 }

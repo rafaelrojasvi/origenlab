@@ -14,6 +14,7 @@ import {
 import { ProspectosDrawer } from "../components/prospectos/ProspectosDrawer";
 import { OperatorApiError } from "../api/operatorClient";
 import { leadProspectsQueryFromOrigin } from "../lib/prospectOriginQuery";
+import { formatProspectosTableFooter } from "../lib/clientTablePagination";
 import {
   prospectContactCell,
   prospectClassificationLabel,
@@ -121,6 +122,11 @@ export function ProspectosPage() {
       summary.blocked_count >= 5
     );
   }, [summary]);
+
+  const listFooter = useMemo(
+    () => formatProspectosTableFooter({ loaded: items.length, total }),
+    [items.length, total],
+  );
 
   return (
     <div className="space-y-6" data-testid="prospectos-page">
@@ -237,10 +243,6 @@ export function ProspectosPage() {
         </p>
       ) : null}
 
-      <p className="text-sm text-[var(--color-muted)]">
-        {listLoading ? "Cargando…" : `${total} prospectos`}
-      </p>
-
       <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-white shadow-sm">
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-[var(--color-border)] bg-slate-50 text-xs uppercase text-[var(--color-muted)]">
@@ -293,6 +295,21 @@ export function ProspectosPage() {
             })}
           </tbody>
         </table>
+        <div
+          className="border-t border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-muted)]"
+          data-testid="prospectos-table-footer"
+        >
+          {listLoading ? (
+            <p>Cargando…</p>
+          ) : (
+            <>
+              <p>{listFooter.primary}</p>
+              {listFooter.truncationNote ? (
+                <p className="mt-1 text-amber-900">{listFooter.truncationNote}</p>
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
 
       {selectedKey ? (

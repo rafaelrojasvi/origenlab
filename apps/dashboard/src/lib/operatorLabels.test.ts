@@ -29,5 +29,6 @@ describe("operatorLabels", () => {
     const out = formatOperatorToken("custom_token", "warm_status");
     expect(out.raw).toBe("custom_token");
     expect(out.label).toBe("Sin clasificar");
+    expect(out.title).toMatch(/no mapeada/i);
   });
 });

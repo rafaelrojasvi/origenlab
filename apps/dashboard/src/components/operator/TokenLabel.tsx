@@ -10,12 +10,12 @@ export function TokenLabel({
   kind: OperatorLabelKind;
   className?: string;
 }) {
-  const { label, raw } = formatOperatorToken(token, kind);
+  const { label, raw, title } = formatOperatorToken(token, kind);
   if (!raw) {
     return <span className="text-slate-500">—</span>;
   }
   return (
-    <span className={className} title={label}>
+    <span className={className} title={title ?? label}>
       {label}
     </span>
   );

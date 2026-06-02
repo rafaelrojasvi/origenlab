@@ -1,7 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ApiBackend } from "../../api/operatorTypes";
 import type { WarmCaseCategory, WarmCaseItem, WarmCaseStatus } from "../../api/commercialTypes";
-import { formatTableCountLabel } from "../../lib/clientTableView";
+import {
+  DEFAULT_CLIENT_PAGE_SIZE,
+  formatWarmCasesTableFooter,
+  paginateSlice,
+  type ClientPageSizeOption,
+} from "../../lib/clientTablePagination";
 import { warmCasesSourceLabel } from "../../lib/dataSourceLabel";
 import {
   clearWarmCaseTableFilters,
@@ -27,6 +32,7 @@ import { CopyTextButton } from "./CopyTextButton";
 import { TableListToolbar, ToolbarField, toolbarInputClass, toolbarSelectClass } from "./TableListToolbar";
 import { TableSection } from "./TableSection";
 import { CaseDetailDrawer } from "./CaseDetailDrawer";
+import { TablePaginationBar } from "./TablePaginationBar";
 
 export function WarmCasesTable({
   backend,
@@ -40,6 +46,8 @@ export function WarmCasesTable({
   subtitle = "Cola de solo lectura · solo asunto y vista previa (sin cuerpo del correo).",
   initialFilters,
   showViewPresets = true,
+  sectionName,
+  globalQueueTotal,
 }: {
   backend: ApiBackend;
   items: WarmCaseItem[];
@@ -57,12 +65,18 @@ export function WarmCasesTable({
   subtitle?: string;
   initialFilters?: Partial<WarmCaseTableFilters>;
   showViewPresets?: boolean;
+  /** Subsection label (e.g. Pagos) when table shows a filtered slice of the warm queue. */
+  sectionName?: string;
+  /** Full warm queue size from parent fetch; used with sectionName for footer clarity. */
+  globalQueueTotal?: number;
 }) {
   const [filters, setFilters] = useState<WarmCaseTableFilters>({
     ...DEFAULT_WARM_FILTERS,
     ...initialFilters,
   });
   const [selectedCase, setSelectedCase] = useState<WarmCaseItem | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ClientPageSizeOption>(DEFAULT_CLIENT_PAGE_SIZE);
 
   const sourceLabel = meta
     ? warmCasesSourceLabel(backend, meta.data_source)
@@ -73,8 +87,45 @@ export function WarmCasesTable({
   const categoryOptions = useMemo(() => uniqueWarmCategories(items), [items]);
   const filtersActive = warmFiltersActive(filters);
   const loadedCount = items.length;
-  const apiCount = meta?.count ?? loadedCount;
   const presetLabel = WARM_VIEW_PRESET_LABELS[filters.preset];
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    filters.search,
+    filters.status,
+    filters.category,
+    filters.sort,
+    filters.preset,
+    filters.hideInternalContacts,
+    loadedCount,
+  ]);
+
+  const pagination = useMemo(
+    () => paginateSlice(visibleRows, page, pageSize),
+    [visibleRows, page, pageSize],
+  );
+
+  const pagedRows = pagination.slice;
+
+  useEffect(() => {
+    if (page !== pagination.page) {
+      setPage(pagination.page);
+    }
+  }, [pagination.page, page]);
+
+  const footerLabel = formatWarmCasesTableFooter({
+    from: pagination.from,
+    to: pagination.to,
+    visibleTotal: pagination.visibleTotal,
+    loadedTotal: loadedCount,
+    page: pagination.page,
+    totalPages: pagination.totalPages,
+    sectionName,
+    globalQueueTotal,
+    presetLabel: showViewPresets ? presetLabel : undefined,
+    filtered: filtersActive,
+  });
 
   const presetChips = (
     <div
@@ -238,7 +289,7 @@ export function WarmCasesTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
-            {visibleRows.map((row, index) => (
+            {pagedRows.map((row, index) => (
               <tr
                 key={row.case_id || `warm-${index}`}
                 className="align-top cursor-pointer hover:bg-brand-50/50 focus-within:bg-brand-50/50"
@@ -307,15 +358,20 @@ export function WarmCasesTable({
             ))}
           </tbody>
         </table>
+        {pagination.visibleTotal > 0 ? (
+          <TablePaginationBar
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
+        ) : null}
         <p className="border-t border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-muted)]">
-          {formatTableCountLabel({
-            visible: visibleRows.length,
-            loaded: loadedCount,
-            apiTotal: apiCount,
-            filtered: filtersActive,
-            noun: "casos",
-            presetLabel,
-          })}
+          {footerLabel}
         </p>
       </div>
 

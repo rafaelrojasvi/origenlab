@@ -18,6 +18,7 @@ export function PaymentsLogisticsPage() {
   const logisticsItems = useMemo(() => filterLogisticsAdminWarmCases(allAdmin), [allAdmin]);
 
   const meta = warm?.meta ?? null;
+  const globalQueueTotal = warm?.items?.length ?? meta?.count ?? 0;
 
   if (warmLoading || warmError) {
     return (
@@ -51,6 +52,8 @@ export function PaymentsLogisticsPage() {
         subtitle="Transferencias, facturas y confirmación de pago · no son cotizaciones a clientes."
         showViewPresets={false}
         initialFilters={{ preset: "todo", hideInternalContacts: false }}
+        sectionName="Pagos"
+        globalQueueTotal={globalQueueTotal}
       />
       <WarmCasesTable
         backend={backend}
@@ -64,6 +67,8 @@ export function PaymentsLogisticsPage() {
         subtitle="DHL, cuentas de importación y flete."
         showViewPresets={false}
         initialFilters={{ preset: "todo", hideInternalContacts: false }}
+        sectionName="Logística"
+        globalQueueTotal={globalQueueTotal}
       />
     </div>
   );
