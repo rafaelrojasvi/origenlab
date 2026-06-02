@@ -30,7 +30,7 @@
 | **No `--apply` without approval** | Imports, backfills, purges, suppression writes, and archive moves require explicit user consent. Default to dry-run / read-only. |
 | **No invented contacts** | Do not add buyer emails, DeepSearch rows, or marketing contacts without evidence. |
 | **Equipment-first tenders** | Use `equipment_first_operator_queue_*.csv` and aligned `buyer_opportunity_ab_queue_*.csv`. |
-| **LEGACY scripts** | **Do not use for current operator work:** `build_buyer_opportunity_queue.py`, `buyer_opportunity_crosscheck_*`, `tender_buyer_outreach_queue_*` — use equipment-first builders instead. |
+| **LEGACY scripts** | **Do not use for current operator work:** `buyer_opportunity_crosscheck_*`, `tender_buyer_outreach_queue_*` — use `build_equipment_first_*` builders instead. Legacy `build_buyer_opportunity_queue.py` was **removed in Phase 5C**. |
 | **Parked stack** | Read [`docs/EXPERIMENTAL_PARKED.md`](docs/EXPERIMENTAL_PARKED.md) before Postgres/API/Tatiana/ML; not required for ingest, DNR, equipment-first queues, or send safety. |
 | **No file deletes** | Unless the user explicitly requests deletion. |
 | **Tests for behavior changes** | If you change code (not docs-only), run targeted pytest; see workspace rule *Testing — definition of done*. |

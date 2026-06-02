@@ -210,7 +210,6 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/check_reports_out_active_hygiene.py` | OPS_AUDIT | Warn/fail when `reports/out/active/` contains unexpected generated artifacts outside `current/` |
 | `scripts/qa/build_equipment_first_opportunity_queue.py` | OPS_AUDIT | Equipment-first filter from `Licitacion_Publicada.csv` → `equipment_first_opportunity_queue_*.csv` (read-only on Gmail; writes reports only) |
 | `scripts/qa/build_equipment_first_operator_queue.py` | OPS_AUDIT | Canonical operator queue + aligned `buyer_opportunity_ab_queue_*.csv` from equipment-first opportunity CSV (read-only cross-check vs DNR/Sent in SQLite) |
-| `scripts/qa/build_buyer_opportunity_queue.py` | DEPRECATED | **LEGACY_DO_NOT_USE** — superseded by `build_equipment_first_*`; retained for audit/tests only; stale `buyer_opportunity_crosscheck_*` must not drive export |
 | `scripts/qa/operator_status.py` | OPS_AUDIT | **Read-only** operator snapshot: SQLite/Sent freshness, DNR files, canonical `active/current`, manifest warnings, verdict READY/CAUTION/BLOCKED |
 | `scripts/qa/build_equipment_deepsearch_vetted_queue.py` | OPS_AUDIT | Gate `equipment_deep_research_opportunities_*.csv` → vetted queue (equipment-first + DNR/Sent/state); fails clearly if input missing |
 | `scripts/qa/validate_sqlite_archive_for_postgres.py` | OPS_MIGRATE | Read-only / pre-migrate validation |
@@ -268,9 +267,10 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 
 | Path | Tag | Replacement / notes |
 |------|-----|---------------------|
-| `scripts/qa/build_buyer_opportunity_queue.py` | DEPRECATED | **LEGACY_DO_NOT_USE** — use `build_equipment_first_opportunity_queue.py` + `build_equipment_first_operator_queue.py` |
 | `scripts/tools/flag_reported_non_delivery_from_contacto.py` | DEPRECATED | Prefer **`flag_ndr_bounces_from_contacto.py`** + [`build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) |
 | `scripts/leads/advanced/export_archive_outreach_candidates.py` | DEPRECATED | Prefer **`build_archive_send_batch.py --audit-only`** (thin wrapper kept for custom `--out`) |
+
+**Removed Phase 5C (2026-06-02):** `scripts/qa/build_buyer_opportunity_queue.py` — use `build_equipment_first_opportunity_queue.py` + `build_equipment_first_operator_queue.py`.
 
 **Removed Phase 5A (2026-06-02):** `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` — use [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) step-by-step instead.
 
