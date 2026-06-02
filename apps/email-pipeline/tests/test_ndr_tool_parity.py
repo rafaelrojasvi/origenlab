@@ -164,3 +164,22 @@ def test_legacy_unique_behavior_is_inbound_reply_heuristic() -> None:
     assert "text_suggests_reported_non_delivery" in legacy
     assert "reported_non_delivery" not in ndr
     assert "bounce_ndr" in ndr or "scan_ndr_planned_recipients" in ndr
+
+
+def test_legacy_ndr_script_warns_on_help() -> None:
+    import os
+    import subprocess
+    import sys
+
+    r = subprocess.run(
+        [sys.executable, str(_LEGACY_SCRIPT), "--help"],
+        cwd=str(REPO),
+        env={**os.environ, "PYTHONPATH": str(_SRC)},
+        capture_output=True,
+        text=True,
+        timeout=90,
+        check=False,
+    )
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "DEPRECATED" in r.stderr, r.stderr
+    assert "flag_ndr_bounces_from_contacto.py" in r.stderr, r.stderr

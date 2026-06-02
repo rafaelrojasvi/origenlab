@@ -21,9 +21,14 @@ import argparse
 import csv
 import re
 import sqlite3
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from origenlab_email_pipeline.core.safety import print_script_deprecation_warning
 REPORTS = ROOT / "reports/out/active/current"
 DEFAULT_DB = Path("/home/rafael/data/origenlab-email/sqlite/emails.sqlite")
 
@@ -383,6 +388,14 @@ def write_markdown(rows: list[dict[str, str]], date_suffix: str) -> Path:
 
 
 def main() -> None:
+    print_script_deprecation_warning(
+        "scripts/qa/build_buyer_opportunity_queue.py",
+        replacement=(
+            "scripts/qa/build_equipment_first_opportunity_queue.py and "
+            "scripts/qa/build_equipment_first_operator_queue.py"
+        ),
+        note="LEGACY_DO_NOT_USE — audit/tests only; not for equipment-first export or send planning.",
+    )
     parser = argparse.ArgumentParser()
     parser.add_argument("--date-suffix", default="20260518")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)

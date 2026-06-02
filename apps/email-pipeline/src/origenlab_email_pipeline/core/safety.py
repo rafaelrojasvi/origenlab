@@ -39,3 +39,41 @@ def require_apply_for_mutation(apply: bool, operation: str) -> None:
 
 def format_break_glass_warning(tool: str, risk: str) -> str:
     return f"Break-glass: {tool} — {risk}"
+
+
+def format_script_deprecation_warning(
+    script: str,
+    *,
+    replacement: str,
+    category: str = "DEPRECATED",
+    note: str | None = None,
+) -> str:
+    """Multi-line stderr banner for deprecated or compatibility-only script entrypoints."""
+    lines = [
+        f"*** {category}: {script} ***",
+        f"  Prefer: {replacement}",
+    ]
+    if note:
+        lines.append(f"  Note: {note}")
+    lines.append("  Retained for compatibility/audit; not for new operator work.")
+    return "\n".join(lines)
+
+
+def print_script_deprecation_warning(
+    script: str,
+    *,
+    replacement: str,
+    category: str = "DEPRECATED",
+    note: str | None = None,
+) -> None:
+    import sys
+
+    print(
+        format_script_deprecation_warning(
+            script,
+            replacement=replacement,
+            category=category,
+            note=note,
+        ),
+        file=sys.stderr,
+    )

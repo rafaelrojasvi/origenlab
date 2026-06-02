@@ -9,6 +9,12 @@
 # targeted allowlist apply → contacted → safety → digest → mirror → drift audit.
 set -eo pipefail
 
+cat >&2 <<'DEPREC'
+*** DEPRECATED: scripts/ops/run_post_send_2026_06_01_refresh.sh ***
+  Prefer: docs/pipeline/POST_SEND_SAFE_LOOP.md step-by-step loop
+  Historical 2026-06-01 orchestrator — do not reuse for new post-send waves.
+DEPREC
+
 PIPE="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/ops/_load_pipeline_dotenv.sh
 source "${PIPE}/scripts/ops/_load_pipeline_dotenv.sh"

@@ -60,3 +60,18 @@ def test_reference_counts_returns_non_negative() -> None:
     assert rc.docs >= 0
     assert rc.tests >= 0
     assert rc.in_script_map
+
+
+def test_deprecated_python_scripts_use_phase4_stderr_helpers() -> None:
+    buyer = (REPO / "scripts/qa/build_buyer_opportunity_queue.py").read_text(encoding="utf-8")
+    assert "print_script_deprecation_warning" in buyer
+    legacy_ndr = (REPO / "scripts/tools/flag_reported_non_delivery_from_contacto.py").read_text(
+        encoding="utf-8",
+    )
+    assert "print_script_deprecation_warning" in legacy_ndr
+    archive = (
+        REPO / "scripts/leads/advanced/export_archive_outreach_candidates.py"
+    ).read_text(encoding="utf-8")
+    assert "print_script_deprecation_warning" in archive
+    wrapper = (REPO / "scripts/build_lead_account_rollup.py").read_text(encoding="utf-8")
+    assert "print_wrapper_deprecation_warning" in wrapper or "_script_warnings" in wrapper

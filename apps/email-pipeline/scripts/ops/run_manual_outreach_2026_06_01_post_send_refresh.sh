@@ -3,6 +3,12 @@
 # Read-only Gmail ingest; SQLite mutations for suppressions/contacted; Postgres mirror.
 set -eo pipefail
 
+cat >&2 <<'DEPREC'
+*** DEPRECATED: scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh ***
+  Prefer: docs/pipeline/POST_SEND_SAFE_LOOP.md step-by-step loop
+  Historical 2026-06-01 manual-wave orchestrator — do not reuse for new sends.
+DEPREC
+
 PIPE="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/ops/_load_pipeline_dotenv.sh
 source "${PIPE}/scripts/ops/_load_pipeline_dotenv.sh"

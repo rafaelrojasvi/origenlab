@@ -27,6 +27,7 @@ from origenlab_email_pipeline.archive_send_batch_builder import (
     write_archive_audit_csv_and_summary,
 )
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.core.safety import print_script_deprecation_warning
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.outbound_core import (
     build_outbound_run_envelope,
@@ -37,6 +38,11 @@ from origenlab_email_pipeline.outbound_core import (
 
 
 def main() -> int:
+    print_script_deprecation_warning(
+        "scripts/leads/advanced/export_archive_outreach_candidates.py",
+        replacement="scripts/leads/build_archive_send_batch.py --audit-only",
+        note="Thin wrapper kept for custom --out paths and backward-compatible automation.",
+    )
     ap = argparse.ArgumentParser(
         description=(
             "Audit-only archive outreach export (wrapper). "
@@ -63,12 +69,6 @@ def main() -> int:
         help="Optional JSON summary with eligible/blocked counts and reason breakdown",
     )
     args = ap.parse_args()
-
-    print(
-        "NOTE: Prefer canonical: uv run python scripts/leads/build_archive_send_batch.py "
-        "--audit-only --out-dir <dir>",
-        file=sys.stderr,
-    )
 
     settings = load_settings()
     db_path = args.db or settings.resolved_sqlite_path()
