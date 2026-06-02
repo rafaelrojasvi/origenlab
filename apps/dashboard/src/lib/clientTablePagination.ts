@@ -6,6 +6,51 @@ export const CLIENT_PAGE_SIZE_OPTIONS = [15, 30, 50] as const;
 
 export type ClientPageSizeOption = (typeof CLIENT_PAGE_SIZE_OPTIONS)[number] | "all";
 
+export type PageNumberToken = number | "ellipsis";
+
+/** Numbered page controls with ellipsis for large page counts (e.g. 1 … 4 5 6 7 8 … 12). */
+export function getVisiblePageNumbers(
+  page: number,
+  totalPages: number,
+  siblingCount = 1,
+): PageNumberToken[] {
+  if (totalPages <= 0) {
+    return [];
+  }
+  if (totalPages === 1) {
+    return [1];
+  }
+
+  const delta = siblingCount;
+  const range: number[] = [];
+  const left = page - delta;
+  const right = page + delta + 1;
+
+  for (let i = 1; i <= totalPages; i += 1) {
+    if (i === 1 || i === totalPages || (i >= left && i < right)) {
+      range.push(i);
+    }
+  }
+
+  const withEllipsis: PageNumberToken[] = [];
+  let prev: number | undefined;
+  for (const i of range) {
+    if (prev !== undefined) {
+      if (i - prev === 2) {
+        withEllipsis.push(prev + 1);
+      } else if (i - prev !== 1) {
+        withEllipsis.push("ellipsis");
+      }
+    }
+    withEllipsis.push(i);
+    prev = i;
+  }
+  return withEllipsis;
+}
+
+/** Alias for paginateSlice — client-side batching of in-memory rows. */
+export const paginateClientItems = paginateSlice;
+
 export function paginateSlice<T>(
   rows: T[],
   page: number,
@@ -100,18 +145,56 @@ export function formatWarmCasesTableFooter(args: {
   return `${rangePart}${sectionPart}${pagePart}${globalPart}${presetPart}${filterPart} · solo lectura`;
 }
 
+export function formatPagedFooterLabel(args: {
+  from: number;
+  to: number;
+  visibleTotal: number;
+  page: number;
+  totalPages: number;
+  extraParts?: string[];
+}): string {
+  const { from, to, visibleTotal, page, totalPages, extraParts = [] } = args;
+
+  const rangePart =
+    visibleTotal === 0
+      ? "Mostrando 0"
+      : from === to
+        ? `Mostrando ${from} de ${visibleTotal}`
+        : `Mostrando ${from}–${to} de ${visibleTotal}`;
+
+  const pagePart =
+    totalPages > 1 ? ` · Página ${page} de ${totalPages}` : "";
+
+  const extras = extraParts.length > 0 ? ` · ${extraParts.join(" · ")}` : "";
+
+  return `${rangePart}${pagePart}${extras} · solo lectura`;
+}
+
 export function formatProspectosTableFooter(args: {
+  from: number;
+  to: number;
   loaded: number;
-  total: number;
+  apiTotal: number;
+  page: number;
+  totalPages: number;
 }): { primary: string; truncationNote?: string } {
-  const { loaded, total } = args;
+  const { from, to, loaded, apiTotal, page, totalPages } = args;
   if (loaded === 0) {
     return { primary: "Mostrando 0 prospectos · solo lectura" };
   }
-  const primary = `Mostrando 1–${loaded} de ${total} prospectos · solo lectura`;
+
+  const rangePart =
+    from === to
+      ? `Mostrando ${from} de ${loaded} cargados`
+      : `Mostrando ${from}–${to} de ${loaded} cargados`;
+
+  const apiPart = apiTotal > loaded ? ` · API total ${apiTotal}` : "";
+  const pagePart = totalPages > 1 ? ` · Página ${page} de ${totalPages}` : "";
+
+  const primary = `${rangePart}${apiPart}${pagePart} · solo lectura`;
   const truncationNote =
-    total > loaded
-      ? "La API tiene más resultados que los cargados; ajustar filtros o cargar más en una fase futura."
+    apiTotal > loaded
+      ? "La API tiene más resultados que los cargados; usar filtros o una fase futura de carga paginada."
       : undefined;
   return { primary, truncationNote };
 }
