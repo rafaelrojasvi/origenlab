@@ -366,6 +366,19 @@ def test_include_low_fit(tmp_path: Path) -> None:
     assert "5" in ids
 
 
+def test_golden_lead_id_1_blocked_by_sent_semantics(tmp_path: Path) -> None:
+    """Lock minimal row semantics before refactor (lead 1 = Sent hit)."""
+    db = tmp_path / "t.sqlite"
+    out = tmp_path / "audit.csv"
+    _seed(db)
+    run = _run(db, out, "--limit", "20")
+    assert run.returncode == 0, run.stderr + run.stdout
+    r = next(x for x in _rows(out) if x["lead_id"] == "1")
+    assert r["blocked_by_sent"] == "1"
+    assert r["already_contacted"] == "1"
+    assert r["recommended_action"] == "skip_already_contacted"
+
+
 def test_csv_columns_stable(tmp_path: Path) -> None:
     db = tmp_path / "t.sqlite"
     out = tmp_path / "audit.csv"
