@@ -12,6 +12,14 @@ writes ``contact_email_suppression`` with ``bounce_no_such_user`` / ``bounce_acc
 
 Default is print-only; use ``--apply`` after reviewing matches.
 
+Targeted apply (operator allowlist)::
+
+  uv run python scripts/tools/flag_ndr_bounces_from_contacto.py \\
+    --since-days 1 --emails-file reports/in/manual_reviews/allowlist.txt \\
+    --only-code bounce_no_such_user --apply
+
+Allowlist emails must appear in the current NDR scan evidence; otherwise apply is refused.
+
 Example::
 
   uv run python scripts/tools/flag_ndr_bounces_from_contacto.py --since-days 30 --limit 20000
@@ -21,8 +29,10 @@ Example::
 from __future__ import annotations
 
 import argparse
+import sqlite3
 import sys
 from pathlib import Path
+from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT / "src") not in sys.path:
@@ -43,8 +53,11 @@ from origenlab_email_pipeline.ndr_bounce_extraction import (
     extract_failed_recipients_from_ndr,
 )
 
+PlannedEntry = tuple[str, str | None, int, str | None]
+# recipient_email -> (code, date_iso, email_id, subject_snip)
 
-def _body_blob(row: tuple) -> str:
+
+def _body_blob(row: tuple[Any, ...]) -> str:
     full_clean, text_clean, body = row
     return (
         str(full_clean or "")
@@ -53,31 +66,30 @@ def _body_blob(row: tuple) -> str:
     )
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--db", type=Path, default=None, help="SQLite path (default: from config)")
-    ap.add_argument(
-        "--apply",
-        action="store_true",
-        help="Upsert contact_email_suppression for extracted recipients.",
-    )
-    ap.add_argument("--limit", type=int, default=50_000, help="Max NDR-shaped rows to scan")
-    ap.add_argument(
-        "--since-days",
-        type=int,
-        default=None,
-        help="Only rows with date_iso >= now - N days (SQLite date string compare is lexical ISO).",
-    )
-    args = ap.parse_args()
+def load_emails_allowlist(path: Path) -> list[str]:
+    """Load one email per line; ignore blanks and ``#`` comments."""
+    emails: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        emails.append(line.lower())
+    return emails
 
-    db_path = args.db or load_settings().resolved_sqlite_path()
+
+def scan_ndr_planned_recipients(
+    conn: sqlite3.Connection,
+    *,
+    since_days: int | None,
+    limit: int,
+) -> tuple[dict[str, PlannedEntry], int, int]:
+    """Scan contacto Gmail rows; return planned suppressions and scan stats."""
     pred = sql_predicate_contacto_gmail_source()
-
     date_filter = ""
-    params: list = []
-    if args.since_days is not None and args.since_days > 0:
+    params: list[Any] = []
+    if since_days is not None and since_days > 0:
         date_filter = "AND date_iso >= date('now', ?)"
-        params.append(f"-{int(args.since_days)} days")
+        params.append(f"-{int(since_days)} days")
 
     sql = f"""
         SELECT sender, subject,
@@ -89,56 +101,180 @@ def main() -> int:
         ORDER BY COALESCE(date_iso, '') DESC
         LIMIT ?
     """
-    params.append(int(args.limit))
+    params.append(int(limit))
 
+    planned: dict[str, PlannedEntry] = {}
+    skipped_no_rcpt = 0
+    scanned = 0
+    cur = conn.execute(sql, tuple(params))
+    for sender, subject, full_clean, text_clean, body, _folder, date_iso, eid in cur:
+        scanned += 1
+        blob = _body_blob((full_clean, text_clean, body))
+        cl = classify_email(sender=str(sender or ""), subject=str(subject or ""), body=blob)
+        if "bounce_ndr" not in cl.get("tags", []):
+            continue
+        subj_l = str(subject or "").lower()
+        if "notification (delay)" in subj_l or subj_l.strip().endswith("(delay)"):
+            continue
+        rcpts = extract_failed_recipients_from_ndr(blob)
+        if not rcpts:
+            skipped_no_rcpt += 1
+            continue
+        code = bounce_suppression_code_from_ndr_text(blob)
+        subj_snip = (str(subject)[:100] + "…") if subject and len(str(subject)) > 100 else subject
+        d_iso = str(date_iso) if date_iso else None
+        for r in rcpts:
+            prev = planned.get(r)
+            if prev is None or (d_iso or "") > (prev[1] or ""):
+                planned[r] = (code, d_iso, int(eid), subj_snip)
+    return planned, scanned, skipped_no_rcpt
+
+
+def select_planned_for_apply(
+    planned: dict[str, PlannedEntry],
+    *,
+    emails_allowlist: list[str] | None,
+    only_code: str | None,
+) -> tuple[dict[str, PlannedEntry], list[str], list[str]]:
+    """Subset ``planned`` for targeted apply.
+
+    Returns ``(selected, refused_not_in_evidence, refused_wrong_code)``.
+    """
+    refused_not_in_evidence: list[str] = []
+    refused_wrong_code: list[str] = []
+
+    if emails_allowlist is not None:
+        selected: dict[str, PlannedEntry] = {}
+        for email in emails_allowlist:
+            entry = planned.get(email)
+            if entry is None:
+                refused_not_in_evidence.append(email)
+                continue
+            code = entry[0]
+            if only_code is not None and code != only_code:
+                refused_wrong_code.append(email)
+                continue
+            selected[email] = entry
+        return selected, refused_not_in_evidence, refused_wrong_code
+
+    if only_code is not None:
+        return (
+            {e: v for e, v in planned.items() if v[0] == only_code},
+            [],
+            [],
+        )
+
+    return dict(planned), [], []
+
+
+def _print_planned_subset(planned: dict[str, PlannedEntry], *, label: str) -> None:
+    print(f"{label}: {len(planned)} address(es)")
+    for email in sorted(planned.keys()):
+        code, d_iso, eid, subj_snip = planned[email]
+        extra = f"  email_id={eid}  date_iso={d_iso or '—'}"
+        if subj_snip:
+            extra += f"\n      subject: {subj_snip}"
+        print(f"  - {email}  → {code}{extra}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--db", type=Path, default=None, help="SQLite path (default: from config)")
+    ap.add_argument(
+        "--apply",
+        action="store_true",
+        help="Upsert contact_email_suppression for selected recipients.",
+    )
+    ap.add_argument("--limit", type=int, default=50_000, help="Max contacto Gmail rows to scan")
+    ap.add_argument(
+        "--since-days",
+        type=int,
+        default=None,
+        help="Only rows with date_iso >= now - N days (SQLite date string compare is lexical ISO).",
+    )
+    ap.add_argument(
+        "--emails-file",
+        type=Path,
+        default=None,
+        help="Apply only these exact emails (must match NDR scan evidence).",
+    )
+    ap.add_argument(
+        "--only-code",
+        default=None,
+        metavar="CODE",
+        help="Only recipients with this suppression code (e.g. bounce_no_such_user).",
+    )
+    args = ap.parse_args()
+
+    emails_allowlist: list[str] | None = None
+    if args.emails_file is not None:
+        if not args.emails_file.is_file():
+            print(f"emails-file not found: {args.emails_file}", file=sys.stderr)
+            return 1
+        emails_allowlist = load_emails_allowlist(args.emails_file)
+        if not emails_allowlist:
+            print(f"emails-file is empty: {args.emails_file}", file=sys.stderr)
+            return 1
+
+    db_path = args.db or load_settings().resolved_sqlite_path()
     conn = connect(db_path)
     try:
-        cur = conn.execute(sql, tuple(params))
-        # recipient_email -> (code, date_iso, email_id, subject_snip)
-        planned: dict[str, tuple[str, str | None, int, str | None]] = {}
-        skipped_no_rcpt = 0
-        scanned = 0
-        for sender, subject, full_clean, text_clean, body, folder, date_iso, eid in cur:
-            scanned += 1
-            blob = _body_blob((full_clean, text_clean, body))
-            cl = classify_email(sender=str(sender or ""), subject=str(subject or ""), body=blob)
-            if "bounce_ndr" not in cl.get("tags", []):
-                continue
-            subj_l = str(subject or "").lower()
-            if "notification (delay)" in subj_l or subj_l.strip().endswith("(delay)"):
-                continue
-            rcpts = extract_failed_recipients_from_ndr(blob)
-            if not rcpts:
-                skipped_no_rcpt += 1
-                continue
-            code = bounce_suppression_code_from_ndr_text(blob)
-            subj_snip = (str(subject)[:100] + "…") if subject and len(str(subject)) > 100 else subject
-            d_iso = str(date_iso) if date_iso else None
-            for r in rcpts:
-                prev = planned.get(r)
-                if prev is None or (d_iso or "") > (prev[1] or ""):
-                    planned[r] = (code, d_iso, int(eid), subj_snip)
-
+        planned, scanned, skipped_no_rcpt = scan_ndr_planned_recipients(
+            conn,
+            since_days=args.since_days,
+            limit=args.limit,
+        )
         print(
             f"Scanned {scanned} recent contacto row(s); "
             f"bounce_ndr with extracted recipient: {len(planned)} distinct address(es); "
             f"bounce_ndr but no address parsed: {skipped_no_rcpt}."
         )
-        for email in sorted(planned.keys()):
-            code, d_iso, eid, subj_snip = planned[email]
-            extra = f"  email_id={eid}  date_iso={d_iso or '—'}"
-            if subj_snip:
-                extra += f"\n      subject: {subj_snip}"
-            print(f"  - {email}  → {code}{extra}")
+
+        selected, refused_missing, refused_wrong_code = select_planned_for_apply(
+            planned,
+            emails_allowlist=emails_allowlist,
+            only_code=args.only_code,
+        )
+
+        if args.emails_file is not None or args.only_code is not None:
+            print(
+                f"Targeted filter: allowlist={len(emails_allowlist) if emails_allowlist else '—'} "
+                f"only_code={args.only_code or '—'} "
+                f"→ matched={len(selected)} "
+                f"refused_not_in_ndr_evidence={len(refused_missing)} "
+                f"refused_wrong_code={len(refused_wrong_code)}"
+            )
+            if refused_missing:
+                for email in refused_missing:
+                    print(f"  REFUSE (not in NDR evidence): {email}", file=sys.stderr)
+            if refused_wrong_code:
+                for email in refused_wrong_code:
+                    code = planned[email][0]
+                    print(
+                        f"  REFUSE (code {code}, wanted {args.only_code}): {email}",
+                        file=sys.stderr,
+                    )
+            if refused_missing or refused_wrong_code:
+                print("Refusing apply: fix allowlist or widen scan window.", file=sys.stderr)
+                return 1
+
+        if emails_allowlist is not None or args.only_code is not None:
+            _print_planned_subset(selected, label="Selected for apply")
+        else:
+            _print_planned_subset(planned, label="All NDR recipients")
 
         if not args.apply:
             print("\nDry run only. Re-run with --apply to write suppressions.")
             return 0
 
+        if not selected:
+            print("Nothing selected to apply.", file=sys.stderr)
+            return 1
+
         ensure_contact_email_suppression_table(conn)
         n = 0
         skipped_manual = 0
-        for email, (code, d_iso, eid, _subj) in sorted(planned.items()):
+        for email, (code, d_iso, eid, _subj) in sorted(selected.items()):
             existing = fetch_contact_email_suppression_row(conn, email)
             if existing and str(existing.get("suppression_reason_code") or "") == "manual_do_not_contact":
                 print(f"  skip (manual_do_not_contact): {email}", file=sys.stderr)
