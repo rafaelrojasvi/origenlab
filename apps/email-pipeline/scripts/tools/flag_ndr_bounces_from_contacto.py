@@ -45,26 +45,11 @@ from origenlab_email_pipeline.contact_email_suppression import (
     upsert_contact_email_suppression,
     validate_contact_email_suppression_payload,
 )
-from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
 from origenlab_email_pipeline.db import connect
-from origenlab_email_pipeline.email_business_filters import classify_email
-from origenlab_email_pipeline.ndr_bounce_extraction import (
-    bounce_suppression_code_from_ndr_text,
-    extract_failed_recipients_from_ndr,
+from origenlab_email_pipeline.ndr_contacto_scan import (
+    PlannedEntry,
+    scan_ndr_planned_recipients,
 )
-
-PlannedEntry = tuple[str, str | None, int, str | None]
-# recipient_email -> (code, date_iso, email_id, subject_snip)
-
-
-def _body_blob(row: tuple[Any, ...]) -> str:
-    full_clean, text_clean, body = row
-    return (
-        str(full_clean or "")
-        or str(text_clean or "")
-        or str(body or "")
-    )
-
 
 def load_emails_allowlist(path: Path) -> list[str]:
     """Load one email per line; ignore blanks and ``#`` comments."""
@@ -75,59 +60,6 @@ def load_emails_allowlist(path: Path) -> list[str]:
             continue
         emails.append(line.lower())
     return emails
-
-
-def scan_ndr_planned_recipients(
-    conn: sqlite3.Connection,
-    *,
-    since_days: int | None,
-    limit: int,
-) -> tuple[dict[str, PlannedEntry], int, int]:
-    """Scan contacto Gmail rows; return planned suppressions and scan stats."""
-    pred = sql_predicate_contacto_gmail_source()
-    date_filter = ""
-    params: list[Any] = []
-    if since_days is not None and since_days > 0:
-        date_filter = "AND date_iso >= date('now', ?)"
-        params.append(f"-{int(since_days)} days")
-
-    sql = f"""
-        SELECT sender, subject,
-               full_body_clean, body_text_clean, body,
-               folder, date_iso, id
-        FROM emails
-        WHERE {pred}
-        {date_filter}
-        ORDER BY COALESCE(date_iso, '') DESC
-        LIMIT ?
-    """
-    params.append(int(limit))
-
-    planned: dict[str, PlannedEntry] = {}
-    skipped_no_rcpt = 0
-    scanned = 0
-    cur = conn.execute(sql, tuple(params))
-    for sender, subject, full_clean, text_clean, body, _folder, date_iso, eid in cur:
-        scanned += 1
-        blob = _body_blob((full_clean, text_clean, body))
-        cl = classify_email(sender=str(sender or ""), subject=str(subject or ""), body=blob)
-        if "bounce_ndr" not in cl.get("tags", []):
-            continue
-        subj_l = str(subject or "").lower()
-        if "notification (delay)" in subj_l or subj_l.strip().endswith("(delay)"):
-            continue
-        rcpts = extract_failed_recipients_from_ndr(blob)
-        if not rcpts:
-            skipped_no_rcpt += 1
-            continue
-        code = bounce_suppression_code_from_ndr_text(blob)
-        subj_snip = (str(subject)[:100] + "…") if subject and len(str(subject)) > 100 else subject
-        d_iso = str(date_iso) if date_iso else None
-        for r in rcpts:
-            prev = planned.get(r)
-            if prev is None or (d_iso or "") > (prev[1] or ""):
-                planned[r] = (code, d_iso, int(eid), subj_snip)
-    return planned, scanned, skipped_no_rcpt
 
 
 def select_planned_for_apply(

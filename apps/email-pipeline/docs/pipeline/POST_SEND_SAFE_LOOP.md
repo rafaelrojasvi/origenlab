@@ -37,6 +37,14 @@ When **Sent mail or INBOX NDRs changed**, run the **full loop** below (at least 
 
 Adjust `N` (`--since-days`) to cover the campaign window (often `1`–`2`).
 
+### Daily health (read-only, no mutations)
+
+Run anytime for a single operator snapshot (does **not** replace the full loop after sends):
+
+`uv run python scripts/qa/run_daily_health_report.py --since-days 2`
+
+Writes `reports/out/active/current/daily_health_report_<YYYY_MM_DD>/` with verdict **READY** | **REVIEW_NEEDED** | **BLOCKED**. Does not ingest Gmail, apply suppressions, or refresh mirrors.
+
 ---
 
 ## NDR apply rules
