@@ -31,6 +31,16 @@ For dashboard/API checks without production risk:
 
 **Do not** use casual validation to mutate **Gmail**, **production SQLite**, or **production/scratch Postgres**. Mirror sync and ingest/send scripts live in **email-pipeline** and require explicit approval — see [`apps/email-pipeline/docs/CRUD_SAFETY.md`](apps/email-pipeline/docs/CRUD_SAFETY.md).
 
+### Local full check
+
+From the repo root:
+
+```bash
+./scripts/check-all.sh
+```
+
+This runs web, email-pipeline, API, and dashboard gates. It is intentionally heavier than app-specific checks. It does not run Gmail/Postgres/send/purge/apply workflows.
+
 ## Local setup
 
 ### Website (`apps/web`)
