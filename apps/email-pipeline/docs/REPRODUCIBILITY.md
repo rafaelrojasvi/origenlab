@@ -49,7 +49,7 @@ uv python install 3.12
 uv sync
 ```
 
-Optional **dependency groups** (install what you use):
+Optional **dependency groups** (install what you use) — full matrix: [`DEPENDENCY_GROUPS.md`](DEPENDENCY_GROUPS.md):
 
 ```bash
 uv sync --group lab          # OpenAI — Tatiana copilot, research automation (not daily ops)
@@ -62,7 +62,13 @@ uv sync --group ml          # torch / embeddings / hdbscan (CUDA index in pyproj
 For **full test suite** (matches CI):
 
 ```bash
-uv sync --group dev --group ui --group lab
+uv sync --group dev --group ui --group postgres --group lab
+```
+
+Frozen lockfile (CI):
+
+```bash
+uv sync --group dev --group ui --group postgres --group lab --frozen
 ```
 
 Copy env template and edit (paths, secrets):
@@ -74,7 +80,7 @@ cp .env.example .env
 ## Test command
 
 ```bash
-uv sync --group dev --group ui --group lab   # CI-equivalent deps for full pytest
+uv sync --group dev --group ui --group postgres --group lab   # CI-equivalent deps for full pytest
 uv run pytest tests -q
 ```
 

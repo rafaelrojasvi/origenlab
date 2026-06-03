@@ -54,7 +54,7 @@ Last reviewed: 2026-04-25
 
 ## 5. OpenAI and secrets
 
-- **Install:** `uv sync --group lab` (OpenAI SDK is **not** in default `uv sync`; see [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)).
+- **Install:** `uv sync --group lab` (OpenAI SDK is **not** in default `uv sync`; see [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)). For all install profiles, see [`DEPENDENCY_GROUPS.md`](DEPENDENCY_GROUPS.md).
 - **Expect** `OPENAI_API_KEY` (or script-specific env) only where the script documentation says so—**never** commit keys or log them.
 - Use **env redaction** patterns from [`core/safety.py`](../src/origenlab_email_pipeline/core/safety.py) for any new script logging.
 - **Do not** invoke OpenAI (or other paid APIs) from **import side effects** or from **tests** in CI without explicit, isolated mocks; production tests stay read-only for Tatiana as for other verticals.

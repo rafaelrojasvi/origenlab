@@ -50,7 +50,7 @@ This monorepo is meant to hold **code and docs** only; **operational data stays 
 
 **After cloning:** `uv sync` → `cp .env.example .env` → create `~/data/origenlab-email/...` and set paths.
 
-Default `uv sync` covers **daily SQLite/document tooling** only. **OpenAI** (Tatiana copilot, research automation) requires `uv sync --group lab`; **HDBSCAN / embeddings clustering** requires `uv sync --group ml`. See [REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md#setup-commands).
+Default `uv sync` covers **daily SQLite/document tooling** only. **OpenAI** (Tatiana copilot, research automation) requires `uv sync --group lab`; **HDBSCAN / embeddings clustering** requires `uv sync --group ml`. See [REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md#setup-commands). For the full dependency matrix, see [docs/DEPENDENCY_GROUPS.md](docs/DEPENDENCY_GROUPS.md).
 
 **Never paste** API keys, OAuth tokens, mailbox passwords, full paths to customer archives, or excerpts from real reports into issues or PRs.
 
