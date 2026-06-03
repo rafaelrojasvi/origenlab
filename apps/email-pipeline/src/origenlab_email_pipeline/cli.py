@@ -380,6 +380,11 @@ def build_refresh_dashboard_steps(options: RefreshDashboardOptions) -> list[Refr
     return steps
 
 
+def _refresh_dashboard_usage_line(*flags: str) -> str:
+    """Example command line for plan/help; always keeps a space before flags."""
+    return f"  {REFRESH_DASHBOARD_USAGE} {' '.join(flags)}"
+
+
 def _print_refresh_dashboard_plan(steps: list[RefreshDashboardStep], options: RefreshDashboardOptions) -> None:
     total = len(steps)
     print("refresh-dashboard — plan only (no Gmail ingest, mart rebuild, or Postgres writes)\n")
@@ -390,12 +395,12 @@ def _print_refresh_dashboard_plan(steps: list[RefreshDashboardStep], options: Re
             note = "  # break-glass: deletes mart tables"
         print(f"  {i}/{total} {step.label}{note}")
     print("\nVariants:")
-    print(f"  {REFRESH_DASHBOARD_USAGE} --apply")
-    print(f"  {REFRESH_DASHBOARD_USAGE} --apply --no-mirror")
-    print(f"  {REFRESH_DASHBOARD_USAGE} --apply --mirror-dry-run")
-    print(f"  {REFRESH_DASHBOARD_USAGE} --apply --skip-ingest")
+    print(_refresh_dashboard_usage_line("--apply"))
+    print(_refresh_dashboard_usage_line("--apply", "--no-mirror"))
+    print(_refresh_dashboard_usage_line("--apply", "--mirror-dry-run"))
+    print(_refresh_dashboard_usage_line("--apply", "--skip-ingest"))
     if options.since_days is None:
-        print(f"  {REFRESH_DASHBOARD_USAGE} --apply --since-days 14")
+        print(_refresh_dashboard_usage_line("--apply", "--since-days", "14"))
     print("\nNo alembic in this workflow; use mirror-dashboard --alembic --apply separately if needed.")
 
 
@@ -538,15 +543,14 @@ def _print_gmail_ingest_help_help() -> None:
 
 
 def _print_refresh_dashboard_help() -> None:
-    u = REFRESH_DASHBOARD_USAGE
     print(
         "refresh-dashboard — orchestrated operator stack refresh\n\n"
-        f"  {u}                    # plan only (default)\n"
-        f"  {u} --apply            # full workflow + mirror apply\n"
-        f"  {u} --apply --no-mirror\n"
-        f"  {u} --apply --mirror-dry-run\n"
-        f"  {u} --apply --skip-ingest\n"
-        f"  {u} --apply --since-days 14\n\n"
+        f"{_refresh_dashboard_usage_line()}                    # plan only (default)\n"
+        f"{_refresh_dashboard_usage_line('--apply')}            # full workflow + mirror apply\n"
+        f"{_refresh_dashboard_usage_line('--apply', '--no-mirror')}\n"
+        f"{_refresh_dashboard_usage_line('--apply', '--mirror-dry-run')}\n"
+        f"{_refresh_dashboard_usage_line('--apply', '--skip-ingest')}\n"
+        f"{_refresh_dashboard_usage_line('--apply', '--since-days', '14')}\n\n"
         "Includes build-mart -- --rebuild (break-glass). No alembic in this workflow.\n"
     )
 
