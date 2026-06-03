@@ -39,7 +39,7 @@ from origenlab_email_pipeline.cli import (
 REPO = Path(__file__).resolve().parents[1]
 _SRC = REPO / "src"
 
-PASSTHROUGH_ADVANCED = ("export-dnr", "ndr-review", "audit-overlap", "build-mart")
+PASSTHROUGH_ADVANCED = ("export-dnr", "ndr-review", "audit-overlap", "build-mart", "build-commercial-intel")
 
 
 def _env() -> dict[str, str]:
@@ -130,6 +130,19 @@ def test_build_mart_passthrough_rebuild_flag() -> None:
     argv = build_subcommand_argv("build-mart", ["--rebuild"])
     assert argv[-1] == "--rebuild"
     assert argv[1].endswith("scripts/mart/build_business_mart.py")
+
+
+def test_build_commercial_intel_subcommand_argv() -> None:
+    argv = build_subcommand_argv("build-commercial-intel")
+    assert argv[0] == sys.executable
+    assert argv[1].endswith("scripts/commercial/build_commercial_intel_v1.py")
+    assert len(argv) == 2
+
+
+def test_build_commercial_intel_passthrough_reprocess_days() -> None:
+    argv = build_subcommand_argv("build-commercial-intel", ["--", "--reprocess-days", "7"])
+    assert argv[-2:] == ["--reprocess-days", "7"]
+    assert argv[1].endswith("scripts/commercial/build_commercial_intel_v1.py")
 
 
 def test_gmail_ingest_help_always_builds_script_help_only() -> None:

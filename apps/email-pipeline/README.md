@@ -24,6 +24,8 @@ uv run origenlab post-send-digest
 uv run origenlab export-dnr
 uv run origenlab ndr-review
 uv run origenlab audit-overlap
+uv run origenlab build-mart
+uv run origenlab build-commercial-intel   # after ingest + build-mart; incremental commercial_* refresh
 uv run origenlab gmail-ingest              # INBOX + Sent; optional: -- --since-days 14
 uv run origenlab gmail-ingest-folders      # if [Gmail]/Enviados label differs
 uv run origenlab mirror-dashboard          # Postgres mirror dry-run (needs Postgres URL env)
