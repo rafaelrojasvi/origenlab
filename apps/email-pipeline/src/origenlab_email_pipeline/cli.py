@@ -16,7 +16,12 @@ GMAIL_INGEST_INBOX_FOLDER = "INBOX"
 GMAIL_INGEST_SENT_FOLDER = "[Gmail]/Enviados"
 
 MIRROR_DASHBOARD_SYNC_SCRIPT = "scripts/sync/sync_dashboard_postgres_mirror.py"
-POSTGRES_ENV_VARS: tuple[str, ...] = ("ORIGENLAB_POSTGRES_URL", "ALEMBIC_DATABASE_URL")
+# Match resolve_postgres_url() in dashboard_postgres_sync / mart_core_postgres_migrate.
+POSTGRES_ENV_VARS: tuple[str, ...] = (
+    "ORIGENLAB_POSTGRES_URL",
+    "ALEMBIC_DATABASE_URL",
+    "ORIGENLAB_CLOUD_POSTGRES_URL",
+)
 
 # Subcommand -> script path relative to apps/email-pipeline repo root (1:1 wrappers).
 SUBCOMMAND_SCRIPTS: dict[str, str] = {
@@ -136,6 +141,22 @@ def missing_postgres_env_message() -> str:
     )
 
 
+def mirror_dashboard_uses_cloud_postgres_only() -> bool:
+    """True when sync resolves ORIGENLAB_CLOUD_POSTGRES_URL (no scratch URL env set)."""
+    if (os.environ.get("ORIGENLAB_POSTGRES_URL") or "").strip():
+        return False
+    if (os.environ.get("ALEMBIC_DATABASE_URL") or "").strip():
+        return False
+    return bool((os.environ.get("ORIGENLAB_CLOUD_POSTGRES_URL") or "").strip())
+
+
+def mirror_dashboard_sync_safety_flags() -> list[str]:
+    """Extra sync flags when target is non-scratch (e.g. Render cloud mirror)."""
+    if mirror_dashboard_uses_cloud_postgres_only():
+        return ["--allow-non-scratch-postgres"]
+    return []
+
+
 def parse_mirror_dashboard_wrapper_args(argv: list[str]) -> tuple[bool, bool, list[str]]:
     """Return ``(apply, alembic, passthrough)`` for mirror-dashboard wrapper flags."""
     apply = False
@@ -176,7 +197,11 @@ def build_mirror_dashboard_sync_argv(
     cmd = [sys.executable, str(mirror_dashboard_sync_script_path())]
     if not apply:
         cmd.append("--dry-run")
-    cmd.extend(normalize_passthrough_args(passthrough or []))
+    extra = normalize_passthrough_args(passthrough or [])
+    for flag in mirror_dashboard_sync_safety_flags():
+        if flag not in extra:
+            cmd.append(flag)
+    cmd.extend(extra)
     return cmd
 
 
@@ -330,6 +355,8 @@ def _print_mirror_dashboard_help() -> None:
         "  uv run origenlab mirror-dashboard --alembic --apply\n"
         "  uv run origenlab mirror-dashboard -- --only mart --json-out path\n\n"
         f"Requires {' or '.join(POSTGRES_ENV_VARS)}.\n"
+        "When only ORIGENLAB_CLOUD_POSTGRES_URL is set, adds --allow-non-scratch-postgres "
+        "(Render/cloud target).\n"
         f"Advanced: {MIRROR_DASHBOARD_SYNC_SCRIPT}\n"
     )
 

@@ -27,7 +27,7 @@ uv run origenlab mirror-dashboard --apply
 uv run origenlab mirror-dashboard --alembic --apply
 ```
 
-Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. Pass script flags after ``--`` where supported. **`gmail-ingest`** runs INBOX then `[Gmail]/Enviados` with `--skip-duplicate-message-id`; **rejects `--replace-source`**. **`mirror-dashboard`** defaults to sync `--dry-run`; **`--apply`** writes Postgres; **`--alembic --apply`** runs `alembic upgrade head` first. Requires **`ORIGENLAB_POSTGRES_URL`** or **`ALEMBIC_DATABASE_URL`**. **Advanced fallback** = `scripts/…` paths in the table below.
+Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. Pass script flags after ``--`` where supported. **`gmail-ingest`** runs INBOX then `[Gmail]/Enviados` with `--skip-duplicate-message-id`; **rejects `--replace-source`**. **`mirror-dashboard`** defaults to sync `--dry-run`; **`--apply`** writes Postgres; **`--alembic --apply`** runs `alembic upgrade head` first. Requires **`ORIGENLAB_POSTGRES_URL`**, **`ALEMBIC_DATABASE_URL`**, or **`ORIGENLAB_CLOUD_POSTGRES_URL`**. **Advanced fallback** = `scripts/…` paths in the table below.
 
 | CLI subcommand | Advanced fallback (`scripts/…`) | Notes |
 |----------------|----------------------------------|--------|
