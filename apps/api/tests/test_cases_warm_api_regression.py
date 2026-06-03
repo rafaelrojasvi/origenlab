@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,11 @@ from origenlab_api.main import create_app
 from origenlab_api.settings import Settings
 
 _CONTACTO_INBOX = "gmail:contacto@origenlab.cl/INBOX"
+
+
+def _recent_iso(days_ago: int = 1, hour: int = 10) -> str:
+    day = date.today() - timedelta(days=days_ago)
+    return f"{day.isoformat()}T{hour:02d}:00:00-04:00"
 
 
 def _warm_client(tmp_path: Path, rows: list[tuple]) -> TestClient:
@@ -60,7 +66,7 @@ def test_warm_api_payment_admin_category_filter(tmp_path: Path) -> None:
         tmp_path,
         [
             (
-                "2026-05-22T11:34:00-04:00",
+                _recent_iso(days_ago=1, hour=11),
                 _CONTACTO_INBOX,
                 "INBOX",
                 "serviciodetransferencias@bancochile.cl",
@@ -81,7 +87,7 @@ def test_warm_api_vendor_logistics_category_filter(tmp_path: Path) -> None:
         tmp_path,
         [
             (
-                "2026-05-22T16:09:00-04:00",
+                _recent_iso(days_ago=1, hour=16),
                 _CONTACTO_INBOX,
                 "INBOX",
                 "Monica Silva <monica.silva@dhl.com>",
@@ -94,7 +100,7 @@ def test_warm_api_vendor_logistics_category_filter(tmp_path: Path) -> None:
     ).json()
     assert len(data["items"]) == 1
     assert data["items"][0]["contact_email"] == "monica.silva@dhl.com"
-    assert data["items"][0]["category"] == "vendor_logistics"
+    assert data["items"][0]["category"] == "logistics_admin"
 
 
 def test_warm_api_default_excludes_internal_contacto(tmp_path: Path) -> None:
@@ -102,14 +108,14 @@ def test_warm_api_default_excludes_internal_contacto(tmp_path: Path) -> None:
         tmp_path,
         [
             (
-                "2026-05-22T10:00:00-04:00",
+                _recent_iso(days_ago=1, hour=10),
                 _CONTACTO_INBOX,
                 "INBOX",
                 "contacto@origenlab.cl",
                 "Re: Quotation Request",
             ),
             (
-                "2026-05-22T11:34:00-04:00",
+                _recent_iso(days_ago=1, hour=11),
                 _CONTACTO_INBOX,
                 "INBOX",
                 "serviciodetransferencias@bancochile.cl",

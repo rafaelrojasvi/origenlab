@@ -18,6 +18,11 @@ from origenlab_api.settings import Settings
 _CONTACTO_SENT = "gmail:contacto@origenlab.cl/[Gmail]/Enviados"
 
 
+def _recent_iso(days_ago: int = 1, hour: int = 10) -> str:
+    day = date.today() - timedelta(days=days_ago)
+    return f"{day.isoformat()}T{hour:02d}:00:00-04:00"
+
+
 def _client(tmp_path: Path, db: Path, *, with_emails: bool = True) -> TestClient:
     active = tmp_path / "current"
     active.mkdir(parents=True)
@@ -48,7 +53,7 @@ def _client(tmp_path: Path, db: Path, *, with_emails: bool = True) -> TestClient
         conn.execute(
             "INSERT INTO emails (date_iso, source_file, folder, sender, subject) VALUES (?, ?, ?, ?, ?)",
             (
-                "2026-05-19T10:00:00-04:00",
+                _recent_iso(days_ago=1, hour=10),
                 _CONTACTO_SENT,
                 "[Gmail]/Enviados",
                 "client@example.cl",
@@ -58,7 +63,7 @@ def _client(tmp_path: Path, db: Path, *, with_emails: bool = True) -> TestClient
         conn.execute(
             "INSERT INTO emails (date_iso, source_file, folder, sender, subject) VALUES (?, ?, ?, ?, ?)",
             (
-                "2026-05-19T11:00:00-04:00",
+                _recent_iso(days_ago=1, hour=11),
                 "other:mailbox@elsewhere/INBOX",
                 "INBOX",
                 "mailer-daemon@google.com",

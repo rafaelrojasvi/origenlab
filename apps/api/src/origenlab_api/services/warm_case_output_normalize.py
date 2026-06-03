@@ -247,6 +247,8 @@ def normalize_warm_case_items(
     positive_signal_only: bool = False,
 ) -> list[WarmCaseItem]:
     needle = (category_filter or "").strip().lower()
+    if needle:
+        needle = _LEGACY_CATEGORY_ALIASES.get(needle, needle)
     out: list[WarmCaseItem] = []
     for item in items:
         normalized = normalize_warm_case_item(item, include_noise=include_noise)
