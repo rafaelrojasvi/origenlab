@@ -30,7 +30,7 @@ The email-pipeline stack is **operationally sound** but **organically large**: *
 
 | # | Target | Why | Suggested class | Risk |
 |---|--------|-----|-----------------|------|
-| 1 | `scripts/mart/build_business_mart.py` (~606 LOC, large `main()`) | Mart rebuild DELETEs tables; logic belongs in `src` with tests | **REFACTOR_SPLIT** | High |
+| 1 | `scripts/mart/build_business_mart.py` (~40 LOC CLI + `core/mart/build_business_mart_cli.py`) | Mart rebuild DELETEs tables; CLI orchestration extracted Phase **5P** | **REFACTOR_SPLIT_DONE** (Phase 5P / Stage 6F1) | High (break-glass unchanged) |
 | 2 | `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` (~365 LOC) | Daily Sent truth; IMAP/OAuth/insert loop in one file | **REFACTOR_SPLIT** | High |
 | 3 | `scripts/qa/export_contacted_lead_overlap_audit.py` (~828 LOC) | Duplicates gate concepts; hard to maintain | **REFACTOR_SPLIT** | Medium |
 | 4 | `scripts/qa/export_email_conversation_intelligence.py` (~802 LOC) | Large read-only export; low daily use | **REFACTOR_SPLIT** or **DEPRECATE_CANDIDATE** if unused | Medium |
@@ -277,19 +277,13 @@ These are **implemented and used** but missing strict SCRIPT_MAP table tags (pla
 
 ---
 
-### 2. `scripts/mart/build_business_mart.py` (606 LOC)
+### 2. `scripts/mart/build_business_mart.py` — **REFACTOR_SPLIT_DONE (Phase 5P / Stage 6F1)**
 
-**Today:** SAFETY banner present; `main()` holds DELETE rebuild, `document_master` build, contact/org/opportunity loops, CLI flags (`--rebuild`, `--dashboard-fast`, `--canonical-only`).
+**Today:** SAFETY banner on script; thin entrypoint calls `run_build_business_mart_from_argv()` in `core/mart/build_business_mart_cli.py` (argparse, migrate, `--rebuild` DELETE, mode prints, `MartBuildOptions`). Stage build in `core/mart/build_runner.py` (`run_business_mart_build`).
 
-| Extract to | Functions |
-|------------|-----------|
-| `src/origenlab_email_pipeline/core/mart/build_runner.py` (new) | `run_business_mart_build(conn, *, rebuild, dashboard_fast, ...)` |
-| `src/origenlab_email_pipeline/core/mart/document_master.py` | `_document_signature`, document insert loop |
-| Existing `business_mart.py` | Keep classification helpers |
+**CLI keeps:** All flags and stdout (`Done.`, `created_at|…`); operator path `scripts/mart/build_business_mart.py` unchanged.
 
-**CLI keeps:** All current flags and stdout progress; thin `main()` calls `run_business_mart_build`.
-
-**Tests before refactor:** `test_build_business_mart.py`; add fixture SQLite tests per stage (`--rebuild` deletes, `--skip-document-master-if-unchanged`).
+**Tests:** `test_build_business_mart.py`, `test_build_business_mart_phase2.py` (subprocess + slack normalization locks).
 
 ---
 
