@@ -8,7 +8,9 @@ Last reviewed: 2026-06-02
 
 **Not enough alone:** mirror-only refresh when Gmail changed — ingest + NDR review + safety exports must run first.
 
-Related: [`CURRENT_SAFETY_CHECKPOINT.md`](CURRENT_SAFETY_CHECKPOINT.md) · [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`SCRIPT_MAP.md`](../SCRIPT_MAP.md)
+Related: [`CURRENT_SAFETY_CHECKPOINT.md`](CURRENT_SAFETY_CHECKPOINT.md) · [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`SCRIPT_MAP.md`](../SCRIPT_MAP.md) · [`OPERATOR_COMMAND_SURFACE.md`](../OPERATOR_COMMAND_SURFACE.md)
+
+**Preferred CLI (Phase 6C):** where a step maps to a unified subcommand, use `uv run python -m origenlab_email_pipeline.cli <subcommand>` first; script paths below are **advanced/manual** fallbacks (same behavior).
 
 ---
 
@@ -22,18 +24,18 @@ When **Sent mail or INBOX NDRs changed**, run the **full loop** below (at least 
 
 ## Steps (from `apps/email-pipeline/`)
 
-| # | Step | Command / script |
-|---|------|------------------|
+| # | Step | Command (preferred · advanced fallback) |
+|---|------|----------------------------------------|
 | 1 | **Gmail ingest (read-only IMAP)** | `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder INBOX --since-days N --skip-duplicate-message-id` then same for `[Gmail]/Enviados`. No `--replace-source`. |
 | 2 | **NDR dry-run** | `uv run python scripts/tools/flag_ndr_bounces_from_contacto.py --since-days N` (default: print-only) |
 | 3 | **Review proposed suppressions** | Read output; classify permanent vs delay vs `bounce_other`; build allowlist if applying |
 | 4 | **Apply exact suppressions (operator-approved only)** | Targeted: `--emails-file PATH --only-code bounce_no_such_user` (or `bounce_other`) **`--apply`**. See [NDR apply rules](#ndr-apply-rules). |
 | 5 | **Contacted universe** | `uv run python scripts/leads/audit_contacted_universe.py` |
-| 6 | **Safety memory** | `uv run python scripts/qa/refresh_outbound_safety_memory.py` |
-| 7 | **Post-send digest** | `uv run python scripts/qa/build_post_send_digest.py --since-days N` (**after** step 5) |
+| 6 | **Safety memory** | **`uv run python -m origenlab_email_pipeline.cli refresh-safety`** · advanced: `scripts/qa/refresh_outbound_safety_memory.py` |
+| 7 | **Post-send digest** | **`uv run python -m origenlab_email_pipeline.cli post-send-digest -- --since-days N`** (**after** step 5) · advanced: `scripts/qa/build_post_send_digest.py` |
 | 8 | **Mirror (Gmail ingest off)** | `GMAIL_SINCE_DAYS=0 RUN_GMAIL_INGEST=0 DASHBOARD_FAST=1 RUN_LEAD_RESEARCH_MIRROR=1 RUN_OUTBOUND_SIDECAR_MIRROR=1 bash scripts/ops/refresh_render_dashboard_once.sh` |
 | 9 | **Prospectos drift (read-only)** | `uv run python scripts/qa/audit_prospectos_safety_drift.py` — drift ≠ send failure |
-| 10 | **Operator status + verifiers** | `uv run python scripts/qa/operator_status.py`; check `/tmp/outbound_sidecar_mirror_verify.json`, `/tmp/lead_research_mirror_verify.json`, `/tmp/render_dashboard_mirror_verify.json` (`ok` / assertions passed) |
+| 10 | **Operator status + verifiers** | **`uv run python -m origenlab_email_pipeline.cli status`** · advanced: `scripts/qa/operator_status.py`; check `/tmp/outbound_sidecar_mirror_verify.json`, `/tmp/lead_research_mirror_verify.json`, `/tmp/render_dashboard_mirror_verify.json` (`ok` / assertions passed) |
 
 Adjust `N` (`--since-days`) to cover the campaign window (often `1`–`2`).
 
@@ -41,7 +43,8 @@ Adjust `N` (`--since-days`) to cover the campaign window (often `1`–`2`).
 
 Run anytime for a single operator snapshot (does **not** replace the full loop after sends):
 
-`uv run python scripts/qa/run_daily_health_report.py --since-days 2`
+`uv run python -m origenlab_email_pipeline.cli daily-health -- --since-days 2`  
+*Advanced:* `scripts/qa/run_daily_health_report.py --since-days 2`
 
 Writes `reports/out/active/current/daily_health_report_<YYYY_MM_DD>/` with verdict **READY** | **REVIEW_NEEDED** | **BLOCKED**. Does not ingest Gmail, apply suppressions, or refresh mirrors.
 
@@ -76,7 +79,7 @@ Allowlist files under `reports/in/` are **gitignored** — do not commit.
 
 ## Historical orchestrator (removed Phase 5A)
 
-The **2026-06-01 one-off** shell drivers `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` were **removed** in Phase 5A. The dated QA scripts `build_manual_outreach_2026_06_01_digest.py` and `apply_manual_outreach_2026_06_01_corrections.py` (and the frozen recipient registry module) were **removed** in Phase 5K — use **`build_post_send_digest.py`** (step 7 below) instead. Those removed shells ran **broad NDR `--apply`** in some steps — do not recreate that pattern. For new waves, follow **this doc** and use targeted allowlists.
+The **2026-06-01 one-off** shell drivers `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` were **removed** in Phase 5A. The dated QA scripts `build_manual_outreach_2026_06_01_digest.py` and `apply_manual_outreach_2026_06_01_corrections.py` (and the frozen recipient registry module) were **removed** in Phase 5K — use **`cli post-send-digest`** / **`build_post_send_digest.py`** (step 7 below) instead. Those removed shells ran **broad NDR `--apply`** in some steps — do not recreate that pattern. For new waves, follow **this doc** and use targeted allowlists.
 
 ---
 

@@ -2,27 +2,27 @@
 
 Status: canonical (navigation)  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-02 (Phase 6A)
+Last reviewed: 2026-06-02 (Phase 6C)
 
 **Start here** for *what to run*. Full tags, removed paths, and safety prose: [`SCRIPT_MAP.md`](SCRIPT_MAP.md). Procedures: [`RUNBOOK.md`](RUNBOOK.md). Post-send order: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md).
 
-## Preferred unified CLI (Phase 6B)
+## Preferred unified CLI (default — Phase 6B / 6C)
 
-Thin wrapper — same behavior as the underlying scripts; pass script flags after ``--``:
+**Use these commands first** — thin wrapper, same behavior as the underlying scripts. Extra script flags go after ``--`` (e.g. `validate-csvs -- --file path --kind marketing_contacts --strict`).
 
 ```bash
 cd apps/email-pipeline
 uv run python -m origenlab_email_pipeline.cli --help
-uv run python -m origenlab_email_pipeline.cli status -- --json
+uv run python -m origenlab_email_pipeline.cli status
 uv run python -m origenlab_email_pipeline.cli daily-health
 uv run python -m origenlab_email_pipeline.cli refresh-safety
-uv run python -m origenlab_email_pipeline.cli validate-csvs -- --strict
+uv run python -m origenlab_email_pipeline.cli validate-csvs
 uv run python -m origenlab_email_pipeline.cli check-readiness
 uv run python -m origenlab_email_pipeline.cli post-send-digest
 ```
 
-| Subcommand | Delegates to |
-|------------|----------------|
+| Subcommand | Advanced fallback (manual) |
+|------------|----------------------------|
 | `status` | `scripts/qa/operator_status.py` |
 | `daily-health` | `scripts/qa/run_daily_health_report.py` |
 | `refresh-safety` | `scripts/qa/refresh_outbound_safety_memory.py` |
@@ -30,7 +30,7 @@ uv run python -m origenlab_email_pipeline.cli post-send-digest
 | `check-readiness` | `scripts/qa/check_outbound_readiness.py` |
 | `post-send-digest` | `scripts/qa/build_post_send_digest.py` |
 
-**Advanced / manual:** run `scripts/...` paths directly (tables below) when you need a script not yet exposed on the wrapper.
+Tables below list **advanced fallback** paths where a unified subcommand exists; run the CLI row above instead when listed.
 
 **Working directory:** `cd apps/email-pipeline` · **Truth today:** SQLite + Gmail Sent in `emails` · **Not send approval:** Postgres mirror / dashboard LISTO.
 
@@ -42,12 +42,12 @@ uv run python -m origenlab_email_pipeline.cli post-send-digest
 
 Two lanes: **volume marketing** (`reviewed_marketing_contacts.csv` → `send_ready_marketing.csv`) and **precision leads** (`reviewed_deepsearch.csv` → `send_ready.csv`). Workspace: `reports/out/active/current/`.
 
-| Path | Purpose | Mutates? | When to use |
-|------|---------|----------|-------------|
+| Preferred / path | Purpose | Mutates? | When to use |
+|------------------|---------|----------|-------------|
 | `scripts/qa/prepare_outbound_campaign_workspace.py` | Init/archive `active/current/` + manifest | Reports | Before a new outbound round |
 | `scripts/qa/export_do_not_repeat_master.py` | DNR lists for DeepSearch + volume processor | Reports | Start of volume lane / weekly refresh |
 | `scripts/research/run_deep_research_prospecting.py` | Automated research → review-ready batch (no send) | Reports | Weekly/heavy or light daily research |
-| `scripts/qa/validate_campaign_csvs.py` | CSV contract checks | No | Before process/import; after DeepSearch export |
+| **`cli validate-csvs`** · `scripts/qa/validate_campaign_csvs.py` | CSV contract checks | No | Before process/import; after DeepSearch export |
 | `scripts/leads/process_broad_marketing_contacts.py` | Gate volume contacts → send-ready marketing | Reports | After `reviewed_marketing_contacts.csv` |
 | `scripts/leads/export_next_marketing_recipients.py` | `send_ready.csv` from `lead_master` + gate | Reports | Precision-style list from lead master |
 | `scripts/leads/run_current_campaign_pipeline.py` | Precision lane: prepare / process-reviewed / post-send | Reports; SQLite with `--apply` on process-reviewed | Named precision campaign slug |
@@ -56,19 +56,19 @@ Two lanes: **volume marketing** (`reviewed_marketing_contacts.csv` → `send_rea
 | `scripts/leads/mark_sent_batch_contacted.py` | Post-send `outreach_contact_state` | SQLite | After human send; real batch metadata |
 | `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Gmail → `emails` (Sent/inbox) | SQLite | Same day/week as send; post-send ingest |
 | `scripts/qa/export_outreach_contacted_all.py` | Auxiliary contacted-all CSV | Reports | Safety chain / anti-repeat inputs |
-| `scripts/qa/refresh_outbound_safety_memory.py` | DNR + contacted-all + strict validation chain | Reports; reads SQLite | Daily or before send; stops on hard failure |
+| **`cli refresh-safety`** · `scripts/qa/refresh_outbound_safety_memory.py` | DNR + contacted-all + strict validation chain | Reports; reads SQLite | Daily or before send; stops on hard failure |
 
 ---
 
 ## 2. Safety / audit commands (OPS_AUDIT / OPS_CORE)
 
-Trust checks and hygiene — **not** the send list builders. Prefer **`operator_status.py`** before ambiguous sends.
+Trust checks and hygiene — **not** the send list builders. Prefer **`cli status`** before ambiguous sends.
 
-| Path | Purpose | Mutates? | When to use |
-|------|---------|----------|-------------|
-| `scripts/qa/operator_status.py` | READY / CAUTION / BLOCKED snapshot | No | Quick health before outbound work |
-| `scripts/qa/check_outbound_readiness.py` | Config / readiness checks | No | Pre-flight debugging |
-| `scripts/qa/run_daily_health_report.py` | Combined health (NDR dry-run, drift, mirror hints) | Reports | Daily ops review |
+| Preferred / path | Purpose | Mutates? | When to use |
+|------------------|---------|----------|-------------|
+| **`cli status`** · `scripts/qa/operator_status.py` | READY / CAUTION / BLOCKED snapshot | No | Quick health before outbound work |
+| **`cli check-readiness`** · `scripts/qa/check_outbound_readiness.py` | Config / readiness checks | No | Pre-flight debugging |
+| **`cli daily-health`** · `scripts/qa/run_daily_health_report.py` | Combined health (NDR dry-run, drift, mirror hints) | Reports | Daily ops review |
 | `scripts/qa/validate_contacted_csv_coverage.py` | Strict contacted CSV vs Sent/gate | No | Part of `refresh_outbound_safety_memory` |
 | `scripts/qa/export_contacted_lead_overlap_audit.py` | Overlap vs Sent, state, suppressions | Reports | Pre-import / pre-send |
 | `scripts/qa/export_gate_audit_csv.py` | Per-row gate flags | Reports | Explain why rows blocked |
@@ -86,13 +86,13 @@ Trust checks and hygiene — **not** the send list builders. Prefer **`operator_
 
 Run after Sent mail, NDRs, or suppression changes. Order: [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md).
 
-| Path | Purpose | Mutates? | When to use |
-|------|---------|----------|-------------|
+| Preferred / path | Purpose | Mutates? | When to use |
+|------------------|---------|----------|-------------|
 | `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Ingest Sent (no `--replace-source`) | SQLite | Refresh Gmail evidence |
 | `scripts/tools/flag_ndr_bounces_from_contacto.py` | NDR / optional human-reported scan; suppression apply | SQLite (`--apply`) | After bounces; prefer `--emails-file` + `--only-code` |
 | `scripts/leads/audit_contacted_universe.py` | Rebuild exclusion CSVs from SQLite | Reports | Before digest |
-| `scripts/qa/refresh_outbound_safety_memory.py` | Safety export chain | Reports | Post-send refresh |
-| `scripts/qa/build_post_send_digest.py` | Post-send digest CSV/MD/JSON | Reports | After `audit_contacted_universe` |
+| **`cli refresh-safety`** · `scripts/qa/refresh_outbound_safety_memory.py` | Safety export chain | Reports | Post-send refresh |
+| **`cli post-send-digest`** · `scripts/qa/build_post_send_digest.py` | Post-send digest CSV/MD/JSON | Reports | After `audit_contacted_universe` |
 | `scripts/qa/audit_prospectos_safety_drift.py` | Prospect vs safety sidecars | Reports | Drift check (≠ send failure) |
 | `scripts/qa/audit_institution_grouping.py` | Institution grouping audit | Reports | Strategy only |
 | `scripts/ops/refresh_render_dashboard_once.sh` | Postgres mirror refresh (optional) | Postgres mirror | Reporting only; not send truth |

@@ -6,7 +6,7 @@ Last reviewed: 2026-06-02 (Phase 1 simplification map — see [`audits/CODEBASE_
 
 **This document is the canonical operator map** for outbound and campaign work. It is **navigation and safety labeling only** — behavior lives in code and in [`RUNBOOK.md`](RUNBOOK.md).
 
-**Practical starting point:** [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md) — short tables of daily, safety, post-send, campaign, Postgres/parked, break-glass, and lab commands (path, purpose, mutates?, when to use). Use **SCRIPT_MAP** below for full tags, removed phases, and break-glass detail.
+**Practical starting point:** [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md) — **preferred** `uv run python -m origenlab_email_pipeline.cli <subcommand>` for status, daily-health, refresh-safety, validate-csvs, check-readiness, post-send-digest; short tables with advanced `scripts/…` fallbacks. Use **SCRIPT_MAP** below for full tags, removed phases, and break-glass detail.
 
 **Canonical working directory:** `apps/email-pipeline/` (`cd apps/email-pipeline`).
 
