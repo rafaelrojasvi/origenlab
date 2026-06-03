@@ -15,6 +15,7 @@ from removal_evidence import (
     REMOVED_PHASE5D_TARGETS,
     REMOVED_PHASE5K_TARGETS,
     REMOVED_PHASE5Q_TARGETS,
+    REMOVED_PHASE5R_TARGETS,
     _rg_files,
     build_removal_evidence_markdown,
     reference_counts,
@@ -49,6 +50,9 @@ def test_generate_removal_evidence_report() -> None:
     for row in REMOVED_PHASE5Q_TARGETS:
         assert row["path"] in body
         assert "Removed in Phase 5Q" in body
+    for row in REMOVED_PHASE5R_TARGETS:
+        assert row["path"] in body
+        assert "Removed in Phase 5R" in body
 
 
 def test_phase5a_removed_shells_documented_in_script_map() -> None:
@@ -103,6 +107,15 @@ def test_phase5q_removed_reported_ndr_documented_in_script_map() -> None:
         assert not (REPO / row["path"]).is_file(), row["path"]
 
 
+def test_phase5r_removed_legacy_contacts_qa_script_documented_in_script_map() -> None:
+    smap = (REPO / "docs/SCRIPT_MAP.md").read_text(encoding="utf-8")
+    assert "legacy_contacts_2016_2019.py" in smap
+    assert "test_legacy_contacts_2016_2019.py" in smap
+    for row in REMOVED_PHASE5R_TARGETS:
+        assert Path(row["path"]).name in smap or "Phase 5R" in smap or "Removed Phase 5R" in smap, row["path"]
+        assert not (REPO / row["path"]).is_file(), row["path"]
+
+
 @pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5A_TARGETS])
 def test_phase5a_removed_shells_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5A removed: {rel}"
@@ -133,6 +146,18 @@ def test_phase5q_removed_reported_ndr_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5Q removed: {rel}"
 
 
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5R_TARGETS])
+def test_phase5r_removed_legacy_contacts_qa_script_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5R removed: {rel}"
+
+
+def test_phase5r_removed_legacy_contacts_qa_script_in_evidence_markdown() -> None:
+    md = build_removal_evidence_markdown()
+    for row in REMOVED_PHASE5R_TARGETS:
+        assert row["path"] in md
+        assert "Removed in Phase 5R" in md
+
+
 def test_refactor_phase3_targets_documented() -> None:
     audit = (REPO / "docs/audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md").read_text(encoding="utf-8")
     for row in REFACTOR_PHASE3_TARGETS:
@@ -146,6 +171,7 @@ def test_evidence_markdown_has_removed_phase_rows() -> None:
     assert "Removed in Phase 5C" in md
     assert "Removed in Phase 5D" in md
     assert "Removed in Phase 5K" in md
+    assert "Removed in Phase 5R" in md
     assert "## Deprecated / wrapper removal candidates" in md
     if not DEPRECATED_REMOVAL_TARGETS:
         assert md.count("| `scripts/tools/flag_reported_non_delivery_from_contacto.py` |") == 1

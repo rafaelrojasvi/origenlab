@@ -4,7 +4,7 @@ Status: generated reference (read-only audit)
 Owner: email-pipeline-maintainers
 Last reviewed: 2026-06-02
 
-**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper; Phase **5K** removed 2026-06-01 manual outreach registry and dated QA scripts; Phase **5Q** removed legacy `flag_reported_non_delivery_from_contacto.py` (canonical `--include-reported-non-delivery`).
+**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper; Phase **5K** removed 2026-06-01 manual outreach registry and dated QA scripts; Phase **5Q** removed legacy `flag_reported_non_delivery_from_contacto.py` (canonical `--include-reported-non-delivery`); Phase **5R** removed orphan `build_legacy_contacts_2016_2019_review.py` (library + tests remain).
 
 Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`
 
@@ -56,6 +56,12 @@ Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_
 | Path | Replacement | Removed phase |
 |------|-------------|---------------|
 | `scripts/tools/flag_reported_non_delivery_from_contacto.py` | scripts/tools/flag_ndr_bounces_from_contacto.py --include-reported-non-delivery + scripts/qa/build_ndr_review_queue.py | 5Q |
+
+## Removed in Phase 5R (2026-06-02)
+
+| Path | Replacement | Removed phase |
+|------|-------------|---------------|
+| `scripts/qa/build_legacy_contacts_2016_2019_review.py` | src/origenlab_email_pipeline/lead_research/legacy_contacts_2016_2019.py + tests/test_legacy_contacts_2016_2019.py | 5R |
 
 ## Phase 3 refactor targets (keep entrypoints; lock behavior first)
 
