@@ -95,7 +95,7 @@ Downloads **all-MiniLM-L6-v2** once, encodes sample sentences on **CUDA**:
 
 ```bash
 source .venv/bin/activate
-python scripts/ml/test_real_embeddings.py
+python scripts/ml/explore_email_clusters.py --help
 ```
 
 Expect: `device: cuda`, `shape: (3, 384)`, `device: cuda:0`, `OK: embedding smoke test passed`.

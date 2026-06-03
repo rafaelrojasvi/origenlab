@@ -293,6 +293,8 @@ Shared helpers imported by other `scripts/` CLIs; not daily outbound or mirror o
 
 **Removed Phase 5R (2026-06-02):** `scripts/qa/build_legacy_contacts_2016_2019_review.py` — use [`legacy_contacts_2016_2019.py`](../src/origenlab_email_pipeline/lead_research/legacy_contacts_2016_2019.py) (library) and [`test_legacy_contacts_2016_2019.py`](../tests/test_legacy_contacts_2016_2019.py) for behavior contracts.
 
+**Removed Phase 5S (2026-06-02):** zero-ref LAB scripts — `scripts/ml/test_real_embeddings.py` (`uv sync --group ml` / [`explore_email_clusters.py`](../scripts/ml/explore_email_clusters.py) for embeddings), `scripts/leads/campaigns/apply_deepresearch_top10_contacts_to_sheet.py` (frozen/manual DR50 sheet workflow), `scripts/dataset/review_marketing_labels_cli.py` (Tatiana cohort workflow / external labeling).
+
 ---
 
 ## Lab scripts (LAB)
