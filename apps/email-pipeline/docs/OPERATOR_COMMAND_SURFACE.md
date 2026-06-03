@@ -2,7 +2,7 @@
 
 Status: canonical (navigation)  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-02 (Phase 6G)
+Last reviewed: 2026-06-03 (Phase 7A)
 
 Procedures: [`RUNBOOK.md`](RUNBOOK.md) · post-send: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) · tags / break-glass: [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
@@ -20,9 +20,11 @@ uv run origenlab post-send-digest
 uv run origenlab export-dnr
 uv run origenlab ndr-review
 uv run origenlab audit-overlap
+uv run origenlab gmail-ingest
+uv run origenlab gmail-ingest-folders
 ```
 
-Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. Pass script flags after ``--`` (e.g. `uv run origenlab validate-csvs -- --file … --strict`). **Advanced fallback** = `scripts/…` paths in the table below.
+Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. Pass script flags after ``--`` where supported. **`gmail-ingest`** runs INBOX then `[Gmail]/Enviados` with `--skip-duplicate-message-id`; **rejects `--replace-source`**. **`gmail-ingest-folders`** = ingest `--list-folders` only. **Advanced fallback** = `scripts/…` paths in the table below.
 
 | CLI subcommand | Advanced fallback (`scripts/…`) | Notes |
 |----------------|----------------------------------|--------|
@@ -36,7 +38,9 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `ndr-review` | `qa/build_ndr_review_queue.py` | Read-only NDR batches |
 | `audit-overlap` | `qa/export_contacted_lead_overlap_audit.py` | Pre-send overlap |
 | `build-mart` | `mart/build_business_mart.py` | Break-glass; `--rebuild` deletes mart tables |
-| `gmail-ingest-help` | `ingest/05_workspace_gmail_imap_to_sqlite.py` | **Help only** — run ingest script for real IMAP |
+| `gmail-ingest` | `ingest/05_workspace_gmail_imap_to_sqlite.py` (INBOX + Sent) | SQLite; daily refresh; rejects `--replace-source` |
+| `gmail-ingest-folders` | same (`--list-folders`) | No; discover Sent label if `[Gmail]/Enviados` differs |
+| `gmail-ingest-help` | same (`--help` only) | No; ingest flags reference |
 
 **Truth:** SQLite + Gmail Sent in `emails`. Postgres / dashboard LISTO ≠ send approval.
 
@@ -44,7 +48,7 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 
 ---
 
-## 1. Daily commands (no CLI wrapper yet)
+## 1. Daily commands
 
 Workspace: `reports/out/active/current/`. Volume: `reviewed_marketing_contacts.csv` → `send_ready_marketing.csv`. Precision: `reviewed_deepsearch.csv` → `send_ready.csv`.
 
@@ -57,7 +61,7 @@ Workspace: `reports/out/active/current/`. Volume: `reviewed_marketing_contacts.c
 | `scripts/leads/process_broad_marketing_contacts.py` | Volume gate → send-ready | Reports | After reviewed marketing CSV |
 | `scripts/leads/run_current_campaign_pipeline.py` | Precision prepare / import / post-send | Reports; SQLite with `--apply` | Named campaign |
 | `scripts/leads/mark_sent_batch_contacted.py` | Post-send state | SQLite | After send |
-| `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Gmail → `emails` | SQLite | Sent ingest (see `gmail-ingest-help` for CLI help) |
+| `cli gmail-ingest` · `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Gmail → `emails` (INBOX + Sent) | SQLite | Daily / post-send refresh |
 | `cli refresh-safety` | Safety export chain | Reports | Daily / pre-send |
 
 ---
@@ -83,7 +87,7 @@ Order: [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md). Key CLI step
 
 | Command | Purpose | Mutates? |
 |---------|---------|----------|
-| `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Ingest Sent | SQLite |
+| `cli gmail-ingest` | Ingest INBOX + Sent | SQLite |
 | `scripts/tools/flag_ndr_bounces_from_contacto.py` | NDR scan / apply | SQLite (`--apply`) |
 | `scripts/leads/audit_contacted_universe.py` | Exclusion CSVs | Reports |
 | `cli refresh-safety` | Safety chain | Reports |
