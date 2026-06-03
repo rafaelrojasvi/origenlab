@@ -2,7 +2,7 @@
 
 Status: canonical (navigation)  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-02 (Phase 6C)
+Last reviewed: 2026-06-02 (Phase 6D)
 
 **Start here** for *what to run*. Full tags, removed paths, and safety prose: [`SCRIPT_MAP.md`](SCRIPT_MAP.md). Procedures: [`RUNBOOK.md`](RUNBOOK.md). Post-send order: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md).
 
@@ -30,7 +30,27 @@ uv run python -m origenlab_email_pipeline.cli post-send-digest
 | `check-readiness` | `scripts/qa/check_outbound_readiness.py` |
 | `post-send-digest` | `scripts/qa/build_post_send_digest.py` |
 
-Tables below list **advanced fallback** paths where a unified subcommand exists; run the CLI row above instead when listed.
+## Advanced CLI aliases (Phase 6D)
+
+Same wrapper; extra script flags after ``--`` except **`gmail-ingest-help`** (ingest ``--help`` only — run the ingest script directly for real IMAP).
+
+```bash
+uv run python -m origenlab_email_pipeline.cli export-dnr
+uv run python -m origenlab_email_pipeline.cli ndr-review
+uv run python -m origenlab_email_pipeline.cli audit-overlap
+uv run python -m origenlab_email_pipeline.cli build-mart          # break-glass aware: --rebuild
+uv run python -m origenlab_email_pipeline.cli gmail-ingest-help   # --help only, no passthrough
+```
+
+| Subcommand | Advanced fallback (manual) | Notes |
+|------------|----------------------------|--------|
+| `export-dnr` | `scripts/qa/export_do_not_repeat_master.py` | Volume lane DNR export |
+| `ndr-review` | `scripts/qa/build_ndr_review_queue.py` | Read-only NDR batches |
+| `audit-overlap` | `scripts/qa/export_contacted_lead_overlap_audit.py` | Pre-send overlap audit |
+| `build-mart` | `scripts/mart/build_business_mart.py` | **Break-glass** — `--rebuild` deletes mart tables |
+| `gmail-ingest-help` | `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Shows ingest ``--help``; Sent ingest required but must be run intentionally |
+
+Tables below list **advanced fallback** paths where a unified subcommand exists; run the CLI rows above instead when listed.
 
 **Working directory:** `cd apps/email-pipeline` · **Truth today:** SQLite + Gmail Sent in `emails` · **Not send approval:** Postgres mirror / dashboard LISTO.
 
@@ -45,7 +65,7 @@ Two lanes: **volume marketing** (`reviewed_marketing_contacts.csv` → `send_rea
 | Preferred / path | Purpose | Mutates? | When to use |
 |------------------|---------|----------|-------------|
 | `scripts/qa/prepare_outbound_campaign_workspace.py` | Init/archive `active/current/` + manifest | Reports | Before a new outbound round |
-| `scripts/qa/export_do_not_repeat_master.py` | DNR lists for DeepSearch + volume processor | Reports | Start of volume lane / weekly refresh |
+| **`cli export-dnr`** · `scripts/qa/export_do_not_repeat_master.py` | DNR lists for DeepSearch + volume processor | Reports | Start of volume lane / weekly refresh |
 | `scripts/research/run_deep_research_prospecting.py` | Automated research → review-ready batch (no send) | Reports | Weekly/heavy or light daily research |
 | **`cli validate-csvs`** · `scripts/qa/validate_campaign_csvs.py` | CSV contract checks | No | Before process/import; after DeepSearch export |
 | `scripts/leads/process_broad_marketing_contacts.py` | Gate volume contacts → send-ready marketing | Reports | After `reviewed_marketing_contacts.csv` |
@@ -54,7 +74,7 @@ Two lanes: **volume marketing** (`reviewed_marketing_contacts.csv` → `send_rea
 | `scripts/leads/export_lead_contact_research_queue.py` | `research_queue.csv` for DeepSearch | Reports | Precision prepare stage |
 | `scripts/leads/import_lead_contact_research_csv.py` | Load reviewed DeepSearch → `lead_contact_research` | SQLite (`--apply`) | After `reviewed_deepsearch.csv`; dry-run first |
 | `scripts/leads/mark_sent_batch_contacted.py` | Post-send `outreach_contact_state` | SQLite | After human send; real batch metadata |
-| `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Gmail → `emails` (Sent/inbox) | SQLite | Same day/week as send; post-send ingest |
+| **`cli gmail-ingest-help`** (help only) · `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Gmail → `emails` (Sent/inbox) | SQLite | Run ingest script directly with folder/since-days; CLI alias shows `--help` only |
 | `scripts/qa/export_outreach_contacted_all.py` | Auxiliary contacted-all CSV | Reports | Safety chain / anti-repeat inputs |
 | **`cli refresh-safety`** · `scripts/qa/refresh_outbound_safety_memory.py` | DNR + contacted-all + strict validation chain | Reports; reads SQLite | Daily or before send; stops on hard failure |
 
@@ -70,11 +90,11 @@ Trust checks and hygiene — **not** the send list builders. Prefer **`cli statu
 | **`cli check-readiness`** · `scripts/qa/check_outbound_readiness.py` | Config / readiness checks | No | Pre-flight debugging |
 | **`cli daily-health`** · `scripts/qa/run_daily_health_report.py` | Combined health (NDR dry-run, drift, mirror hints) | Reports | Daily ops review |
 | `scripts/qa/validate_contacted_csv_coverage.py` | Strict contacted CSV vs Sent/gate | No | Part of `refresh_outbound_safety_memory` |
-| `scripts/qa/export_contacted_lead_overlap_audit.py` | Overlap vs Sent, state, suppressions | Reports | Pre-import / pre-send |
+| **`cli audit-overlap`** · `scripts/qa/export_contacted_lead_overlap_audit.py` | Overlap vs Sent, state, suppressions | Reports | Pre-import / pre-send |
 | `scripts/qa/export_gate_audit_csv.py` | Per-row gate flags | Reports | Explain why rows blocked |
 | `scripts/qa/export_outreach_volume_rollup.py` | Saturation metrics by source | Reports | Capacity planning (not DNR export) |
 | `scripts/qa/check_reports_out_active_hygiene.py` | Unexpected files under `active/` | No | After manual exports / cleanup |
-| `scripts/qa/build_ndr_review_queue.py` | NDR review batches + suggested allowlists | Reports | Before targeted NDR `--apply` |
+| **`cli ndr-review`** · `scripts/qa/build_ndr_review_queue.py` | NDR review batches + suggested allowlists | Reports | Before targeted NDR `--apply` |
 | `scripts/leads/import_operator_outreach_blocklist.py` | Blocklist → suppressions | SQLite | Policy blocklist import |
 | `scripts/leads/add_manual_contact_suppressions.py` | Manual suppression adds | SQLite | Operator-confirmed blocks |
 | `scripts/qa/plan_reports_out_cleanup.py` | Classify `reports/out` (plan only) | No | Before archiving generated files |
@@ -145,7 +165,7 @@ High blast radius: send, purge, rebuild, broad `--apply`, or `--replace-source`.
 | `scripts/tools/purge_contact_emails_from_sqlite.py` | Multi-table email purge | SQLite (`--apply`) | GDPR / correction — dry-run first |
 | `scripts/tools/purge_email_domain_from_sqlite.py` | Domain purge | SQLite (`--apply`) | Same |
 | `scripts/tools/purge_mailbox_from_sqlite.py` | Mailbox purge | SQLite (`--apply`) | Same |
-| `scripts/mart/build_business_mart.py` | Rebuild business mart | SQLite DELETE/rebuild | Scheduled mart rebuild |
+| **`cli build-mart`** · `scripts/mart/build_business_mart.py` | Rebuild business mart | SQLite DELETE/rebuild | Scheduled mart rebuild; avoid `--rebuild` unless intended |
 | `scripts/commercial/build_commercial_intel_v1.py` | Rebuild commercial facts | SQLite | Commercial rebuild |
 | `scripts/leads/advanced/build_lead_account_rollup.py` | Rebuild `lead_account_*` | SQLite DELETE/rebuild | Lead-account maintenance |
 | `scripts/maintenance/dedupe_canonical_gmail_messages.py` | Dedupe canonical Gmail rows | SQLite (`--apply`) | Duplicate repair |

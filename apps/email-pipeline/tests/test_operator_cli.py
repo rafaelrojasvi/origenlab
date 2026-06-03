@@ -1,4 +1,4 @@
-"""Tests for unified operator CLI wrapper (Phase 6B) — no heavy script execution."""
+"""Tests for unified operator CLI wrapper (Phase 6B / 6D) — no heavy script execution."""
 
 from __future__ import annotations
 
@@ -10,8 +10,10 @@ from pathlib import Path
 import pytest
 
 from origenlab_email_pipeline.cli import (
+    HELP_ONLY_SUBCOMMANDS,
     SUBCOMMAND_SCRIPTS,
     build_subcommand_argv,
+    main,
     normalize_passthrough_args,
     repo_root,
     script_path_for,
@@ -19,6 +21,8 @@ from origenlab_email_pipeline.cli import (
 
 REPO = Path(__file__).resolve().parents[1]
 _SRC = REPO / "src"
+
+PASSTHROUGH_ADVANCED = ("export-dnr", "ndr-review", "audit-overlap", "build-mart")
 
 
 def _env() -> dict[str, str]:
@@ -76,9 +80,45 @@ def test_build_subcommand_argv_strict_validate() -> None:
     assert "validate_campaign_csvs.py" in argv[1]
 
 
+@pytest.mark.parametrize("name", PASSTHROUGH_ADVANCED)
+def test_advanced_subcommands_preserve_passthrough(name: str) -> None:
+    argv = build_subcommand_argv(name, ["--", "--json-out", "/tmp/out.json"])
+    assert argv[-2:] == ["--json-out", "/tmp/out.json"]
+    assert SUBCOMMAND_SCRIPTS[name] in argv[1].replace("\\", "/")
+
+
+def test_build_mart_passthrough_rebuild_flag() -> None:
+    argv = build_subcommand_argv("build-mart", ["--rebuild"])
+    assert argv[-1] == "--rebuild"
+    assert argv[1].endswith("scripts/mart/build_business_mart.py")
+
+
+def test_gmail_ingest_help_always_builds_script_help_only() -> None:
+    argv = build_subcommand_argv("gmail-ingest-help")
+    assert argv == [
+        sys.executable,
+        str(repo_root() / "scripts/ingest/05_workspace_gmail_imap_to_sqlite.py"),
+        "--help",
+    ]
+    argv_ignored = build_subcommand_argv("gmail-ingest-help", ["--folder", "INBOX"])
+    assert argv_ignored[-1] == "--help"
+    assert "INBOX" not in argv_ignored
+
+
+def test_gmail_ingest_help_rejects_passthrough_in_main(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        main(["gmail-ingest-help", "--", "--folder", "INBOX"])
+    err = capsys.readouterr().err
+    assert "does not accept extra arguments" in err
+
+
 def test_normalize_passthrough_strips_leading_separator() -> None:
     assert normalize_passthrough_args(["--", "--json", "--verbose"]) == ["--json", "--verbose"]
     assert normalize_passthrough_args(["--json"]) == ["--json"]
+
+
+def test_help_only_subcommands_frozenset() -> None:
+    assert HELP_ONLY_SUBCOMMANDS == frozenset({"gmail-ingest-help"})
 
 
 def test_run_subcommand_not_invoked_in_tests(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,3 +139,21 @@ def test_run_subcommand_not_invoked_in_tests(monkeypatch: pytest.MonkeyPatch) ->
     assert len(calls) == 1
     assert calls[0][-1] == "--help"
     assert calls[0][1].endswith("check_outbound_readiness.py")
+
+
+def test_run_gmail_ingest_help_mocked_only_help(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        class R:
+            returncode = 0
+
+        return R()
+
+    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    from origenlab_email_pipeline.cli import run_subcommand
+
+    assert run_subcommand("gmail-ingest-help") == 0
+    assert calls[0][-1] == "--help"
+    assert calls[0][1].endswith("05_workspace_gmail_imap_to_sqlite.py")
