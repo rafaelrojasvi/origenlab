@@ -54,7 +54,7 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `mirror-dashboard` | `sync/sync_dashboard_postgres_mirror.py` | Postgres (dry-run default); `--apply` writes |
 | `mirror-dashboard --alembic --apply` | alembic + sync script | Postgres; schema + mirror |
 | `refresh-dashboard` | orchestrates CLI steps above | Plan only (default) |
-| `refresh-dashboard --apply` | ingest → `build-mart --rebuild` → safety → digest → status → `mirror-dashboard --apply` | SQLite + reports + Postgres |
+| `refresh-dashboard --apply` | ingest → `build-mart --rebuild` → `build-commercial-intel` (incremental) → safety → digest → status → `mirror-dashboard --apply` | SQLite + reports + Postgres |
 | `refresh-dashboard --apply --no-mirror` | same without mirror | SQLite + reports |
 | `refresh-dashboard --apply --mirror-dry-run` | SQLite/report steps + `mirror-dashboard` dry-run | Mixed |
 

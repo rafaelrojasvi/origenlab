@@ -100,6 +100,7 @@ def build_refresh_dashboard_steps(options: RefreshDashboardOptions) -> list[Refr
                 command="build-mart",
                 passthrough=("--", "--rebuild"),
             ),
+            RefreshDashboardStep(label="build-commercial-intel", command="build-commercial-intel"),
             RefreshDashboardStep(label="refresh-safety", command="refresh-safety"),
             RefreshDashboardStep(label="ndr-review", command="ndr-review"),
             RefreshDashboardStep(label="post-send-digest", command="post-send-digest"),
@@ -127,7 +128,7 @@ def refresh_dashboard_usage_line(*flags: str) -> str:
 
 def print_refresh_dashboard_plan(steps: list[RefreshDashboardStep], options: RefreshDashboardOptions) -> None:
     total = len(steps)
-    print("refresh-dashboard — plan only (no Gmail ingest, mart rebuild, or Postgres writes)\n")
+    print("refresh-dashboard — plan only (no Gmail ingest, mart rebuild, commercial intel, or Postgres writes)\n")
     print(f"Planned steps ({total}) when you pass --apply:")
     for i, step in enumerate(steps, 1):
         note = ""
@@ -153,7 +154,8 @@ def print_refresh_dashboard_help() -> None:
         f"{refresh_dashboard_usage_line('--apply', '--mirror-dry-run')}\n"
         f"{refresh_dashboard_usage_line('--apply', '--skip-ingest')}\n"
         f"{refresh_dashboard_usage_line('--apply', '--since-days', '14')}\n\n"
-        "Includes build-mart -- --rebuild (break-glass). No alembic in this workflow.\n"
+        "Includes build-mart -- --rebuild (break-glass) and incremental build-commercial-intel. "
+        "No alembic in this workflow.\n"
     )
 
 

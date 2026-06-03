@@ -473,6 +473,8 @@ def test_refresh_dashboard_default_plan_no_runner(
     out = capsys.readouterr().out
     assert "plan only" in out
     assert "build-mart -- --rebuild" in out
+    assert "build-commercial-intel" in out
+    assert "3/8 build-commercial-intel" in out
     assert "uv run origenlab refresh-dashboard --apply" in out
     assert "refresh-dashboard--apply" not in out
 
@@ -489,6 +491,7 @@ def test_refresh_dashboard_apply_full_workflow_order() -> None:
     assert [c[0] for c in calls] == [
         "gmail-ingest",
         "build-mart",
+        "build-commercial-intel",
         "refresh-safety",
         "ndr-review",
         "post-send-digest",
@@ -497,6 +500,7 @@ def test_refresh_dashboard_apply_full_workflow_order() -> None:
     ]
     assert calls[0][1] is None
     assert calls[1][1] == ["--", "--rebuild"]
+    assert calls[2][1] is None
     assert calls[-1][2] is True
 
 
@@ -572,9 +576,9 @@ def test_refresh_dashboard_main_default_no_subprocess(
 
 
 def test_refresh_dashboard_build_steps_count() -> None:
-    assert len(build_refresh_dashboard_steps(_refresh_opts())) == 7
-    assert len(build_refresh_dashboard_steps(_refresh_opts(no_mirror=True))) == 6
-    assert len(build_refresh_dashboard_steps(_refresh_opts(skip_ingest=True))) == 6
+    assert len(build_refresh_dashboard_steps(_refresh_opts())) == 8
+    assert len(build_refresh_dashboard_steps(_refresh_opts(no_mirror=True))) == 7
+    assert len(build_refresh_dashboard_steps(_refresh_opts(skip_ingest=True))) == 7
 
 
 def test_run_gmail_ingest_help_mocked_only_help(monkeypatch: pytest.MonkeyPatch) -> None:
