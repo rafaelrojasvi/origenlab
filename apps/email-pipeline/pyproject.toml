@@ -17,6 +17,9 @@ dependencies = [
     "openpyxl>=3.1",
 ]
 
+[project.scripts]
+origenlab = "origenlab_email_pipeline.cli:main"
+
 # ML stack: use `uv sync --group ml` so torch resolves from cu129 (CUDA), not PyPI CPU.
 [dependency-groups]
 dev = [

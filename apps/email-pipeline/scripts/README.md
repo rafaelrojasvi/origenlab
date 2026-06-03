@@ -16,19 +16,19 @@
 
 ```bash
 cd apps/email-pipeline
-uv run python -m origenlab_email_pipeline.cli --help
-uv run python -m origenlab_email_pipeline.cli status
-uv run python -m origenlab_email_pipeline.cli daily-health
-uv run python -m origenlab_email_pipeline.cli refresh-safety
-uv run python -m origenlab_email_pipeline.cli validate-csvs
-uv run python -m origenlab_email_pipeline.cli check-readiness
-uv run python -m origenlab_email_pipeline.cli post-send-digest
-uv run python -m origenlab_email_pipeline.cli export-dnr
-uv run python -m origenlab_email_pipeline.cli ndr-review
-uv run python -m origenlab_email_pipeline.cli audit-overlap
+uv run origenlab --help
+uv run origenlab status
+uv run origenlab daily-health
+uv run origenlab refresh-safety
+uv run origenlab validate-csvs
+uv run origenlab check-readiness
+uv run origenlab post-send-digest
+uv run origenlab export-dnr
+uv run origenlab ndr-review
+uv run origenlab audit-overlap
 ```
 
-Extra flags after ``--``. Other workflows (lanes, ingest, campaigns, break-glass): [`docs/RUNBOOK.md`](../docs/RUNBOOK.md). **Advanced fallback:** `uv run python scripts/...` — paths in [`docs/OPERATOR_COMMAND_SURFACE.md`](../docs/OPERATOR_COMMAND_SURFACE.md). Moving a script requires updating docs and `tests/test_critical_script_paths.py`.
+Module fallback: `uv run python -m origenlab_email_pipeline.cli …`. Extra flags after ``--``. Other workflows: [`docs/RUNBOOK.md`](../docs/RUNBOOK.md). Script paths: [`docs/OPERATOR_COMMAND_SURFACE.md`](../docs/OPERATOR_COMMAND_SURFACE.md).
 
 ## Lead-account layer (rollup + mart match)
 

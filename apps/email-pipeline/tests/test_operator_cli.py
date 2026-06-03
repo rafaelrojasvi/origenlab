@@ -1,4 +1,4 @@
-"""Tests for unified operator CLI wrapper (Phase 6B / 6D) — no heavy script execution."""
+"""Tests for unified operator CLI wrapper (Phase 6B / 6D / 6G) — no heavy script execution."""
 
 from __future__ import annotations
 
@@ -39,6 +39,28 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         timeout=30,
         check=False,
     )
+
+
+def _run_origenlab_console(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["uv", "run", "origenlab", *args],
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+
+def test_cli_main_importable_and_callable() -> None:
+    assert callable(main)
+    assert main(["--help"]) == 0
+
+
+def test_console_script_help_exits_zero() -> None:
+    cp = _run_origenlab_console("--help")
+    assert cp.returncode == 0, cp.stderr
+    assert "origenlab-email-pipeline" in cp.stdout or "command" in cp.stdout
 
 
 def test_cli_help_exits_zero() -> None:

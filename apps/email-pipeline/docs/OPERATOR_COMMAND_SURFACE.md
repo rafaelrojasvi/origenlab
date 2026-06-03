@@ -2,7 +2,7 @@
 
 Status: canonical (navigation)  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-02 (Phase 6E)
+Last reviewed: 2026-06-02 (Phase 6G)
 
 Procedures: [`RUNBOOK.md`](RUNBOOK.md) · post-send: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) · tags / break-glass: [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
@@ -10,19 +10,19 @@ Procedures: [`RUNBOOK.md`](RUNBOOK.md) · post-send: [`pipeline/POST_SEND_SAFE_L
 
 ```bash
 cd apps/email-pipeline
-uv run python -m origenlab_email_pipeline.cli --help
-uv run python -m origenlab_email_pipeline.cli status
-uv run python -m origenlab_email_pipeline.cli daily-health
-uv run python -m origenlab_email_pipeline.cli refresh-safety
-uv run python -m origenlab_email_pipeline.cli validate-csvs
-uv run python -m origenlab_email_pipeline.cli check-readiness
-uv run python -m origenlab_email_pipeline.cli post-send-digest
-uv run python -m origenlab_email_pipeline.cli export-dnr
-uv run python -m origenlab_email_pipeline.cli ndr-review
-uv run python -m origenlab_email_pipeline.cli audit-overlap
+uv run origenlab --help
+uv run origenlab status
+uv run origenlab daily-health
+uv run origenlab refresh-safety
+uv run origenlab validate-csvs
+uv run origenlab check-readiness
+uv run origenlab post-send-digest
+uv run origenlab export-dnr
+uv run origenlab ndr-review
+uv run origenlab audit-overlap
 ```
 
-Pass underlying script flags after ``--`` (e.g. `validate-csvs -- --file … --strict`). **Advanced fallback** = run the `scripts/…` path in the table below directly (same behavior).
+Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. Pass script flags after ``--`` (e.g. `uv run origenlab validate-csvs -- --file … --strict`). **Advanced fallback** = `scripts/…` paths in the table below.
 
 | CLI subcommand | Advanced fallback (`scripts/…`) | Notes |
 |----------------|----------------------------------|--------|

@@ -14,19 +14,19 @@ Code lives in the repo; **put real PSTs and outputs outside the repo** (e.g. `~/
 
 ```bash
 cd apps/email-pipeline
-uv run python -m origenlab_email_pipeline.cli --help
-uv run python -m origenlab_email_pipeline.cli status
-uv run python -m origenlab_email_pipeline.cli daily-health
-uv run python -m origenlab_email_pipeline.cli refresh-safety
-uv run python -m origenlab_email_pipeline.cli validate-csvs
-uv run python -m origenlab_email_pipeline.cli check-readiness
-uv run python -m origenlab_email_pipeline.cli post-send-digest
-uv run python -m origenlab_email_pipeline.cli export-dnr
-uv run python -m origenlab_email_pipeline.cli ndr-review
-uv run python -m origenlab_email_pipeline.cli audit-overlap
+uv run origenlab --help
+uv run origenlab status
+uv run origenlab daily-health
+uv run origenlab refresh-safety
+uv run origenlab validate-csvs
+uv run origenlab check-readiness
+uv run origenlab post-send-digest
+uv run origenlab export-dnr
+uv run origenlab ndr-review
+uv run origenlab audit-overlap
 ```
 
-Script-specific flags after ``--`` (e.g. `validate-csvs -- --strict`). Lane/ingest/campaign commands: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md). Raw `scripts/…` paths = advanced fallback only.
+Fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>` (same behavior). Script flags after ``--`` (e.g. `uv run origenlab validate-csvs -- --strict`). More commands: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md). Raw `scripts/…` = advanced fallback only.
 
 **HTTP API:** This package does **not** ship FastAPI. Operator and Postgres mirror HTTP live in [`apps/api`](../api/README.md) on port **8001** (`GET /mirror/*` for mirror reporting). The React dashboard [`apps/dashboard`](../dashboard/README.md) uses operator routes only.
 
@@ -434,4 +434,4 @@ origenlab-email-pipeline/
 └── tests/                        # pytest (test_parse_mbox_body, test_business_mart_app_ux, etc.)
 ```
 
-Pipeline scripts live under `scripts/`; day-to-day ops use **`python -m origenlab_email_pipeline.cli`** (see [Operator CLI](#operator-cli)). Index: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md), [docs/SCRIPT_MAP.md](docs/SCRIPT_MAP.md), [scripts/README.md](scripts/README.md).
+Pipeline scripts live under `scripts/`; day-to-day ops use **`uv run origenlab`** (see [Operator CLI](#operator-cli)). Index: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md), [docs/SCRIPT_MAP.md](docs/SCRIPT_MAP.md), [scripts/README.md](scripts/README.md).
