@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 
+from origenlab_email_pipeline.core.step_runner import run_step_sequence
 from origenlab_email_pipeline.operator_cli.constants import (
     MIRROR_DASHBOARD_SYNC_SCRIPT,
     POSTGRES_ENV_VARS,
@@ -15,6 +17,12 @@ from origenlab_email_pipeline.operator_cli.paths import (
     normalize_passthrough_args,
     repo_root,
 )
+
+
+@dataclass(frozen=True)
+class _MirrorDashboardStep:
+    label: str
+    argv: list[str]
 
 
 def postgres_url_configured() -> bool:
@@ -111,6 +119,28 @@ def build_mirror_dashboard_argv_list(
     return cmds
 
 
+def _mirror_dashboard_step_label(argv: list[str]) -> str:
+    if argv and argv[0] == "alembic":
+        return "alembic upgrade head"
+    return MIRROR_DASHBOARD_SYNC_SCRIPT
+
+
+def _mirror_dashboard_steps(
+    *,
+    apply: bool = False,
+    alembic: bool = False,
+    passthrough: list[str] | None = None,
+) -> list[_MirrorDashboardStep]:
+    return [
+        _MirrorDashboardStep(label=_mirror_dashboard_step_label(argv), argv=argv)
+        for argv in build_mirror_dashboard_argv_list(
+            apply=apply,
+            alembic=alembic,
+            passthrough=passthrough,
+        )
+    ]
+
+
 def run_mirror_dashboard(
     *,
     apply: bool = False,
@@ -121,11 +151,16 @@ def run_mirror_dashboard(
         print(missing_postgres_env_message(), file=sys.stderr)
         return 2
     cwd = str(repo_root())
-    for cmd in build_mirror_dashboard_argv_list(apply=apply, alembic=alembic, passthrough=passthrough):
-        proc = subprocess.run(cmd, cwd=cwd, check=False)
-        if proc.returncode != 0:
-            return int(proc.returncode)
-    return 0
+
+    def _run_step(step: _MirrorDashboardStep) -> int:
+        proc = subprocess.run(step.argv, cwd=cwd, check=False)
+        return int(proc.returncode)
+
+    return run_step_sequence(
+        _mirror_dashboard_steps(apply=apply, alembic=alembic, passthrough=passthrough),
+        _run_step,
+        prefix="[mirror-dashboard]",
+    )
 
 
 def print_mirror_dashboard_help() -> None:

@@ -287,6 +287,23 @@ def test_run_gmail_ingest_stops_on_first_failure(monkeypatch: pytest.MonkeyPatch
     assert len(calls) == 1
 
 
+def test_run_mirror_dashboard_stops_on_first_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        class R:
+            returncode = 5 if cmd[0] == "alembic" else 0
+
+        return R()
+
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.mirror.subprocess.run", fake_run)
+    assert run_mirror_dashboard(apply=True, alembic=True) == 5
+    assert len(calls) == 1
+    assert calls[0][0] == "alembic"
+
+
 def test_mirror_dashboard_default_builds_sync_dry_run() -> None:
     cmds = build_mirror_dashboard_argv_list()
     assert len(cmds) == 1

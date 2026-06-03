@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from dataclasses import dataclass
 
+from origenlab_email_pipeline.core.step_runner import run_step_sequence
 from origenlab_email_pipeline.operator_cli.constants import (
     GMAIL_INGEST_INBOX_FOLDER,
     GMAIL_INGEST_SCRIPT,
@@ -15,6 +17,12 @@ from origenlab_email_pipeline.operator_cli.paths import (
     normalize_passthrough_args,
     repo_root,
 )
+
+
+@dataclass(frozen=True)
+class _GmailIngestStep:
+    label: str
+    argv: list[str]
 
 
 def validate_gmail_ingest_passthrough(passthrough: list[str] | None) -> list[str]:
@@ -43,14 +51,23 @@ def build_gmail_ingest_folders_argv() -> list[str]:
     return [sys.executable, str(gmail_ingest_script_path()), "--list-folders"]
 
 
+def _gmail_ingest_steps(passthrough: list[str] | None = None) -> list[_GmailIngestStep]:
+    folders = (GMAIL_INGEST_INBOX_FOLDER, GMAIL_INGEST_SENT_FOLDER)
+    return [
+        _GmailIngestStep(label=folder, argv=cmd)
+        for folder, cmd in zip(folders, build_gmail_ingest_argv_list(passthrough), strict=True)
+    ]
+
+
 def run_gmail_ingest(passthrough: list[str] | None = None) -> int:
     """Run INBOX then Sent ingest; stop on first non-zero exit."""
     cwd = str(repo_root())
-    for cmd in build_gmail_ingest_argv_list(passthrough):
-        proc = subprocess.run(cmd, cwd=cwd, check=False)
-        if proc.returncode != 0:
-            return int(proc.returncode)
-    return 0
+
+    def _run_step(step: _GmailIngestStep) -> int:
+        proc = subprocess.run(step.argv, cwd=cwd, check=False)
+        return int(proc.returncode)
+
+    return run_step_sequence(_gmail_ingest_steps(passthrough), _run_step, prefix="[gmail-ingest]")
 
 
 def print_gmail_ingest_folders_help() -> None:
