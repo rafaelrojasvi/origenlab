@@ -26,9 +26,11 @@ uv run origenlab ndr-review
 uv run origenlab audit-overlap
 uv run origenlab gmail-ingest              # INBOX + Sent; optional: -- --since-days 14
 uv run origenlab gmail-ingest-folders      # if [Gmail]/Enviados label differs
+uv run origenlab mirror-dashboard          # Postgres mirror dry-run (needs Postgres URL env)
+uv run origenlab mirror-dashboard --apply  # write mirror; --alembic --apply runs migrations first
 ```
 
-Fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>` (same behavior). Script flags after ``--`` (e.g. `uv run origenlab validate-csvs -- --strict`). `gmail-ingest` rejects `--replace-source`. More: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md). Raw `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` = advanced fallback.
+Fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>` (same behavior). Script flags after ``--`` (e.g. `uv run origenlab validate-csvs -- --strict`). `gmail-ingest` rejects `--replace-source`. Postgres mirror is **parked** — see [docs/EXPERIMENTAL_PARKED.md](docs/EXPERIMENTAL_PARKED.md). More: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
 **HTTP API:** This package does **not** ship FastAPI. Operator and Postgres mirror HTTP live in [`apps/api`](../api/README.md) on port **8001** (`GET /mirror/*` for mirror reporting). The React dashboard [`apps/dashboard`](../dashboard/README.md) uses operator routes only.
 

@@ -2,7 +2,7 @@
 
 Status: canonical (navigation)  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-03 (Phase 7A)
+Last reviewed: 2026-06-03 (Phase 7B)
 
 Procedures: [`RUNBOOK.md`](RUNBOOK.md) · post-send: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) · tags / break-glass: [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
@@ -22,9 +22,12 @@ uv run origenlab ndr-review
 uv run origenlab audit-overlap
 uv run origenlab gmail-ingest
 uv run origenlab gmail-ingest-folders
+uv run origenlab mirror-dashboard
+uv run origenlab mirror-dashboard --apply
+uv run origenlab mirror-dashboard --alembic --apply
 ```
 
-Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. Pass script flags after ``--`` where supported. **`gmail-ingest`** runs INBOX then `[Gmail]/Enviados` with `--skip-duplicate-message-id`; **rejects `--replace-source`**. **`gmail-ingest-folders`** = ingest `--list-folders` only. **Advanced fallback** = `scripts/…` paths in the table below.
+Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. Pass script flags after ``--`` where supported. **`gmail-ingest`** runs INBOX then `[Gmail]/Enviados` with `--skip-duplicate-message-id`; **rejects `--replace-source`**. **`mirror-dashboard`** defaults to sync `--dry-run`; **`--apply`** writes Postgres; **`--alembic --apply`** runs `alembic upgrade head` first. Requires **`ORIGENLAB_POSTGRES_URL`** or **`ALEMBIC_DATABASE_URL`**. **Advanced fallback** = `scripts/…` paths in the table below.
 
 | CLI subcommand | Advanced fallback (`scripts/…`) | Notes |
 |----------------|----------------------------------|--------|
@@ -41,6 +44,8 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `gmail-ingest` | `ingest/05_workspace_gmail_imap_to_sqlite.py` (INBOX + Sent) | SQLite; daily refresh; rejects `--replace-source` |
 | `gmail-ingest-folders` | same (`--list-folders`) | No; discover Sent label if `[Gmail]/Enviados` differs |
 | `gmail-ingest-help` | same (`--help` only) | No; ingest flags reference |
+| `mirror-dashboard` | `sync/sync_dashboard_postgres_mirror.py` | Postgres (dry-run default); `--apply` writes |
+| `mirror-dashboard --alembic --apply` | alembic + sync script | Postgres; schema + mirror |
 
 **Truth:** SQLite + Gmail Sent in `emails`. Postgres / dashboard LISTO ≠ send approval.
 
@@ -101,7 +106,7 @@ Order: [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md). Key CLI step
 
 ## 5. Postgres / experimental (parked)
 
-Verifiers `scripts/qa/verify_*_postgres_mirror.py` — optional; [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md).
+`cli mirror-dashboard` → `sync/sync_dashboard_postgres_mirror.py` (dry-run default). Verifiers `scripts/qa/verify_*_postgres_mirror.py` — optional; [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md).
 
 ## 6. Break-glass
 
