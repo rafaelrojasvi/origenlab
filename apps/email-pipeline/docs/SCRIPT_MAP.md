@@ -291,6 +291,8 @@ Shared helpers imported by other `scripts/` CLIs; not daily outbound or mirror o
 
 **Removed Phase 5A (2026-06-02):** `run_post_send_2026_06_01_refresh.sh` and `run_manual_outreach_2026_06_01_post_send_refresh.sh` — use [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) step-by-step instead.
 
+**Removed Phase 5R (2026-06-02):** `scripts/qa/build_legacy_contacts_2016_2019_review.py` — use [`legacy_contacts_2016_2019.py`](../src/origenlab_email_pipeline/lead_research/legacy_contacts_2016_2019.py) (library) and [`test_legacy_contacts_2016_2019.py`](../tests/test_legacy_contacts_2016_2019.py) for behavior contracts.
+
 ---
 
 ## Lab scripts (LAB)
