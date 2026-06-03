@@ -38,7 +38,7 @@ The email-pipeline stack is **operationally sound** but **organically large**: *
 | 6 | `scripts/ops/run_post_send_2026_06_01_refresh.sh` + `run_manual_outreach_2026_06_01_post_send_refresh.sh` | Historical; **broad NDR `--apply`** called out in SCRIPT_MAP | **DEPRECATE_CANDIDATE** → archive | High if reused |
 | 7 | Four root lead-account shims (`scripts/build_lead_account_rollup.py`, etc.) | Documented **COMPATIBILITY_WRAPPER** | **COMPATIBILITY_WRAPPER** → warn, then remove in Phase 5 | Medium |
 | 8 | `scripts/qa/build_buyer_opportunity_queue.py` (**LEGACY_DO_NOT_USE**) | Superseded by `build_equipment_first_*` | **DEPRECATE_CANDIDATE** (keep tests until removal) | Low |
-| 9 | `scripts/tools/flag_reported_non_delivery_from_contacto.py` vs `flag_ndr_bounces_from_contacto.py` | Overlapping suppression apply paths; latter is post-send canonical | **DEPRECATE_CANDIDATE** (merge docs first) | High if wrong tool used |
+| 9 | ~~`scripts/tools/flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** — human-reported inbound via `flag_ndr_bounces_from_contacto.py --include-reported-non-delivery` | **REMOVED** (5Q) | — |
 | 10 | `sys.path.insert` in ~90 scripts + duplicate `gmail_workspace_oauth` top-level vs `core/gmail/` | Reproducibility / import hygiene | **REFACTOR_SPLIT** (bootstrap only) | Low |
 
 ---
@@ -136,7 +136,7 @@ These are **safety-critical** or **contract-locked**. Internal refactors require
 |------|----------|
 | `scripts/qa/build_buyer_opportunity_queue.py` | Header `LEGACY_DO_NOT_USE`; AGENTS.md; manifest `legacy_do_not_use` |
 | `apps/email-pipeline` FastAPI `:8000` | Removed API-3 Phase 6; dashboard tests for `:8000` warning |
-| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | Only self + SCRIPT_MAP reference; post-send doc prefers `flag_ndr_*` |
+| ~~`scripts/tools/flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** — use `flag_ndr_bounces_from_contacto.py --include-reported-non-delivery` |
 | `scripts/leads/advanced/export_archive_outreach_candidates.py` | Docstring: use `build_archive_send_batch.py --audit-only` |
 
 ### Ingest paths
@@ -200,7 +200,7 @@ Planner baseline: `uv run python scripts/qa/plan_script_consolidation.py` → **
 | `scripts/qa/build_buyer_opportunity_queue.py` | Legacy A/B queue | `LEGACY_DO_NOT_USE`, AGENTS.md | E | low | Archive after 1 release warning | `test_build_buyer_opportunity_queue.py`, `test_phase1_simplification_banners.py` |
 | `scripts/ops/run_post_send_2026_06_01_refresh.sh` | One-off orchestrator | SCRIPT_MAP “do not blindly reuse” | E | high | Move to `scripts/ops/archive/` or delete with doc-only procedure | `test_refresh_render_dashboard_once.py` (if referenced) |
 | `scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh` | Dated manual wave | Same family | E | high | Same | shell syntax tests if any |
-| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | Older NDR flagger | Only SCRIPT_MAP + file; NDR doc prefers `flag_ndr_*` | E | med | Deprecation warning → merge into NDR module | add parity tests vs `ndr_bounce_extraction` |
+| ~~`scripts/tools/flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** | Canonical `flag_ndr_*` + `--include-reported-non-delivery` | — | — | Done | `test_ndr_tool_parity.py` |
 | `scripts/leads/advanced/export_archive_outreach_candidates.py` | Audit wrapper | Docstring points to `build_archive_send_batch --audit-only` | D/E | low | Deprecation stderr only | archive lane tests |
 
 ### Compatibility wrappers (repo root — out of folder scope but locked)
@@ -315,7 +315,7 @@ These are **implemented and used** but missing strict SCRIPT_MAP table tags (pla
 | `build_business_mart.py` | Yes | `--rebuild` opt-in | N/A | Yes | Yes | Yes break-glass |
 | `purge_*.py` | Yes | Yes | Required | Yes | Banner tests | Yes |
 | `flag_ndr_bounces_from_contacto.py` | Yes | Yes | Required for write | Yes | Yes | POST_SEND_SAFE_LOOP |
-| `flag_reported_non_delivery_from_contacto.py` | Yes | Yes | Required | Yes | Weak | SCRIPT_MAP only |
+| ~~`flag_reported_non_delivery_from_contacto.py`~~ | — | — | — | — | **Removed 5Q** | SCRIPT_MAP historical |
 | `import_lead_contact_research_csv.py` | Partial | Yes | Required | Yes | Yes | Yes |
 | `mark_outreach_state.py` | Yes | Yes | Required | Yes | CLI tests | CRUD_SAFETY |
 | `dedupe_canonical_gmail_messages.py` | Yes | Yes | `--apply --ack-sqlite-backup` | Yes | Yes | Yes |
@@ -390,7 +390,7 @@ flowchart LR
 |-----------|----------|---------|
 | `build_buyer_opportunity_queue.py` | LEGACY header; equipment-first replacements; tests lock header only | **E** — not F until tests/docs removed |
 | `run_post_send_2026_06_01_refresh.sh` | Documented dangerous broad NDR apply | **E** — archive, not silent F |
-| `flag_reported_non_delivery_from_contacto.py` | No tests; superseded by NDR pipeline | **E** — verify no ops runbooks, then F |
+| ~~`flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** | **F** (done) |
 | `03_sqlite_to_jsonl.py` | ARCHITECTURE / ML path only | **Keep** — not F |
 | `02_mbox_to_sqlite.py` | Still in ingest observability tests | **Keep** with break-glass label |
 | Root lead-account wrappers | `test_critical_script_paths` + `test_lead_compatibility_wrappers` | **D only** until Phase 5 |
@@ -454,7 +454,7 @@ rg 'subprocess|scripts/' apps/api/src
 
 1. **Campaign scripts** (`build_presentacion_*`, `build_cyber_*`, `apply_manual_outreach_2026_06_01_corrections`) — are these one-wave artifacts or ongoing OPS? Determines E vs B.
 2. **`export_email_conversation_intelligence.py`** — last production use date? Candidate for archive if unused.
-3. **`flag_reported_non_delivery_from_contacto.py`** — any operator runbook still referencing it vs `flag_ndr_bounces_from_contacto.py`?
+3. ~~**`flag_reported_non_delivery_from_contacto.py`**~~ — **removed Phase 5Q**; use `flag_ndr_bounces_from_contacto.py --include-reported-non-delivery`.
 4. **`refresh_operational_dashboard_stack.py`** — timeline for `--mode sqlite-status|postgres-mirror|full-dashboard` from design doc?
 5. **Streamlit** (`business_mart_app.py`) vs **React dashboard** — long-term single UI? Affects whether `postgres_dashboard_api` split continues in email-pipeline vs api package.
 6. **Root wrapper removal** — external bookmarks/CI outside monorepo still calling `scripts/build_lead_account_rollup.py`?

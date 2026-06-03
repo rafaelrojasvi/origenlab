@@ -11,14 +11,16 @@ from shutil import which
 REPO = Path(__file__).resolve().parents[1]
 MONOREPO = REPO.parents[1]
 
-DEPRECATED_REMOVAL_TARGETS: tuple[dict[str, str], ...] = (
+DEPRECATED_REMOVAL_TARGETS: tuple[dict[str, str], ...] = ()
+
+REMOVED_PHASE5Q_TARGETS: tuple[dict[str, str], ...] = (
     {
         "path": "scripts/tools/flag_reported_non_delivery_from_contacto.py",
         "replacement": (
-            "flag_ndr_bounces_from_contacto.py (--include-reported-non-delivery for human inbound) "
-            "+ build_ndr_review_queue.py"
+            "scripts/tools/flag_ndr_bounces_from_contacto.py --include-reported-non-delivery "
+            "+ scripts/qa/build_ndr_review_queue.py"
         ),
-        "suggested_phase": "5Q delete next once canonical human-reported mode verified in prod",
+        "removed_phase": "5Q",
     },
 )
 
@@ -121,11 +123,6 @@ REFACTOR_PHASE3_TARGETS: tuple[dict[str, str], ...] = (
     },
 )
 
-_TEST_LOCK_PATTERNS: dict[str, str] = {
-    "scripts/tools/flag_reported_non_delivery_from_contacto.py": "flag_reported_non_delivery",
-}
-
-
 @dataclass(frozen=True, slots=True)
 class ReferenceCounts:
     docs: int
@@ -226,11 +223,11 @@ def reference_counts(rel_path: str) -> ReferenceCounts:
     map_text = (REPO / "docs/SCRIPT_MAP.md").read_text(encoding="utf-8", errors="replace")
     in_map = rel in map_text or base in map_text
 
-    lock_pat = _TEST_LOCK_PATTERNS.get(rel, base)
+    lock_pat = base
     critical = (REPO / "tests/test_critical_script_paths.py").read_text(encoding="utf-8", errors="replace")
-    test_locked = lock_pat in critical or any(
+    test_locked = rel in critical or lock_pat in critical or any(
         lock_pat in (REPO / "tests" / p).read_text(encoding="utf-8", errors="replace")
-        for p in ("test_lead_compatibility_wrappers.py",)
+        for p in ("test_lead_compatibility_wrappers.py", "test_ndr_tool_parity.py")
         if (REPO / "tests" / p).is_file()
     )
 
@@ -251,7 +248,7 @@ def build_removal_evidence_markdown() -> str:
         "Owner: email-pipeline-maintainers",
         "Last reviewed: 2026-06-02",
         "",
-        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper; Phase **5K** removed 2026-06-01 manual outreach registry and dated QA scripts.",
+        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper; Phase **5K** removed 2026-06-01 manual outreach registry and dated QA scripts; Phase **5Q** removed legacy `flag_reported_non_delivery_from_contacto.py` (canonical `--include-reported-non-delivery`).",
         "",
         "Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`",
         "",
@@ -332,6 +329,19 @@ def build_removal_evidence_markdown() -> str:
         ]
     )
     for row in REMOVED_PHASE5K_TARGETS:
+        lines.append(
+            f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
+        )
+    lines.extend(
+        [
+            "",
+            "## Removed in Phase 5Q (2026-06-02)",
+            "",
+            "| Path | Replacement | Removed phase |",
+            "|------|-------------|---------------|",
+        ]
+    )
+    for row in REMOVED_PHASE5Q_TARGETS:
         lines.append(
             f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
         )

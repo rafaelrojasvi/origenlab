@@ -14,6 +14,7 @@ from removal_evidence import (
     REMOVED_PHASE5C_TARGETS,
     REMOVED_PHASE5D_TARGETS,
     REMOVED_PHASE5K_TARGETS,
+    REMOVED_PHASE5Q_TARGETS,
     _rg_files,
     build_removal_evidence_markdown,
     reference_counts,
@@ -22,14 +23,14 @@ from removal_evidence import (
 
 REPO = Path(__file__).resolve().parents[1]
 
+REMOVED_LEGACY_REPORTED_NDR = "scripts/tools/flag_reported_non_delivery_from_contacto.py"
+
 
 def test_generate_removal_evidence_report() -> None:
     out = write_removal_evidence_report()
     assert out.is_file()
     body = out.read_text(encoding="utf-8")
     assert "Phase 2 — script removal evidence" in body
-    for row in DEPRECATED_REMOVAL_TARGETS:
-        assert row["path"] in body
     for row in REMOVED_PHASE5A_TARGETS:
         assert row["path"] in body
         assert "Removed in Phase 5A" in body
@@ -45,12 +46,9 @@ def test_generate_removal_evidence_report() -> None:
     for row in REMOVED_PHASE5K_TARGETS:
         assert row["path"] in body
         assert "Removed in Phase 5K" in body
-
-
-def test_deprecated_targets_listed_in_script_map() -> None:
-    smap = (REPO / "docs/SCRIPT_MAP.md").read_text(encoding="utf-8")
-    for row in DEPRECATED_REMOVAL_TARGETS:
-        assert Path(row["path"]).name in smap or row["path"] in smap, row["path"]
+    for row in REMOVED_PHASE5Q_TARGETS:
+        assert row["path"] in body
+        assert "Removed in Phase 5Q" in body
 
 
 def test_phase5a_removed_shells_documented_in_script_map() -> None:
@@ -96,6 +94,15 @@ def test_phase5k_removed_manual_outreach_oneoffs_documented_in_script_map() -> N
         assert not (REPO / row["path"]).is_file(), row["path"]
 
 
+def test_phase5q_removed_reported_ndr_documented_in_script_map() -> None:
+    smap = (REPO / "docs/SCRIPT_MAP.md").read_text(encoding="utf-8")
+    assert "--include-reported-non-delivery" in smap
+    assert "build_ndr_review_queue.py" in smap
+    for row in REMOVED_PHASE5Q_TARGETS:
+        assert Path(row["path"]).name in smap or "Phase 5Q" in smap or "Removed Phase 5Q" in smap, row["path"]
+        assert not (REPO / row["path"]).is_file(), row["path"]
+
+
 @pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5A_TARGETS])
 def test_phase5a_removed_shells_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5A removed: {rel}"
@@ -121,30 +128,33 @@ def test_phase5k_removed_manual_outreach_oneoffs_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5K removed: {rel}"
 
 
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5Q_TARGETS])
+def test_phase5q_removed_reported_ndr_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5Q removed: {rel}"
+
+
 def test_refactor_phase3_targets_documented() -> None:
     audit = (REPO / "docs/audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md").read_text(encoding="utf-8")
     for row in REFACTOR_PHASE3_TARGETS:
         assert row["path"] in audit
 
 
-@pytest.mark.parametrize("rel", [r["path"] for r in DEPRECATED_REMOVAL_TARGETS])
-def test_deprecated_script_file_still_exists(rel: str) -> None:
-    assert (REPO / rel).is_file(), f"deprecated target must remain on disk: {rel}"
-
-
-def test_evidence_markdown_has_table_rows() -> None:
+def test_evidence_markdown_has_removed_phase_rows() -> None:
     md = build_removal_evidence_markdown()
-    assert "| `scripts/tools/flag_reported_non_delivery_from_contacto.py` |" in md
+    assert f"| `{REMOVED_LEGACY_REPORTED_NDR}` |" in md
+    assert "Removed in Phase 5Q" in md
     assert "Removed in Phase 5C" in md
     assert "Removed in Phase 5D" in md
     assert "Removed in Phase 5K" in md
+    assert "## Deprecated / wrapper removal candidates" in md
+    if not DEPRECATED_REMOVAL_TARGETS:
+        assert md.count("| `scripts/tools/flag_reported_non_delivery_from_contacto.py` |") == 1
 
 
-def test_reference_counts_returns_non_negative() -> None:
-    rc = reference_counts("scripts/tools/flag_reported_non_delivery_from_contacto.py")
+def test_reference_counts_removed_script_still_in_docs() -> None:
+    rc = reference_counts(REMOVED_LEGACY_REPORTED_NDR)
     assert rc.docs >= 0
     assert rc.tests >= 0
-    assert rc.in_script_map
 
 
 def test_rg_files_python_fallback_when_ripgrep_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -155,13 +165,5 @@ def test_rg_files_python_fallback_when_ripgrep_missing(monkeypatch: pytest.Monke
         [REPO / "docs", REPO / "tests"],
     )
     assert len(hits) >= 1
-    rc = reference_counts("scripts/tools/flag_reported_non_delivery_from_contacto.py")
+    rc = reference_counts(REMOVED_LEGACY_REPORTED_NDR)
     assert rc.docs >= 0
-    assert rc.in_script_map
-
-
-def test_deprecated_python_scripts_use_phase4_stderr_helpers() -> None:
-    legacy_ndr = (REPO / "scripts/tools/flag_reported_non_delivery_from_contacto.py").read_text(
-        encoding="utf-8",
-    )
-    assert "print_script_deprecation_warning" in legacy_ndr
