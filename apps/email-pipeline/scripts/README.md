@@ -32,7 +32,7 @@ uv run origenlab mirror-dashboard
 uv run origenlab mirror-dashboard --apply
 ```
 
-Module fallback: `uv run python -m origenlab_email_pipeline.cli …`. Extra flags after ``--`` append to sync script (`mirror-dashboard -- --only mart`). Requires `ORIGENLAB_POSTGRES_URL` or `ALEMBIC_DATABASE_URL`. Other workflows: [`docs/RUNBOOK.md`](../docs/RUNBOOK.md).
+Module fallback: `uv run python -m origenlab_email_pipeline.cli …`. Extra flags after ``--`` append to sync script (`mirror-dashboard -- --only mart`). Requires `ORIGENLAB_POSTGRES_URL`, `ALEMBIC_DATABASE_URL`, or `ORIGENLAB_CLOUD_POSTGRES_URL`. Other workflows: [`docs/RUNBOOK.md`](../docs/RUNBOOK.md).
 
 ## Lead-account layer (rollup + mart match)
 

@@ -19,9 +19,11 @@ from origenlab_email_pipeline.cli import (
     SUBCOMMAND_SCRIPTS,
     build_gmail_ingest_argv_list,
     build_mirror_dashboard_argv_list,
+    build_mirror_dashboard_sync_argv,
     build_subcommand_argv,
     main,
     missing_postgres_env_message,
+    mirror_dashboard_uses_cloud_postgres_only,
     normalize_passthrough_args,
     postgres_url_configured,
     repo_root,
@@ -330,6 +332,48 @@ def test_mirror_dashboard_missing_postgres_env_no_subprocess(
     assert not postgres_url_configured()
     assert run_mirror_dashboard() == 2
     assert calls == []
+
+
+def test_mirror_dashboard_cloud_only_adds_allow_non_scratch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ORIGENLAB_POSTGRES_URL", raising=False)
+    monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
+    monkeypatch.setenv("ORIGENLAB_CLOUD_POSTGRES_URL", "postgresql://u:p@host.example.com/prod")
+    assert mirror_dashboard_uses_cloud_postgres_only()
+    sync = build_mirror_dashboard_sync_argv(apply=False)
+    assert "--allow-non-scratch-postgres" in sync
+    assert sync.count("--allow-non-scratch-postgres") == 1
+
+
+def test_mirror_dashboard_scratch_url_omits_allow_non_scratch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    monkeypatch.setenv("ORIGENLAB_CLOUD_POSTGRES_URL", "postgresql://u:p@host.example.com/prod")
+    assert not mirror_dashboard_uses_cloud_postgres_only()
+    sync = build_mirror_dashboard_sync_argv(apply=False)
+    assert "--allow-non-scratch-postgres" not in sync
+
+
+def test_mirror_dashboard_accepts_cloud_postgres_env_mocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ORIGENLAB_POSTGRES_URL", raising=False)
+    monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
+    monkeypatch.setenv(
+        "ORIGENLAB_CLOUD_POSTGRES_URL",
+        "postgresql://u:p@host.example.com/origenlab_dashboard_prod",
+    )
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        class R:
+            returncode = 0
+
+        return R()
+
+    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    assert run_mirror_dashboard() == 0
+    assert len(calls) == 1
+    assert "--dry-run" in calls[0]
 
 
 def test_mirror_dashboard_with_postgres_env_mocked(
