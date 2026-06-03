@@ -6,6 +6,32 @@ Last reviewed: 2026-06-02 (Phase 6A)
 
 **Start here** for *what to run*. Full tags, removed paths, and safety prose: [`SCRIPT_MAP.md`](SCRIPT_MAP.md). Procedures: [`RUNBOOK.md`](RUNBOOK.md). Post-send order: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md).
 
+## Preferred unified CLI (Phase 6B)
+
+Thin wrapper — same behavior as the underlying scripts; pass script flags after ``--``:
+
+```bash
+cd apps/email-pipeline
+uv run python -m origenlab_email_pipeline.cli --help
+uv run python -m origenlab_email_pipeline.cli status -- --json
+uv run python -m origenlab_email_pipeline.cli daily-health
+uv run python -m origenlab_email_pipeline.cli refresh-safety
+uv run python -m origenlab_email_pipeline.cli validate-csvs -- --strict
+uv run python -m origenlab_email_pipeline.cli check-readiness
+uv run python -m origenlab_email_pipeline.cli post-send-digest
+```
+
+| Subcommand | Delegates to |
+|------------|----------------|
+| `status` | `scripts/qa/operator_status.py` |
+| `daily-health` | `scripts/qa/run_daily_health_report.py` |
+| `refresh-safety` | `scripts/qa/refresh_outbound_safety_memory.py` |
+| `validate-csvs` | `scripts/qa/validate_campaign_csvs.py` |
+| `check-readiness` | `scripts/qa/check_outbound_readiness.py` |
+| `post-send-digest` | `scripts/qa/build_post_send_digest.py` |
+
+**Advanced / manual:** run `scripts/...` paths directly (tables below) when you need a script not yet exposed on the wrapper.
+
 **Working directory:** `cd apps/email-pipeline` · **Truth today:** SQLite + Gmail Sent in `emails` · **Not send approval:** Postgres mirror / dashboard LISTO.
 
 **Mutates?** — **No** = read-only or reports only; **Reports** = writes under `reports/out/` only; **SQLite** = may write DB (often dry-run default); **Yes** = mutates without dry-run default on common paths.
