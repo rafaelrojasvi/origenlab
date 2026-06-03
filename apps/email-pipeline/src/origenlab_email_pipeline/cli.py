@@ -44,6 +44,7 @@ SUBCOMMAND_SCRIPTS: dict[str, str] = {
 GMAIL_INGEST_COMMANDS: frozenset[str] = frozenset({"gmail-ingest", "gmail-ingest-folders"})
 MIRROR_DASHBOARD_COMMAND = "mirror-dashboard"
 REFRESH_DASHBOARD_COMMAND = "refresh-dashboard"
+REFRESH_DASHBOARD_USAGE = "uv run origenlab refresh-dashboard"
 SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset(
     {MIRROR_DASHBOARD_COMMAND, REFRESH_DASHBOARD_COMMAND}
 )
@@ -389,12 +390,12 @@ def _print_refresh_dashboard_plan(steps: list[RefreshDashboardStep], options: Re
             note = "  # break-glass: deletes mart tables"
         print(f"  {i}/{total} {step.label}{note}")
     print("\nVariants:")
-    print("  uv run origenlab refresh-dashboard --apply")
-    print("  uv run origenlab refresh-dashboard --apply --no-mirror")
-    print("  uv run origenlab refresh-dashboard --apply --mirror-dry-run")
-    print("  uv run origenlab refresh-dashboard --apply --skip-ingest")
+    print(f"  {REFRESH_DASHBOARD_USAGE} --apply")
+    print(f"  {REFRESH_DASHBOARD_USAGE} --apply --no-mirror")
+    print(f"  {REFRESH_DASHBOARD_USAGE} --apply --mirror-dry-run")
+    print(f"  {REFRESH_DASHBOARD_USAGE} --apply --skip-ingest")
     if options.since_days is None:
-        print("  uv run origenlab refresh-dashboard --apply --since-days 14")
+        print(f"  {REFRESH_DASHBOARD_USAGE} --apply --since-days 14")
     print("\nNo alembic in this workflow; use mirror-dashboard --alembic --apply separately if needed.")
 
 
@@ -537,14 +538,15 @@ def _print_gmail_ingest_help_help() -> None:
 
 
 def _print_refresh_dashboard_help() -> None:
+    u = REFRESH_DASHBOARD_USAGE
     print(
         "refresh-dashboard — orchestrated operator stack refresh\n\n"
-        "  uv run origenlab refresh-dashboard                    # plan only (default)\n"
-        "  uv run origenlab refresh-dashboard --apply            # full workflow + mirror apply\n"
-        "  uv run origenlab refresh-dashboard --apply --no-mirror\n"
-        "  uv run origenlab refresh-dashboard --apply --mirror-dry-run\n"
-        "  uv run origenlab refresh-dashboard --apply --skip-ingest\n"
-        "  uv run origenlab refresh-dashboard --apply --since-days 14\n\n"
+        f"  {u}                    # plan only (default)\n"
+        f"  {u} --apply            # full workflow + mirror apply\n"
+        f"  {u} --apply --no-mirror\n"
+        f"  {u} --apply --mirror-dry-run\n"
+        f"  {u} --apply --skip-ingest\n"
+        f"  {u} --apply --since-days 14\n\n"
         "Includes build-mart -- --rebuild (break-glass). No alembic in this workflow.\n"
     )
 

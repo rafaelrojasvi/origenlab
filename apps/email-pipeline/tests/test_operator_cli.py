@@ -17,6 +17,7 @@ from origenlab_email_pipeline.cli import (
     MIRROR_DASHBOARD_SYNC_SCRIPT,
     POSTGRES_ENV_VARS,
     SUBCOMMAND_SCRIPTS,
+    REFRESH_DASHBOARD_USAGE,
     RefreshDashboardOptions,
     build_gmail_ingest_argv_list,
     build_mirror_dashboard_argv_list,
@@ -439,7 +440,8 @@ def test_refresh_dashboard_default_plan_no_runner(
     out = capsys.readouterr().out
     assert "plan only" in out
     assert "build-mart -- --rebuild" in out
-    assert "--apply" in out
+    assert f"{REFRESH_DASHBOARD_USAGE} --apply" in out
+    assert "refresh-dashboard--apply" not in out
 
 
 def test_refresh_dashboard_apply_full_workflow_order() -> None:
