@@ -210,6 +210,14 @@ Full CI pytest is the main **engineering tax** after deps. Splitting CI is optio
 
 **Explicitly out of scope for 8F:** script deletes, directory reshuffles, mirror/send behavior changes, `refresh-dashboard --apply` automation.
 
+### Phase 8F implementation status (2026-06-03)
+
+| PR | Status | Deliverable |
+|----|--------|-------------|
+| **8F-1** | Done | `openai` → `lab` group; CI `--group lab`; `tests/test_lab_dependencies.py` |
+| **8F-2** | Done | `hdbscan` → `ml` group; `tests/test_ml_dependencies.py` |
+| **8F-3** | Done | **`docs/DEPENDENCY_GROUPS.md`** — canonical install matrix after 8F-1/8F-2 |
+
 ---
 
 ## 8. Operator CLI — daily path stays minimal
@@ -266,4 +274,4 @@ uv run pytest tests/test_operator_cli.py tests/test_operator_entrypoint_contract
 | 8C | Done | Source taxonomy 102→51 unknown |
 | 8D | Done | Runner duplication audit |
 | 8E | Done | `core.step_runner` → refresh, gmail, mirror |
-| **8F** | **This audit** | Backend reduction options; implement 8F-1…8F-5 as small PRs |
+| **8F** | In progress | 8F-1…8F-3 done (deps + install guide); 8F-4…8F-5 docs-only follow-ups remain |
