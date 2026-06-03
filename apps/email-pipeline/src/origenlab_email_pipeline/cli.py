@@ -9,6 +9,8 @@ import argparse
 import os
 import subprocess
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 GMAIL_INGEST_SCRIPT = "scripts/ingest/05_workspace_gmail_imap_to_sqlite.py"
@@ -41,7 +43,11 @@ SUBCOMMAND_SCRIPTS: dict[str, str] = {
 # Multi-step or special wrappers (not 1:1 SUBCOMMAND_SCRIPTS).
 GMAIL_INGEST_COMMANDS: frozenset[str] = frozenset({"gmail-ingest", "gmail-ingest-folders"})
 MIRROR_DASHBOARD_COMMAND = "mirror-dashboard"
-SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset({MIRROR_DASHBOARD_COMMAND})
+REFRESH_DASHBOARD_COMMAND = "refresh-dashboard"
+REFRESH_DASHBOARD_USAGE = "uv run origenlab refresh-dashboard"
+SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset(
+    {MIRROR_DASHBOARD_COMMAND, REFRESH_DASHBOARD_COMMAND}
+)
 
 CLI_COMMAND_NAMES: tuple[str, ...] = tuple(SUBCOMMAND_SCRIPTS.keys()) + tuple(sorted(SPECIAL_COMMANDS))
 
@@ -74,6 +80,9 @@ _SUBCOMMAND_HELP: dict[str, str] = {
     "mirror-dashboard": (
         "Postgres dashboard mirror sync (dry-run default); --apply writes; "
         "--alembic --apply runs alembic upgrade head first"
+    ),
+    "refresh-dashboard": (
+        "Orchestrated Gmail→mart→safety→digest→status→mirror workflow (plan-only default)"
     ),
 }
 
@@ -262,6 +271,165 @@ def run_gmail_ingest(passthrough: list[str] | None = None) -> int:
     return 0
 
 
+@dataclass(frozen=True)
+class RefreshDashboardStep:
+    """One step in the refresh-dashboard workflow."""
+
+    label: str
+    command: str
+    passthrough: tuple[str, ...] = ()
+    mirror_apply: bool = False
+    mirror_alembic: bool = False
+
+
+@dataclass(frozen=True)
+class RefreshDashboardOptions:
+    apply: bool = False
+    no_mirror: bool = False
+    mirror_dry_run: bool = False
+    skip_ingest: bool = False
+    since_days: int | None = None
+
+
+def parse_refresh_dashboard_wrapper_args(argv: list[str]) -> RefreshDashboardOptions:
+    apply = False
+    no_mirror = False
+    mirror_dry_run = False
+    skip_ingest = False
+    since_days: int | None = None
+    i = 0
+    while i < len(argv):
+        tok = argv[i]
+        if tok in ("-h", "--help"):
+            i += 1
+            continue
+        if tok == "--apply":
+            apply = True
+            i += 1
+            continue
+        if tok == "--no-mirror":
+            no_mirror = True
+            i += 1
+            continue
+        if tok == "--mirror-dry-run":
+            mirror_dry_run = True
+            i += 1
+            continue
+        if tok == "--skip-ingest":
+            skip_ingest = True
+            i += 1
+            continue
+        if tok == "--since-days":
+            if i + 1 >= len(argv):
+                raise ValueError("refresh-dashboard --since-days requires a value")
+            since_days = int(argv[i + 1])
+            i += 2
+            continue
+        if tok.startswith("-"):
+            raise ValueError(f"refresh-dashboard: unknown flag {tok!r}")
+        raise ValueError(f"refresh-dashboard: unexpected argument {tok!r}")
+    if mirror_dry_run and no_mirror:
+        raise ValueError("refresh-dashboard: --mirror-dry-run and --no-mirror are mutually exclusive")
+    if since_days is not None and since_days < 1:
+        raise ValueError("refresh-dashboard --since-days must be a positive integer")
+    return RefreshDashboardOptions(
+        apply=apply,
+        no_mirror=no_mirror,
+        mirror_dry_run=mirror_dry_run,
+        skip_ingest=skip_ingest,
+        since_days=since_days,
+    )
+
+
+def build_refresh_dashboard_steps(options: RefreshDashboardOptions) -> list[RefreshDashboardStep]:
+    """Build ordered workflow steps from options (used for plan and apply)."""
+    steps: list[RefreshDashboardStep] = []
+    if not options.skip_ingest:
+        ingest_pt: tuple[str, ...] = ()
+        ingest_label = "gmail-ingest"
+        if options.since_days is not None:
+            ingest_pt = ("--", "--since-days", str(options.since_days))
+            ingest_label = f"gmail-ingest -- --since-days {options.since_days}"
+        steps.append(
+            RefreshDashboardStep(label=ingest_label, command="gmail-ingest", passthrough=ingest_pt)
+        )
+    steps.extend(
+        [
+            RefreshDashboardStep(
+                label="build-mart -- --rebuild",
+                command="build-mart",
+                passthrough=("--", "--rebuild"),
+            ),
+            RefreshDashboardStep(label="refresh-safety", command="refresh-safety"),
+            RefreshDashboardStep(label="ndr-review", command="ndr-review"),
+            RefreshDashboardStep(label="post-send-digest", command="post-send-digest"),
+            RefreshDashboardStep(label="status", command="status"),
+        ]
+    )
+    if not options.no_mirror:
+        if options.mirror_dry_run:
+            steps.append(RefreshDashboardStep(label="mirror-dashboard", command="mirror-dashboard"))
+        else:
+            steps.append(
+                RefreshDashboardStep(
+                    label="mirror-dashboard --apply",
+                    command="mirror-dashboard",
+                    mirror_apply=True,
+                )
+            )
+    return steps
+
+
+def _print_refresh_dashboard_plan(steps: list[RefreshDashboardStep], options: RefreshDashboardOptions) -> None:
+    total = len(steps)
+    print("refresh-dashboard — plan only (no Gmail ingest, mart rebuild, or Postgres writes)\n")
+    print(f"Planned steps ({total}) when you pass --apply:")
+    for i, step in enumerate(steps, 1):
+        note = ""
+        if step.command == "build-mart":
+            note = "  # break-glass: deletes mart tables"
+        print(f"  {i}/{total} {step.label}{note}")
+    print("\nVariants:")
+    print(f"  {REFRESH_DASHBOARD_USAGE} --apply")
+    print(f"  {REFRESH_DASHBOARD_USAGE} --apply --no-mirror")
+    print(f"  {REFRESH_DASHBOARD_USAGE} --apply --mirror-dry-run")
+    print(f"  {REFRESH_DASHBOARD_USAGE} --apply --skip-ingest")
+    if options.since_days is None:
+        print(f"  {REFRESH_DASHBOARD_USAGE} --apply --since-days 14")
+    print("\nNo alembic in this workflow; use mirror-dashboard --alembic --apply separately if needed.")
+
+
+SubcommandRunner = Callable[..., int]
+
+
+def run_refresh_dashboard(
+    options: RefreshDashboardOptions,
+    runner: SubcommandRunner | None = None,
+) -> int:
+    """Run refresh-dashboard plan or apply workflow via existing CLI subcommands."""
+    execute = runner or run_subcommand
+    steps = build_refresh_dashboard_steps(options)
+    if not options.apply:
+        _print_refresh_dashboard_plan(steps, options)
+        return 0
+    total = len(steps)
+    for i, step in enumerate(steps, 1):
+        print(f"[refresh-dashboard] {i}/{total} {step.label}")
+        rc = execute(
+            step.command,
+            list(step.passthrough) or None,
+            mirror_apply=step.mirror_apply,
+            mirror_alembic=step.mirror_alembic,
+        )
+        if rc != 0:
+            print(
+                f"[refresh-dashboard] failed at step {i}/{total}: {step.label} (exit {rc})",
+                file=sys.stderr,
+            )
+            return int(rc)
+    return 0
+
+
 def run_subcommand(
     subcommand: str,
     passthrough: list[str] | None = None,
@@ -290,12 +458,34 @@ def _build_parser() -> argparse.ArgumentParser:
             "origenlab status -- --json. "
             "gmail-ingest: safe INBOX + Sent ingest (--replace-source rejected). "
             "gmail-ingest-help: ingest --help only. "
-            "mirror-dashboard: Postgres mirror sync (dry-run default; requires Postgres URL env)."
+            "mirror-dashboard: Postgres mirror sync (dry-run default; requires Postgres URL env). "
+            "refresh-dashboard: orchestrated stack refresh (plan-only default)."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True, metavar="command")
     for name in CLI_COMMAND_NAMES:
         script_rel = SUBCOMMAND_SCRIPTS.get(name, GMAIL_INGEST_SCRIPT)
+        if name == REFRESH_DASHBOARD_COMMAND:
+            p = sub.add_parser(name, help=_SUBCOMMAND_HELP[name], description=_SUBCOMMAND_HELP[name])
+            p.add_argument("--apply", action="store_true", help="Run workflow steps (stop on first failure)")
+            p.add_argument("--no-mirror", action="store_true", help="With --apply: skip Postgres mirror step")
+            p.add_argument(
+                "--mirror-dry-run",
+                action="store_true",
+                help="With --apply: end with mirror-dashboard dry-run (not --apply)",
+            )
+            p.add_argument(
+                "--skip-ingest",
+                action="store_true",
+                help="With --apply: skip gmail-ingest (use when already ingested)",
+            )
+            p.add_argument(
+                "--since-days",
+                metavar="N",
+                type=int,
+                help="With --apply: pass --since-days N to gmail-ingest only",
+            )
+            continue
         if name == MIRROR_DASHBOARD_COMMAND:
             p = sub.add_parser(
                 name,
@@ -347,6 +537,20 @@ def _print_gmail_ingest_help_help() -> None:
     )
 
 
+def _print_refresh_dashboard_help() -> None:
+    u = REFRESH_DASHBOARD_USAGE
+    print(
+        "refresh-dashboard — orchestrated operator stack refresh\n\n"
+        f"  {u}                    # plan only (default)\n"
+        f"  {u} --apply            # full workflow + mirror apply\n"
+        f"  {u} --apply --no-mirror\n"
+        f"  {u} --apply --mirror-dry-run\n"
+        f"  {u} --apply --skip-ingest\n"
+        f"  {u} --apply --since-days 14\n\n"
+        "Includes build-mart -- --rebuild (break-glass). No alembic in this workflow.\n"
+    )
+
+
 def _print_mirror_dashboard_help() -> None:
     print(
         "mirror-dashboard — Postgres dashboard mirror (EXPERIMENTAL_PARKED)\n\n"
@@ -371,6 +575,16 @@ def main(argv: list[str] | None = None) -> int:
     command = argv[0]
     if not _is_known_command(command):
         parser.error(f"unknown command {command!r}")
+
+    if command == REFRESH_DASHBOARD_COMMAND:
+        if _wrapper_help_requested(argv[1:]):
+            _print_refresh_dashboard_help()
+            return 0
+        try:
+            refresh_opts = parse_refresh_dashboard_wrapper_args(argv[1:])
+        except ValueError as exc:
+            parser.error(str(exc))
+        return run_refresh_dashboard(refresh_opts)
 
     mirror_apply = False
     mirror_alembic = False

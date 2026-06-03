@@ -2,7 +2,7 @@
 
 Status: canonical (navigation)  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-03 (Phase 7B)
+Last reviewed: 2026-06-03 (Phase 7C)
 
 Procedures: [`RUNBOOK.md`](RUNBOOK.md) · post-send: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) · tags / break-glass: [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
@@ -25,6 +25,10 @@ uv run origenlab gmail-ingest-folders
 uv run origenlab mirror-dashboard
 uv run origenlab mirror-dashboard --apply
 uv run origenlab mirror-dashboard --alembic --apply
+uv run origenlab refresh-dashboard
+uv run origenlab refresh-dashboard --apply
+uv run origenlab refresh-dashboard --apply --no-mirror
+uv run origenlab refresh-dashboard --apply --mirror-dry-run
 ```
 
 Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. Pass script flags after ``--`` where supported. **`gmail-ingest`** runs INBOX then `[Gmail]/Enviados` with `--skip-duplicate-message-id`; **rejects `--replace-source`**. **`mirror-dashboard`** defaults to sync `--dry-run`; **`--apply`** writes Postgres; **`--alembic --apply`** runs `alembic upgrade head` first. Requires **`ORIGENLAB_POSTGRES_URL`**, **`ALEMBIC_DATABASE_URL`**, or **`ORIGENLAB_CLOUD_POSTGRES_URL`**. **Advanced fallback** = `scripts/…` paths in the table below.
@@ -46,6 +50,10 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `gmail-ingest-help` | same (`--help` only) | No; ingest flags reference |
 | `mirror-dashboard` | `sync/sync_dashboard_postgres_mirror.py` | Postgres (dry-run default); `--apply` writes |
 | `mirror-dashboard --alembic --apply` | alembic + sync script | Postgres; schema + mirror |
+| `refresh-dashboard` | orchestrates CLI steps above | Plan only (default) |
+| `refresh-dashboard --apply` | ingest → `build-mart --rebuild` → safety → digest → status → `mirror-dashboard --apply` | SQLite + reports + Postgres |
+| `refresh-dashboard --apply --no-mirror` | same without mirror | SQLite + reports |
+| `refresh-dashboard --apply --mirror-dry-run` | SQLite/report steps + `mirror-dashboard` dry-run | Mixed |
 
 **Truth:** SQLite + Gmail Sent in `emails`. Postgres / dashboard LISTO ≠ send approval.
 

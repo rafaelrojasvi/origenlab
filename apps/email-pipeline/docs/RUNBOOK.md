@@ -424,6 +424,11 @@ uv run python scripts/mart/build_business_mart.py --rebuild
 uv run python scripts/qa/refresh_outbound_safety_memory.py
 
 # E–F — Postgres mirror (explicit approval; scratch DB only)
+uv run origenlab refresh-dashboard              # plan only — safe default
+uv run origenlab refresh-dashboard --apply      # full stack (ingest→mart --rebuild→…→mirror apply)
+uv run origenlab refresh-dashboard --apply --no-mirror
+uv run origenlab refresh-dashboard --apply --mirror-dry-run
+# Or step-by-step / mirror only:
 uv run origenlab mirror-dashboard
 uv run origenlab mirror-dashboard --apply
 # Schema drift + mirror: uv run origenlab mirror-dashboard --alembic --apply
