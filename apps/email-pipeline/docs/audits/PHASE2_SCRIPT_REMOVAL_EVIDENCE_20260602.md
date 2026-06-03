@@ -4,7 +4,7 @@ Status: generated reference (read-only audit)
 Owner: email-pipeline-maintainers
 Last reviewed: 2026-06-02
 
-**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper; Phase **5K** removed 2026-06-01 manual outreach registry and dated QA scripts.
+**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper; Phase **5K** removed 2026-06-01 manual outreach registry and dated QA scripts; Phase **5Q** removed legacy `flag_reported_non_delivery_from_contacto.py` (canonical `--include-reported-non-delivery`).
 
 Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`
 
@@ -14,7 +14,6 @@ Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_
 
 | Path | SCRIPT_MAP | Test-locked | Doc refs | Test refs | Script refs | Replacement | Suggested phase |
 |------|------------|-------------|----------|-----------|-------------|-------------|-----------------|
-| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | yes | no | 4 | 4 | 2 | flag_ndr_bounces_from_contacto.py (--include-reported-non-delivery for human inbound) + build_ndr_review_queue.py | 5Q delete next once canonical human-reported mode verified in prod |
 
 ## Removed in Phase 5A (2026-06-02)
 
@@ -51,6 +50,12 @@ Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_
 | `src/origenlab_email_pipeline/campaigns/manual_outreach_2026_06_01.py` | scripts/qa/build_post_send_digest.py + docs/pipeline/POST_SEND_SAFE_LOOP.md | 5K |
 | `scripts/qa/build_manual_outreach_2026_06_01_digest.py` | scripts/qa/build_post_send_digest.py | 5K |
 | `scripts/qa/apply_manual_outreach_2026_06_01_corrections.py` | docs/pipeline/POST_SEND_SAFE_LOOP.md + generic suppression tools | 5K |
+
+## Removed in Phase 5Q (2026-06-02)
+
+| Path | Replacement | Removed phase |
+|------|-------------|---------------|
+| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | scripts/tools/flag_ndr_bounces_from_contacto.py --include-reported-non-delivery + scripts/qa/build_ndr_review_queue.py | 5Q |
 
 ## Phase 3 refactor targets (keep entrypoints; lock behavior first)
 

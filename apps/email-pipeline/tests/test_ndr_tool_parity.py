@@ -1,37 +1,14 @@
-"""NDR tooling parity: canonical flag_ndr vs ndr_bounce_extraction vs legacy reported-non-delivery."""
+"""NDR tooling parity: canonical flag_ndr vs ndr_bounce_extraction."""
 
 from __future__ import annotations
 
-import importlib.util
 import sqlite3
 import sys
 from pathlib import Path
 
-import pytest
-
 REPO = Path(__file__).resolve().parents[1]
 _SRC = REPO / "src"
 _NDR_SCRIPT = REPO / "scripts/tools/flag_ndr_bounces_from_contacto.py"
-_LEGACY_SCRIPT = REPO / "scripts/tools/flag_reported_non_delivery_from_contacto.py"
-
-
-def _load_script(path: Path, name: str):
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-@pytest.fixture
-def ndr_script():
-    return _load_script(_NDR_SCRIPT, "flag_ndr_bounces")
-
-
-@pytest.fixture
-def legacy_script():
-    return _load_script(_LEGACY_SCRIPT, "flag_reported_ndr")
 
 
 def _ndr_body(recipient: str = "failed@client.cl") -> str:
@@ -108,30 +85,16 @@ def test_scan_ndr_uses_bounce_extraction_on_dsn_body(tmp_path: Path) -> None:
     assert "bounce_ndr" in cl.get("tags", [])
 
 
-def test_legacy_does_not_flag_mailer_daemon_ndr(tmp_path: Path) -> None:
-    """Legacy tool scans human senders only; DSN bounces are canonical NDR domain."""
+def test_reported_signal_does_not_match_mailer_daemon_body(tmp_path: Path) -> None:
     if str(_SRC) not in sys.path:
         sys.path.insert(0, str(_SRC))
     from origenlab_email_pipeline.reported_non_delivery_signals import text_suggests_reported_non_delivery
 
     body = _ndr_body("other@client.cl")
-    conn = sqlite3.connect(tmp_path / "legacy.sqlite")
-    _seed_contacto_emails(
-        conn,
-        [
-            (
-                "Mail Delivery Subsystem <mailer-daemon@googlemail.com>",
-                "Failure",
-                body,
-                "INBOX",
-            ),
-        ],
-    )
-    conn.close()
     assert not text_suggests_reported_non_delivery("Failure", body)
 
 
-def test_legacy_flags_human_reported_non_delivery_not_ndr_scan(tmp_path: Path) -> None:
+def test_human_reported_detected_by_canonical_scan_not_ndr(tmp_path: Path) -> None:
     if str(_SRC) not in sys.path:
         sys.path.insert(0, str(_SRC))
     from origenlab_email_pipeline.ndr_contacto_scan import scan_ndr_planned_recipients
@@ -194,7 +157,6 @@ def test_canonical_default_scan_ndr_only(tmp_path: Path) -> None:
 def test_canonical_cli_dry_run_labels_human_reported_non_delivery(tmp_path: Path) -> None:
     import os
     import subprocess
-    import sys
 
     db = tmp_path / "human_cli.sqlite"
     conn = sqlite3.connect(db)
@@ -233,32 +195,3 @@ def test_canonical_cli_dry_run_labels_human_reported_non_delivery(tmp_path: Path
     assert "comprador@institucion.cl" in r.stdout
     assert "Dry run only" in r.stdout
     assert "bounce_ndr with extracted recipient: 0" in r.stdout
-
-
-def test_legacy_unique_behavior_is_inbound_reply_heuristic() -> None:
-    """Document: legacy path is complementary (inbound 'did not receive' text), not DSN parsing."""
-    legacy = _LEGACY_SCRIPT.read_text(encoding="utf-8")
-    ndr = _NDR_SCRIPT.read_text(encoding="utf-8")
-    assert "reported_non_delivery" in legacy
-    assert "text_suggests_reported_non_delivery" in legacy
-    assert "scan_reported_non_delivery_senders" in ndr
-    assert "bounce_ndr" in ndr or "scan_ndr_planned_recipients" in ndr
-
-
-def test_legacy_ndr_script_warns_on_help() -> None:
-    import os
-    import subprocess
-    import sys
-
-    r = subprocess.run(
-        [sys.executable, str(_LEGACY_SCRIPT), "--help"],
-        cwd=str(REPO),
-        env={**os.environ, "PYTHONPATH": str(_SRC)},
-        capture_output=True,
-        text=True,
-        timeout=90,
-        check=False,
-    )
-    assert r.returncode == 0, r.stderr + r.stdout
-    assert "DEPRECATED" in r.stderr, r.stderr
-    assert "flag_ndr_bounces_from_contacto.py" in r.stderr, r.stderr

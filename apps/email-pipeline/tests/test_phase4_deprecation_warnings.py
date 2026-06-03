@@ -14,18 +14,13 @@ from removal_evidence import (
     REMOVED_PHASE5B_TARGETS,
     REMOVED_PHASE5C_TARGETS,
     REMOVED_PHASE5D_TARGETS,
+    REMOVED_PHASE5Q_TARGETS,
 )
 
 REPO = Path(__file__).resolve().parents[1]
 _SRC = REPO / "src"
 
-_PYTHON_HELP_TARGETS: tuple[tuple[str, str, str], ...] = (
-    (
-        "scripts/tools/flag_reported_non_delivery_from_contacto.py",
-        "DEPRECATED",
-        "flag_ndr_bounces_from_contacto.py",
-    ),
-)
+_PYTHON_HELP_TARGETS: tuple[tuple[str, str, str], ...] = ()
 
 _SHELL_BANNER_TARGETS: tuple[tuple[str, str], ...] = ()
 
@@ -63,8 +58,6 @@ def test_deprecated_python_scripts_warn_on_help(
     assert category in err, err
     assert replacement_needle in err, err
     assert "not for new operator work" in err.lower() or "not preferred" in err.lower(), err
-    if "flag_reported_non_delivery_from_contacto.py" in rel:
-        assert "include-reported-non-delivery" in err, err
 
 
 @pytest.mark.parametrize("rel,replacement_needle", _SHELL_BANNER_TARGETS)
@@ -98,6 +91,11 @@ def test_phase5c_removed_buyer_queue_not_on_disk(rel: str) -> None:
 @pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5D_TARGETS])
 def test_phase5d_removed_archive_audit_wrapper_not_on_disk(rel: str) -> None:
     assert not (REPO / rel).is_file(), f"Phase 5D removed: {rel}"
+
+
+@pytest.mark.parametrize("rel", [r["path"] for r in REMOVED_PHASE5Q_TARGETS])
+def test_phase5q_removed_reported_ndr_not_on_disk(rel: str) -> None:
+    assert not (REPO / rel).is_file(), f"Phase 5Q removed: {rel}"
 
 
 @pytest.mark.parametrize("rel", _EQUIPMENT_FIRST_CANONICAL)

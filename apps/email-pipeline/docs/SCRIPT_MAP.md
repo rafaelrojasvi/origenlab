@@ -155,13 +155,13 @@ Legacy tags **KEEP_CORE** / **KEEP_AUDIT** in older prose map loosely to **OPS_C
 **Canonical post-send path:** [`scripts/tools/flag_ndr_bounces_from_contacto.py`](../scripts/tools/flag_ndr_bounces_from_contacto.py) — dry-run default; **targeted** apply only after human review:
 
 - Default scan: **NDR / Mailer-Daemon** (`bounce_ndr`) only.
-- Optional: `--include-reported-non-delivery` — inbound human replies (e.g. «no recibimos su correo»); dry-run labels matches as **`human_reported_non_delivery`** (not `bounce_ndr`). Replaces legacy `flag_reported_non_delivery_from_contacto.py` behavior.
+- Optional: `--include-reported-non-delivery` — inbound human replies (e.g. «no recibimos su correo»); dry-run labels matches as **`human_reported_non_delivery`** (not `bounce_ndr`). Replaces removed `flag_reported_non_delivery_from_contacto.py` (Phase **5Q**).
 - Preferred NDR apply: `--emails-file PATH --only-code CODE --apply` (allowlist must match scan evidence).
 - **Broad `--apply`** without `--emails-file` / `--only-code` = **break-glass** (all planned recipients from scan).
 
 **Human-review helper (read-only):** [`scripts/qa/build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) — batches + suggested allowlists under `reports/out/active/current/ndr_review_queue_*`; **does not** write suppressions.
 
-**Legacy / deprecation candidate:** [`scripts/tools/flag_reported_non_delivery_from_contacto.py`](../scripts/tools/flag_reported_non_delivery_from_contacto.py) — **delete next phase** after canonical `--include-reported-non-delivery` is verified; use canonical tool instead. No broad or automatic suppression writes.
+**Removed Phase 5Q:** `scripts/tools/flag_reported_non_delivery_from_contacto.py` — use canonical `--include-reported-non-delivery` above instead.
 
 Procedure: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md#ndr-apply-rules).
 
@@ -283,7 +283,7 @@ Shared helpers imported by other `scripts/` CLIs; not daily outbound or mirror o
 
 | Path | Tag | Replacement / notes |
 |------|-----|---------------------|
-| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | DEPRECATED | **`flag_ndr_bounces_from_contacto.py --include-reported-non-delivery`** + [`build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py); delete script next phase when verified |
+| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | REMOVED (5Q) | **`flag_ndr_bounces_from_contacto.py --include-reported-non-delivery`** + [`build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) |
 
 **Removed Phase 5D (2026-06-02):** `scripts/leads/advanced/export_archive_outreach_candidates.py` — use [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) `--audit-only`.
 
@@ -389,7 +389,6 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | `scripts/qa/sync_outreach_batch_from_ingested_bounces.py` | **`--apply`** updates suppressions / state |
 | `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | **`--replace-source`** deletes existing rows for that Gmail `source_file` before reinsert — [details](#gmail-ingest-replace-source) |
 | `scripts/tools/flag_ndr_bounces_from_contacto.py` | **`--apply`** writes `contact_email_suppression`; broad apply = all scan matches; prefer `--emails-file` + `--only-code` ([`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md)) |
-| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | **DEPRECATED** — prefer `flag_ndr_bounces_from_contacto.py`; **`--apply`** writes suppressions |
 | `scripts/validation/extract_attachment_text.py` | May **delete** `attachment_extracts` during rebuild patterns |
 | `scripts/tools/archive_reports_out_generated.py` | **`--apply`** **moves** files under `reports/out` to `archive/manual_cleanup/…` (no deletes) |
 
