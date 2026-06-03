@@ -73,12 +73,23 @@ def _is_tatiana_lab_path(p: str) -> bool:
 
 
 def classify_vertical(rel_posix: str) -> str:
-    """Heuristic single bucket; first matching rule wins."""
+    """Heuristic single bucket; first matching rule wins (Phase 6F taxonomy)."""
     p = rel_posix.replace("\\", "/").lower()
 
+    if p.startswith("scripts/qa/plan_") or "/scripts/qa/plan_" in p:
+        return "planners"
+
+    if p.startswith("scripts/qa/verify_") and "postgres_mirror" in p:
+        return "postgres_verify"
+
+    if p.startswith("scripts/tools/check_") or p.endswith("scripts/tools/inspect_sqlite.py"):
+        return "tooling"
+
     if (
-        "/scripts/migrate/" in f"/{p}/"
-        or p.startswith("scripts/migrate/")
+        p.startswith("scripts/migrate/")
+        or "/scripts/migrate/" in f"/{p}/"
+        or (p.startswith("scripts/sync/") and "postgres" in p)
+        or "/scripts/sync/" in f"/{p}/" and "postgres" in p
         or "_to_postgres" in p
         or "validate_sqlite_archive_for_postgres" in p
         or "postgres_outbound_audit" in p
@@ -91,16 +102,67 @@ def classify_vertical(rel_posix: str) -> str:
     if _is_tatiana_lab_path(p):
         return "tatiana_lab"
 
-    if "commercial" in p and ("/commercial/" in f"/{p}/" or "commercial_intel" in p or "/commercial/" in p):
+    if "postgres_dashboard_api" in p:
+        return "postgres_api"
+
+    if (
+        p.startswith("src/origenlab_email_pipeline/catalog/")
+        or "/origenlab_email_pipeline/catalog/" in p
+        or p.startswith("scripts/catalog/")
+    ):
+        return "catalog"
+
+    if (
+        "core/mart/" in p
+        or "business_mart" in p
+        or p.startswith("scripts/mart/")
+        or "/scripts/mart/" in p
+    ):
+        return "mart"
+
+    if (
+        p.startswith("src/origenlab_email_pipeline/validation/")
+        or "/origenlab_email_pipeline/validation/" in p
+        or p.startswith("scripts/validation/")
+    ):
+        return "validation"
+
+    if (
+        p.startswith("src/origenlab_email_pipeline/campaigns/")
+        or "/origenlab_email_pipeline/campaigns/" in p
+    ):
+        return "campaigns"
+
+    if (
+        p.startswith("src/origenlab_email_pipeline/qa/")
+        or "/origenlab_email_pipeline/qa/" in p
+    ):
+        return "qa"
+
+    if (
+        p.startswith("src/origenlab_email_pipeline/ingest/")
+        or "/origenlab_email_pipeline/ingest/" in p
+        or p.startswith("scripts/ingest/")
+    ):
+        return "ingest"
+
+    if "warm_case_" in p:
+        return "warm_cases"
+
+    if "ndr_" in p or "reported_non_delivery_" in p:
+        return "ndr"
+
+    if "commercial" in p and ("/commercial/" in f"/{p}/" or "commercial_intel" in p):
         return "commercial"
 
     if (
         "client_report" in p
-        or "/scripts/reports/" in f"/{p}/"
         or p.startswith("scripts/reports/")
+        or "/scripts/reports/" in f"/{p}/"
+        or "build_leads_client" in p
+        or "generate_client_report" in p
+        or "open_client_report" in p
     ):
-        return "reports"
-    if "build_leads_client" in p or "generate_client_report" in p or "open_client_report" in p:
         return "reports"
 
     if (
@@ -121,7 +183,6 @@ def classify_vertical(rel_posix: str) -> str:
             "csv_contracts",
             "suppression",
             "gmail_",
-            "ingest/05",
             "mark_sent",
             "process_broad",
             "next_marketing",

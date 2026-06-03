@@ -455,6 +455,8 @@ rg 'subprocess|scripts/' apps/api/src
 
 **Planner output (2026-06-02):** 191 scripts total; buckets: maintenance 69, audit_readonly 33, break_glass 26, unknown 19; 168 referenced in docs, 112 in tests.
 
+**Phase 6F (2026-06-02):** `plan_source_quality.py` taxonomy only — added buckets (`campaigns`, `qa`, `postgres_api`, `catalog`, `mart`, `validation`, `ingest`, `warm_cases`, `ndr`, `planners`, `tooling`, `postgres_verify`, …). **No runtime behavior change.** Re-run `plan_source_quality.py --json-out` and compare `vertical_counts.unknown` (was 192 on pre-6F scan).
+
 ---
 
 ## Open questions
