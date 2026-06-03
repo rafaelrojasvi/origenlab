@@ -1,4 +1,4 @@
-"""Tests for unified operator CLI wrapper (Phase 6B / 6D / 6G / 7A / 7B / 7C) — no heavy script execution."""
+"""Tests for unified operator CLI wrapper (Phase 6B / 6D / 6G / 7A / 7B / 7C / 8B) — no heavy script execution."""
 
 from __future__ import annotations
 
@@ -156,7 +156,7 @@ def test_gmail_ingest_folders_wrapper_help_no_subprocess(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(
-        "origenlab_email_pipeline.cli.subprocess.run",
+        "origenlab_email_pipeline.operator_cli.runner.subprocess.run",
         lambda *a, **k: pytest.fail("subprocess must not run for wrapper --help"),
     )
     assert main(["gmail-ingest-folders", "--help"]) == 0
@@ -170,7 +170,7 @@ def test_gmail_ingest_help_wrapper_help_no_subprocess(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(
-        "origenlab_email_pipeline.cli.subprocess.run",
+        "origenlab_email_pipeline.operator_cli.runner.subprocess.run",
         lambda *a, **k: pytest.fail("subprocess must not run for wrapper --help"),
     )
     assert main(["gmail-ingest-help", "--help"]) == 0
@@ -189,7 +189,7 @@ def test_run_gmail_ingest_folders_mocked_list_folders(monkeypatch: pytest.Monkey
 
         return R()
 
-    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.runner.subprocess.run", fake_run)
     from origenlab_email_pipeline.cli import run_subcommand
 
     assert run_subcommand("gmail-ingest-folders") == 0
@@ -218,7 +218,7 @@ def test_run_subcommand_not_invoked_in_tests(monkeypatch: pytest.MonkeyPatch) ->
 
         return R()
 
-    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.runner.subprocess.run", fake_run)
     from origenlab_email_pipeline.cli import run_subcommand
 
     assert run_subcommand("check-readiness", ["--help"]) == 0
@@ -261,7 +261,7 @@ def test_run_gmail_ingest_mocked_runs_inbox_then_sent(monkeypatch: pytest.Monkey
 
         return R()
 
-    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.gmail.subprocess.run", fake_run)
     from origenlab_email_pipeline.cli import run_gmail_ingest
 
     assert run_gmail_ingest() == 0
@@ -280,7 +280,7 @@ def test_run_gmail_ingest_stops_on_first_failure(monkeypatch: pytest.MonkeyPatch
 
         return R()
 
-    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.gmail.subprocess.run", fake_run)
     from origenlab_email_pipeline.cli import run_gmail_ingest
 
     assert run_gmail_ingest() == 3
@@ -332,7 +332,7 @@ def test_mirror_dashboard_missing_postgres_env_no_subprocess(
 
         return R()
 
-    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.mirror.subprocess.run", fake_run)
     assert not postgres_url_configured()
     assert run_mirror_dashboard() == 2
     assert calls == []
@@ -374,7 +374,7 @@ def test_mirror_dashboard_accepts_cloud_postgres_env_mocked(
 
         return R()
 
-    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.mirror.subprocess.run", fake_run)
     assert run_mirror_dashboard() == 0
     assert len(calls) == 1
     assert "--dry-run" in calls[0]
@@ -393,7 +393,7 @@ def test_mirror_dashboard_with_postgres_env_mocked(
 
         return R()
 
-    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.mirror.subprocess.run", fake_run)
     assert run_mirror_dashboard(apply=True, alembic=True) == 0
     assert len(calls) == 2
     assert calls[0][0] == "alembic"
@@ -417,7 +417,10 @@ def test_mirror_dashboard_missing_env_via_main(
 ) -> None:
     for name in POSTGRES_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", lambda *a, **k: pytest.fail("no subprocess"))
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.operator_cli.mirror.subprocess.run",
+        lambda *a, **k: pytest.fail("no subprocess"),
+    )
     assert main(["mirror-dashboard"]) == 2
     err = capsys.readouterr().err
     assert "ORIGENLAB_POSTGRES_URL" in err or "ALEMBIC_DATABASE_URL" in err
@@ -433,7 +436,7 @@ def test_refresh_dashboard_default_plan_no_runner(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(
-        "origenlab_email_pipeline.cli.run_subcommand",
+        "origenlab_email_pipeline.operator_cli.runner.run_subcommand",
         lambda *a, **k: pytest.fail("run_subcommand must not run for plan-only"),
     )
     assert run_refresh_dashboard(_refresh_opts()) == 0
@@ -531,7 +534,7 @@ def test_refresh_dashboard_main_default_no_subprocess(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(
-        "origenlab_email_pipeline.cli.run_subcommand",
+        "origenlab_email_pipeline.operator_cli.runner.run_subcommand",
         lambda *a, **k: pytest.fail("no subprocess"),
     )
     assert main(["refresh-dashboard"]) == 0
@@ -554,7 +557,7 @@ def test_run_gmail_ingest_help_mocked_only_help(monkeypatch: pytest.MonkeyPatch)
 
         return R()
 
-    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.runner.subprocess.run", fake_run)
     from origenlab_email_pipeline.cli import run_subcommand
 
     assert run_subcommand("gmail-ingest-help") == 0
