@@ -52,10 +52,17 @@ uv sync
 Optional **dependency groups** (install what you use):
 
 ```bash
+uv sync --group lab          # OpenAI — Tatiana copilot, research automation (not daily ops)
 uv sync --group workspace   # Google OAuth for Gmail IMAP / API tooling
 uv sync --group ui          # Streamlit / pandas stack
 uv sync --group postgres    # Alembic + drivers
 uv sync --group ml          # torch / embeddings (CUDA index in pyproject)
+```
+
+For **full test suite** (matches CI):
+
+```bash
+uv sync --group dev --group ui --group lab
 ```
 
 Copy env template and edit (paths, secrets):
@@ -67,6 +74,7 @@ cp .env.example .env
 ## Test command
 
 ```bash
+uv sync --group dev --group ui --group lab   # CI-equivalent deps for full pytest
 uv run pytest tests -q
 ```
 

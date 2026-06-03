@@ -140,7 +140,7 @@ The business mart Streamlit app ([`apps/business_mart_app.py`](../../apps/busine
 - **Generator choice:** use **Mock explícito** for offline runs, or **OpenAI** when API keys are configured. There is **no silent fallback** to mock when OpenAI is selected but misconfigured — the UI shows a clear error.
 - **Optional export** writes `draft_package.json`, `pilot_review_row.csv`, and `origenlab_context_snapshot.json` under `reports/out/<timestamp>_streamlit_borrador_comercial/` (same column conventions as pilot review CSVs). SQLite remains read-only.
 
-Run locally (from monorepo root: `cd apps/email-pipeline`; if you are already in that folder, skip the inner `cd`): `uv sync --group ui` once, then `uv run --group ui streamlit run apps/business_mart_app.py`.
+Run locally (from monorepo root: `cd apps/email-pipeline`; if you are already in that folder, skip the inner `cd`): `uv sync --group ui --group lab` once, then `uv run --group ui streamlit run apps/business_mart_app.py`.
 
 ## Guardrails
 

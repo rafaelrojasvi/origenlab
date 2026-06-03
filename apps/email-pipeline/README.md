@@ -50,6 +50,8 @@ This monorepo is meant to hold **code and docs** only; **operational data stays 
 
 **After cloning:** `uv sync` → `cp .env.example .env` → create `~/data/origenlab-email/...` and set paths.
 
+Default `uv sync` covers **daily SQLite/document tooling** only. **OpenAI** (Tatiana copilot, research automation) requires `uv sync --group lab`. See [REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md#setup-commands).
+
 **Never paste** API keys, OAuth tokens, mailbox passwords, full paths to customer archives, or excerpts from real reports into issues or PRs.
 
 **Monorepo (repo root):** coordinated disclosure → [`SECURITY.md`](../../SECURITY.md); general contribution flow → [`CONTRIBUTING.md`](../../CONTRIBUTING.md); license → [`LICENSE`](../../LICENSE). Default PR template → [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md).
