@@ -1,4 +1,4 @@
-"""Tests for unified operator CLI wrapper (Phase 6B / 6D / 6G / 7A / 7B) — no heavy script execution."""
+"""Tests for unified operator CLI wrapper (Phase 6B / 6D / 6G / 7A / 7B / 7C) — no heavy script execution."""
 
 from __future__ import annotations
 
@@ -17,9 +17,11 @@ from origenlab_email_pipeline.cli import (
     MIRROR_DASHBOARD_SYNC_SCRIPT,
     POSTGRES_ENV_VARS,
     SUBCOMMAND_SCRIPTS,
+    RefreshDashboardOptions,
     build_gmail_ingest_argv_list,
     build_mirror_dashboard_argv_list,
     build_mirror_dashboard_sync_argv,
+    build_refresh_dashboard_steps,
     build_subcommand_argv,
     main,
     missing_postgres_env_message,
@@ -28,6 +30,7 @@ from origenlab_email_pipeline.cli import (
     postgres_url_configured,
     repo_root,
     run_mirror_dashboard,
+    run_refresh_dashboard,
     script_path_for,
     validate_gmail_ingest_passthrough,
 )
@@ -418,6 +421,125 @@ def test_mirror_dashboard_missing_env_via_main(
     err = capsys.readouterr().err
     assert "ORIGENLAB_POSTGRES_URL" in err or "ALEMBIC_DATABASE_URL" in err
     assert missing_postgres_env_message() in err
+
+
+def _refresh_opts(**kwargs: object) -> RefreshDashboardOptions:
+    return RefreshDashboardOptions(**kwargs)
+
+
+def test_refresh_dashboard_default_plan_no_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.cli.run_subcommand",
+        lambda *a, **k: pytest.fail("run_subcommand must not run for plan-only"),
+    )
+    assert run_refresh_dashboard(_refresh_opts()) == 0
+    out = capsys.readouterr().out
+    assert "plan only" in out
+    assert "build-mart -- --rebuild" in out
+    assert "--apply" in out
+
+
+def test_refresh_dashboard_apply_full_workflow_order() -> None:
+    calls: list[tuple[str, list[str] | None, bool]] = []
+
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        calls.append((cmd, passthrough, mirror_apply))
+        return 0
+
+    opts = _refresh_opts(apply=True)
+    assert run_refresh_dashboard(opts, runner=fake_runner) == 0
+    assert [c[0] for c in calls] == [
+        "gmail-ingest",
+        "build-mart",
+        "refresh-safety",
+        "ndr-review",
+        "post-send-digest",
+        "status",
+        "mirror-dashboard",
+    ]
+    assert calls[0][1] is None
+    assert calls[1][1] == ["--", "--rebuild"]
+    assert calls[-1][2] is True
+
+
+def test_refresh_dashboard_apply_no_mirror_omits_mirror() -> None:
+    calls: list[str] = []
+
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        calls.append(cmd)
+        return 0
+
+    run_refresh_dashboard(_refresh_opts(apply=True, no_mirror=True), runner=fake_runner)
+    assert calls[-1] == "status"
+    assert "mirror-dashboard" not in calls
+
+
+def test_refresh_dashboard_apply_mirror_dry_run_no_mirror_apply() -> None:
+    calls: list[tuple[str, bool]] = []
+
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        calls.append((cmd, mirror_apply))
+        return 0
+
+    run_refresh_dashboard(_refresh_opts(apply=True, mirror_dry_run=True), runner=fake_runner)
+    assert calls[-1] == ("mirror-dashboard", False)
+
+
+def test_refresh_dashboard_apply_skip_ingest() -> None:
+    calls: list[str] = []
+
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        calls.append(cmd)
+        return 0
+
+    run_refresh_dashboard(_refresh_opts(apply=True, skip_ingest=True), runner=fake_runner)
+    assert calls[0] == "build-mart"
+    assert "gmail-ingest" not in calls
+
+
+def test_refresh_dashboard_apply_since_days_only_on_ingest() -> None:
+    calls: list[tuple[str, list[str] | None]] = []
+
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        calls.append((cmd, passthrough))
+        return 0
+
+    run_refresh_dashboard(_refresh_opts(apply=True, since_days=14), runner=fake_runner)
+    assert calls[0] == ("gmail-ingest", ["--", "--since-days", "14"])
+    assert all(c[1] != ["--", "--since-days", "14"] for c in calls[1:])
+
+
+def test_refresh_dashboard_stops_on_first_failure() -> None:
+    calls: list[str] = []
+
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        calls.append(cmd)
+        return 3 if cmd == "build-mart" else 0
+
+    rc = run_refresh_dashboard(_refresh_opts(apply=True), runner=fake_runner)
+    assert rc == 3
+    assert calls == ["gmail-ingest", "build-mart"]
+
+
+def test_refresh_dashboard_main_default_no_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.cli.run_subcommand",
+        lambda *a, **k: pytest.fail("no subprocess"),
+    )
+    assert main(["refresh-dashboard"]) == 0
+    assert "plan only" in capsys.readouterr().out
+
+
+def test_refresh_dashboard_build_steps_count() -> None:
+    assert len(build_refresh_dashboard_steps(_refresh_opts())) == 7
+    assert len(build_refresh_dashboard_steps(_refresh_opts(no_mirror=True))) == 6
+    assert len(build_refresh_dashboard_steps(_refresh_opts(skip_ingest=True))) == 6
 
 
 def test_run_gmail_ingest_help_mocked_only_help(monkeypatch: pytest.MonkeyPatch) -> None:

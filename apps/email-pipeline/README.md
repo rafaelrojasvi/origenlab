@@ -28,6 +28,10 @@ uv run origenlab gmail-ingest              # INBOX + Sent; optional: -- --since-
 uv run origenlab gmail-ingest-folders      # if [Gmail]/Enviados label differs
 uv run origenlab mirror-dashboard          # Postgres mirror dry-run (needs Postgres URL env)
 uv run origenlab mirror-dashboard --apply  # write mirror; --alembic --apply runs migrations first
+uv run origenlab refresh-dashboard         # plan only (safe default)
+uv run origenlab refresh-dashboard --apply # full stack: ingest→mart --rebuild→safety→mirror apply
+uv run origenlab refresh-dashboard --apply --no-mirror
+uv run origenlab refresh-dashboard --apply --mirror-dry-run
 ```
 
 Fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>` (same behavior). Script flags after ``--`` (e.g. `uv run origenlab validate-csvs -- --strict`). `gmail-ingest` rejects `--replace-source`. Postgres mirror is **parked** — see [docs/EXPERIMENTAL_PARKED.md](docs/EXPERIMENTAL_PARKED.md). More: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md).
