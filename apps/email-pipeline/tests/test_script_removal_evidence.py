@@ -14,6 +14,7 @@ from removal_evidence import (
     REMOVED_PHASE5C_TARGETS,
     REMOVED_PHASE5D_TARGETS,
     REMOVED_PHASE5K_TARGETS,
+    _rg_files,
     build_removal_evidence_markdown,
     reference_counts,
     write_removal_evidence_report,
@@ -143,6 +144,19 @@ def test_reference_counts_returns_non_negative() -> None:
     rc = reference_counts("scripts/tools/flag_reported_non_delivery_from_contacto.py")
     assert rc.docs >= 0
     assert rc.tests >= 0
+    assert rc.in_script_map
+
+
+def test_rg_files_python_fallback_when_ripgrep_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GitHub Actions runners often lack ``rg``; reference_counts must not subprocess-fail."""
+    monkeypatch.setattr("removal_evidence._rg_available", lambda: False)
+    hits = _rg_files(
+        r"flag_reported_non_delivery_from_contacto\.py",
+        [REPO / "docs", REPO / "tests"],
+    )
+    assert len(hits) >= 1
+    rc = reference_counts("scripts/tools/flag_reported_non_delivery_from_contacto.py")
+    assert rc.docs >= 0
     assert rc.in_script_map
 
 
