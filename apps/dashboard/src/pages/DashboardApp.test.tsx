@@ -309,7 +309,9 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
     await waitFor(() => screen.getByText("LISTO"));
 
     vi.mocked(fetchTodayPanel).mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+
+    const refreshButton = await screen.findByRole("button", { name: "Actualizar" });
+    fireEvent.click(refreshButton);
 
     await waitFor(() => {
       expect(fetchTodayPanel).toHaveBeenCalled();

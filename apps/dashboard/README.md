@@ -65,6 +65,11 @@ Production builds **throw at runtime** if `VITE_ORIGENLAB_API_BASE_URL` is missi
 cd apps/dashboard
 npm test        # active src only (excludes src/legacy)
 npm run build
+```
+
+GitHub Actions workflow [`.github/workflows/dashboard.yml`](../../.github/workflows/dashboard.yml) runs `npm ci`, `npm test`, and `npm run build` for dashboard changes.
+
+```bash
 npm run smoke          # HTTP smoke → :8001 (same as smoke:sqlite)
 npm run smoke:sqlite   # assert health.backend=sqlite
 npm run smoke:postgres # assert postgres mirror labels (API must use postgres backend)
