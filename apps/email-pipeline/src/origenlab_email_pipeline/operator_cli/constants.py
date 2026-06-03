@@ -1,0 +1,76 @@
+"""Operator CLI subcommand names, script map, and help strings."""
+
+from __future__ import annotations
+
+GMAIL_INGEST_SCRIPT = "scripts/ingest/05_workspace_gmail_imap_to_sqlite.py"
+GMAIL_INGEST_INBOX_FOLDER = "INBOX"
+GMAIL_INGEST_SENT_FOLDER = "[Gmail]/Enviados"
+
+MIRROR_DASHBOARD_SYNC_SCRIPT = "scripts/sync/sync_dashboard_postgres_mirror.py"
+# Match resolve_postgres_url() in dashboard_postgres_sync / mart_core_postgres_migrate.
+POSTGRES_ENV_VARS: tuple[str, ...] = (
+    "ORIGENLAB_POSTGRES_URL",
+    "ALEMBIC_DATABASE_URL",
+    "ORIGENLAB_CLOUD_POSTGRES_URL",
+)
+
+# Subcommand -> script path relative to apps/email-pipeline repo root (1:1 wrappers).
+SUBCOMMAND_SCRIPTS: dict[str, str] = {
+    "status": "scripts/qa/operator_status.py",
+    "daily-health": "scripts/qa/run_daily_health_report.py",
+    "refresh-safety": "scripts/qa/refresh_outbound_safety_memory.py",
+    "validate-csvs": "scripts/qa/validate_campaign_csvs.py",
+    "check-readiness": "scripts/qa/check_outbound_readiness.py",
+    "post-send-digest": "scripts/qa/build_post_send_digest.py",
+    "export-dnr": "scripts/qa/export_do_not_repeat_master.py",
+    "ndr-review": "scripts/qa/build_ndr_review_queue.py",
+    "audit-overlap": "scripts/qa/export_contacted_lead_overlap_audit.py",
+    "build-mart": "scripts/mart/build_business_mart.py",
+    "gmail-ingest-help": GMAIL_INGEST_SCRIPT,
+}
+
+# Multi-step or special wrappers (not 1:1 SUBCOMMAND_SCRIPTS).
+GMAIL_INGEST_COMMANDS: frozenset[str] = frozenset({"gmail-ingest", "gmail-ingest-folders"})
+MIRROR_DASHBOARD_COMMAND = "mirror-dashboard"
+REFRESH_DASHBOARD_COMMAND = "refresh-dashboard"
+REFRESH_DASHBOARD_USAGE = "uv run origenlab refresh-dashboard"
+SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset(
+    {MIRROR_DASHBOARD_COMMAND, REFRESH_DASHBOARD_COMMAND}
+)
+
+CLI_COMMAND_NAMES: tuple[str, ...] = tuple(SUBCOMMAND_SCRIPTS.keys()) + tuple(sorted(SPECIAL_COMMANDS))
+
+# Subcommands that only run the target script ``--help`` (no passthrough).
+HELP_ONLY_SUBCOMMANDS: frozenset[str] = frozenset({"gmail-ingest-help"})
+
+SUBCOMMAND_HELP: dict[str, str] = {
+    "status": "Operator READY / CAUTION / BLOCKED snapshot (operator_status.py)",
+    "daily-health": "Combined daily health report (run_daily_health_report.py)",
+    "refresh-safety": "Outbound safety memory refresh chain (refresh_outbound_safety_memory.py)",
+    "validate-csvs": "Campaign CSV contract validation (validate_campaign_csvs.py)",
+    "check-readiness": "Outbound readiness checks (check_outbound_readiness.py)",
+    "post-send-digest": "Post-send digest artifacts (build_post_send_digest.py)",
+    "export-dnr": "Export do-not-repeat master lists (export_do_not_repeat_master.py)",
+    "ndr-review": "NDR human-review batches — read-only (build_ndr_review_queue.py)",
+    "audit-overlap": "Contacted-lead overlap audit CSV (export_contacted_lead_overlap_audit.py)",
+    "build-mart": (
+        "Business mart rebuild (build_business_mart.py) — break-glass: optional --rebuild deletes mart tables"
+    ),
+    "gmail-ingest": (
+        "Safe daily Gmail ingest: INBOX then Sent ([Gmail]/Enviados), --skip-duplicate-message-id; "
+        "rejects --replace-source"
+    ),
+    "gmail-ingest-folders": (
+        "List IMAP folder labels on the ingest script (use if [Gmail]/Enviados differs)"
+    ),
+    "gmail-ingest-help": (
+        "Show Gmail Workspace ingest --help only. For daily ingest use gmail-ingest."
+    ),
+    "mirror-dashboard": (
+        "Postgres dashboard mirror sync (dry-run default); --apply writes; "
+        "--alembic --apply runs alembic upgrade head first"
+    ),
+    "refresh-dashboard": (
+        "Orchestrated Gmail→mart→safety→digest→status→mirror workflow (plan-only default)"
+    ),
+}
