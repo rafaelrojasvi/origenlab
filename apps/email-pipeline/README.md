@@ -8,6 +8,7 @@ Code lives in the repo; **put real PSTs and outputs outside the repo** (e.g. `~/
 - Paths from **environment** (see [`.env.example`](.env.example)); defaults use `$HOME/data/origenlab-email/`
 
 **Agent-first app context:** [docs/APP_CONTEXT.md](docs/APP_CONTEXT.md#m-epapp-start).  
+**Operator commands (preferred):** [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) — unified CLI: `uv run python -m origenlab_email_pipeline.cli --help` (`status`, `daily-health`, `refresh-safety`, `validate-csvs`, `check-readiness`, `post-send-digest`). Raw `scripts/qa/…` paths are advanced fallbacks.  
 **Documentation index** (what is canonical vs auto-generated, merges to consider): [docs/README.md](docs/README.md).
 
 **HTTP API:** This package does **not** ship FastAPI. Operator and Postgres mirror HTTP live in [`apps/api`](../api/README.md) on port **8001** (`GET /mirror/*` for mirror reporting). The React dashboard [`apps/dashboard`](../dashboard/README.md) uses operator routes only.
@@ -416,4 +417,4 @@ origenlab-email-pipeline/
 └── tests/                        # pytest (test_parse_mbox_body, test_business_mart_app_ux, etc.)
 ```
 
-All one-off and pipeline commands live in `scripts/`; they are not installed as package entrypoints. See **[docs/SCRIPT_MAP.md](docs/SCRIPT_MAP.md)** for daily outbound lanes and break-glass labeling, and **scripts/README.md** for categories and main commands. **Lead/client pack publish-safe check:** `uv run python scripts/qa/publish_gate.py` — [docs/RUNBOOK.md](docs/RUNBOOK.md#m-eprun-publish-qa).
+All one-off and pipeline commands live in `scripts/`; they are not installed as package entrypoints except the **unified operator CLI** (`python -m origenlab_email_pipeline.cli`). See **[docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md)** (preferred entrypoints), **[docs/SCRIPT_MAP.md](docs/SCRIPT_MAP.md)** (daily outbound lanes and break-glass labeling), and **scripts/README.md** for categories. **Lead/client pack publish-safe check:** `uv run python scripts/qa/publish_gate.py` — [docs/RUNBOOK.md](docs/RUNBOOK.md#m-eprun-publish-qa).

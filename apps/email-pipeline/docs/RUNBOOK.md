@@ -4,7 +4,9 @@ Status: canonical
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-02
 
-Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.). **Outbound script index + classifications:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
+Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.). **Operator quick index:** [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md). **Outbound script index + classifications:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
+
+**Preferred operator CLI (Phase 6C):** `uv run python -m origenlab_email_pipeline.cli <subcommand>` — see [Operator health matrix](#m-eprun-operator-health-matrix) and [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md). Raw `scripts/qa/…` paths remain valid **advanced/manual** fallbacks.
 
 ### Runbook map (pick one track)
 
@@ -29,7 +31,7 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 | Decision | Source of truth |
 |----------|-----------------|
 | Sent / already contacted | Canonical Gmail ingested into SQLite `emails` (`[Gmail]/Enviados`) |
-| Anti-repeat / DNR | `refresh_outbound_safety_memory.py` → `do_not_repeat_master`, `outreach_contacted_all`, etc. |
+| Anti-repeat / DNR | `origenlab_email_pipeline.cli refresh-safety` (or `scripts/qa/refresh_outbound_safety_memory.py`) → `do_not_repeat_master`, `outreach_contacted_all`, etc. |
 | Equipment-first tenders | `equipment_first_operator_queue_*` under `reports/out/active/current/` |
 | Read-only doctor | See [Operator health matrix](#m-eprun-operator-health-matrix) |
 
@@ -40,17 +42,20 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 
 All commands below are **read-only** on SQLite (no send, no `--apply`, no Gmail write). Run from `apps/email-pipeline/` unless noted.
 
-| Command | What it checks | Before campaign | Before send | After send | Dashboard refresh | Debugging only |
+| Command (preferred · advanced fallback) | What it checks | Before campaign | Before send | After send | Dashboard refresh | Debugging only |
 |---------|----------------|-----------------|-------------|------------|-------------------|----------------|
-| **`make doctor`** | `operator_status.py` then `check_reproducibility.py` (env, paths, manifest hints) | ✓ quick sanity | ✓ | ✓ (light) | — | ✓ new machine / clone |
-| **`uv run python scripts/qa/operator_status.py`** | SQLite/Sent freshness, DNR files, `active/current` manifest, verdict **READY / CAUTION / BLOCKED** | ✓ | ✓ | ✓ | optional | ✓ default “how are we?” |
-| **`make audit`** | `operator_status.py` then `check_outbound_readiness.py` | ✓ | **✓ recommended** | ✓ | — | ✓ |
-| **`uv run python scripts/qa/check_outbound_readiness.py`** | Sent-folder coverage, sidecars, mart freshness, optional commercial checks; verdict `ready` / `ready_with_warnings` / `not_ready` | optional | **✓** | ✓ before next export | — | ✓ `--json-out` |
-| **`uv run python scripts/qa/run_daily_health_report.py`** | Bundled snapshot: NDR **dry-run**, prospectos drift, mirror verify JSON paths; verdict READY / REVIEW_NEEDED / BLOCKED | optional | optional | ✓ (does **not** replace full [post-send loop](pipeline/POST_SEND_SAFE_LOOP.md)) | ✓ mirror hints | ✓ |
+| **`make doctor`** | `cli status` / `operator_status.py` then `check_reproducibility.py` (env, paths, manifest hints) | ✓ quick sanity | ✓ | ✓ (light) | — | ✓ new machine / clone |
+| **`uv run python -m origenlab_email_pipeline.cli status`** | SQLite/Sent freshness, DNR files, `active/current` manifest, verdict **READY / CAUTION / BLOCKED** | ✓ | ✓ | ✓ | optional | ✓ default “how are we?” |
+| *Advanced:* `scripts/qa/operator_status.py` | Same as `cli status` | ✓ | ✓ | ✓ | optional | ✓ |
+| **`make audit`** | `cli status` then `cli check-readiness` (or script paths) | ✓ | **✓ recommended** | ✓ | — | ✓ |
+| **`uv run python -m origenlab_email_pipeline.cli check-readiness`** | Sent-folder coverage, sidecars, mart freshness, optional commercial checks; verdict `ready` / `ready_with_warnings` / `not_ready` | optional | **✓** | ✓ before next export | — | ✓ `--json-out` via `check-readiness -- --json-out` |
+| *Advanced:* `scripts/qa/check_outbound_readiness.py` | Same as `cli check-readiness` | optional | **✓** | ✓ | — | ✓ |
+| **`uv run python -m origenlab_email_pipeline.cli daily-health`** | Bundled snapshot: NDR **dry-run**, prospectos drift, mirror verify JSON paths; verdict READY / REVIEW_NEEDED / BLOCKED | optional | optional | ✓ (does **not** replace full [post-send loop](pipeline/POST_SEND_SAFE_LOOP.md)) | ✓ mirror hints | ✓ |
+| *Advanced:* `scripts/qa/run_daily_health_report.py` | Same as `cli daily-health` | optional | optional | ✓ | ✓ | ✓ |
 | **`GET /operator/status`** (`apps/api` **:8001**) | Same underlying report as `operator_status.py` for Dashboard Today | — | — | — | **✓** UI polling | ✓ HTTP/integration |
 | **`uv run python scripts/qa/smoke_dashboard_api_readiness.py`** | HTTP smoke vs deployed API (local or prod URL) | — | — | — | ✓ after deploy | **✓** only |
 
-**Not substitutes for post-send safety:** `run_daily_health_report.py` and API status do **not** ingest Gmail, apply NDR suppressions, or run `refresh_outbound_safety_memory.py`. After sends, follow [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md).
+**Not substitutes for post-send safety:** `cli daily-health` / `run_daily_health_report.py` and API status do **not** ingest Gmail, apply NDR suppressions, or run `cli refresh-safety`. After sends, follow [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md).
 
 **Makefile shortcuts:**
 
@@ -76,9 +81,10 @@ uv run python scripts/qa/export_do_not_repeat_master.py
 # - light: non-deep-research model (lower-cost draft discovery)
 # - heavy: MUST be true Deep Research model (o4-mini-deep-research or o3-deep-research)
 # - web_search + gpt-4o-mini is NOT Deep Research heavy mode
-uv run python scripts/qa/validate_campaign_csvs.py \
+uv run python -m origenlab_email_pipeline.cli validate-csvs -- \
   --file reports/out/active/current/reviewed_marketing_contacts.csv \
   --kind marketing_contacts --strict
+# Advanced: uv run python scripts/qa/validate_campaign_csvs.py (same flags)
 uv run python scripts/leads/process_broad_marketing_contacts.py
 # Review send_ready_marketing.csv — send manually or via scripts/qa/send_inline_html_email_via_gmail_api.py
 uv run python scripts/leads/mark_sent_batch_contacted.py --batch-file ... --source ... --updated-by ...
@@ -116,16 +122,18 @@ uv run python scripts/qa/export_all_known_marketing_contacts.py
 uv run python scripts/qa/export_do_not_repeat_master.py
 uv run python scripts/qa/validate_contacted_csv_coverage.py --strict
 uv run python scripts/qa/check_reports_out_active_hygiene.py
-uv run python scripts/qa/check_outbound_readiness.py
+uv run python -m origenlab_email_pipeline.cli check-readiness
+# Advanced: uv run python scripts/qa/check_outbound_readiness.py
 ```
 
 One-command wrapper (same order, stops on first hard failure):
 
 ```bash
 cd apps/email-pipeline
-uv run python scripts/qa/refresh_outbound_safety_memory.py
-# Optional strict mode:
-# uv run python scripts/qa/refresh_outbound_safety_memory.py --fail-on-ready-with-warnings
+uv run python -m origenlab_email_pipeline.cli refresh-safety
+# Advanced: uv run python scripts/qa/refresh_outbound_safety_memory.py
+# Optional strict mode (either entrypoint):
+# uv run python -m origenlab_email_pipeline.cli refresh-safety -- --fail-on-ready-with-warnings
 ```
 
 <a id="m-eprun-equipment-first-opportunities"></a>
