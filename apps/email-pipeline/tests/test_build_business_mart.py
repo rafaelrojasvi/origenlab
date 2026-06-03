@@ -10,9 +10,28 @@ from pathlib import Path
 
 import pytest
 
+from origenlab_email_pipeline.core.mart.build_business_mart_cli import (
+    normalize_mart_date_slack_days,
+    run_build_business_mart_from_argv,
+)
+from origenlab_email_pipeline.freshness_dates import MART_DATE_SLACK_DAYS_DEFAULT
+
 REPO = Path(__file__).resolve().parents[1]
 _SRC = REPO / "src"
 _SCRIPT = REPO / "scripts" / "mart" / "build_business_mart.py"
+
+
+def test_build_business_mart_cli_runner_importable() -> None:
+    assert callable(run_build_business_mart_from_argv)
+
+
+@pytest.mark.parametrize("invalid", [-1, 99999])
+def test_normalize_mart_date_slack_days_invalid_uses_default(invalid: int) -> None:
+    assert normalize_mart_date_slack_days(invalid) == MART_DATE_SLACK_DAYS_DEFAULT
+
+
+def test_normalize_mart_date_slack_days_valid_unchanged() -> None:
+    assert normalize_mart_date_slack_days(30) == 30
 
 
 def test_build_business_mart_source_imports_counter() -> None:

@@ -6,6 +6,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from shutil import which
 
 REPO = Path(__file__).resolve().parents[1]
 MONOREPO = REPO.parents[1]
@@ -121,13 +122,74 @@ class ReferenceCounts:
     test_locked: bool
 
 
-def _rg_files(pattern: str, roots: list[Path]) -> list[str]:
+_SKIP_DIR_NAMES = frozenset(
+    {".git", "__pycache__", ".venv", "node_modules", ".pytest_cache", ".mypy_cache", "htmlcov"}
+)
+_TEXT_SUFFIXES = frozenset(
+    {
+        "",
+        ".md",
+        ".py",
+        ".sh",
+        ".txt",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".rst",
+        ".sql",
+    }
+)
+
+
+def _rg_available() -> bool:
+    return which("rg") is not None
+
+
+def _iter_search_paths(root: Path) -> list[Path]:
+    if root.is_file():
+        return [root]
+    if not root.is_dir():
+        return []
+    out: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if _SKIP_DIR_NAMES.intersection(path.parts):
+            continue
+        if path.suffix.lower() not in _TEXT_SUFFIXES and path.name not in ("Makefile", "AGENTS.md"):
+            continue
+        out.append(path)
+    return out
+
+
+def _python_grep_files(pattern: str, roots: list[Path]) -> list[str]:
+    """Fallback when ripgrep is not installed (e.g. default GitHub Actions runners)."""
+    compiled = re.compile(pattern)
     hits: list[str] = []
     for root in roots:
-        if not root.is_dir():
+        for path in _iter_search_paths(root):
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if compiled.search(text):
+                hits.append(str(path))
+    return sorted(set(hits))
+
+
+def _rg_files(pattern: str, roots: list[Path]) -> list[str]:
+    if not _rg_available():
+        return _python_grep_files(pattern, roots)
+    hits: list[str] = []
+    for root in roots:
+        if not root.is_dir() and not root.is_file():
             continue
+        target = str(root)
         cp = subprocess.run(
-            ["rg", "-l", pattern, str(root)],
+            ["rg", "-l", pattern, target],
             capture_output=True,
             text=True,
             check=False,
