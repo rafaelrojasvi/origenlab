@@ -424,9 +424,11 @@ uv run python scripts/mart/build_business_mart.py --rebuild
 uv run python scripts/qa/refresh_outbound_safety_memory.py
 
 # E–F — Postgres mirror (explicit approval; scratch DB only)
-uv run alembic -c alembic.ini upgrade head
-uv run python scripts/sync/sync_dashboard_postgres_mirror.py --dry-run
-uv run python scripts/sync/sync_dashboard_postgres_mirror.py
+uv run origenlab mirror-dashboard
+uv run origenlab mirror-dashboard --apply
+# Schema drift + mirror: uv run origenlab mirror-dashboard --alembic --apply
+# Advanced: uv run alembic -c alembic.ini upgrade head
+#           uv run python scripts/sync/sync_dashboard_postgres_mirror.py [--dry-run]
 ```
 
 **Mirror sync notes:** loads outbound sidecars, mart (archive + canonical), `reporting.dashboard_sync_run`, `reporting.email_classification_canonical`, `commercial.purchase_*`. Options: `--only outbound|mart|canonical`, `--skip-outbound`, `--skip-mart`, `--json-out path`. **Fail-closed:** sync aborts if canonical Gmail exists but mart tables are empty — run step C first; break-glass only: `--allow-empty-mart`.

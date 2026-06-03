@@ -1,4 +1,4 @@
-"""Tests for unified operator CLI wrapper (Phase 6B / 6D / 6G / 7A) — no heavy script execution."""
+"""Tests for unified operator CLI wrapper (Phase 6B / 6D / 6G / 7A / 7B) — no heavy script execution."""
 
 from __future__ import annotations
 
@@ -14,12 +14,18 @@ from origenlab_email_pipeline.cli import (
     GMAIL_INGEST_INBOX_FOLDER,
     GMAIL_INGEST_SENT_FOLDER,
     HELP_ONLY_SUBCOMMANDS,
+    MIRROR_DASHBOARD_SYNC_SCRIPT,
+    POSTGRES_ENV_VARS,
     SUBCOMMAND_SCRIPTS,
     build_gmail_ingest_argv_list,
+    build_mirror_dashboard_argv_list,
     build_subcommand_argv,
     main,
+    missing_postgres_env_message,
     normalize_passthrough_args,
+    postgres_url_configured,
     repo_root,
+    run_mirror_dashboard,
     script_path_for,
     validate_gmail_ingest_passthrough,
 )
@@ -139,6 +145,53 @@ def test_gmail_ingest_help_rejects_passthrough_in_main(capsys: pytest.CaptureFix
     assert "does not accept extra arguments" in err
 
 
+def test_gmail_ingest_folders_wrapper_help_no_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.cli.subprocess.run",
+        lambda *a, **k: pytest.fail("subprocess must not run for wrapper --help"),
+    )
+    assert main(["gmail-ingest-folders", "--help"]) == 0
+    out = capsys.readouterr().out
+    assert "gmail-ingest-folders" in out
+    assert "--list-folders" in out
+
+
+def test_gmail_ingest_help_wrapper_help_no_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.cli.subprocess.run",
+        lambda *a, **k: pytest.fail("subprocess must not run for wrapper --help"),
+    )
+    assert main(["gmail-ingest-help", "--help"]) == 0
+    out = capsys.readouterr().out
+    assert "gmail-ingest-help" in out
+    assert "gmail-ingest" in out
+
+
+def test_run_gmail_ingest_folders_mocked_list_folders(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        class R:
+            returncode = 0
+
+        return R()
+
+    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    from origenlab_email_pipeline.cli import run_subcommand
+
+    assert run_subcommand("gmail-ingest-folders") == 0
+    assert len(calls) == 1
+    assert calls[0][-1] == "--list-folders"
+    assert calls[0][1].endswith("05_workspace_gmail_imap_to_sqlite.py")
+
+
 def test_normalize_passthrough_strips_leading_separator() -> None:
     assert normalize_passthrough_args(["--", "--json", "--verbose"]) == ["--json", "--verbose"]
     assert normalize_passthrough_args(["--json"]) == ["--json"]
@@ -226,6 +279,101 @@ def test_run_gmail_ingest_stops_on_first_failure(monkeypatch: pytest.MonkeyPatch
 
     assert run_gmail_ingest() == 3
     assert len(calls) == 1
+
+
+def test_mirror_dashboard_default_builds_sync_dry_run() -> None:
+    cmds = build_mirror_dashboard_argv_list()
+    assert len(cmds) == 1
+    sync = cmds[0]
+    assert sync[1].endswith(MIRROR_DASHBOARD_SYNC_SCRIPT.replace("/", os.sep))
+    assert "--dry-run" in sync
+    assert sync.count("--dry-run") == 1
+
+
+def test_mirror_dashboard_apply_omits_dry_run() -> None:
+    sync = build_mirror_dashboard_argv_list(apply=True)[0]
+    assert "--dry-run" not in sync
+    assert sync[1].endswith("sync_dashboard_postgres_mirror.py")
+
+
+def test_mirror_dashboard_alembic_apply_builds_alembic_then_sync() -> None:
+    cmds = build_mirror_dashboard_argv_list(apply=True, alembic=True)
+    assert len(cmds) == 2
+    assert cmds[0][:4] == ["alembic", "-c", "alembic.ini", "upgrade"]
+    assert cmds[0][4] == "head"
+    assert "--dry-run" not in cmds[1]
+
+
+def test_mirror_dashboard_passthrough_appended_to_sync_only() -> None:
+    cmds = build_mirror_dashboard_argv_list(passthrough=["--", "--only", "mart", "--skip-outbound"])
+    sync = cmds[-1]
+    assert sync[sync.index("--only") :] == ["--only", "mart", "--skip-outbound"]
+    if len(cmds) == 2:
+        assert "--only" not in cmds[0]
+
+
+def test_mirror_dashboard_missing_postgres_env_no_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in POSTGRES_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        class R:
+            returncode = 0
+
+        return R()
+
+    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    assert not postgres_url_configured()
+    assert run_mirror_dashboard() == 2
+    assert calls == []
+
+
+def test_mirror_dashboard_with_postgres_env_mocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        class R:
+            returncode = 0
+
+        return R()
+
+    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    assert run_mirror_dashboard(apply=True, alembic=True) == 0
+    assert len(calls) == 2
+    assert calls[0][0] == "alembic"
+    assert "--dry-run" not in calls[1]
+
+
+def test_mirror_dashboard_main_rejects_alembic_without_apply(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    with pytest.raises(SystemExit):
+        main(["mirror-dashboard", "--alembic"])
+    err = capsys.readouterr().err
+    assert "requires --apply" in err
+
+
+def test_mirror_dashboard_missing_env_via_main(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    for name in POSTGRES_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", lambda *a, **k: pytest.fail("no subprocess"))
+    assert main(["mirror-dashboard"]) == 2
+    err = capsys.readouterr().err
+    assert "ORIGENLAB_POSTGRES_URL" in err or "ALEMBIC_DATABASE_URL" in err
+    assert missing_postgres_env_message() in err
 
 
 def test_run_gmail_ingest_help_mocked_only_help(monkeypatch: pytest.MonkeyPatch) -> None:
