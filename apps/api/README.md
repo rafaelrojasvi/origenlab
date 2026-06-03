@@ -97,6 +97,8 @@ cd apps/api
 uv run pytest tests -q
 ```
 
+GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/api.yml) runs `uv sync --group dev --frozen` and `uv run pytest tests -q` for `apps/api` changes and `apps/email-pipeline` dependency changes.
+
 ## Dashboard v1–v2 backend matrix
 
 Dashboard v1 + **Dashboard-2 contact drilldown** use **this app only** (`apps/api` on port **8001**).
