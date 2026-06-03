@@ -63,6 +63,8 @@ def test_deprecated_python_scripts_warn_on_help(
     assert category in err, err
     assert replacement_needle in err, err
     assert "not for new operator work" in err.lower() or "not preferred" in err.lower(), err
+    if "flag_reported_non_delivery_from_contacto.py" in rel:
+        assert "include-reported-non-delivery" in err, err
 
 
 @pytest.mark.parametrize("rel,replacement_needle", _SHELL_BANNER_TARGETS)

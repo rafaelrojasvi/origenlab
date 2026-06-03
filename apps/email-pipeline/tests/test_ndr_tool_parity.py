@@ -156,13 +156,92 @@ def test_legacy_flags_human_reported_non_delivery_not_ndr_scan(tmp_path: Path) -
     assert "comprador@institucion.cl" not in planned
 
 
+def test_canonical_script_supports_include_reported_non_delivery_flag() -> None:
+    text = _NDR_SCRIPT.read_text(encoding="utf-8")
+    assert "--include-reported-non-delivery" in text
+    assert "scan_reported_non_delivery_senders" in text
+    assert "human_reported_non_delivery" in text
+
+
+def test_canonical_default_scan_ndr_only(tmp_path: Path) -> None:
+    if str(_SRC) not in sys.path:
+        sys.path.insert(0, str(_SRC))
+    from origenlab_email_pipeline.ndr_contacto_scan import scan_ndr_planned_recipients
+    from origenlab_email_pipeline.reported_non_delivery_contacto_scan import (
+        scan_reported_non_delivery_senders,
+    )
+
+    body = _reported_non_delivery_body()
+    conn = sqlite3.connect(tmp_path / "default.sqlite")
+    _seed_contacto_emails(
+        conn,
+        [
+            (
+                "Comprador <comprador@institucion.cl>",
+                "No recibimos su mail",
+                body,
+                "INBOX",
+            ),
+        ],
+    )
+    planned_ndr, _, _ = scan_ndr_planned_recipients(conn, since_days=None, limit=50)
+    reported, _ = scan_reported_non_delivery_senders(conn, since_days=None, limit=50)
+    conn.close()
+    assert "comprador@institucion.cl" not in planned_ndr
+    assert "comprador@institucion.cl" in reported
+
+
+def test_canonical_cli_dry_run_labels_human_reported_non_delivery(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    db = tmp_path / "human_cli.sqlite"
+    conn = sqlite3.connect(db)
+    _seed_contacto_emails(
+        conn,
+        [
+            (
+                "Comprador <comprador@institucion.cl>",
+                "No recibimos su mail",
+                _reported_non_delivery_body(),
+                "INBOX",
+            ),
+        ],
+    )
+    conn.close()
+
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(_NDR_SCRIPT),
+            "--db",
+            str(db),
+            "--include-reported-non-delivery",
+            "--limit",
+            "100",
+        ],
+        cwd=str(REPO),
+        env={**os.environ, "PYTHONPATH": str(_SRC)},
+        capture_output=True,
+        text=True,
+        timeout=90,
+        check=False,
+    )
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "human_reported_non_delivery" in r.stdout
+    assert "comprador@institucion.cl" in r.stdout
+    assert "Dry run only" in r.stdout
+    assert "bounce_ndr with extracted recipient: 0" in r.stdout
+
+
 def test_legacy_unique_behavior_is_inbound_reply_heuristic() -> None:
     """Document: legacy path is complementary (inbound 'did not receive' text), not DSN parsing."""
     legacy = _LEGACY_SCRIPT.read_text(encoding="utf-8")
     ndr = _NDR_SCRIPT.read_text(encoding="utf-8")
     assert "reported_non_delivery" in legacy
     assert "text_suggests_reported_non_delivery" in legacy
-    assert "reported_non_delivery" not in ndr
+    assert "scan_reported_non_delivery_senders" in ndr
     assert "bounce_ndr" in ndr or "scan_ndr_planned_recipients" in ndr
 
 

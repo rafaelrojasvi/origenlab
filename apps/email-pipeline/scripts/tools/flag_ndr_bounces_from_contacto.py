@@ -20,6 +20,10 @@ Targeted apply (operator allowlist)::
 
 Allowlist emails must appear in the current NDR scan evidence; otherwise apply is refused.
 
+Optional inbound human-reported mode (legacy ``flag_reported_non_delivery_from_contacto.py`` behavior)::
+
+  uv run python scripts/tools/flag_ndr_bounces_from_contacto.py --include-reported-non-delivery --since-days 30
+
 Example::
 
   uv run python scripts/tools/flag_ndr_bounces_from_contacto.py --since-days 30 --limit 20000
@@ -49,6 +53,10 @@ from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.ndr_contacto_scan import (
     PlannedEntry,
     scan_ndr_planned_recipients,
+)
+from origenlab_email_pipeline.reported_non_delivery_contacto_scan import (
+    ReportedNonDeliveryEntry,
+    scan_reported_non_delivery_senders,
 )
 
 def load_emails_allowlist(path: Path) -> list[str]:
@@ -109,6 +117,20 @@ def _print_planned_subset(planned: dict[str, PlannedEntry], *, label: str) -> No
         print(f"  - {email}  → {code}{extra}")
 
 
+def _print_reported_non_delivery_subset(
+    planned: dict[str, ReportedNonDeliveryEntry],
+    *,
+    label: str,
+) -> None:
+    print(f"{label}: {len(planned)} address(es)")
+    for email in sorted(planned.keys()):
+        d_iso, eid, subj_snip = planned[email]
+        extra = f"  email_id={eid}  date_iso={d_iso or '—'}"
+        if subj_snip:
+            extra += f"\n      subject: {subj_snip}"
+        print(f"  - {email}  → human_reported_non_delivery{extra}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", type=Path, default=None, help="SQLite path (default: from config)")
@@ -135,6 +157,14 @@ def main() -> int:
         default=None,
         metavar="CODE",
         help="Only recipients with this suppression code (e.g. bounce_no_such_user).",
+    )
+    ap.add_argument(
+        "--include-reported-non-delivery",
+        action="store_true",
+        help=(
+            "Also scan inbound (non-Sent) contacto rows for human-reported non-delivery "
+            "(e.g. «no recibimos su correo»). Default scan remains NDR/bounce_ndr only."
+        ),
     )
     args = ap.parse_args()
 
@@ -195,11 +225,37 @@ def main() -> int:
         else:
             _print_planned_subset(planned, label="All NDR recipients")
 
+        reported_planned: dict[str, ReportedNonDeliveryEntry] = {}
+        reported_scanned = 0
+        if args.include_reported_non_delivery:
+            reported_planned, reported_scanned = scan_reported_non_delivery_senders(
+                conn,
+                since_days=args.since_days,
+                limit=args.limit,
+            )
+            print(
+                f"\nHuman-reported non-delivery scan: {reported_scanned} recent non-sent contacto row(s); "
+                f"{len(reported_planned)} distinct sender(s) matched."
+            )
+            _print_reported_non_delivery_subset(
+                reported_planned,
+                label="All human_reported_non_delivery recipients",
+            )
+
         if not args.apply:
             print("\nDry run only. Re-run with --apply to write suppressions.")
             return 0
 
-        if not selected:
+        if args.include_reported_non_delivery and args.only_code is not None:
+            if args.only_code != "reported_non_delivery":
+                print(
+                    "Refusing apply: --only-code with human-reported mode applies only to "
+                    "reported_non_delivery (NDR codes use bounce_*).",
+                    file=sys.stderr,
+                )
+                return 1
+
+        if not selected and not (args.include_reported_non_delivery and reported_planned):
             print("Nothing selected to apply.", file=sys.stderr)
             return 1
 
@@ -222,8 +278,49 @@ def main() -> int:
             )
             upsert_contact_email_suppression(conn, payload=payload)
             n += 1
+
+        reported_n = 0
+        skipped_reported_existing = 0
+        if args.include_reported_non_delivery and reported_planned:
+            for email, (d_iso, eid, _subj) in sorted(reported_planned.items()):
+                existing = fetch_contact_email_suppression_row(conn, email)
+                if existing and str(existing.get("suppression_reason_code") or "") not in (
+                    "",
+                    "reported_non_delivery",
+                ):
+                    print(
+                        f"  skip (already suppressed as {existing.get('suppression_reason_code')}): {email}",
+                        file=sys.stderr,
+                    )
+                    skipped_reported_existing += 1
+                    continue
+                if existing and str(existing.get("suppression_reason_code") or "") == "manual_do_not_contact":
+                    print(f"  skip (manual_do_not_contact): {email}", file=sys.stderr)
+                    skipped_manual += 1
+                    continue
+                payload = validate_contact_email_suppression_payload(
+                    email=email,
+                    suppression_reason_code="reported_non_delivery",
+                    suppression_reason_text=(
+                        f"Human-reported non-delivery inbound from contacto Gmail (email id {eid})"
+                    ),
+                    suppression_source="flag_ndr_bounces_from_contacto.py",
+                    last_bounced_at=None,
+                    updated_by="flag_ndr_bounces_from_contacto.py",
+                )
+                upsert_contact_email_suppression(conn, payload=payload)
+                reported_n += 1
+
         conn.commit()
-        print(f"Upserted bounce suppressions: {n} row(s); skipped_manual: {skipped_manual}")
+        if n:
+            print(f"Upserted bounce suppressions: {n} row(s); skipped_manual: {skipped_manual}")
+        if reported_n:
+            print(
+                f"Upserted human_reported_non_delivery: {reported_n} row(s); "
+                f"skipped_existing_other_reason: {skipped_reported_existing}"
+            )
+        elif args.include_reported_non_delivery and not reported_planned:
+            print("No human_reported_non_delivery matches to apply.")
     finally:
         conn.close()
     return 0

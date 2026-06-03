@@ -57,10 +57,13 @@ def _is_internal_or_system_sender(sender: str) -> bool:
 def main() -> int:
     print_script_deprecation_warning(
         "scripts/tools/flag_reported_non_delivery_from_contacto.py",
-        replacement="scripts/tools/flag_ndr_bounces_from_contacto.py for DSN/NDR bounce detection",
+        replacement=(
+            "scripts/tools/flag_ndr_bounces_from_contacto.py "
+            "(NDR default; add --include-reported-non-delivery for human-reported inbound)"
+        ),
         note=(
-            'Human "reported non-delivery" inbound replies are legacy/manual-review behavior; '
-            "review matches carefully before --apply."
+            'Human "reported non-delivery" inbound replies: use canonical tool with '
+            "--include-reported-non-delivery; review matches carefully before --apply."
         ),
     )
     ap = argparse.ArgumentParser(

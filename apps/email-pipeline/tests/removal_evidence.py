@@ -14,8 +14,11 @@ MONOREPO = REPO.parents[1]
 DEPRECATED_REMOVAL_TARGETS: tuple[dict[str, str], ...] = (
     {
         "path": "scripts/tools/flag_reported_non_delivery_from_contacto.py",
-        "replacement": "flag_ndr_bounces_from_contacto.py (NDR) + human review queue",
-        "suggested_phase": "5",
+        "replacement": (
+            "flag_ndr_bounces_from_contacto.py (--include-reported-non-delivery for human inbound) "
+            "+ build_ndr_review_queue.py"
+        ),
+        "suggested_phase": "5Q delete next once canonical human-reported mode verified in prod",
     },
 )
 
@@ -92,19 +95,29 @@ REMOVED_PHASE5B_TARGETS: tuple[dict[str, str], ...] = (
     },
 )
 
+REFACTOR_PHASE5P_COMPLETED: tuple[dict[str, str], ...] = (
+    {
+        "path": "scripts/mart/build_business_mart.py",
+        "note": (
+            "Done (Phase 5P / Stage 6F1): CLI orchestration → core/mart/build_business_mart_cli.py; "
+            "operator script path + SAFETY banner unchanged; tests in test_build_business_mart.py, "
+            "test_build_business_mart_phase2.py"
+        ),
+    },
+)
+
 REFACTOR_PHASE3_TARGETS: tuple[dict[str, str], ...] = (
-    {"path": "scripts/mart/build_business_mart.py", "note": "Split main() → src; tests in test_build_business_mart.py"},
     {
         "path": "scripts/ingest/05_workspace_gmail_imap_to_sqlite.py",
-        "note": "Extract IMAP helpers; tests in test_workspace_gmail_imap_ingest.py",
+        "note": "Extract IMAP helpers; tests in test_workspace_gmail_imap_ingest.py — future",
     },
     {
         "path": "scripts/qa/export_contacted_lead_overlap_audit.py",
-        "note": "Golden CSV columns locked in test_export_contacted_lead_overlap_audit.py",
+        "note": "Golden CSV columns locked in test_export_contacted_lead_overlap_audit.py — library split done; entrypoint unchanged",
     },
     {
         "path": "scripts/qa/export_email_conversation_intelligence.py",
-        "note": "Golden CSV columns locked in test_export_email_conversation_intelligence.py",
+        "note": "Golden CSV columns locked in test_export_email_conversation_intelligence.py — library split done; entrypoint unchanged",
     },
 )
 
@@ -332,6 +345,17 @@ def build_removal_evidence_markdown() -> str:
         ]
     )
     for row in REFACTOR_PHASE3_TARGETS:
+        lines.append(f"| `{row['path']}` | {row['note']} |")
+    lines.extend(
+        [
+            "",
+            "## Completed Phase 5P / Stage 6F1 (mart CLI)",
+            "",
+            "| Path | Notes |",
+            "|------|-------|",
+        ]
+    )
+    for row in REFACTOR_PHASE5P_COMPLETED:
         lines.append(f"| `{row['path']}` | {row['note']} |")
     lines.extend(
         [
