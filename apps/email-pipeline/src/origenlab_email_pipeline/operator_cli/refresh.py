@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from origenlab_email_pipeline.core.step_runner import run_step_sequence
 from origenlab_email_pipeline.operator_cli.constants import REFRESH_DASHBOARD_USAGE
 
 SubcommandRunner = Callable[..., int]
@@ -169,19 +169,13 @@ def run_refresh_dashboard(
     if not options.apply:
         print_refresh_dashboard_plan(steps, options)
         return 0
-    total = len(steps)
-    for i, step in enumerate(steps, 1):
-        print(f"[refresh-dashboard] {i}/{total} {step.label}")
-        rc = execute(
+
+    def _run_step(step: RefreshDashboardStep) -> int:
+        return execute(
             step.command,
             list(step.passthrough) or None,
             mirror_apply=step.mirror_apply,
             mirror_alembic=step.mirror_alembic,
         )
-        if rc != 0:
-            print(
-                f"[refresh-dashboard] failed at step {i}/{total}: {step.label} (exit {rc})",
-                file=sys.stderr,
-            )
-            return int(rc)
-    return 0
+
+    return run_step_sequence(steps, _run_step, prefix="[refresh-dashboard]")
