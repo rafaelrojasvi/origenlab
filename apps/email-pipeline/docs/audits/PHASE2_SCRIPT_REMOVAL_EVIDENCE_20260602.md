@@ -56,10 +56,15 @@ Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_
 
 | Path | Notes |
 |------|-------|
-| `scripts/mart/build_business_mart.py` | Split main() → src; tests in test_build_business_mart.py |
-| `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Extract IMAP helpers; tests in test_workspace_gmail_imap_ingest.py |
-| `scripts/qa/export_contacted_lead_overlap_audit.py` | Golden CSV columns locked in test_export_contacted_lead_overlap_audit.py |
-| `scripts/qa/export_email_conversation_intelligence.py` | Golden CSV columns locked in test_export_email_conversation_intelligence.py |
+| `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | Extract IMAP helpers; tests in test_workspace_gmail_imap_ingest.py — future |
+| `scripts/qa/export_contacted_lead_overlap_audit.py` | Golden CSV columns locked in test_export_contacted_lead_overlap_audit.py — library split done; entrypoint unchanged |
+| `scripts/qa/export_email_conversation_intelligence.py` | Golden CSV columns locked in test_export_email_conversation_intelligence.py — library split done; entrypoint unchanged |
+
+## Completed Phase 5P / Stage 6F1 (mart CLI)
+
+| Path | Notes |
+|------|-------|
+| `scripts/mart/build_business_mart.py` | Done (Phase 5P / Stage 6F1): CLI orchestration → core/mart/build_business_mart_cli.py; operator script path + SAFETY banner unchanged; tests in test_build_business_mart.py, test_build_business_mart_phase2.py |
 
 ## Interpretation
 

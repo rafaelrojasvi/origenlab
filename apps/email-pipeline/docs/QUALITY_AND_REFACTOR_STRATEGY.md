@@ -88,6 +88,8 @@ Refactors are **staged**; the tables below are **not** a commitment to order. Us
 
 **Stage 6E2 (future):** optional refactors of large Tatiana modules (e.g. split or isolate optional deps) with **tests** — **not** the same change set as 6E1.
 
+**Phase 5P / Stage 6F1 (mart, narrow):** CLI orchestration for ``scripts/mart/build_business_mart.py`` was **extracted** to ``origenlab_email_pipeline.core.mart.build_business_mart_cli`` (``run_build_business_mart_from_argv``). The **operator entrypoint** remains ``scripts/mart/build_business_mart.py`` (path unchanged); the **SAFETY (break-glass)** banner stays on the script. **CLI flags**, **stdout** shape (mode lines, ``Done.``, ``created_at|…``), and ``--rebuild`` **DELETE** semantics for mart tables are unchanged in intent (verify with ``test_build_business_mart.py``, ``test_build_business_mart_phase2.py``). Stage build logic remains in ``core/mart/build_runner.py``.
+
 **Future Stage 6C+ (preview):** pick the **next** vertical or script, apply a **small** internal-only refactor, then re-run the full test suite and readiness scripts.
 
 ---
