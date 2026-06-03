@@ -243,7 +243,7 @@ After **`05_workspace_gmail_imap_to_sqlite.py`** succeeds against the **same** S
 1. **Mount / process** — Confirm Docker or local Streamlit points at that DB path (see [Docker: Streamlit business mart only](#m-eprun-docker-streamlit)).
 2. **Safe to inspect immediately (raw `emails`)** — **Actividad contacto Gmail** and **Casos para revisar** read **`emails`** for **`gmail:contacto@...`**. After ingest, reopen or refresh the app so it rereads SQLite; new messages appear without rebuilding marts. If the UI is empty, verify Workspace ingest actually wrote **`gmail:`** rows (not only **`imap:`**).
 3. **Rebuild business mart when** — You changed data that feeds organization/contact/document rollups, or Streamlit pages backed by mart tables look wrong. Run **[`build_business_mart.py`](../scripts/mart/build_business_mart.py)** on the host before expecting updated drill-downs (the Docker image does not build the mart).
-4. **Rebuild commercial intel when** — You want **Candidatos comerciales**, exports, or signal-driven views to reflect new mail. Run **`uv run origenlab build-commercial-intel`** after Gmail ingest + **`build-mart`** (see [Commercial intelligence v1](#m-eprun-commercial-intel-v1); incremental by default; use **`-- --rebuild`** or **`-- --reprocess-days N`** via passthrough when you need a broader refresh). **`refresh-dashboard --apply` does not run this step yet.**
+4. **Rebuild commercial intel when** — You want **Candidatos comerciales**, exports, or signal-driven views to reflect new mail outside a full **`refresh-dashboard --apply`**. Run **`uv run origenlab build-commercial-intel`** after Gmail ingest + **`build-mart`** (see [Commercial intelligence v1](#m-eprun-commercial-intel-v1); incremental by default; use **`-- --rebuild`** or **`-- --reprocess-days N`** via passthrough when you need a broader refresh). **`refresh-dashboard --apply`** runs **`build-commercial-intel`** incrementally after mart rebuild.
 5. **Likely stale until rebuild** — Pages and widgets that join **`emails`** to **mart** or **`commercial_*`** tables may show old rollups or sparse signals until steps 3–4 complete. **Borrador comercial** can use verbatim text from **`emails`** immediately; richer context panels may still lag mart/commercial builds.
 
 **React dashboard:** mart/commercial rebuilds here are for **Streamlit/SQLite** workflows. Refreshing the **React** panel also requires the [optional dashboard stack](#m-eprun-dashboard-optional) (Postgres mirror) — not required for daily DNR or equipment-first.
@@ -425,7 +425,7 @@ uv run python scripts/qa/refresh_outbound_safety_memory.py
 
 # E–F — Postgres mirror (explicit approval; scratch DB only)
 uv run origenlab refresh-dashboard              # plan only — safe default
-uv run origenlab refresh-dashboard --apply      # full stack (ingest→mart --rebuild→…→mirror apply)
+uv run origenlab refresh-dashboard --apply      # ingest→mart --rebuild→commercial→…→mirror apply
 uv run origenlab refresh-dashboard --apply --no-mirror
 uv run origenlab refresh-dashboard --apply --mirror-dry-run
 # Or step-by-step / mirror only:
@@ -1158,7 +1158,7 @@ cd apps/email-pipeline
 uv run origenlab build-commercial-intel
 ```
 
-Run after Gmail ingest + **`build-mart`** when checking commercial candidates / **Candidatos comerciales**. Default is incremental and writes SQLite **`commercial_*`** tables. **`--rebuild`** is break-glass — pass explicitly via passthrough (e.g. `uv run origenlab build-commercial-intel -- --rebuild`). **`refresh-dashboard` does not run this step yet.**
+Run after Gmail ingest + **`build-mart`** when checking commercial candidates / **Candidatos comerciales**. Default is incremental and writes SQLite **`commercial_*`** tables. **`--rebuild`** is break-glass — pass explicitly via passthrough (e.g. `uv run origenlab build-commercial-intel -- --rebuild`). **`refresh-dashboard --apply`** runs **`build-commercial-intel`** incrementally (no `--rebuild` passthrough).
 
 Advanced fallback:
 

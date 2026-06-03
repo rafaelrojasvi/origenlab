@@ -76,6 +76,6 @@ SUBCOMMAND_HELP: dict[str, str] = {
         "--alembic --apply runs alembic upgrade head first"
     ),
     "refresh-dashboard": (
-        "Orchestrated Gmail→mart→safety→digest→status→mirror workflow (plan-only default)"
+        "Orchestrated Gmail→mart→commercial→safety→digest→status→mirror workflow (plan-only default)"
     ),
 }
