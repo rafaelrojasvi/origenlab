@@ -56,7 +56,7 @@ uv sync --group lab          # OpenAI — Tatiana copilot, research automation (
 uv sync --group workspace   # Google OAuth for Gmail IMAP / API tooling
 uv sync --group ui          # Streamlit / pandas stack
 uv sync --group postgres    # Alembic + drivers
-uv sync --group ml          # torch / embeddings (CUDA index in pyproject)
+uv sync --group ml          # torch / embeddings / hdbscan (CUDA index in pyproject)
 ```
 
 For **full test suite** (matches CI):

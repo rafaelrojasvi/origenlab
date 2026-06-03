@@ -159,7 +159,7 @@ def main() -> None:
         noise = list(labels_h).count(-1)
         hdb_info = {"clusters": ncl, "noise_points": int(noise)}
     except ImportError:
-        hdb_info = {"skipped": "pip install hdbscan"}
+        hdb_info = {"skipped": "uv sync --group ml (includes hdbscan)"}
 
     # Model mentions (full sample texts for regex)
     model_hits: Counter[tuple[str, str]] = Counter()

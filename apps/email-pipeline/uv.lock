@@ -1183,7 +1183,6 @@ name = "origenlab-email-pipeline"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "hdbscan" },
     { name = "openpyxl" },
     { name = "orjson" },
     { name = "pydantic" },
@@ -1214,6 +1213,7 @@ lab = [
 ]
 ml = [
     { name = "faiss-cpu" },
+    { name = "hdbscan" },
     { name = "numpy" },
     { name = "orjson" },
     { name = "pandas" },
@@ -1244,7 +1244,6 @@ workspace = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hdbscan", specifier = ">=0.8.41" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "orjson", specifier = ">=3.9" },
     { name = "pydantic", specifier = ">=2" },
@@ -1273,6 +1272,7 @@ gmail = [
 lab = [{ name = "openai", specifier = ">=1.40" }]
 ml = [
     { name = "faiss-cpu", specifier = "==1.13.2" },
+    { name = "hdbscan", specifier = ">=0.8.41" },
     { name = "numpy", specifier = "==2.3.5" },
     { name = "orjson", specifier = "==3.11.7" },
     { name = "pandas", specifier = "<3" },

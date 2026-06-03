@@ -47,10 +47,10 @@ So: **visuals** = charts and tables in the HTML; **numbers** = same in `summary.
 | **clusters_cotiz.json** | `run_all.sh` step 3/4 ran and wrote explore_clusters.json | Same |
 | **ml_explore.json** | `run_all.sh` step 4/4 or you ran `email_ml_explore.py` | You didn’t run the script |
 | **KMeans** | Always in `email_ml_explore.py` output | — |
-| **HDBSCAN** | In `ml_explore.json` if `hdbscan` is installed | `"skipped": "pip install hdbscan"` in JSON |
+| **HDBSCAN** | In `ml_explore.json` if `hdbscan` is installed (`uv sync --group ml`) | `"skipped": "uv sync --group ml (includes hdbscan)"` in JSON |
 | **Equipment model mentions** | Always in `email_ml_explore.py` output | — |
 
-So: **everything** = run `WITH_EMBEDDINGS=1 bash scripts/reports/run_all.sh` and have `hdbscan` installed if you want HDBSCAN numbers too.
+So: **everything** = run `WITH_EMBEDDINGS=1 bash scripts/reports/run_all.sh` after `uv sync --group ml` if you want HDBSCAN numbers too.
 
 ---
 
