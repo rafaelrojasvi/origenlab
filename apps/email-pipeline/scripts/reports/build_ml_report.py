@@ -3,6 +3,9 @@
 Build an HTML report with visuals from ml_explore.json: KMeans clusters, HDBSCAN summary,
 equipment mentions bar chart. No raw JSON — charts and cards you can open in a browser.
 
+Requires `ml_explore.json` from `email_ml_explore.py` (HDBSCAN section needs `uv sync --group ml`).
+
+  uv sync --group ml
   uv run python scripts/reports/build_ml_report.py --json path/to/ml_explore.json --out path/to/ml_report.html
   uv run python scripts/reports/build_ml_report.py --batch path/to/run_NAME   # uses run_NAME/ml_explore.json, writes run_NAME/ml_report.html
 """

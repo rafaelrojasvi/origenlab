@@ -2,6 +2,8 @@
 """
 Generate a single overview.html in the batch folder: what ran, key numbers, links to all outputs.
 
+HDBSCAN numbers in `ml_explore.json` require `uv sync --group ml` when running `email_ml_explore.py`.
+
   uv run python scripts/mart/build_batch_overview.py --batch /path/to/run_NAME
 
 Usually called at the end of run_all.sh so you have one page showing everything.

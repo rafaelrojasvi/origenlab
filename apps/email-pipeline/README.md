@@ -50,7 +50,7 @@ This monorepo is meant to hold **code and docs** only; **operational data stays 
 
 **After cloning:** `uv sync` → `cp .env.example .env` → create `~/data/origenlab-email/...` and set paths.
 
-Default `uv sync` covers **daily SQLite/document tooling** only. **OpenAI** (Tatiana copilot, research automation) requires `uv sync --group lab`. See [REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md#setup-commands).
+Default `uv sync` covers **daily SQLite/document tooling** only. **OpenAI** (Tatiana copilot, research automation) requires `uv sync --group lab`; **HDBSCAN / embeddings clustering** requires `uv sync --group ml`. See [REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md#setup-commands).
 
 **Never paste** API keys, OAuth tokens, mailbox passwords, full paths to customer archives, or excerpts from real reports into issues or PRs.
 
@@ -98,7 +98,7 @@ cp .env.example .env
 
 ## ML environment setup (WSL, project-local venv only)
 
-Use the repo **`.venv`** — do **not** install into system Python. **`pyproject.toml`** pins the ML stack and uses **`tool.uv.sources`** so **torch** resolves from **cu129** (CUDA), not PyPI CPU. **`numpy==2.3.5`** is pinned with ML so a loose upgrade does not break torch (numpy 2.4.x + this torch build caused import errors in practice).
+Use the repo **`.venv`** — do **not** install into system Python. **`pyproject.toml`** pins the ML stack (including **hdbscan** for optional density clustering) and uses **`tool.uv.sources`** so **torch** resolves from **cu129** (CUDA), not PyPI CPU. **`numpy==2.3.5`** is pinned with ML so a loose upgrade does not break torch (numpy 2.4.x + this torch build caused import errors in practice).
 
 ### Recommended: one command
 

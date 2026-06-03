@@ -27,7 +27,7 @@ Last reviewed: 2026-03-24
 ## Implemented today (code in repo)
 
 1. **Embeddings:** `all-MiniLM-L6-v2` → `explore_email_clusters.py`, `generate_client_report.py`, `email_ml_explore.py`.
-2. **Clustering:** Agglomerative, K-Means in those scripts; **HDBSCAN** is an **optional** path where the code uses it — package `hdbscan` is listed in `pyproject.toml` dependencies (no separate ad‑hoc `pip install` step for this repo).
+2. **Clustering:** Agglomerative, K-Means in those scripts; **HDBSCAN** is an **optional** path where the code uses it — package `hdbscan` is in the **`ml`** dependency group in [`pyproject.toml`](../../pyproject.toml) (`uv sync --group ml`).
 3. **Equipment models (heuristic):** regex catalog in `email_ml_explore.py`.
 
 ## Optional / not in default pipeline
