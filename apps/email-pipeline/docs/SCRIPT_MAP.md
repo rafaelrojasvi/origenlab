@@ -8,9 +8,10 @@ Last reviewed: 2026-06-02 (Phase 1 simplification map — see [`audits/CODEBASE_
 
 ```bash
 cd apps/email-pipeline
-uv run python -m origenlab_email_pipeline.cli --help
+uv run origenlab --help
 # status · daily-health · refresh-safety · validate-csvs · check-readiness · post-send-digest
 # export-dnr · ndr-review · audit-overlap  (+ build-mart · gmail-ingest-help — see OPERATOR_COMMAND_SURFACE)
+# fallback: uv run python -m origenlab_email_pipeline.cli <subcommand>
 ```
 
 Detail and script fallbacks: [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md).
