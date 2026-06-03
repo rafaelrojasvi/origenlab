@@ -1,6 +1,6 @@
 # Scripts
 
-**Canonical map (daily lanes, core / ops / lab / break-glass):** [`docs/SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md). **Preferred operator surface (Phase 6C):** [`docs/OPERATOR_COMMAND_SURFACE.md`](../docs/OPERATOR_COMMAND_SURFACE.md).
+**Operator CLI:** see [How to run](#how-to-run). **Script map / tags:** [`docs/SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md) · [`docs/OPERATOR_COMMAND_SURFACE.md`](../docs/OPERATOR_COMMAND_SURFACE.md).
 
 **Environment / safety / refactor planning:** [REPRODUCIBILITY.md](../docs/REPRODUCIBILITY.md) · [CRUD_SAFETY.md](../docs/CRUD_SAFETY.md) · [QUALITY_AND_REFACTOR_STRATEGY.md](../docs/QUALITY_AND_REFACTOR_STRATEGY.md) · [SCRIPT_INVENTORY.md](../docs/SCRIPT_INVENTORY.md) · **Tatiana/lab vs daily ops:** [TATIANA_LAB_BOUNDARY.md](../docs/TATIANA_LAB_BOUNDARY.md) (Stage 6E1) — read-only: [`qa/check_reproducibility.py`](qa/check_reproducibility.py), [`qa/plan_reports_out_cleanup.py`](qa/plan_reports_out_cleanup.py) (inspect `reports/out` layout), [`qa/plan_script_consolidation.py`](qa/plan_script_consolidation.py) (inspect `scripts/` sprawl before delete/wrap/deprecate), [`qa/plan_source_quality.py`](qa/plan_source_quality.py) (heuristic `src/` + `scripts/` line counts, `tatiana_lab` bucket; planning only). **Move-only `reports/out` archiver (dry-run default, break-glass):** [`tools/archive_reports_out_generated.py`](tools/archive_reports_out_generated.py) — use after the planner; `--apply` + `--archive-slug` to execute. Planner/archiver share path **classification** via `origenlab_email_pipeline.core.reports_out` (Stage 6D1). **Imports:** new code should prefer `origenlab_email_pipeline.core.*` where a re-export exists; no mass rewrites (see `QUALITY_AND_REFACTOR_STRATEGY.md`).
 
@@ -12,28 +12,23 @@
 | **Lead-account (canonical implementations)** | [`leads/advanced/build_lead_account_rollup.py`](leads/advanced/build_lead_account_rollup.py), [`leads/advanced/match_lead_accounts_to_existing_orgs.py`](leads/advanced/match_lead_accounts_to_existing_orgs.py), [`leads/advanced/validate_lead_account_rollup.py`](leads/advanced/validate_lead_account_rollup.py), [`leads/advanced/audit_lead_org_quality.py`](leads/advanced/audit_lead_org_quality.py) | **Use `scripts/leads/advanced/…`** in docs and commands. Root wrappers removed Phase 5B. Detail: [`docs/leads/LEAD_ACCOUNT_LAYER.md`](../docs/leads/LEAD_ACCOUNT_LAYER.md). |
 | **One-off / exploratory** | [`tools/`](tools/), [`validation/`](validation/) (phase checks), [`ml/`](ml/), some [`dataset/`](dataset/) | Not the main weekly path; useful for debugging or optional ML |
 
-**Execution:** always from **`apps/email-pipeline/`** — **`uv run python scripts/...`** or **`uv run bash scripts/...`** (see below).
-
 ## How to run
 
-From **`apps/email-pipeline/`** (monorepo: `cd apps/email-pipeline`):
+```bash
+cd apps/email-pipeline
+uv run python -m origenlab_email_pipeline.cli --help
+uv run python -m origenlab_email_pipeline.cli status
+uv run python -m origenlab_email_pipeline.cli daily-health
+uv run python -m origenlab_email_pipeline.cli refresh-safety
+uv run python -m origenlab_email_pipeline.cli validate-csvs
+uv run python -m origenlab_email_pipeline.cli check-readiness
+uv run python -m origenlab_email_pipeline.cli post-send-digest
+uv run python -m origenlab_email_pipeline.cli export-dnr
+uv run python -m origenlab_email_pipeline.cli ndr-review
+uv run python -m origenlab_email_pipeline.cli audit-overlap
+```
 
-- **Preferred (health / safety / post-send digest):** unified operator CLI — same behavior as the underlying `scripts/qa/` entrypoints:
-
-  ```bash
-  uv run python -m origenlab_email_pipeline.cli status
-  uv run python -m origenlab_email_pipeline.cli daily-health
-  uv run python -m origenlab_email_pipeline.cli refresh-safety
-  uv run python -m origenlab_email_pipeline.cli validate-csvs
-  uv run python -m origenlab_email_pipeline.cli check-readiness
-  uv run python -m origenlab_email_pipeline.cli post-send-digest
-  ```
-
-  Extra flags for the underlying script go after ``--`` (e.g. `validate-csvs -- --file … --strict`). See [`docs/OPERATOR_COMMAND_SURFACE.md`](../docs/OPERATOR_COMMAND_SURFACE.md).
-
-- **Advanced / manual:** `uv run python scripts/...` or `uv run bash scripts/...` for all other entrypoints (lanes, ingest, campaign waves, break-glass).
-- Script locations (e.g. `scripts/qa/publish_gate.py`, `scripts/leads/advanced/build_lead_account_rollup.py`) are part of the **operational contract**: documented in [`docs/RUNBOOK.md`](../docs/RUNBOOK.md), [`docs/SCRIPT_MAP.md`](../docs/SCRIPT_MAP.md), [`docs/pipeline/SCHEMA_OWNERSHIP.md`](../docs/pipeline/SCHEMA_OWNERSHIP.md), and regression-tested under `tests/test_critical_script_paths.py`. **If you move a script, update docs and that test in the same change.**
-- Subfolder scripts that use `sys.path` should resolve the app root with `Path(__file__).resolve().parents[2]` when the file is `scripts/<subdir>/tool.py` (not `parent.parent`, which pointed at `scripts/` only). Shared reference: [`_bootstrap.py`](_bootstrap.py) exposes `APP_ROOT` / `SCRIPTS_DIR` for future imports.
+Extra flags after ``--``. Other workflows (lanes, ingest, campaigns, break-glass): [`docs/RUNBOOK.md`](../docs/RUNBOOK.md). **Advanced fallback:** `uv run python scripts/...` — paths in [`docs/OPERATOR_COMMAND_SURFACE.md`](../docs/OPERATOR_COMMAND_SURFACE.md). Moving a script requires updating docs and `tests/test_critical_script_paths.py`.
 
 ## Lead-account layer (rollup + mart match)
 

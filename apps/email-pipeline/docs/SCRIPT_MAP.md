@@ -4,11 +4,16 @@ Status: canonical
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-02 (Phase 1 simplification map — see [`audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md`](audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md))
 
-**This document is the canonical operator map** for outbound and campaign work. It is **navigation and safety labeling only** — behavior lives in code and in [`RUNBOOK.md`](RUNBOOK.md).
+**This document is the canonical operator map** for outbound and campaign work (tags, break-glass, removed paths). **Run commands via the unified CLI first** — behavior lives in code and [`RUNBOOK.md`](RUNBOOK.md).
 
-**Practical starting point:** [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md) — **preferred** `uv run python -m origenlab_email_pipeline.cli <subcommand>` for status, daily-health, refresh-safety, validate-csvs, check-readiness, post-send-digest; short tables with advanced `scripts/…` fallbacks. Use **SCRIPT_MAP** below for full tags, removed phases, and break-glass detail.
+```bash
+cd apps/email-pipeline
+uv run python -m origenlab_email_pipeline.cli --help
+# status · daily-health · refresh-safety · validate-csvs · check-readiness · post-send-digest
+# export-dnr · ndr-review · audit-overlap  (+ build-mart · gmail-ingest-help — see OPERATOR_COMMAND_SURFACE)
+```
 
-**Canonical working directory:** `apps/email-pipeline/` (`cd apps/email-pipeline`).
+Detail and script fallbacks: [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md).
 
 **Reproducibility, safety, inventory:** [REPRODUCIBILITY.md](REPRODUCIBILITY.md) (machine setup) · [CRUD_SAFETY.md](CRUD_SAFETY.md) (read/create/update/delete rules) · [SCRIPT_INVENTORY.md](SCRIPT_INVENTORY.md) (group-level script classification) · read-only [check_reproducibility.py](../scripts/qa/check_reproducibility.py) · read-only [plan_reports_out_cleanup.py](../scripts/qa/plan_reports_out_cleanup.py) (scan `reports/out` before any cleanup; does not change files; buckets include `active_current`, `active_workspace_misc`, `client_pack_latest`, tmp/lab/archive/reference, etc.) · [archive_reports_out_generated.py](../scripts/tools/archive_reports_out_generated.py) (optional **move** of selected generated files into `archive/manual_cleanup/…`; **dry-run** default, `--apply` + `--archive-slug` to execute; no deletes) · read-only [plan_script_consolidation.py](../scripts/qa/plan_script_consolidation.py) (classify `scripts/` sprawl before deprecating, wrapping, or deleting entrypoints; does not change files) · read-only [plan_source_quality.py](../scripts/qa/plan_source_quality.py) (heuristic `src/` + `scripts/` size/vertical scan; planning only) · [`QUALITY_AND_REFACTOR_STRATEGY.md`](QUALITY_AND_REFACTOR_STRATEGY.md) (refactor rules; **new** code should **prefer** `core.*` imports where re-exports exist; no mass rewrites yet).
 

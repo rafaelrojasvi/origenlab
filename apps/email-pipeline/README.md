@@ -8,8 +8,25 @@ Code lives in the repo; **put real PSTs and outputs outside the repo** (e.g. `~/
 - Paths from **environment** (see [`.env.example`](.env.example)); defaults use `$HOME/data/origenlab-email/`
 
 **Agent-first app context:** [docs/APP_CONTEXT.md](docs/APP_CONTEXT.md#m-epapp-start).  
-**Operator commands (preferred):** [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) — unified CLI: `uv run python -m origenlab_email_pipeline.cli --help` (`status`, `daily-health`, `refresh-safety`, `validate-csvs`, `check-readiness`, `post-send-digest`). Raw `scripts/qa/…` paths are advanced fallbacks.  
-**Documentation index** (what is canonical vs auto-generated, merges to consider): [docs/README.md](docs/README.md).
+**Documentation index:** [docs/README.md](docs/README.md).
+
+## Operator CLI
+
+```bash
+cd apps/email-pipeline
+uv run python -m origenlab_email_pipeline.cli --help
+uv run python -m origenlab_email_pipeline.cli status
+uv run python -m origenlab_email_pipeline.cli daily-health
+uv run python -m origenlab_email_pipeline.cli refresh-safety
+uv run python -m origenlab_email_pipeline.cli validate-csvs
+uv run python -m origenlab_email_pipeline.cli check-readiness
+uv run python -m origenlab_email_pipeline.cli post-send-digest
+uv run python -m origenlab_email_pipeline.cli export-dnr
+uv run python -m origenlab_email_pipeline.cli ndr-review
+uv run python -m origenlab_email_pipeline.cli audit-overlap
+```
+
+Script-specific flags after ``--`` (e.g. `validate-csvs -- --strict`). Lane/ingest/campaign commands: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md). Raw `scripts/…` paths = advanced fallback only.
 
 **HTTP API:** This package does **not** ship FastAPI. Operator and Postgres mirror HTTP live in [`apps/api`](../api/README.md) on port **8001** (`GET /mirror/*` for mirror reporting). The React dashboard [`apps/dashboard`](../dashboard/README.md) uses operator routes only.
 
@@ -417,4 +434,4 @@ origenlab-email-pipeline/
 └── tests/                        # pytest (test_parse_mbox_body, test_business_mart_app_ux, etc.)
 ```
 
-All one-off and pipeline commands live in `scripts/`; they are not installed as package entrypoints except the **unified operator CLI** (`python -m origenlab_email_pipeline.cli`). See **[docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md)** (preferred entrypoints), **[docs/SCRIPT_MAP.md](docs/SCRIPT_MAP.md)** (daily outbound lanes and break-glass labeling), and **scripts/README.md** for categories. **Lead/client pack publish-safe check:** `uv run python scripts/qa/publish_gate.py` — [docs/RUNBOOK.md](docs/RUNBOOK.md#m-eprun-publish-qa).
+Pipeline scripts live under `scripts/`; day-to-day ops use **`python -m origenlab_email_pipeline.cli`** (see [Operator CLI](#operator-cli)). Index: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md), [docs/SCRIPT_MAP.md](docs/SCRIPT_MAP.md), [scripts/README.md](scripts/README.md).
