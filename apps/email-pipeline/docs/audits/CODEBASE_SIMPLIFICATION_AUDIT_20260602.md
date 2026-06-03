@@ -139,6 +139,9 @@ These are **safety-critical** or **contract-locked**. Internal refactors require
 | `apps/email-pipeline` FastAPI `:8000` | Removed API-3 Phase 6; dashboard tests for `:8000` warning |
 | ~~`scripts/tools/flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** — use `flag_ndr_bounces_from_contacto.py --include-reported-non-delivery` |
 | ~~`scripts/qa/build_legacy_contacts_2016_2019_review.py`~~ | **Removed Phase 5R** — `legacy_contacts_2016_2019.py` + `test_legacy_contacts_2016_2019.py` |
+| ~~`scripts/ml/test_real_embeddings.py`~~ | **Removed Phase 5S** — `uv sync --group ml` / `explore_email_clusters.py` |
+| ~~`scripts/leads/campaigns/apply_deepresearch_top10_contacts_to_sheet.py`~~ | **Removed Phase 5S** — frozen/manual DR50 sheet workflow |
+| ~~`scripts/dataset/review_marketing_labels_cli.py`~~ | **Removed Phase 5S** — Tatiana cohort workflow / external labeling |
 | `scripts/leads/advanced/export_archive_outreach_candidates.py` | Docstring: use `build_archive_send_batch.py --audit-only` |
 
 ### Ingest paths
@@ -394,6 +397,7 @@ flowchart LR
 | `run_post_send_2026_06_01_refresh.sh` | Documented dangerous broad NDR apply | **E** — archive, not silent F |
 | ~~`flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** | **F** (done) |
 | ~~`build_legacy_contacts_2016_2019_review.py`~~ | **Removed Phase 5R** — orphan QA CLI; library + tests remain | **F** (done) |
+| ~~`test_real_embeddings.py`~~, ~~`apply_deepresearch_top10_contacts_to_sheet.py`~~, ~~`review_marketing_labels_cli.py`~~ | **Removed Phase 5S** — zero-ref LAB one-offs | **F** (done) |
 | `03_sqlite_to_jsonl.py` | ARCHITECTURE / ML path only | **Keep** — not F |
 | `02_mbox_to_sqlite.py` | Still in ingest observability tests | **Keep** with break-glass label |
 | Root lead-account wrappers | `test_critical_script_paths` + `test_lead_compatibility_wrappers` | **D only** until Phase 5 |

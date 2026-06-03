@@ -35,6 +35,24 @@ REMOVED_PHASE5R_TARGETS: tuple[dict[str, str], ...] = (
     },
 )
 
+REMOVED_PHASE5S_TARGETS: tuple[dict[str, str], ...] = (
+    {
+        "path": "scripts/ml/test_real_embeddings.py",
+        "replacement": "uv sync --group ml; scripts/ml/explore_email_clusters.py if embeddings needed",
+        "removed_phase": "5S",
+    },
+    {
+        "path": "scripts/leads/campaigns/apply_deepresearch_top10_contacts_to_sheet.py",
+        "replacement": "frozen/manual DR50 sheet workflow",
+        "removed_phase": "5S",
+    },
+    {
+        "path": "scripts/dataset/review_marketing_labels_cli.py",
+        "replacement": "Tatiana cohort workflow / external labeling",
+        "removed_phase": "5S",
+    },
+)
+
 REMOVED_PHASE5D_TARGETS: tuple[dict[str, str], ...] = (
     {
         "path": "scripts/leads/advanced/export_archive_outreach_candidates.py",
@@ -259,7 +277,7 @@ def build_removal_evidence_markdown() -> str:
         "Owner: email-pipeline-maintainers",
         "Last reviewed: 2026-06-02",
         "",
-        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper; Phase **5K** removed 2026-06-01 manual outreach registry and dated QA scripts; Phase **5Q** removed legacy `flag_reported_non_delivery_from_contacto.py` (canonical `--include-reported-non-delivery`); Phase **5R** removed orphan `build_legacy_contacts_2016_2019_review.py` (library + tests remain).",
+        "**Purpose:** Evidence for Phase 4–5 deprecation/removal. Phase **5A** removed dated post-send shell orchestrators; Phase **5B** removed root lead-account wrappers; Phase **5C** removed legacy buyer opportunity queue builder; Phase **5D** removed archive outreach audit wrapper; Phase **5K** removed 2026-06-01 manual outreach registry and dated QA scripts; Phase **5Q** removed legacy `flag_reported_non_delivery_from_contacto.py` (canonical `--include-reported-non-delivery`); Phase **5R** removed orphan `build_legacy_contacts_2016_2019_review.py` (library + tests remain); Phase **5S** removed three zero-ref LAB scripts (ML smoke, DR50 top-10 patch, interactive marketing labels CLI).",
         "",
         "Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_removal_evidence_report -q`",
         "",
@@ -366,6 +384,19 @@ def build_removal_evidence_markdown() -> str:
         ]
     )
     for row in REMOVED_PHASE5R_TARGETS:
+        lines.append(
+            f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
+        )
+    lines.extend(
+        [
+            "",
+            "## Removed in Phase 5S (2026-06-02)",
+            "",
+            "| Path | Replacement | Removed phase |",
+            "|------|-------------|---------------|",
+        ]
+    )
+    for row in REMOVED_PHASE5S_TARGETS:
         lines.append(
             f"| `{row['path']}` | {row['replacement']} | {row['removed_phase']} |",
         )
