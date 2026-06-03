@@ -26,6 +26,7 @@ SUBCOMMAND_SCRIPTS: dict[str, str] = {
     "ndr-review": "scripts/qa/build_ndr_review_queue.py",
     "audit-overlap": "scripts/qa/export_contacted_lead_overlap_audit.py",
     "build-mart": "scripts/mart/build_business_mart.py",
+    "build-commercial-intel": "scripts/commercial/build_commercial_intel_v1.py",
     "gmail-ingest-help": GMAIL_INGEST_SCRIPT,
 }
 
@@ -55,6 +56,10 @@ SUBCOMMAND_HELP: dict[str, str] = {
     "audit-overlap": "Contacted-lead overlap audit CSV (export_contacted_lead_overlap_audit.py)",
     "build-mart": (
         "Business mart rebuild (build_business_mart.py) — break-glass: optional --rebuild deletes mart tables"
+    ),
+    "build-commercial-intel": (
+        "Commercial intel incremental builder (build_commercial_intel_v1.py) — writes SQLite commercial_* "
+        "tables; --rebuild is break-glass"
     ),
     "gmail-ingest": (
         "Safe daily Gmail ingest: INBOX then Sent ([Gmail]/Enviados), --skip-duplicate-message-id; "

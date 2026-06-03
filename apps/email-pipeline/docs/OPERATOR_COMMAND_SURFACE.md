@@ -20,6 +20,8 @@ uv run origenlab post-send-digest
 uv run origenlab export-dnr
 uv run origenlab ndr-review
 uv run origenlab audit-overlap
+uv run origenlab build-mart
+uv run origenlab build-commercial-intel
 uv run origenlab gmail-ingest
 uv run origenlab gmail-ingest-folders
 uv run origenlab mirror-dashboard
@@ -45,6 +47,7 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `ndr-review` | `qa/build_ndr_review_queue.py` | Read-only NDR batches |
 | `audit-overlap` | `qa/export_contacted_lead_overlap_audit.py` | Pre-send overlap |
 | `build-mart` | `mart/build_business_mart.py` | Break-glass; `--rebuild` deletes mart tables |
+| `build-commercial-intel` | `commercial/build_commercial_intel_v1.py` | SQLite; incremental `commercial_*` refresh; `--rebuild` break-glass via passthrough |
 | `gmail-ingest` | `ingest/05_workspace_gmail_imap_to_sqlite.py` (INBOX + Sent) | SQLite; daily refresh; rejects `--replace-source` |
 | `gmail-ingest-folders` | same (`--list-folders`) | No; discover Sent label if `[Gmail]/Enviados` differs |
 | `gmail-ingest-help` | same (`--help` only) | No; ingest flags reference |
