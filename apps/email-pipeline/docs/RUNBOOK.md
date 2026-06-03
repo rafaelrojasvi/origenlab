@@ -88,7 +88,8 @@ uv run python -m origenlab_email_pipeline.cli validate-csvs -- \
 uv run python scripts/leads/process_broad_marketing_contacts.py
 # Review send_ready_marketing.csv — send manually or via scripts/qa/send_inline_html_email_via_gmail_api.py
 uv run python scripts/leads/mark_sent_batch_contacted.py --batch-file ... --source ... --updated-by ...
-uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"  # Sent ingest
+uv run origenlab gmail-ingest
+# Advanced: uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"
 ```
 
 ### B) Precision lead lane
@@ -116,7 +117,8 @@ Run this sequence before a new send cycle to keep auxiliary anti-repeat artifact
 
 ```bash
 cd apps/email-pipeline
-uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"
+uv run origenlab gmail-ingest
+# Advanced: uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"
 uv run python scripts/qa/export_outreach_contacted_all.py
 uv run python scripts/qa/export_all_known_marketing_contacts.py
 uv run python scripts/qa/export_do_not_repeat_master.py
@@ -409,8 +411,10 @@ sqlite3 "$ORIGENLAB_SQLITE_PATH" \
   "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"
 
 # B — Gmail (same as daily outbound; required for React to see new mail)
-uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder INBOX --skip-duplicate-message-id
-uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados" --skip-duplicate-message-id
+uv run origenlab gmail-ingest
+# Optional window: uv run origenlab gmail-ingest -- --since-days 14
+# If Sent label differs: uv run origenlab gmail-ingest-folders
+# Advanced (same two steps): scripts/ingest/05_workspace_gmail_imap_to_sqlite.py per folder
 
 sqlite3 "$ORIGENLAB_SQLITE_PATH" \
   "SELECT COUNT(*), MAX(date_iso) FROM emails WHERE source_file LIKE 'gmail:contacto@origenlab.cl/%';"

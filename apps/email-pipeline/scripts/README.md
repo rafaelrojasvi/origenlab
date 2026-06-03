@@ -26,9 +26,11 @@ uv run origenlab post-send-digest
 uv run origenlab export-dnr
 uv run origenlab ndr-review
 uv run origenlab audit-overlap
+uv run origenlab gmail-ingest
+uv run origenlab gmail-ingest-folders
 ```
 
-Module fallback: `uv run python -m origenlab_email_pipeline.cli …`. Extra flags after ``--``. Other workflows: [`docs/RUNBOOK.md`](../docs/RUNBOOK.md). Script paths: [`docs/OPERATOR_COMMAND_SURFACE.md`](../docs/OPERATOR_COMMAND_SURFACE.md).
+Module fallback: `uv run python -m origenlab_email_pipeline.cli …`. Extra flags after ``--`` (not on `gmail-ingest-folders`). `gmail-ingest` rejects `--replace-source`. Other workflows: [`docs/RUNBOOK.md`](../docs/RUNBOOK.md).
 
 ## Lead-account layer (rollup + mart match)
 

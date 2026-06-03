@@ -1,4 +1,4 @@
-"""Tests for unified operator CLI wrapper (Phase 6B / 6D / 6G) — no heavy script execution."""
+"""Tests for unified operator CLI wrapper (Phase 6B / 6D / 6G / 7A) — no heavy script execution."""
 
 from __future__ import annotations
 
@@ -10,13 +10,18 @@ from pathlib import Path
 import pytest
 
 from origenlab_email_pipeline.cli import (
+    CLI_COMMAND_NAMES,
+    GMAIL_INGEST_INBOX_FOLDER,
+    GMAIL_INGEST_SENT_FOLDER,
     HELP_ONLY_SUBCOMMANDS,
     SUBCOMMAND_SCRIPTS,
+    build_gmail_ingest_argv_list,
     build_subcommand_argv,
     main,
     normalize_passthrough_args,
     repo_root,
     script_path_for,
+    validate_gmail_ingest_passthrough,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -69,7 +74,7 @@ def test_cli_help_exits_zero() -> None:
     assert "origenlab-email-pipeline" in cp.stdout or "Operator CLI" in cp.stdout
 
 
-@pytest.mark.parametrize("name", list(SUBCOMMAND_SCRIPTS))
+@pytest.mark.parametrize("name", CLI_COMMAND_NAMES)
 def test_subcommand_appears_in_help(name: str) -> None:
     cp = _run_cli("--help")
     assert cp.returncode == 0
@@ -161,6 +166,66 @@ def test_run_subcommand_not_invoked_in_tests(monkeypatch: pytest.MonkeyPatch) ->
     assert len(calls) == 1
     assert calls[0][-1] == "--help"
     assert calls[0][1].endswith("check_outbound_readiness.py")
+
+
+def test_gmail_ingest_builds_two_commands_with_safe_defaults() -> None:
+    cmds = build_gmail_ingest_argv_list()
+    assert len(cmds) == 2
+    for cmd in cmds:
+        assert "--skip-duplicate-message-id" in cmd
+        assert cmd[1].endswith("05_workspace_gmail_imap_to_sqlite.py")
+    assert cmds[0][cmds[0].index("--folder") + 1] == GMAIL_INGEST_INBOX_FOLDER
+    assert cmds[1][cmds[1].index("--folder") + 1] == GMAIL_INGEST_SENT_FOLDER
+
+
+def test_gmail_ingest_passthrough_since_days_on_both() -> None:
+    cmds = build_gmail_ingest_argv_list(["--", "--since-days", "14"])
+    for cmd in cmds:
+        assert "--since-days" in cmd
+        assert "14" in cmd
+
+
+def test_gmail_ingest_rejects_replace_source() -> None:
+    with pytest.raises(ValueError, match="replace-source"):
+        validate_gmail_ingest_passthrough(["--replace-source"])
+    with pytest.raises(SystemExit):
+        main(["gmail-ingest", "--", "--replace-source"])
+
+
+def test_run_gmail_ingest_mocked_runs_inbox_then_sent(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        class R:
+            returncode = 0
+
+        return R()
+
+    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    from origenlab_email_pipeline.cli import run_gmail_ingest
+
+    assert run_gmail_ingest() == 0
+    assert len(calls) == 2
+    assert calls[0][calls[0].index("--folder") + 1] == GMAIL_INGEST_INBOX_FOLDER
+    assert calls[1][calls[1].index("--folder") + 1] == GMAIL_INGEST_SENT_FOLDER
+
+
+def test_run_gmail_ingest_stops_on_first_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        class R:
+            returncode = 3 if len(calls) == 1 else 0
+
+        return R()
+
+    monkeypatch.setattr("origenlab_email_pipeline.cli.subprocess.run", fake_run)
+    from origenlab_email_pipeline.cli import run_gmail_ingest
+
+    assert run_gmail_ingest() == 3
+    assert len(calls) == 1
 
 
 def test_run_gmail_ingest_help_mocked_only_help(monkeypatch: pytest.MonkeyPatch) -> None:
