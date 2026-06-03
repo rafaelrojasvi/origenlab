@@ -1,4 +1,4 @@
-"""Phase 6F taxonomy unit tests for plan_source_quality.classify_vertical (path-only)."""
+"""Phase 6F / 8C taxonomy unit tests for plan_source_quality.classify_vertical (path-only)."""
 
 from __future__ import annotations
 
@@ -43,8 +43,62 @@ def test_phase6f_script_verticals() -> None:
     assert _classify("scripts/tools/check_system.py") == "tooling"
     assert _classify("scripts/tools/inspect_sqlite.py") == "tooling"
     assert _classify("scripts/qa/verify_dashboard_postgres_mirror.py") == "postgres_verify"
-    assert _classify("scripts/sync/sync_lead_research_postgres_mirror.py") == "migration"
-    assert _classify("scripts/migrate/sqlite_archive_to_postgres.py") == "migration"
+    assert _classify("scripts/sync/sync_lead_research_postgres_mirror.py") == "postgres_mirror"
+    assert _classify("scripts/migrate/sqlite_archive_to_postgres.py") == "postgres_mirror"
     assert _classify("scripts/ingest/04_imap_to_sqlite.py") == "ingest"
     assert _classify("scripts/mart/build_business_mart.py") == "mart"
     assert _classify("scripts/qa/build_ndr_review_queue.py") == "ndr"
+
+
+def test_phase8c_operator_cli() -> None:
+    assert _classify("src/origenlab_email_pipeline/cli.py") == "operator_cli"
+    assert _classify("src/origenlab_email_pipeline/operator_cli/parser.py") == "operator_cli"
+    assert _classify("src/origenlab_email_pipeline/operator_status_report.py") == "operator_cli"
+    assert _classify("src/origenlab_email_pipeline/operator_copy_es.py") == "operator_cli"
+
+
+def test_phase8c_postgres_mirror() -> None:
+    assert _classify("src/origenlab_email_pipeline/mart_core_postgres_migrate.py") == "postgres_mirror"
+    assert _classify("src/origenlab_email_pipeline/dashboard_postgres_sync.py") == "postgres_mirror"
+    assert _classify("src/origenlab_email_pipeline/catalog/catalog_postgres_mirror.py") == "postgres_mirror"
+    assert _classify("scripts/sync/sync_dashboard_postgres_mirror.py") == "postgres_mirror"
+
+
+def test_phase8c_equipment_first() -> None:
+    assert _classify("src/origenlab_email_pipeline/equipment_first_operator_queue.py") == "equipment_first"
+    assert _classify("src/origenlab_email_pipeline/equipment_opportunity_mirror.py") == "equipment_first"
+    assert _classify("scripts/sync/load_equipment_opportunity_mirror.py") == "equipment_first"
+
+
+def test_phase8c_core_infrastructure() -> None:
+    assert _classify("src/origenlab_email_pipeline/db.py") == "core_infrastructure"
+    assert _classify("src/origenlab_email_pipeline/parse_mbox.py") == "core_infrastructure"
+    assert _classify("src/origenlab_email_pipeline/core/reports_out.py") == "core_infrastructure"
+
+
+def test_phase8c_qa_exports() -> None:
+    assert _classify("scripts/qa/export_do_not_repeat_master.py") == "qa_exports"
+    assert _classify("scripts/qa/validate_campaign_csvs.py") == "qa_exports"
+    assert _classify("scripts/qa/audit_canonical_contacto_gmail.py") == "qa_exports"
+
+
+def test_phase8c_campaign_scripts() -> None:
+    assert _classify("scripts/qa/build_cyber_outreach_campaign.py") == "campaign_scripts"
+    assert _classify("scripts/qa/build_presentacion_origenlab_quality.py") == "campaign_scripts"
+
+
+def test_phase8c_research_lab() -> None:
+    assert _classify("scripts/research/run_deep_research_prospecting.py") == "research_lab"
+    assert _classify("src/origenlab_email_pipeline/core/research_automation.py") == "research_lab"
+    assert _classify("scripts/qa/verify_research_candidate_evidence.py") == "research_lab"
+
+
+def test_phase8c_streamlit_read() -> None:
+    assert _classify("src/origenlab_email_pipeline/read/today_workspace.py") == "streamlit_read"
+    assert _classify("src/origenlab_email_pipeline/tatiana_copilot/streamlit_draft_helpers.py") == "streamlit_read"
+    assert _classify("src/origenlab_email_pipeline/streamlit_prioridad_pages.py") == "streamlit_ui"
+
+
+def test_phase8c_purge_break_glass() -> None:
+    assert _classify("scripts/tools/purge_contact_emails_from_sqlite.py") == "purge_break_glass"
+    assert _classify("scripts/tools/archive_reports_out_generated.py") == "purge_break_glass"

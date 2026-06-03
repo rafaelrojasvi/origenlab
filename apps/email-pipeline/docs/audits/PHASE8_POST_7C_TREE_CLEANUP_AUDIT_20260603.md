@@ -101,7 +101,14 @@ Planner heuristic only — **do not change taxonomy in Phase 8A**. Representativ
 | **`purge_break_glass`** | `scripts/tools/purge_*.py`, `archive_reports_out_generated.py` | ~5 | Already in SCRIPT_MAP break-glass |
 | **`misc_root_src`** | `email_business_filters.py`, `business_filter_rules.py`, `bi_views.py`, `marketing_contact_noise.py` | ~19 | Triage into outbound/mart/qa |
 
-**Action:** Phase **8B** taxonomy round — update `plan_source_quality.py` keyword maps only after owner review; target **102 → ~60** unknown without moving files.
+**Action (Phase 8A):** Phase **8C** taxonomy round — update `plan_source_quality.py` keyword maps only; no file moves.
+
+### Phase 8C complete (2026-06-03)
+
+- **Scope:** taxonomy-only — `scripts/qa/plan_source_quality.py` + path-only tests; **no runtime behavior change**, no file moves/deletes.
+- **Source-quality `unknown` verticals:** **102 → 51** (−51; planner re-run with `--top 100`).
+- **Artifact:** `reports/out/active/current/plan_source_quality_after_phase8c.json` (local, gitignored).
+- **New buckets:** `operator_cli`, `postgres_mirror`, `equipment_first`, `core_infrastructure`, `qa_exports`, `campaign_scripts`, `research_lab`, `streamlit_read`, `purge_break_glass`; conservative misc root `src` → `outbound` / `qa` where obvious.
 
 ---
 
@@ -190,7 +197,7 @@ Observed patterns (no changes in 8A):
 | **7B** | `mirror-dashboard` (dry-run default; cloud URL + non-scratch handling) |
 | **7C** | `refresh-dashboard` (plan-only default; `--apply` orchestration) |
 
-Consolidation **`unknown=0`** held through 7C. Source **`unknown=102`** unchanged — next leverage is taxonomy (8B), not operator CLI.
+Consolidation **`unknown=0`** held through 7C. Source **`unknown=102`** through 8A/8B; **Phase 8C** taxonomy dropped it to **51** (planner-only).
 
 ---
 
@@ -198,8 +205,8 @@ Consolidation **`unknown=0`** held through 7C. Source **`unknown=102`** unchange
 
 ```bash
 cd apps/email-pipeline
-uv run pytest tests/test_operator_cli.py tests/test_operator_entrypoint_contracts.py -q
-# 73 passed (2026-06-03)
+uv run pytest tests/test_plan_source_quality_taxonomy.py tests/test_operator_cli.py tests/test_operator_entrypoint_contracts.py -q
+# 85 passed (2026-06-03, after Phase 8C)
 ```
 
 No Gmail, Postgres writes, or `--apply` executed during this audit.

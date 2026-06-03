@@ -4,6 +4,8 @@
 Heuristic vertical buckets, line counts, and import-hint flags. **Not** authoritative for refactors;
 use with [`docs/QUALITY_AND_REFACTOR_STRATEGY.md`](../../docs/QUALITY_AND_REFACTOR_STRATEGY.md) and [`docs/TATIANA_LAB_BOUNDARY.md`](../../docs/TATIANA_LAB_BOUNDARY.md) for the ``tatiana_lab`` bucket.
 Does not read SQLite, Gmail, or secrets; does not write outside optional ``--json-out`` path.
+
+Phase 8C extends vertical buckets per ``docs/audits/PHASE8_POST_7C_TREE_CLEANUP_AUDIT_20260603.md`` §3 (planner-only).
 """
 
 from __future__ import annotations
@@ -72,9 +74,14 @@ def _is_tatiana_lab_path(p: str) -> bool:
     return False
 
 
+def _basename(p: str) -> str:
+    return p.rsplit("/", 1)[-1]
+
+
 def classify_vertical(rel_posix: str) -> str:
-    """Heuristic single bucket; first matching rule wins (Phase 6F taxonomy)."""
+    """Heuristic single bucket; first matching rule wins (Phase 6F / 8C taxonomy)."""
     p = rel_posix.replace("\\", "/").lower()
+    base = _basename(p)
 
     if p.startswith("scripts/qa/plan_") or "/scripts/qa/plan_" in p:
         return "planners"
@@ -82,19 +89,79 @@ def classify_vertical(rel_posix: str) -> str:
     if p.startswith("scripts/qa/verify_") and "postgres_mirror" in p:
         return "postgres_verify"
 
-    if p.startswith("scripts/tools/check_") or p.endswith("scripts/tools/inspect_sqlite.py"):
-        return "tooling"
+    if base.startswith("purge_") and p.startswith("scripts/tools/"):
+        return "purge_break_glass"
+    if base == "archive_reports_out_generated.py":
+        return "purge_break_glass"
 
     if (
-        p.startswith("scripts/migrate/")
+        p.startswith("src/origenlab_email_pipeline/operator_cli/")
+        or base == "cli.py"
+        or base == "operator_status_report.py"
+        or base == "operator_copy_es.py"
+    ):
+        return "operator_cli"
+
+    if p.startswith("scripts/qa/") and (
+        base.startswith("export_")
+        or base.startswith("validate_")
+        or base.startswith("audit_")
+    ):
+        return "qa_exports"
+
+    if p.startswith("scripts/qa/") and (
+        base.startswith("build_cyber_") or base.startswith("build_presentacion_")
+    ):
+        return "campaign_scripts"
+
+    if (
+        p.startswith("scripts/research/")
+        or base == "research_automation.py"
+        or "core/research_automation.py" in p
+        or base == "verify_research_candidate_evidence.py"
+        or base == "audit_research_candidate_evidence.py"
+    ):
+        return "research_lab"
+
+    if (
+        base.startswith("equipment_")
+        and ("_queue.py" in base or base == "equipment_opportunity_mirror.py")
+    ) or base == "load_equipment_opportunity_mirror.py":
+        return "equipment_first"
+
+    if (
+        base == "mart_core_postgres_migrate.py"
+        or base == "dashboard_postgres_sync.py"
+        or "_postgres_mirror" in base
+        or p.startswith("scripts/sync/")
+        or p.startswith("scripts/migrate/")
+        or "/scripts/sync/" in f"/{p}/"
         or "/scripts/migrate/" in f"/{p}/"
-        or (p.startswith("scripts/sync/") and "postgres" in p)
-        or "/scripts/sync/" in f"/{p}/" and "postgres" in p
         or "_to_postgres" in p
         or "validate_sqlite_archive_for_postgres" in p
         or "postgres_outbound_audit" in p
     ):
-        return "migration"
+        return "postgres_mirror"
+
+    if (
+        base == "db.py"
+        or base == "parse_mbox.py"
+        or base == "attachment_extract.py"
+        or base == "canonical_operational_sql.py"
+        or base == "reports_out.py"
+        or "core/reports_out.py" in p
+    ):
+        return "core_infrastructure"
+
+    if p.startswith("scripts/tools/check_") or (
+        base == "inspect_sqlite.py" and p.startswith("scripts/tools/")
+    ):
+        return "tooling"
+
+    if "read/today_workspace" in p or base == "today_workspace.py":
+        return "streamlit_read"
+    if "streamlit_draft_helpers" in p or "tatiana_copilot/streamlit" in p:
+        return "streamlit_read"
 
     if "streamlit" in p:
         return "streamlit_ui"
@@ -188,6 +255,9 @@ def classify_vertical(rel_posix: str) -> str:
             "next_marketing",
             "outreach_contact",
             "outreach_ingest",
+            "email_business_filters",
+            "business_filter_rules",
+            "marketing_contact_noise",
         )
     ):
         return "outbound"
@@ -197,6 +267,12 @@ def classify_vertical(rel_posix: str) -> str:
 
     if "supplier" in p:
         return "suppliers"
+
+    if base == "email_classification_qa.py":
+        return "qa"
+
+    if base == "cases_review_queue.py":
+        return "qa"
 
     return "unknown"
 
