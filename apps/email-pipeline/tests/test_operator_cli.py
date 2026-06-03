@@ -440,7 +440,7 @@ def test_refresh_dashboard_default_plan_no_runner(
     out = capsys.readouterr().out
     assert "plan only" in out
     assert "build-mart -- --rebuild" in out
-    assert f"{REFRESH_DASHBOARD_USAGE} --apply" in out
+    assert "uv run origenlab refresh-dashboard --apply" in out
     assert "refresh-dashboard--apply" not in out
 
 
