@@ -14,7 +14,7 @@ Regenerate: `uv run pytest tests/test_script_removal_evidence.py::test_generate_
 
 | Path | SCRIPT_MAP | Test-locked | Doc refs | Test refs | Script refs | Replacement | Suggested phase |
 |------|------------|-------------|----------|-----------|-------------|-------------|-----------------|
-| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | yes | no | 4 | 4 | 1 | flag_ndr_bounces_from_contacto.py (NDR) + human review queue | 5 |
+| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | yes | no | 4 | 4 | 2 | flag_ndr_bounces_from_contacto.py (--include-reported-non-delivery for human inbound) + build_ndr_review_queue.py | 5Q delete next once canonical human-reported mode verified in prod |
 
 ## Removed in Phase 5A (2026-06-02)
 

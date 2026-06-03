@@ -154,12 +154,14 @@ Legacy tags **KEEP_CORE** / **KEEP_AUDIT** in older prose map loosely to **OPS_C
 
 **Canonical post-send path:** [`scripts/tools/flag_ndr_bounces_from_contacto.py`](../scripts/tools/flag_ndr_bounces_from_contacto.py) — dry-run default; **targeted** apply only after human review:
 
-- Preferred: `--emails-file PATH --only-code CODE --apply` (allowlist must match scan evidence).
+- Default scan: **NDR / Mailer-Daemon** (`bounce_ndr`) only.
+- Optional: `--include-reported-non-delivery` — inbound human replies (e.g. «no recibimos su correo»); dry-run labels matches as **`human_reported_non_delivery`** (not `bounce_ndr`). Replaces legacy `flag_reported_non_delivery_from_contacto.py` behavior.
+- Preferred NDR apply: `--emails-file PATH --only-code CODE --apply` (allowlist must match scan evidence).
 - **Broad `--apply`** without `--emails-file` / `--only-code` = **break-glass** (all planned recipients from scan).
 
 **Human-review helper (read-only):** [`scripts/qa/build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) — batches + suggested allowlists under `reports/out/active/current/ndr_review_queue_*`; **does not** write suppressions.
 
-**Legacy / deprecation candidate:** [`scripts/tools/flag_reported_non_delivery_from_contacto.py`](../scripts/tools/flag_reported_non_delivery_from_contacto.py) — older reported-NDR scanner; **do not use** for new post-send work unless you confirm no overlap with `flag_ndr_bounces_from_contacto.py`. No broad or automatic suppression writes.
+**Legacy / deprecation candidate:** [`scripts/tools/flag_reported_non_delivery_from_contacto.py`](../scripts/tools/flag_reported_non_delivery_from_contacto.py) — **delete next phase** after canonical `--include-reported-non-delivery` is verified; use canonical tool instead. No broad or automatic suppression writes.
 
 Procedure: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md#ndr-apply-rules).
 
@@ -281,7 +283,7 @@ Shared helpers imported by other `scripts/` CLIs; not daily outbound or mirror o
 
 | Path | Tag | Replacement / notes |
 |------|-----|---------------------|
-| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | DEPRECATED | Prefer **`flag_ndr_bounces_from_contacto.py`** + [`build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) |
+| `scripts/tools/flag_reported_non_delivery_from_contacto.py` | DEPRECATED | **`flag_ndr_bounces_from_contacto.py --include-reported-non-delivery`** + [`build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py); delete script next phase when verified |
 
 **Removed Phase 5D (2026-06-02):** `scripts/leads/advanced/export_archive_outreach_candidates.py` — use [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) `--audit-only`.
 
@@ -332,7 +334,7 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | Path | Role | Mutates? | Notes |
 |------|------|----------|--------|
 | [`scripts/ingest/05_workspace_gmail_imap_to_sqlite.py`](../scripts/ingest/05_workspace_gmail_imap_to_sqlite.py) | Read-only Gmail IMAP → `emails` | SQLite insert | No Gmail send; use `--skip-duplicate-message-id`; no `--replace-source` in safe loops |
-| [`scripts/tools/flag_ndr_bounces_from_contacto.py`](../scripts/tools/flag_ndr_bounces_from_contacto.py) | NDR scan; optional suppression apply | SQLite **only with `--apply`** | **Dry-run default.** Preferred apply: `--emails-file PATH --only-code CODE --apply` (allowlist must match scan evidence). **Broad `--apply` without filters = break-glass** (all planned recipients). Delay DSN subjects skipped. Exact-email only — not domain suppression. |
+| [`scripts/tools/flag_ndr_bounces_from_contacto.py`](../scripts/tools/flag_ndr_bounces_from_contacto.py) | NDR scan; optional human-reported inbound (`--include-reported-non-delivery`); optional suppression apply | SQLite **only with `--apply`** | **Dry-run default.** NDR apply: `--emails-file PATH --only-code CODE --apply`. **Broad `--apply` without filters = break-glass.** Human-reported matches labeled `human_reported_non_delivery` in dry-run. Delay DSN subjects skipped. Exact-email only — not domain suppression. |
 | [`scripts/leads/audit_contacted_universe.py`](../scripts/leads/audit_contacted_universe.py) | Rebuild exclusion CSVs from SQLite | Writes `reports/out/` only | Run before post-send digest |
 | [`scripts/qa/refresh_outbound_safety_memory.py`](../scripts/qa/refresh_outbound_safety_memory.py) | Safety exports + validation chain | SQLite read; `reports/out/` writes | Daily / post-send |
 | [`scripts/qa/build_post_send_digest.py`](../scripts/qa/build_post_send_digest.py) | Post-send digest CSV/MD/JSON | **Read-only** analysis | Output under `reports/out/active/current/` (gitignored) — not source of truth |
