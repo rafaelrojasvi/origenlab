@@ -41,7 +41,7 @@ For dashboard/API checks without production risk:
 ### Email pipeline (`apps/email-pipeline`)
 
 - Python 3.12 with [`uv`](https://docs.astral.sh/uv/).
-- From `apps/email-pipeline/`: `uv sync --group dev --group ui` (matches CI for tests that need Streamlit-related deps).
+- From `apps/email-pipeline/`: `uv sync --group dev --group ui --group lab` (matches CI for Streamlit- and Tatiana-related tests).
 - Copy [`apps/email-pipeline/.env.example`](apps/email-pipeline/.env.example) to `.env` and point paths at a **directory outside the repo** for real data (see [`apps/email-pipeline/docs/DATA_LOCATIONS.md`](apps/email-pipeline/docs/DATA_LOCATIONS.md)).
 
 ## What must not be committed

@@ -1184,7 +1184,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "hdbscan" },
-    { name = "openai" },
     { name = "openpyxl" },
     { name = "orjson" },
     { name = "pydantic" },
@@ -1209,6 +1208,9 @@ dev = [
 gmail = [
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
+]
+lab = [
+    { name = "openai" },
 ]
 ml = [
     { name = "faiss-cpu" },
@@ -1243,7 +1245,6 @@ workspace = [
 [package.metadata]
 requires-dist = [
     { name = "hdbscan", specifier = ">=0.8.41" },
-    { name = "openai", specifier = ">=1.40" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "orjson", specifier = ">=3.9" },
     { name = "pydantic", specifier = ">=2" },
@@ -1269,6 +1270,7 @@ gmail = [
     { name = "google-auth", specifier = ">=2.29" },
     { name = "google-auth-oauthlib", specifier = ">=1.2" },
 ]
+lab = [{ name = "openai", specifier = ">=1.40" }]
 ml = [
     { name = "faiss-cpu", specifier = "==1.13.2" },
     { name = "numpy", specifier = "==2.3.5" },
