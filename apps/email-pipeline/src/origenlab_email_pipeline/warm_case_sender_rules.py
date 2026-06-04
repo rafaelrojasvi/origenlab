@@ -194,6 +194,33 @@ _CLIENT_QUOTE_REQUEST_MARKERS: tuple[str, ...] = (
     "3812200",
 )
 
+# ---------------------------------------------------------------------------
+# Parsing / domain helpers
+# ---------------------------------------------------------------------------
+
+
+def _message_haystack(
+    subject: str | None,
+    snippet: str | None = None,
+    sender: str | None = None,
+) -> str:
+    return " ".join([subject or "", snippet or "", sender or ""]).lower()
+
+
+def _resolve_contact_email(
+    contact_email: str = "",
+    *,
+    sender: str | None = None,
+) -> str:
+    return (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+
+
+def _supplier_quote_haystack(
+    subject: str | None,
+    snippet: str | None = None,
+) -> str:
+    return " ".join([subject or "", snippet or ""]).lower()
+
 
 def contact_email_from_sender(sender_preview: str | None) -> str:
     found = emails_in(sender_preview or "")
@@ -232,6 +259,10 @@ def is_chile_institution_client_domain(domain: str) -> bool:
         return False
     return True
 
+
+# ---------------------------------------------------------------------------
+# Payment / logistics admin
+# ---------------------------------------------------------------------------
 
 PAYMENT_ADMIN_TEXT_MARKERS: tuple[str, ...] = (
     "datos bancarios",
@@ -333,18 +364,56 @@ def looks_like_vendor_logistics_contact(contact_email: str, subject: str | None)
     return looks_like_logistics_admin_contact(contact_email, subject)
 
 
+# ---------------------------------------------------------------------------
+# System / security noise
+# ---------------------------------------------------------------------------
+
+
+def _google_security_domain_alert(domain: str, sub: str) -> bool:
+    if domain not in _SECURITY_CONTACT_DOMAINS:
+        return False
+    if any(m in sub for m in _SECURITY_SUBJECT_MARKERS):
+        return True
+    return "seguridad" in sub or "security" in sub
+
+
+def _google_security_sender_alert(snd: str, sub: str) -> bool:
+    return "accounts.google.com" in snd and ("seguridad" in sub or "security" in sub)
+
+
 def looks_like_system_noise_contact(
     contact_email: str,
     sender: str | None,
     subject: str | None,
 ) -> bool:
-    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    email = _resolve_contact_email(contact_email, sender=sender)
     if email in _SYSTEM_NOISE_EMAILS:
         return True
     if looks_like_security_notification(sender, subject, contact_email=email):
         return True
     snd = (sender or "").lower()
     if "mailer-daemon" in snd or "mailer-daemon" in email:
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Internal / operator / admin
+# ---------------------------------------------------------------------------
+
+
+def _internal_thread_haystack(
+    subject: str | None,
+    snippet: str | None,
+    sender: str | None,
+) -> str:
+    return " ".join([subject or "", snippet or "", sender or ""]).lower()
+
+
+def _personal_operator_admin_email_match(email: str, hay: str) -> bool:
+    if email == "sebastian.rojas.vivanco@gmail.com" and "serva" in hay:
+        return True
+    if email == "tvivancob@gmail.com" and any(m in hay for m in _INTERNAL_ADMIN_SUBJECT_MARKERS):
         return True
     return False
 
@@ -357,7 +426,7 @@ def looks_like_internal_admin_thread(
     sender: str | None = None,
 ) -> bool:
     """Operator/internal notes (SERVA payment, Wise, etc.) — not client threads."""
-    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    email = _resolve_contact_email(contact_email, sender=sender)
     if is_internal_operator_contact(email):
         if looks_like_internal_forwarded_client_quote_request(
             contact_email=email,
@@ -367,12 +436,8 @@ def looks_like_internal_admin_thread(
         ):
             return False
         return True
-    hay = " ".join([subject or "", snippet or "", sender or ""]).lower()
-    if email == "sebastian.rojas.vivanco@gmail.com" and "serva" in hay:
-        return True
-    if email == "tvivancob@gmail.com" and any(m in hay for m in _INTERNAL_ADMIN_SUBJECT_MARKERS):
-        return True
-    return False
+    hay = _internal_thread_haystack(subject, snippet, sender)
+    return _personal_operator_admin_email_match(email, hay)
 
 
 def looks_like_internal_forwarded_client_quote_request(
@@ -383,20 +448,26 @@ def looks_like_internal_forwarded_client_quote_request(
     sender: str | None = None,
 ) -> bool:
     """Internal forward that carries a real external quote request."""
-    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    email = _resolve_contact_email(contact_email, sender=sender)
     if not is_internal_operator_contact(email):
         return False
-    hay = " ".join([subject or "", snippet or "", sender or ""]).lower()
+    hay = _internal_thread_haystack(subject, snippet, sender)
     has_forward_marker = any(marker in hay for marker in _FORWARDED_CLIENT_QUOTE_SUBJECT_MARKERS)
     has_quote_signal = any(marker in hay for marker in _CLIENT_QUOTE_REQUEST_MARKERS)
     return has_forward_marker and has_quote_signal
 
 
-def _supplier_quote_haystack(
-    subject: str | None,
-    snippet: str | None = None,
-) -> str:
-    return " ".join([subject or "", snippet or ""]).lower()
+# ---------------------------------------------------------------------------
+# Supplier / vendor quote
+# ---------------------------------------------------------------------------
+
+
+def _matched_supplier_quote_subject_markers(hay: str) -> list[str]:
+    return [marker for marker in _SUPPLIER_QUOTE_SUBJECT_MARKERS if marker in hay]
+
+
+def _weak_supplier_quote_markers_only(matched: list[str]) -> bool:
+    return bool(matched) and all(marker in _WEAK_SUPPLIER_QUOTE_SUBJECT_MARKERS for marker in matched)
 
 
 def looks_like_auto_reply_text(
@@ -455,7 +526,7 @@ def looks_like_supplier_quote_response(
     sender: str | None = None,
 ) -> bool:
     """Inbound supplier quote/price (e.g. IKA RV10.70), not a client opportunity."""
-    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    email = _resolve_contact_email(contact_email, sender=sender)
     if not is_supplier_vendor_domain(email_domain(email)):
         return False
     if looks_like_supplier_admin_signup_subject(subject):
@@ -463,36 +534,17 @@ def looks_like_supplier_quote_response(
     if looks_like_auto_reply_text(subject, snippet):
         return looks_like_real_supplier_quote_content(subject, snippet)
     hay = _supplier_quote_haystack(subject, snippet)
-    matched = [marker for marker in _SUPPLIER_QUOTE_SUBJECT_MARKERS if marker in hay]
+    matched = _matched_supplier_quote_subject_markers(hay)
     if not matched:
         return False
-    if all(marker in _WEAK_SUPPLIER_QUOTE_SUBJECT_MARKERS for marker in matched):
+    if _weak_supplier_quote_markers_only(matched):
         return looks_like_real_supplier_quote_content(subject, snippet)
     return True
 
 
-def should_keep_visible_despite_suppression(
-    contact_email: str,
-    subject: str | None,
-    *,
-    category: str,
-    snippet: str | None = None,
-) -> bool:
-    """Payment/logistics/supplier rows must stay in api.v_warm_case (status <> problem-only gate)."""
-    if category in ("supplier_reply", "quote_sent", "waiting_supplier", "waiting_client"):
-        if looks_like_cyberday_bulk_campaign_subject(subject):
-            return False
-        return True
-    if looks_like_payment_admin_contact(contact_email, subject, snippet=snippet):
-        return True
-    if looks_like_vendor_logistics_contact(contact_email, subject):
-        return True
-    if is_real_client_domain(email_domain(contact_email)) and looks_like_client_oc_post_sale_subject(
-        subject,
-        snippet=snippet,
-    ):
-        return True
-    return False
+# ---------------------------------------------------------------------------
+# Client post-sale / OC
+# ---------------------------------------------------------------------------
 
 
 def looks_like_client_oc_post_sale_subject(
@@ -516,6 +568,50 @@ def looks_like_client_post_sale_subject(subject: str | None) -> bool:
     return looks_like_client_oc_post_sale_subject(subject)
 
 
+# ---------------------------------------------------------------------------
+# Visibility overrides (api.v_warm_case suppression gate)
+# ---------------------------------------------------------------------------
+
+
+def _warm_case_category_keeps_visible(category: str, subject: str | None) -> bool:
+    if category not in ("supplier_reply", "quote_sent", "waiting_supplier", "waiting_client"):
+        return False
+    if looks_like_cyberday_bulk_campaign_subject(subject):
+        return False
+    return True
+
+
+def _client_oc_keeps_visible(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+) -> bool:
+    return is_real_client_domain(email_domain(contact_email)) and looks_like_client_oc_post_sale_subject(
+        subject,
+        snippet=snippet,
+    )
+
+
+def should_keep_visible_despite_suppression(
+    contact_email: str,
+    subject: str | None,
+    *,
+    category: str,
+    snippet: str | None = None,
+) -> bool:
+    """Payment/logistics/supplier rows must stay in api.v_warm_case (status <> problem-only gate)."""
+    if _warm_case_category_keeps_visible(category, subject):
+        return True
+    if looks_like_payment_admin_contact(contact_email, subject, snippet=snippet):
+        return True
+    if looks_like_vendor_logistics_contact(contact_email, subject):
+        return True
+    if _client_oc_keeps_visible(contact_email, subject, snippet=snippet):
+        return True
+    return False
+
+
 def email_domain(contact_email: str) -> str:
     email = (contact_email or "").strip().lower()
     if "@" not in email:
@@ -530,18 +626,15 @@ def looks_like_security_notification(
     contact_email: str = "",
 ) -> bool:
     """Google / account security alerts — not commercial client threads."""
-    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    email = _resolve_contact_email(contact_email, sender=sender)
     domain = email_domain(email)
     sub = (subject or "").lower()
     snd = (sender or "").lower()
 
-    if domain in _SECURITY_CONTACT_DOMAINS:
-        if any(m in sub for m in _SECURITY_SUBJECT_MARKERS):
-            return True
-        if "seguridad" in sub or "security" in sub:
-            return True
+    if _google_security_domain_alert(domain, sub):
+        return True
 
-    if "accounts.google.com" in snd and ("seguridad" in sub or "security" in sub):
+    if _google_security_sender_alert(snd, sub):
         return True
     return False
 
@@ -555,15 +648,29 @@ def looks_like_supplier_admin_signup_subject(subject: str | None) -> bool:
     return any(m in sub for m in _ADMIN_SIGNUP_SUBJECT_MARKERS)
 
 
+# ---------------------------------------------------------------------------
+# Campaign / outreach
+# ---------------------------------------------------------------------------
+
+
+def _cyberday_subject_matches(normalized: str, expected: str) -> bool:
+    if normalized == expected:
+        return True
+    return "cyberday" in normalized and "equipos de laboratorio seleccionados" in normalized
+
+
 def looks_like_cyberday_bulk_campaign_subject(subject: str | None) -> bool:
     """Exact CyberDay 2026 bulk-send subject (operator outreach, not warm client thread)."""
     if not subject:
         return False
     normalized = subject.strip().lower().replace("–", "-").replace("—", "-")
     expected = CYBERDAY_CAMPAIGN_SUBJECT.lower().replace("—", "-")
-    if normalized == expected:
-        return True
-    return "cyberday" in normalized and "equipos de laboratorio seleccionados" in normalized
+    return _cyberday_subject_matches(normalized, expected)
+
+
+# ---------------------------------------------------------------------------
+# Client / equipment opportunity threads
+# ---------------------------------------------------------------------------
 
 
 def looks_like_idiem_auto_acknowledgement(
@@ -619,14 +726,6 @@ def looks_like_unach_hielscher_supplier_wait(
     if is_supplier_vendor_domain(sender_domain) or is_supplier_vendor_domain(email_domain(contact_email)):
         return True
     return "[rch-" in hay and "hielscher" in hay
-
-
-def _message_haystack(
-    subject: str | None,
-    snippet: str | None = None,
-    sender: str | None = None,
-) -> str:
-    return " ".join([subject or "", snippet or "", sender or ""]).lower()
 
 
 def looks_like_contact_routing_notice(
@@ -745,7 +844,7 @@ def looks_like_supplier_followup_thread(
     sender: str | None = None,
 ) -> bool:
     """Supplier chase for quote receipt / shipping address — not a fresh price quote."""
-    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    email = _resolve_contact_email(contact_email, sender=sender)
     if not is_supplier_vendor_domain(email_domain(email)):
         return False
     if looks_like_auto_reply_text(subject, snippet) and not looks_like_real_supplier_quote_content(
@@ -787,7 +886,7 @@ def looks_like_supplier_marketing_thread(
     subject: str | None = None,
 ) -> bool:
     """Vendor/supplier outreach that must not be labeled client_reply."""
-    email = (contact_email or "").strip().lower() or contact_email_from_sender(sender)
+    email = _resolve_contact_email(contact_email, sender=sender)
     domain = email_domain(email)
     if is_supplier_vendor_domain(domain):
         return True
