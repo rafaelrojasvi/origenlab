@@ -59,7 +59,7 @@ cd apps/dashboard && npm ci && npm run dev
 ```
 
 Open `http://localhost:4321` (web preview) and `http://localhost:5173` (operator dashboard → API on **:8001**).
-Legacy Streamlit (`apps/email-pipeline/apps/business_mart_app.py`) is **not** the active UI — see [`apps/email-pipeline/docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](apps/email-pipeline/docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
+Streamlit Python UI in `apps/email-pipeline` was **removed** (2026-06-04). Active operator UI: **`apps/dashboard`** + **`apps/api`** — see [`apps/email-pipeline/docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](apps/email-pipeline/docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 ## Public release checklist
 

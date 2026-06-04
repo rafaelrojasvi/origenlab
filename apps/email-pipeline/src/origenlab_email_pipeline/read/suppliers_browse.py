@@ -1,4 +1,4 @@
-"""Read-only supplier browse for imported supplier / sourcing rows (neutral module; Streamlit S2)."""
+"""Read-only supplier browse for imported supplier / sourcing rows (extracted read module)."""
 
 from __future__ import annotations
 

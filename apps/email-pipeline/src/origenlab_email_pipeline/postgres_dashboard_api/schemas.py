@@ -126,7 +126,7 @@ class ClassificationActionsResponse(BaseModel):
     table_available: bool = False
     groups: list[ClassificationActionGroup] = Field(default_factory=list)
     disclaimer: str = (
-        "Acciones sugeridas por heurística; el operador decide en Streamlit/CLI."
+        "Acciones sugeridas por heurística; el operador decide en dashboard/CLI."
     )
 
 
@@ -721,5 +721,5 @@ class OutboundReadinessResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
     disclaimer: str = (
         "Based on Postgres mirror tables only. Sent-folder ingest and live gates still use "
-        "SQLite; sync lag may make this differ from Streamlit/CLI truth."
+        "SQLite; sync lag may make this differ from CLI/SQLite operational truth."
     )

@@ -1,4 +1,4 @@
-"""«Qué hacer hoy»: agrega filas accionables desde colas existentes (neutral module; Streamlit S2).
+"""«Qué hacer hoy»: agrega filas accionables desde colas existentes (extracted read module).
 
 Orden **explícito y mecánico** (no ranking con ML):
   0 Correos contacto con señal CI positiva

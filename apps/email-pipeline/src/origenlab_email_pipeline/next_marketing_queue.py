@@ -1,6 +1,6 @@
 """Next cold-outreach recipients from ``lead_master`` (ranked SQL + shared export gate).
 
-**Canonical lead lane:** ``export_next_marketing_recipients.py`` and Streamlit Cola use
+**Canonical lead lane:** ``export_next_marketing_recipients.py`` and the marketing queue read path use
 ``compute_next_marketing_recipients``; keep this module aligned with ``outbound_core`` and
 ``candidate_export_gate`` — do not remove or bypass without a migrated, tested replacement.
 

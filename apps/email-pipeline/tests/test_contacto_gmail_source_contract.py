@@ -27,7 +27,7 @@ def test_coalesce_qualified_e_matches_legacy_cases_review_inner_query() -> None:
     )
 
 
-def test_non_coalesce_unqualified_matches_streamlit_and_mart_forms() -> None:
+def test_non_coalesce_unqualified_matches_mart_and_shared_predicate_forms() -> None:
     assert (
         sql_predicate_contacto_gmail_source()
         == "lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'"
@@ -38,7 +38,7 @@ def test_cases_review_queue_reexports_same_constant() -> None:
     assert crq_constant is CONTACTO_GMAIL_SOURCE_SQL
 
 
-def test_streamlit_email_choices_query_runs_with_shared_predicate(tmp_path) -> None:
+def test_contacto_gmail_email_choices_query_runs_with_shared_predicate(tmp_path) -> None:
     db = tmp_path / "g.sqlite"
     conn = __import__("sqlite3").connect(db)
     conn.execute(

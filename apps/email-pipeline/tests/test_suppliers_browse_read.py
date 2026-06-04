@@ -1,4 +1,4 @@
-"""Streamlit supplier browse helpers."""
+"""read/suppliers_browse: supplier browse SQL helpers."""
 
 from __future__ import annotations
 

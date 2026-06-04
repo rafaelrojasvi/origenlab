@@ -1,4 +1,4 @@
-"""Borrador comercial / pilot batch helpers (neutral module; Streamlit S2)."""
+"""Borrador comercial / pilot batch helpers (extracted read module)."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def fmt_marketing_variant(v: str) -> str:
 
 
 def load_existing_pilot_batch(batch_dir_raw: str) -> tuple[pd.DataFrame | None, list[dict[str, Any]] | None, str | None]:
-    """Load an existing Tatiana pilot batch folder for read-only review in Streamlit."""
+    """Load an existing Tatiana pilot batch folder for read-only review (export / CLI)."""
     raw = (batch_dir_raw or "").strip()
     if not raw:
         return None, None, "Ingrese una carpeta de batch."
