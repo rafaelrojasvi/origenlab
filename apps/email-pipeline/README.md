@@ -226,7 +226,7 @@ uv run --group ui streamlit run apps/business_mart_app.py
 # LAN: use streamlit CLI flags if needed (run_streamlit_lan.sh removed — see launch-surface audit)
 ```
 
-Docker/compose for Streamlit only: [`Dockerfile`](Dockerfile), [`docker-compose.yml`](docker-compose.yml) — see [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-eprun-legacy-streamlit-docker).
+Legacy Streamlit Docker (`Dockerfile`, `docker-compose.yml`) **removed** — local `streamlit run` only. Postgres mirror dev: [`docker-compose.dashboard-postgres.yml`](docker-compose.dashboard-postgres.yml).
 
 **3. SQLite → JSONL**
 

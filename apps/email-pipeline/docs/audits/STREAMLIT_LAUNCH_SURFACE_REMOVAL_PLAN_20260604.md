@@ -11,49 +11,41 @@ Parent: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_
 
 | Path | Removed in | Notes |
 |------|------------|-------|
-| **`scripts/tools/run_streamlit_lan.sh`** | **LAN launcher PR (2026-06-04)** | Docs-only references; no CI/tests/Makefile. Local LAN: `streamlit run … --server.address 0.0.0.0 --server.port 8501` |
+| **`scripts/tools/run_streamlit_lan.sh`** | LAN launcher PR (2026-06-04) | Docs-only; local LAN via `streamlit run … --server.address 0.0.0.0` |
+| **`Dockerfile`** | Docker/compose PR (2026-06-04) | Streamlit-only image; not used by CI or active dashboard/API |
+| **`docker-compose.yml`** | Docker/compose PR (2026-06-04) | Service `business-mart` on :8501; not CI |
+
+**Still active (not Streamlit):** [`docker-compose.dashboard-postgres.yml`](../../docker-compose.dashboard-postgres.yml) — local Postgres for dashboard mirror proof-of-life (:5433).
 
 ---
 
 ## Launch surface inventory
 
-| Path | References (summary) | Active / legacy | Safe action | PR |
-|------|----------------------|-----------------|-------------|-----|
-| **Root `README.md`** | Streamlit badge; Quick demo `uv run streamlit` + `:8501` | Was **active-looking** | **Park** — demo → `apps/dashboard` + `apps/api` | **PR 1** ✓ |
-| **`apps/email-pipeline/README.md`** | Legacy Streamlit appendix; tree comment | **Legacy** | **Park** — no primary launch path | **PR 1** ✓ |
-| **`docs/RUNBOOK.md`** | Legacy Docker section; dashboard stack | Mixed | **Park** — legacy section; active dashboard track | **PR 1** ✓ |
-| ~~**`scripts/tools/run_streamlit_lan.sh`**~~ | Was docs-only | **Removed** | **Deleted** | **LAN launcher PR** ✓ |
-| **`Dockerfile`** | `README`, `RUNBOOK`, audits. **Not** in CI/workflows | **Legacy** | **Park** — top comment `LEGACY`; no delete yet | PR 4 |
-| **`docker-compose.yml`** | Same as Dockerfile; service `business-mart` :8501 | **Legacy** | **Park** — compose header comment; no delete yet | PR 4 |
-| **`pyproject.toml` `[dependency-groups] ui`** | CI: `.github/workflows/email-pipeline.yml`, `scripts/check-all.sh`, `CONTRIBUTING.md` | **CI-required** | **Keep** — tests import `streamlit` | — |
-| **`apps/business_mart_app.py`** | Tests read source (`test_business_mart_app_ux`, etc.) | **Legacy runtime** | **Keep** — no delete | — |
-| **`streamlit_*.py` modules** | `business_mart_app` imports | **Legacy runtime** | **Keep** | — |
-| **`tests/test_streamlit_*.py`** | pytest + `--group ui` sync | **CI** | **Keep** | — |
+| Path | References (summary) | Active / legacy | Status |
+|------|----------------------|-----------------|--------|
+| **Root `README.md`** | Dashboard/API demo | **Active** | Parked Streamlit in PR 1 ✓ |
+| **`apps/email-pipeline/README.md`** | Legacy Streamlit appendix | **Legacy** | Local `streamlit run` only ✓ |
+| **`docs/RUNBOOK.md`** | Dashboard stack + legacy Streamlit notes | **Mixed** | Docker section → removed notice ✓ |
+| ~~**`scripts/tools/run_streamlit_lan.sh`**~~ | Was docs-only | **Removed** | Deleted ✓ |
+| ~~**`Dockerfile`**~~ | Was docs-only | **Removed** | Deleted ✓ |
+| ~~**`docker-compose.yml`**~~ | Was Streamlit :8501 | **Removed** | Deleted ✓ |
+| **`docker-compose.dashboard-postgres.yml`** | RUNBOOK dashboard stack | **Active** (mirror dev) | **Keep** |
+| **`pyproject.toml` `[dependency-groups] ui`** | CI + Streamlit tests | **CI-required** | **Keep** |
+| **`apps/business_mart_app.py`** | Tests, legacy local UI | **Legacy runtime** | **Keep** |
+| **`streamlit_*.py` modules** | App imports | **Legacy runtime** | **Keep** |
+| **`tests/test_streamlit_*.py`** | pytest | **CI** | **Keep** |
 
-### Grep evidence — `run_streamlit_lan.sh` (pre-removal)
-
-```
-apps/email-pipeline/README.md
-apps/email-pipeline/docs/audits/*.md (audit cross-refs only)
-```
-
-**No** matches in `tests/`, other `scripts/`, `.github/`, `Makefile`, `apps/api`, `apps/dashboard`.
-
-**Conclusion:** Removed 2026-06-04; update docs only — do not restore script without operator request.
-
-### Grep evidence — Docker / compose
+### Grep evidence — Docker Streamlit (pre-removal, 2026-06-04)
 
 ```
-apps/email-pipeline/README.md, docs/RUNBOOK.md, Dockerfile, docker-compose.yml, audits
+.github — no Dockerfile, docker-compose.yml, 8501, business-mart
+apps/api, apps/dashboard — no matches
+apps/email-pipeline/tests — no matches
 ```
 
-**No** `.github/workflows` references to `8501`, `business-mart`, or `docker-compose.yml`.
+References were **README**, **RUNBOOK**, **audits**, **`.env.example`** only.
 
-**Conclusion:** Label **legacy**; remove Dockerfile/compose in a later PR when operators confirm no Docker Streamlit deploys.
-
-### Grep evidence — `--group ui`
-
-Required by CI and `tests/test_streamlit_*`. Do **not** remove `ui` group until Streamlit tests retire.
+**Conclusion:** Safe to delete `Dockerfile` + `docker-compose.yml`; keep `docker-compose.dashboard-postgres.yml`.
 
 ---
 
@@ -61,17 +53,18 @@ Required by CI and `tests/test_streamlit_*`. Do **not** remove `ui` group until 
 
 | PR | Changes |
 |----|---------|
-| **1** | Park Streamlit in README/RUNBOOK; LEGACY comments on Docker/compose |
-| **LAN launcher** | Delete `run_streamlit_lan.sh`; update audit docs + README |
-| **4+** | Remove Dockerfile + `docker-compose.yml` |
-| **5+** | Drop `--group ui` from CI after Streamlit tests retired |
+| **1** | Park Streamlit in README/RUNBOOK |
+| **LAN launcher** | Delete `run_streamlit_lan.sh` |
+| **Docker/compose** | Delete `Dockerfile`, `docker-compose.yml`; update docs/tests |
+| **Next** | Drop `--group ui` from CI after Streamlit tests retired |
 
 ---
 
 ## Non-goals
 
 - No Gmail / Postgres sync / send / mirror / `--apply` behavior changes.
-- No deletion of `business_mart_app.py` or `streamlit_*` modules in launcher PR.
+- No deletion of `business_mart_app.py` or `streamlit_*` modules.
+- Do not remove `docker-compose.dashboard-postgres.yml`.
 
 ---
 

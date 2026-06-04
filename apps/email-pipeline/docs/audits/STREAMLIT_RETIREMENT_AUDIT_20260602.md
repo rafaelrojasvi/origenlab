@@ -50,8 +50,8 @@ uv run --group ui streamlit run apps/business_mart_app.py
 
 | Artifact | Streamlit usage |
 |----------|-----------------|
-| [`Dockerfile`](../../Dockerfile) | **UI-only image** — `uv sync --group ui`, `CMD streamlit run apps/business_mart_app.py :8501`, healthcheck `/_stcore/health` |
-| [`docker-compose.yml`](../../docker-compose.yml) | Service `business-mart` → port **8501**, bind-mount SQLite **read-only** |
+| ~~`Dockerfile`~~ | **Removed** (2026-06-04) — was UI-only Streamlit image |
+| ~~`docker-compose.yml`~~ | **Removed** (2026-06-04) — was `business-mart` :8501 |
 | [`docker-compose.dashboard-postgres.yml`](../../docker-compose.dashboard-postgres.yml) | Postgres for **mirror** stack — **not** Streamlit |
 
 No monorepo `.github` workflow references Streamlit or 8501 (as of this audit).
@@ -67,7 +67,7 @@ ui = [
 ]
 ```
 
-- **`streamlit`** is only pulled via `--group ui` (Dockerfile, README).
+- **`streamlit`** is only pulled via `--group ui` (README, local run; Docker image removed).
 - **`pandas`** is also in the `ml` group — removing `ui` does not remove pandas from ML installs.
 - **`xlrd`** may still be needed outside Streamlit (spreadsheet ingest); verify before dropping from `ui`.
 
@@ -239,7 +239,7 @@ Priority extractions (behavior-preserving renames; tests move with modules):
 | Dependency / artifact | When safe to remove |
 |----------------------|---------------------|
 | `streamlit>=1.36` (`ui` group) | After app + all `import streamlit` renderers removed |
-| `Dockerfile` + `docker-compose.yml` (business-mart) | After operators confirm no Docker Streamlit deploys |
+| ~~`Dockerfile`~~ + ~~`docker-compose.yml`~~ | **Removed** (2026-06-04) |
 | ~~`scripts/tools/run_streamlit_lan.sh`~~ | **Removed** (2026-06-04) |
 | `apps/business_mart_app.py` | Last — after all pages migrated |
 | `streamlit_*` modules | Per-module after extraction + zero imports |
@@ -309,7 +309,7 @@ Priority extractions (behavior-preserving renames; tests move with modules):
 | `streamlit_prioridad_copy.py` | **Migrate** | Pure copy |
 | `streamlit_borrador_support.py` | **Migrate** | Shared with borrador |
 | `streamlit_draft_helpers.py` | **Migrate** | Rename; keep Tatiana boundary |
-| `Dockerfile` / `docker-compose.yml` | **Remove (late)** | Streamlit-only image |
+| ~~`Dockerfile`~~ / ~~`docker-compose.yml`~~ | **Removed** (2026-06-04) |
 | `pyproject.toml` `ui` group | **Remove (late)** | After streamlit dep gone |
 | `contact_email_suppression.streamlit_*_enabled` | **Migrate** | Generic `operator_rw_enabled` or drop flags |
 | `RUNBOOK` Streamlit sections | **Migrate docs** | Point to dashboard + CLIs |
