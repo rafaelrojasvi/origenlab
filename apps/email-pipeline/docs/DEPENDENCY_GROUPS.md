@@ -2,15 +2,15 @@
 
 Status: canonical install guide  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-03
+Last reviewed: 2026-06-04
 
 ## Purpose
 
 Explain which `uv sync` dependency groups are needed for each workflow.
 
-Default **`uv sync`** is intentionally small and supports **daily SQLite / document / operator tooling**. Optional groups install heavier or external-service-specific dependencies (OpenAI, Torch, Streamlit, Postgres drivers, Google OAuth).
+Default **`uv sync`** is intentionally small and supports **daily SQLite / document / operator tooling**. Optional groups install heavier or external-service-specific dependencies (OpenAI, Torch, pandas/xlrd, Postgres drivers, Google OAuth).
 
-**Phase 8F context:** OpenAI moved to **`lab`** (8F-1); HDBSCAN moved to **`ml`** (8F-2). This document is the canonical matrix after those changes.
+**Phase 8F context:** OpenAI moved to **`lab`** (8F-1); HDBSCAN moved to **`ml`** (8F-2). **`streamlit`** was removed from the repo (2026-06-04); **`data-tools`** holds pandas/xlrd for tests and spreadsheet helpers.
 
 ---
 
@@ -22,10 +22,10 @@ Default **`uv sync`** is intentionally small and supports **daily SQLite / docum
 | Gmail ingest / Workspace OAuth | `uv sync --group gmail` or `uv sync --group workspace` |
 | Tatiana / research / OpenAI-backed lab tools | `uv sync --group lab` |
 | ML / embeddings / HDBSCAN / FAISS / Torch | `uv sync --group ml` |
-| Streamlit legacy UI | `uv sync --group ui` |
+| Pandas / xlrd (read tests, draft helpers, legacy .xls) | `uv sync --group data-tools` |
 | Postgres mirror / Alembic / verifiers | `uv sync --group postgres` |
-| Full CI-style local test install | `uv sync --group dev --group ui --group postgres --group lab --frozen` |
-| Full local kitchen-sink install (only when needed) | `uv sync --group dev --group ui --group postgres --group lab --group gmail --group ml` |
+| Full CI-style local test install | `uv sync --group dev --group data-tools --group postgres --group lab --frozen` |
+| Full local kitchen-sink install (only when needed) | `uv sync --group dev --group data-tools --group postgres --group lab --group gmail --group ml` |
 
 ---
 
@@ -48,7 +48,7 @@ Packages in **`[project.dependencies]`** (no extra `--group` flags):
 - **OpenAI** → `lab`
 - **HDBSCAN** → `ml`
 - **Torch** / sentence-transformers / FAISS → `ml`
-- **Streamlit** / pandas (UI stack) → `ui`
+- **pandas** / **xlrd** (read tests, Tatiana helpers, legacy .xls) → `data-tools`
 - **Postgres** driver / Alembic → `postgres`
 - **Google OAuth** (Gmail IMAP) → `gmail` / `workspace`
 
@@ -117,14 +117,16 @@ See: [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md).
 | **Example** | `uv sync --group postgres --group api` (bootstrap notes in RUNBOOK) |
 | **Daily operator?** | **No** — active operator HTTP API is **`apps/api`** on port **8001** |
 
-### `ui`
+### `data-tools`
 
 | | |
 |---|---|
-| **Purpose** | CI/tests needing **pandas** (Tatiana draft review helpers, contacto picker queries) — **not** a product UI |
-| **Main packages** | `streamlit`, `pandas`, `xlrd` |
-| **Example** | `uv sync --group ui` · `uv run pytest tests/test_tatiana_draft_review_helpers.py -q` |
-| **Daily operator?** | **No** — primary operator UI is `apps/dashboard` |
+| **Purpose** | **pandas** + **xlrd** for read-module tests, Tatiana `draft_review_helpers`, legacy `.xls` ingest |
+| **Main packages** | `pandas`, `xlrd` |
+| **Example** | `uv sync --group data-tools` · `uv run pytest tests/test_tatiana_draft_review_helpers.py -q` |
+| **Daily operator?** | **No** — only needed when running those tests or spreadsheet helpers |
+
+**Removed (2026-06-04):** the old **`ui`** group included **Streamlit**; no Python module in this package imports `streamlit` anymore.
 
 ### `dev`
 
@@ -135,7 +137,7 @@ See: [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md).
 | **Example** | `uv sync --group dev` |
 | **Daily operator?** | **No** (test tooling) |
 
-**Note:** Because `dev` **includes** `postgres`, `uv sync --group dev` already pulls Alembic/psycopg. CI still passes **`--group postgres`** explicitly for clarity alongside `dev`.
+**Note:** Because `dev` **includes** `postgres`, `uv sync --group dev` already pulls Alembic/psycopg. CI still passes **`--group postgres`** and **`--group data-tools`** explicitly for clarity alongside `dev`.
 
 ---
 
@@ -167,7 +169,8 @@ This prints the workflow plan only — no Gmail ingest, mart rebuild, or Postgre
 | `ModuleNotFoundError: google` | `uv sync --group gmail` |
 | `ModuleNotFoundError: openai` | `uv sync --group lab` |
 | `ModuleNotFoundError: hdbscan` | `uv sync --group ml` |
-| Streamlit import fails | `uv sync --group ui` |
+| `ModuleNotFoundError: pandas` | `uv sync --group data-tools` (or `--group ml` for ML scripts) |
+| `ModuleNotFoundError: xlrd` | `uv sync --group data-tools` |
 | `psycopg` / `alembic` import fails | `uv sync --group postgres` (or `--group dev`, which includes postgres) |
 
 After adding groups, re-run your command with `uv run …` so the project venv is used.

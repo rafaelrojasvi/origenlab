@@ -84,7 +84,7 @@ Daily operator path (`origenlab status`, `refresh-safety`, `validate-csvs`) does
 ### 3.3 CI (`.github/workflows/email-pipeline.yml`)
 
 ```yaml
-uv sync --group dev --group ui --group postgres --frozen
+uv sync --group dev --group data-tools --group postgres --frozen
 uv run pytest
 ```
 
