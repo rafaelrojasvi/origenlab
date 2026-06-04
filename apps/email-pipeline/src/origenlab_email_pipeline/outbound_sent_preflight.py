@@ -5,6 +5,7 @@ Read-only probes on ``emails``; does not change ``candidate_export_gate`` policy
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 from dataclasses import dataclass
@@ -13,6 +14,23 @@ from typing import TextIO
 from origenlab_email_pipeline.marketing_export_context import load_sent_recipient_norms
 
 _DISTINCT_FOLDER_SAMPLE_LIMIT = 20
+
+_OPERATOR_ALLOW_EMPTY_SENT_HISTORY = "ORIGENLAB_OPERATOR_ALLOW_EMPTY_SENT_HISTORY"
+_LEGACY_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY = "ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY"
+
+
+def _operator_env_flag_enabled(*, new_var: str, legacy_var: str) -> bool:
+    if os.environ.get(new_var) is not None:
+        return os.environ.get(new_var) == "1"
+    return os.environ.get(legacy_var) == "1"
+
+
+def operator_allow_empty_sent_history_enabled() -> bool:
+    """True when env allows bypassing Sent-history fail-closed (legacy Streamlit env still accepted)."""
+    return _operator_env_flag_enabled(
+        new_var=_OPERATOR_ALLOW_EMPTY_SENT_HISTORY,
+        legacy_var=_LEGACY_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY,
+    )
 
 
 def _emails_table_exists(conn: sqlite3.Connection) -> bool:
@@ -207,7 +225,7 @@ def sent_preflight_failure_detail_lines(
     *,
     allow_empty_flag: str = "--allow-empty-sent-history",
 ) -> list[str]:
-    """Operator-facing detail lines (shared by lead/archive CLIs and Streamlit expander)."""
+    """Operator-facing detail lines (shared by lead/archive export CLIs)."""
     p = outcome.probe
     lines = [
         f"  gmail_user={p.gmail_user!r}",
@@ -223,8 +241,11 @@ def sent_preflight_failure_detail_lines(
     lines.append("    uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders")
     lines.append("  then ingest Sent with --folder '<exact label from the list>'.")
     lines.append(
-        f"  If you accept the risk of incomplete Sent blocking, pass {allow_empty_flag} "
-        "(CLI) or set ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1 (Streamlit Cola only)."
+        f"  If you accept the risk of incomplete Sent blocking, pass {allow_empty_flag} on the CLI"
+    )
+    lines.append(
+        f"  or set {_OPERATOR_ALLOW_EMPTY_SENT_HISTORY}=1 "
+        f"(legacy alias: {_LEGACY_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY}=1)."
     )
     return lines
 

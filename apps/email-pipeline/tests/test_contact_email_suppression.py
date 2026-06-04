@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 
+import pytest
+
 from origenlab_email_pipeline.contact_email_suppression import (
+    operator_contact_suppression_rw_enabled,
+    streamlit_contact_suppression_rw_enabled,
     contact_email_suppression_table_exists,
     delete_contact_email_suppression,
     ensure_contact_email_suppression_table,
@@ -55,3 +59,24 @@ def test_contact_email_suppression_roundtrip() -> None:
         assert fetch_contact_email_suppression_row(conn, "contacto@example.cl") is None
     finally:
         conn.close()
+
+
+def test_operator_contact_suppression_rw_new_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ORIGENLAB_OPERATOR_CONTACT_SUPPRESSION_RW", raising=False)
+    monkeypatch.delenv("ORIGENLAB_STREAMLIT_CONTACT_SUPPRESSION_RW", raising=False)
+    assert operator_contact_suppression_rw_enabled() is False
+    monkeypatch.setenv("ORIGENLAB_OPERATOR_CONTACT_SUPPRESSION_RW", "1")
+    assert operator_contact_suppression_rw_enabled() is True
+
+
+def test_operator_contact_suppression_rw_legacy_env_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ORIGENLAB_OPERATOR_CONTACT_SUPPRESSION_RW", raising=False)
+    monkeypatch.setenv("ORIGENLAB_STREAMLIT_CONTACT_SUPPRESSION_RW", "1")
+    assert operator_contact_suppression_rw_enabled() is True
+    assert streamlit_contact_suppression_rw_enabled() is True
+
+
+def test_operator_contact_suppression_rw_new_env_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORIGENLAB_OPERATOR_CONTACT_SUPPRESSION_RW", "0")
+    monkeypatch.setenv("ORIGENLAB_STREAMLIT_CONTACT_SUPPRESSION_RW", "1")
+    assert operator_contact_suppression_rw_enabled() is False

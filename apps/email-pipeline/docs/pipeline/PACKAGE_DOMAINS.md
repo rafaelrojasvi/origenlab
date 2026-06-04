@@ -43,7 +43,7 @@ Convention today (historical but consistent):
 ## Import and dependency rules
 
 1. **Export eligibility is centralized** — Archive and lead marketing exports must use **`candidate_export_gate.evaluate_export_eligibility`** (and **`marketing_export_context.build_marketing_export_gate_context`** for DB-backed sets). Do not duplicate gate rules in Tatiana, dashboard read paths, or one-off scripts.
-2. **Dashboard/API are not send truth** — Mirror and React panels are read-only; sidecar writes stay on **documented CLIs** (and legacy `ORIGENLAB_STREAMLIT_*_RW` env gates where still documented). **Canonical batch selection** remains CLIs and reproducible CSVs ([`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md)).
+2. **Dashboard/API are not send truth** — Mirror and React panels are read-only; sidecar writes stay on **documented CLIs** (and opt-in `ORIGENLAB_OPERATOR_*_RW` env gates; legacy `ORIGENLAB_STREAMLIT_*` names still accepted). **Canonical batch selection** remains CLIs and reproducible CSVs ([`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md)).
 3. **Tatiana does not own eligibility** — Drafting and retrieval must **not** implement or bypass marketing/archive export gates. Copilot code stays in `tatiana_copilot/` + small cohort entry modules.
 4. **Operational trust ≠ export gate** — `operational_trust*` checks **publish consistency** (pack, CSVs, cohorts, URLs). It does not replace `candidate_export_gate` for “who may be emailed.”
 5. **Stable root anchors (for now)** — **`candidate_export_gate.py`**, **`marketing_export_context.py`**, and **`outbound_core.py`** remain at package root intentionally. Future package restructures should **move other domains first** and treat these as last-mile moves.

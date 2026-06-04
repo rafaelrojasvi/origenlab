@@ -6,6 +6,7 @@ Rows live in ``lead_contact_research`` (1:1 with ``lead_master``). Imported fiel
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from dataclasses import dataclass
 
@@ -42,11 +43,27 @@ class ContactResearchPayload:
     updated_by: str | None
 
 
-def streamlit_leads_review_rw_enabled() -> bool:
-    """True when Streamlit may write ``lead_contact_research`` (opt-in via env)."""
-    import os
+_OPERATOR_LEADS_REVIEW_RW = "ORIGENLAB_OPERATOR_LEADS_REVIEW_RW"
+_LEGACY_STREAMLIT_LEADS_REVIEW_RW = "ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW"
 
-    return os.environ.get("ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW") == "1"
+
+def _operator_env_flag_enabled(*, new_var: str, legacy_var: str) -> bool:
+    if os.environ.get(new_var) is not None:
+        return os.environ.get(new_var) == "1"
+    return os.environ.get(legacy_var) == "1"
+
+
+def operator_leads_review_rw_enabled() -> bool:
+    """True when operator may write ``lead_contact_research`` (opt-in via env)."""
+    return _operator_env_flag_enabled(
+        new_var=_OPERATOR_LEADS_REVIEW_RW,
+        legacy_var=_LEGACY_STREAMLIT_LEADS_REVIEW_RW,
+    )
+
+
+def streamlit_leads_review_rw_enabled() -> bool:
+    """Deprecated alias for :func:`operator_leads_review_rw_enabled`."""
+    return operator_leads_review_rw_enabled()
 
 
 def _trim(value: str | None, max_len: int) -> str | None:

@@ -9,10 +9,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from origenlab_email_pipeline.outbound_sent_preflight import (
     SentHistoryProbeResult,
     evaluate_sent_history_preflight,
+    operator_allow_empty_sent_history_enabled,
     probe_sent_history,
+    sent_preflight_failure_detail_lines,
     sent_preflight_summary_dict,
 )
 
@@ -21,6 +25,38 @@ REPO = Path(__file__).resolve().parents[1]
 
 def _conn() -> sqlite3.Connection:
     return sqlite3.connect(":memory:")
+
+
+def test_sent_preflight_failure_hint_no_streamlit_mentions_operator_env() -> None:
+    p = SentHistoryProbeResult(
+        gmail_user="contacto@origenlab.cl",
+        sent_folders=("[Gmail]/Enviados",),
+        sent_row_count=0,
+        parsed_recipient_count=0,
+        distinct_folders_sample=(),
+    )
+    o = evaluate_sent_history_preflight(p, allow_empty=False)
+    text = "\n".join(sent_preflight_failure_detail_lines(o))
+    assert "Streamlit" not in text
+    assert "--allow-empty-sent-history" in text
+    assert "ORIGENLAB_OPERATOR_ALLOW_EMPTY_SENT_HISTORY=1" in text
+    assert "ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1" in text
+
+
+def test_operator_allow_empty_sent_history_env_and_legacy_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ORIGENLAB_OPERATOR_ALLOW_EMPTY_SENT_HISTORY", raising=False)
+    monkeypatch.delenv("ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY", raising=False)
+    assert operator_allow_empty_sent_history_enabled() is False
+    monkeypatch.setenv("ORIGENLAB_OPERATOR_ALLOW_EMPTY_SENT_HISTORY", "1")
+    assert operator_allow_empty_sent_history_enabled() is True
+    monkeypatch.setenv("ORIGENLAB_OPERATOR_ALLOW_EMPTY_SENT_HISTORY", "0")
+    monkeypatch.setenv("ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY", "1")
+    assert operator_allow_empty_sent_history_enabled() is False
+    monkeypatch.delenv("ORIGENLAB_OPERATOR_ALLOW_EMPTY_SENT_HISTORY", raising=False)
+    monkeypatch.setenv("ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY", "1")
+    assert operator_allow_empty_sent_history_enabled() is True
 
 
 def test_probe_empty_sent_history_no_rows() -> None:

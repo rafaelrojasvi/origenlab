@@ -42,7 +42,7 @@ Both **lead** and **archive** canonical exports run [`outbound_sent_preflight.py
 - **Ingest that folder** (example — use the label from your account):  
   `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"`
 - **`sent_preflight` in JSON:** **Lead** — only when you pass **`--write-outbound-summary`** (writes `<stem>_outbound_summary.json` next to the CSV). **Archive** — always present in **`archive_outreach_build_summary.json`** on success (and in audit summaries where the builder writes them), alongside nested **`outbound_run`** for drift-resistant auditing.
-- **Streamlit Cola** (`compute_next_marketing_recipients` queue UI): uses the **same** shared preflight. The **only** bypass is environment-based: **`ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1`** (no equivalent to `--allow-empty-sent-history` inside the app).
+- **Marketing queue / archive exports** use the **same** shared preflight. Bypass: CLI **`--allow-empty-sent-history`** (preferred), or env **`ORIGENLAB_OPERATOR_ALLOW_EMPTY_SENT_HISTORY=1`** (legacy alias: `ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1`).
 
 **Blocker-memory regression tests:** integration tests exercise the canonical **lead** queue (`tests/test_next_marketing_queue_outbound_integration.py`) and **archive** batch builder (`tests/test_archive_lane_outbound_integration.py`) against real SQLite fixtures — Sent-history norms (default Sent folders only), `outreach_contact_state`, and suppression — without changing gate policy.
 

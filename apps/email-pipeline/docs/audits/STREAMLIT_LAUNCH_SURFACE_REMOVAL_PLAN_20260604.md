@@ -21,7 +21,7 @@ Parent: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_
 
 **Still active (not Streamlit):** [`docker-compose.dashboard-postgres.yml`](../../docker-compose.dashboard-postgres.yml) — local Postgres for dashboard mirror proof-of-life (:5433).
 
-**Renamed (2026-06-04 naming PR):** `tatiana_copilot/draft_review_helpers.py` (was `streamlit_draft_helpers.py`). **Kept:** `streamlit_*` env-flag helpers in `contact_email_suppression.py` / `lead_contact_research.py`.
+**Renamed (2026-06-04 naming PR):** `tatiana_copilot/draft_review_helpers.py` (was `streamlit_draft_helpers.py`). **Operator env (2026-06-04):** `ORIGENLAB_OPERATOR_*` names with `ORIGENLAB_STREAMLIT_*` legacy aliases in `contact_email_suppression.py`, `lead_contact_research.py`, and `outbound_sent_preflight.py` (Sent-history bypass message + `operator_allow_empty_sent_history_enabled()`).
 
 ---
 

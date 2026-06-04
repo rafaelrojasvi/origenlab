@@ -3,7 +3,7 @@
 Uses the same upstream-active and best-per-lead match semantics as lead exports (MIN match row id).
 
 ``lead_contact_research`` is joined when that table exists (operator enrichment; distinct from import fields).
-Writes to enrichment require ``ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW=1`` (legacy env; product UI removed 2026-06-04).
+Writes to enrichment require ``ORIGENLAB_OPERATOR_LEADS_REVIEW_RW=1`` (legacy alias: ``ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW``).
 """
 
 from __future__ import annotations

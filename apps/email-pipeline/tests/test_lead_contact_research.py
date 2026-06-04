@@ -12,6 +12,7 @@ from origenlab_email_pipeline.lead_contact_research import (
     archive_org_hint_for_domain,
     delete_contact_research,
     fetch_contact_research_row,
+    operator_leads_review_rw_enabled,
     streamlit_leads_review_rw_enabled,
     upsert_contact_research,
     validate_contact_research_payload,
@@ -157,10 +158,18 @@ def test_fetch_contact_research_row_missing_table_returns_none() -> None:
     assert fetch_contact_research_row(conn, 1) is None
 
 
-def test_streamlit_rw_flag_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_operator_rw_flag_env_with_legacy_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ORIGENLAB_OPERATOR_LEADS_REVIEW_RW", raising=False)
     monkeypatch.delenv("ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW", raising=False)
-    assert streamlit_leads_review_rw_enabled() is False
+    assert operator_leads_review_rw_enabled() is False
+    monkeypatch.setenv("ORIGENLAB_OPERATOR_LEADS_REVIEW_RW", "1")
+    assert operator_leads_review_rw_enabled() is True
+    monkeypatch.setenv("ORIGENLAB_OPERATOR_LEADS_REVIEW_RW", "0")
+    assert operator_leads_review_rw_enabled() is False
+    monkeypatch.delenv("ORIGENLAB_OPERATOR_LEADS_REVIEW_RW", raising=False)
     monkeypatch.setenv("ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW", "1")
+    assert operator_leads_review_rw_enabled() is True
     assert streamlit_leads_review_rw_enabled() is True
-    monkeypatch.setenv("ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW", "0")
-    assert streamlit_leads_review_rw_enabled() is False
+    monkeypatch.setenv("ORIGENLAB_OPERATOR_LEADS_REVIEW_RW", "0")
+    monkeypatch.setenv("ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW", "1")
+    assert operator_leads_review_rw_enabled() is False

@@ -135,7 +135,7 @@ See [`STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](STREAMLIT_LAUNCH_SURFA
 1. **docs:** RUNBOOK — demote `#m-eprun-docker-streamlit` to “legacy”; dashboard section first in operator map. **(PR 1 — done in launch-surface batch)**
 2. **docs:** `EXPERIMENTAL_PARKED.md` — Streamlit row → legacy/parked; React = active UI.  
 3. **api/dashboard:** Wire `GET /emails/recent`, expand cases/contacts parity (read-only).  
-4. **rename:** any remaining historical doc references to `--group ui`.
+4. **operator env:** `ORIGENLAB_OPERATOR_*` with `ORIGENLAB_STREAMLIT_*` aliases (contact suppression, leads research, Sent preflight) — **done** 2026-06-04.
 
 ---
 
