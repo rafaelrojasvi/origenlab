@@ -1,6 +1,6 @@
 """Canonical SQL and source-tier classification for contacto@origenlab.cl Gmail Workspace ingest.
 
-Operational intelligence (Streamlit, outbound readiness, case queues) treats rows whose
+Operational intelligence (dashboard/API read models, outbound readiness, case queues) treats rows whose
 ``source_file`` begins with ``gmail:contacto@origenlab.cl/`` as the **canonical** live mailbox.
 
 Legacy ``contacto@labdelivery.cl`` mbox exports remain in ``emails`` for historical reference;

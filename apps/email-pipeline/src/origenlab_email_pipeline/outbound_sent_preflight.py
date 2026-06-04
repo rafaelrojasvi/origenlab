@@ -26,7 +26,7 @@ def _operator_env_flag_enabled(*, new_var: str, legacy_var: str) -> bool:
 
 
 def operator_allow_empty_sent_history_enabled() -> bool:
-    """True when env allows bypassing Sent-history fail-closed (legacy Streamlit env still accepted)."""
+    """True when env allows bypassing Sent-history fail-closed (legacy env alias still accepted)."""
     return _operator_env_flag_enabled(
         new_var=_OPERATOR_ALLOW_EMPTY_SENT_HISTORY,
         legacy_var=_LEGACY_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY,

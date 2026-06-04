@@ -5,7 +5,7 @@ supplier domains, and assemble :class:`~origenlab_email_pipeline.candidate_expor
 
 **Not here:** ranked ``lead_master`` selection — that lives in ``next_marketing_queue``.
 
-Scripts and Streamlit should import from this module when they only need gate context;
+Export CLIs and read modules should import from this module when they only need gate context;
 ``next_marketing_queue`` re-exports the same symbols for backward compatibility.
 """
 

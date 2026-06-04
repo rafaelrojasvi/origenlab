@@ -27,7 +27,7 @@ ARCHIVE_SCOPE_NOTE = (
 
 CANONICAL_POSTGRES_UNAVAILABLE_NOTE = (
     "Canonical scope not available from current Postgres mirror; load canonical mart tables "
-    "(mart.*_canonical) via sqlite_mart_core_to_postgres.py or use SQLite/Streamlit."
+    "(mart.*_canonical) via sqlite_mart_core_to_postgres.py or use SQLite / operator read modules."
 )
 
 # Domains seen in archive mart that must not surface on operational Inicio / Qué hacer hoy.

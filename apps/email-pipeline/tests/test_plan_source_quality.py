@@ -37,7 +37,7 @@ def test_classify_vertical_outbound_reports_tatiana_streamlit_migration() -> Non
     assert m.classify_vertical("scripts/tatiana/run_something.py") == "tatiana_lab"
     assert m.classify_vertical("scripts/dataset/export_tatiana_candidate_cohort.py") == "tatiana_lab"
     assert m.classify_vertical("scripts/ml/explore_email_clusters.py") == "tatiana_lab"
-    assert m.classify_vertical("src/origenlab_email_pipeline/streamlit_foo.py") == "streamlit_ui"
+    assert m.classify_vertical("src/origenlab_email_pipeline/streamlit_foo.py") == "removed_ui_module"
     assert m.classify_vertical("scripts/migrate/sqlite_archive_to_postgres.py") == "postgres_mirror"
     assert m.classify_vertical("src/origenlab_email_pipeline/postgres_outbound_audit.py") == "postgres_mirror"
 

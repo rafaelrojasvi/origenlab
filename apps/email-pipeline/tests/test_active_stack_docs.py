@@ -107,3 +107,63 @@ def test_no_active_python_imports_removed_streamlit_ui_modules() -> None:
                 ):
                     violations.append(f"{path.relative_to(_REPO)}:{i}:{line.strip()}")
     assert not violations, "removed Streamlit UI modules must not be imported:\n" + "\n".join(violations)
+
+
+_STALE_STREAMLIT_LAUNCH = re.compile(
+    r"uv run --group ui streamlit run apps/business_mart_app\.py",
+    re.I,
+)
+
+# Active docs must not instruct operators to launch the removed UI.
+_ACTIVE_DOC_PATHS: tuple[Path, ...] = (
+    _REPO / "README.md",
+    _REPO / "AGENTS.md",
+    _REPO / "docs" / "RUNBOOK.md",
+    _REPO / "docs" / "APP_CONTEXT.md",
+    _REPO / "docs" / "OUTBOUND_SOURCE_OF_TRUTH.md",
+    _REPO / "docs" / "OPERATOR_COMMAND_SURFACE.md",
+)
+
+# Phrases that imply Streamlit is the current operator UI (retirement notices are OK).
+_STREAMLIT_AS_ACTIVE_UI = re.compile(
+    r"(?i)(?:"
+    r"active operator ui[^\n]{0,80}streamlit(?!.*\bremoved\b)"
+    r"|operator ui \(active\)[^\n]{0,40}streamlit"
+    r"|use streamlit (?:for|as|to run)"
+    r"|streamlit run apps/business_mart_app"
+    r")",
+)
+
+
+def _iter_active_markdown_docs() -> list[Path]:
+    paths = list(_ACTIVE_DOC_PATHS)
+    for sub in ("docs/pipeline", "docs/leads", "docs/ingest"):
+        d = _REPO / sub
+        if d.is_dir():
+            paths.extend(sorted(d.glob("*.md")))
+    return [p for p in paths if p.is_file()]
+
+
+def test_active_docs_no_stale_streamlit_launch_command() -> None:
+    violations: list[str] = []
+    for path in _iter_active_markdown_docs():
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if _STALE_STREAMLIT_LAUNCH.search(line):
+                violations.append(f"{path.relative_to(_REPO)}:{i}:{line.strip()}")
+    assert not violations, "active docs must not contain stale Streamlit launch:\n" + "\n".join(
+        violations
+    )
+
+
+def test_active_docs_do_not_present_streamlit_as_current_ui() -> None:
+    violations: list[str] = []
+    for path in _iter_active_markdown_docs():
+        rel = path.relative_to(_REPO)
+        if str(rel).startswith("docs/audits/"):
+            continue
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if _STREAMLIT_AS_ACTIVE_UI.search(line):
+                violations.append(f"{rel}:{i}:{line.strip()}")
+    assert not violations, "active docs must not present Streamlit as current UI:\n" + "\n".join(
+        violations
+    )
