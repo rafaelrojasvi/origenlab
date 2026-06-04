@@ -39,9 +39,9 @@ api = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
 ]
-ui = [
+# Pandas/xlrd for read-module tests, Tatiana draft helpers, legacy .xls ingest (no Streamlit).
+data-tools = [
     "pandas<3",
-    "streamlit>=1.36",
     "xlrd>=2.0.1",
 ]
 # Google Workspace Gmail IMAP ingest (05_workspace_gmail_imap_to_sqlite.py) and OAuth helpers.

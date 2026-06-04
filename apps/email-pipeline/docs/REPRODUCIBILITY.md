@@ -54,7 +54,7 @@ Optional **dependency groups** (install what you use) — full matrix: [`DEPENDE
 ```bash
 uv sync --group lab          # OpenAI — Tatiana copilot, research automation (not daily ops)
 uv sync --group workspace   # Google OAuth for Gmail IMAP / API tooling
-uv sync --group ui          # Streamlit / pandas stack
+uv sync --group data-tools  # pandas / xlrd (read tests, draft helpers)
 uv sync --group postgres    # Alembic + drivers
 uv sync --group ml          # torch / embeddings / hdbscan (CUDA index in pyproject)
 ```
@@ -62,13 +62,13 @@ uv sync --group ml          # torch / embeddings / hdbscan (CUDA index in pyproj
 For **full test suite** (matches CI):
 
 ```bash
-uv sync --group dev --group ui --group postgres --group lab
+uv sync --group dev --group data-tools --group postgres --group lab
 ```
 
 Frozen lockfile (CI):
 
 ```bash
-uv sync --group dev --group ui --group postgres --group lab --frozen
+uv sync --group dev --group data-tools --group postgres --group lab --frozen
 ```
 
 Copy env template and edit (paths, secrets):
@@ -80,7 +80,7 @@ cp .env.example .env
 ## Test command
 
 ```bash
-uv sync --group dev --group ui --group postgres --group lab   # CI-equivalent deps for full pytest
+uv sync --group dev --group data-tools --group postgres --group lab   # CI-equivalent deps for full pytest
 uv run pytest tests -q
 ```
 

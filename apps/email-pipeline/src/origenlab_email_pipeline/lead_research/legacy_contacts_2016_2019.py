@@ -303,7 +303,7 @@ def read_legacy_workbook_xls(path: Path) -> tuple[list[LegacyRawRow], WorkbookIn
         import xlrd
     except ImportError as exc:
         raise ImportError(
-            "xlrd is required for .xls legacy imports. Install with: uv sync --group ui"
+            "xlrd is required for .xls legacy imports. Install with: uv sync --group data-tools"
         ) from exc
 
     path = path.resolve()

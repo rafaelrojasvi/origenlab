@@ -48,7 +48,7 @@ Parent: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_
 | ~~**`Dockerfile`**~~ | Was docs-only | **Removed** | Deleted ✓ |
 | ~~**`docker-compose.yml`**~~ | Was Streamlit :8501 | **Removed** | Deleted ✓ |
 | **`docker-compose.dashboard-postgres.yml`** | RUNBOOK dashboard stack | **Active** (mirror dev) | **Keep** |
-| **`pyproject.toml` `[dependency-groups] ui`** | CI + remaining Streamlit tests | **CI-required** | **Keep** until draft-helper tests retired |
+| **`pyproject.toml` `data-tools`** (pandas/xlrd) | CI + read/draft tests | **Active** | **`streamlit` removed** (2026-06-04) |
 | ~~**`apps/business_mart_app.py`**~~ | Was legacy local UI | **Removed** | Deleted ✓ |
 | ~~**`streamlit_prioridad_*.py`**, **`streamlit_page_status.py`**~~ | Was app imports | **Removed** | Deleted ✓ |
 | **`tatiana_copilot/draft_review_helpers.py`** | Tests, borrador export | **Library** | **Keep** (renamed) |
@@ -65,7 +65,7 @@ Parent: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_
 | **Docker/compose** | Delete `Dockerfile`, `docker-compose.yml`; update docs/tests |
 | **Python UI** | Delete `business_mart_app.py` + three `streamlit_*` UI modules; drop UI-only tests; guardrails in `test_active_stack_docs.py` |
 | **Naming** | `streamlit_draft_helpers` → `draft_review_helpers`; test renames; import guardrails |
-| **Next** | Drop `--group ui` from CI when pandas tests no longer need the group |
+| **Deps** | `ui` → `data-tools`; drop `streamlit` package | **Done** (2026-06-04) |
 
 ---
 
@@ -74,7 +74,7 @@ Parent: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_
 - No Gmail / Postgres sync / send / mirror / `--apply` behavior changes.
 - No changes to `apps/api` or `apps/dashboard` runtime code.
 - Do not remove `docker-compose.dashboard-postgres.yml`.
-- Do not remove `pyproject.toml` `ui` group in the Python UI PR (draft-helper tests still need `streamlit`).
+- `streamlit` is not a project dependency; use `--group data-tools` for pandas/xlrd tests.
 
 ---
 

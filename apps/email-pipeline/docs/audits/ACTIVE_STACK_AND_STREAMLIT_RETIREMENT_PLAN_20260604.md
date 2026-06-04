@@ -38,7 +38,7 @@ See monorepo [`docs/PROJECT_CONTEXT.md`](../../../../docs/PROJECT_CONTEXT.md), r
 | Neutral read helpers | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` — **keep**; session keys on `today_workspace` |
 | LAN launcher | ~~`scripts/tools/run_streamlit_lan.sh`~~ **removed** |
 | Docker UI image | ~~`Dockerfile`~~, ~~`docker-compose.yml`~~ **removed**. Active mirror dev: [`docker-compose.dashboard-postgres.yml`](../../docker-compose.dashboard-postgres.yml) |
-| Dependency group | `pyproject.toml` → `[dependency-groups] ui` — **keep** until remaining `test_streamlit_*` / draft-helper tests retired |
+| Dependency group | `pyproject.toml` → **`data-tools`** (pandas/xlrd); **`streamlit` removed** from deps (2026-06-04) |
 | Renamed tests | `test_today_workspace_read.py`, `test_tatiana_draft_review_helpers.py`, etc. — not the product UI |
 | Streamlit operator docs | `docs/pipeline/STREAMLIT_DATA_FRESHNESS.md`, historical RUNBOOK sections — migrate over time |
 
@@ -64,7 +64,7 @@ See monorepo [`docs/PROJECT_CONTEXT.md`](../../../../docs/PROJECT_CONTEXT.md), r
 | **1** | Remove Streamlit as *primary* path in top-level docs | **Partial** — README/RUNBOOK pointers; full RUNBOOK dedup deferred |
 | **2** | API/dashboard parity checklist per Streamlit page | Documented below — implementation in follow-up PRs |
 | **3** | Delete Streamlit Python UI (`business_mart_app`, `streamlit_prioridad_*`, `streamlit_page_status`) | **Done** (2026-06-04) — see launch-surface plan |
-| **4** | Drop `ui` group after draft-helper tests retired | **No** — CI still syncs `--group ui` |
+| **4** | Drop `streamlit` dep; rename `ui` → `data-tools` | **Done** (2026-06-04) |
 
 ---
 
@@ -99,7 +99,7 @@ Use before deleting Streamlit pages. Status from [`STREAMLIT_RETIREMENT_AUDIT_20
 | Tatiana helper | `tatiana_copilot/draft_review_helpers.py` | **Keep** | Renamed from `streamlit_draft_helpers` |
 | Read helpers | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` | **Keep** | API/library |
 | Docker Streamlit | ~~`Dockerfile`~~, ~~`docker-compose.yml`~~ | **Removed** | Dashboard stack uses `docker-compose.dashboard-postgres.yml` |
-| Deps | `pyproject.toml` `ui` group | **Keep** | Remaining `test_streamlit_*` + draft helpers |
+| Deps | `data-tools` (pandas/xlrd) | **Keep** | No `streamlit` package |
 | Tests | UI-only tests (`test_business_mart_app_ux`, etc.) | **Removed** | Read-module tests remain |
 | Already gone | browse/today/copy shims, `streamlit_api_preview`, canonical SQL shim | **Done** | Phase 5E–5G |
 
@@ -122,7 +122,7 @@ Use before deleting Streamlit pages. Status from [`STREAMLIT_RETIREMENT_AUDIT_20
 - **No** runtime behavior changes (Gmail, Postgres sync, send, purge, mirror, `--apply`).  
 - **No** import migrations or `core/` facade churn for Streamlit retirement.  
 - **No** generic developer-doc expansion unrelated to retirement (prefer this plan + parity checklist).  
-- **No** removing `--group ui` from CI until Streamlit tests are retired or rewritten.
+- **No** re-adding the `streamlit` package without an approved UI surface.
 
 ---
 
@@ -135,8 +135,7 @@ See [`STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](STREAMLIT_LAUNCH_SURFA
 1. **docs:** RUNBOOK — demote `#m-eprun-docker-streamlit` to “legacy”; dashboard section first in operator map. **(PR 1 — done in launch-surface batch)**
 2. **docs:** `EXPERIMENTAL_PARKED.md` — Streamlit row → legacy/parked; React = active UI.  
 3. **api/dashboard:** Wire `GET /emails/recent`, expand cases/contacts parity (read-only).  
-4. **ci:** Optional job without `--group ui` once pandas tests move to default deps or `lab` group.
-5. **rename:** remaining `test_streamlit_*` browse/copy tests → neutral names when touched.
+4. **rename:** any remaining historical doc references to `--group ui`.
 
 ---
 
