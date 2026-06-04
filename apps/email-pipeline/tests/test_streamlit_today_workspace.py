@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import sqlite3
 
-from origenlab_email_pipeline.streamlit_prioridad_handoffs import (
+from origenlab_email_pipeline.read.today_workspace import (
     SESSION_CI_ENTITY_KIND,
     SESSION_CI_STATUS,
     SESSION_CI_TODAY_HINT,
     SESSION_LEADS_TODAY_BANNER,
     SESSION_OPP_SIGNAL_FILTER,
     SESSION_TODAY_HANDOFF_CASO_EMAIL_ID,
-)
-from origenlab_email_pipeline.read.today_workspace import (
     TIER_CANDIDATO_NEEDS_REVIEW,
     TIER_CASO_SENAL_POSITIVA,
     TIER_CUENTA_DORMIDA,

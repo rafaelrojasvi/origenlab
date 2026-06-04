@@ -6,7 +6,7 @@ Orden **explícito y mecánico** (no ranking con ML):
   2 Leads high/medium fit sin ``next_action``
   3 Top ``dormant_contact`` en ``opportunity_signals``
 
-Sin escritura en SQLite; ``apply_today_row_handoff`` solo llena claves de sesión (p. ej. Streamlit).
+Sin escritura en SQLite; ``apply_today_row_handoff`` solo llena claves de sesión para consumidores UI.
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ from origenlab_email_pipeline.operational_scope import (
 from origenlab_email_pipeline.lead_export_queries import sql_upstream_active_lead_master
 from origenlab_email_pipeline.read.leads_browse import lead_browse_ready
 
-# Must match ``streamlit_prioridad_handoffs`` session key strings.
-_SESSION_TODAY_HANDOFF_CASO_EMAIL_ID = "today_handoff_caso_email_id"
-_SESSION_CI_ENTITY_KIND = "ci_entity_kind"
-_SESSION_CI_STATUS = "ci_status"
-_SESSION_CI_TODAY_HINT = "ci_today_hint"
-_SESSION_LEADS_TODAY_BANNER = "leads_today_banner"
-_SESSION_OPP_SIGNAL_FILTER = "opp_signal_filter"
+# Handoff session keys (stable contract for ``apply_today_row_handoff`` consumers/tests).
+SESSION_TODAY_HANDOFF_CASO_EMAIL_ID = "today_handoff_caso_email_id"
+SESSION_CI_ENTITY_KIND = "ci_entity_kind"
+SESSION_CI_STATUS = "ci_status"
+SESSION_CI_TODAY_HINT = "ci_today_hint"
+SESSION_LEADS_TODAY_BANNER = "leads_today_banner"
+SESSION_OPP_SIGNAL_FILTER = "opp_signal_filter"
 
 __all__ = [
     "TodayWorkspaceSpec",
@@ -40,6 +40,12 @@ __all__ = [
     "apply_today_row_handoff",
     "source_label_es",
     "SOURCE_LABEL_ES",
+    "SESSION_TODAY_HANDOFF_CASO_EMAIL_ID",
+    "SESSION_CI_ENTITY_KIND",
+    "SESSION_CI_STATUS",
+    "SESSION_CI_TODAY_HINT",
+    "SESSION_LEADS_TODAY_BANNER",
+    "SESSION_OPP_SIGNAL_FILTER",
 ]
 
 HandoffKind = Literal["caso", "ci", "lead", "dormant"]
@@ -179,21 +185,21 @@ def sort_today_rows(rows: list[TodayWorkspaceRow]) -> list[TodayWorkspaceRow]:
 def apply_today_row_handoff(row: TodayWorkspaceRow, sess: MutableMapping[str, Any]) -> None:
     """Escribir claves que consumen Casos / Candidatos / Leads / Oportunidades."""
     if row.handoff_kind == "caso" and row.handoff_email_id is not None:
-        sess[_SESSION_TODAY_HANDOFF_CASO_EMAIL_ID] = int(row.handoff_email_id)
+        sess[SESSION_TODAY_HANDOFF_CASO_EMAIL_ID] = int(row.handoff_email_id)
     elif row.handoff_kind == "ci":
         if row.handoff_ci_entity_kind and row.handoff_ci_entity_key:
-            sess[_SESSION_CI_ENTITY_KIND] = row.handoff_ci_entity_kind
-            sess[_SESSION_CI_STATUS] = "needs_review"
-            sess[_SESSION_CI_TODAY_HINT] = f"{row.handoff_ci_entity_kind} | {row.handoff_ci_entity_key}"
+            sess[SESSION_CI_ENTITY_KIND] = row.handoff_ci_entity_kind
+            sess[SESSION_CI_STATUS] = "needs_review"
+            sess[SESSION_CI_TODAY_HINT] = f"{row.handoff_ci_entity_kind} | {row.handoff_ci_entity_key}"
     elif row.handoff_kind == "lead" and row.handoff_lead_id is not None:
         org = row.handoff_lead_org or "—"
         lid = int(row.handoff_lead_id)
-        sess[_SESSION_LEADS_TODAY_BANNER] = (
+        sess[SESSION_LEADS_TODAY_BANNER] = (
             f"Sugerencia desde **Qué hacer hoy**: revisar lead **{lid}** — {org}. "
             "Use filtros en esta página si no ve la fila."
         )
     elif row.handoff_kind == "dormant":
-        sess[_SESSION_OPP_SIGNAL_FILTER] = "dormant_contact"
+        sess[SESSION_OPP_SIGNAL_FILTER] = "dormant_contact"
 
 
 def _float_metric(value: object, *, default: float = 0.0) -> float:

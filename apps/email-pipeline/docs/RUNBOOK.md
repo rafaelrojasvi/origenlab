@@ -8,7 +8,7 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 
 **Preferred operator CLI (Phase 6C):** `uv run python -m origenlab_email_pipeline.cli <subcommand>` — see [Operator health matrix](#m-eprun-operator-health-matrix) and [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md). Raw `scripts/qa/…` paths remain valid **advanced/manual** fallbacks.
 
-**Active operator UI:** [`apps/dashboard`](../../dashboard/README.md) (React) backed by [`apps/api`](../../api/README.md) (:8001) and the Postgres mirror — not Streamlit. Streamlit ([`apps/business_mart_app.py`](../apps/business_mart_app.py)) is **legacy/parked**; see [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
+**Active operator UI:** [`apps/dashboard`](../../dashboard/README.md) (React) backed by [`apps/api`](../../api/README.md) (:8001) and the Postgres mirror. Streamlit Python UI **removed** (2026-06-04); see [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 ### Runbook map (pick one track)
 
@@ -212,7 +212,7 @@ For **live** mail for **contacto@origenlab.cl** on **Google Workspace**, the ope
 
 **Titan (password IMAP)** via **[`04_imap_to_sqlite.py`](../scripts/ingest/04_imap_to_sqlite.py)** ([`docs/ingest/IMAP_CONTACTO.md`](ingest/IMAP_CONTACTO.md)) remains supported for legacy or alternate hosts; those rows use **`imap:...`** prefixes.
 
-In **Streamlit** ([`apps/business_mart_app.py`](../apps/business_mart_app.py)), **Actividad contacto Gmail**, **Casos para revisar**, and **Borrador comercial** when loading from the Gmail inbox filter the same **`gmail:contacto@origenlab.cl/…`** prefix (SQL: `lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'`). They do **not** include Titan-ingested rows; use **Salud de datos** (or raw SQL) if you need a mixed view of sources.
+**Contacto Gmail** consumers (cases queue, Tatiana draft email picker, mirror/API paths) filter the same **`gmail:contacto@origenlab.cl/…`** prefix (SQL: `lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'` via [`contacto_gmail_source.py`](../src/origenlab_email_pipeline/contacto_gmail_source.py)). They do **not** include Titan-ingested rows by default.
 
 <a id="m-eprun-source-tiers"></a>
 ### Source-of-truth tiers (Phase 1)
@@ -255,28 +255,18 @@ After **`05_workspace_gmail_imap_to_sqlite.py`** succeeds against the **same** S
 
 <a id="m-eprun-docker-streamlit"></a>
 <a id="m-eprun-legacy-streamlit-docker"></a>
-## Legacy: Streamlit business mart (local only — Docker removed)
+## Retired: Streamlit business mart UI
 
-> **Not the active operator UI.** Use [`apps/dashboard`](../../dashboard/README.md) + [`apps/api`](../../api/README.md). The Streamlit-only **`Dockerfile`** and **`docker-compose.yml`** (port 8501) were **removed** (2026-06-04). See [`audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
+> **Removed (2026-06-04).** `apps/business_mart_app.py`, Streamlit Docker (`Dockerfile`, `docker-compose.yml`), and UI modules (`streamlit_prioridad_*`, `streamlit_page_status`) are deleted. **Active UI:** [`apps/dashboard`](../../dashboard/README.md) + [`apps/api`](../../api/README.md). Inventory: [`audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
 
-Rare local review on SQLite (host paths, not containerized):
-
-```bash
-cd apps/email-pipeline
-uv sync --group ui
-uv run --group ui streamlit run apps/business_mart_app.py
-```
-
-Build mart on the host first if needed: [`build_business_mart.py`](../scripts/mart/build_business_mart.py). **Borrador comercial** does not send mail.
-
-**Postgres for dashboard mirror (active stack):** use [`docker-compose.dashboard-postgres.yml`](../docker-compose.dashboard-postgres.yml) — not the removed Streamlit compose file.
+**Postgres for dashboard mirror (active stack):** [`docker-compose.dashboard-postgres.yml`](../docker-compose.dashboard-postgres.yml).
 
 ---
 
 <a id="m-eprun-postgres-optional"></a>
 ## Optional PostgreSQL (Alembic, archive load, outbound audit)
 
-**PostgreSQL is optional and parked for daily ops.** Ingest, outbound gates, Streamlit, equipment-first queues, and day-to-day reporting run against **SQLite** (`ORIGENLAB_SQLITE_PATH` or default under `ORIGENLAB_DATA_ROOT`). Do **not** treat Postgres as required for send/export decisions.
+**PostgreSQL is optional and parked for daily ops.** Ingest, outbound gates, equipment-first queues, and day-to-day reporting run against **SQLite** (`ORIGENLAB_SQLITE_PATH` or default under `ORIGENLAB_DATA_ROOT`). Do **not** treat Postgres as required for send/export decisions.
 
 **React commercial panel:** use [Optional dashboard preview stack (parked)](#m-eprun-dashboard-optional) — not this section alone. **Do not run** `alembic upgrade` or `scripts/migrate/*` without explicit approval ([`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md)).
 
@@ -327,7 +317,7 @@ Example URL form: `postgresql+psycopg://user:pass@host:5432/dbname`. Template li
 | **5. FastAPI** | Read-only HTTP over Postgres | **No writes** — serves whatever mirror was last synced |
 | **6. React dashboard** | Commercial panel (`apps/dashboard`) | **No** — polls FastAPI; never ingests Gmail |
 
-**Streamlit** (`business_mart_app.py`) is **legacy/parked** (SQLite review only). **React** (`apps/dashboard`) is the **active** operator UI over the Postgres mirror via `apps/api`.
+**React** (`apps/dashboard`) is the **active** operator UI over the Postgres mirror via `apps/api`. Streamlit Python UI was **removed** (2026-06-04).
 
 **Scope:** API and React **default to canonical Gmail** (`source_file LIKE 'gmail:contacto@origenlab.cl/%'`). Full historical mart requires `?scope=archive` — never treat archive counts as the headline KPI.
 
@@ -973,7 +963,7 @@ Optional: `--limit N` caps recipients after dedupe; duplicate emails (case-insen
 
 The gate is invoked from:
 
-- [`compute_next_marketing_recipients()`](../src/origenlab_email_pipeline/next_marketing_queue.py) — Streamlit **Cola outreach marketing** (`apps/business_mart_app.py`).
+- [`compute_next_marketing_recipients()`](../src/origenlab_email_pipeline/next_marketing_queue.py) — marketing queue (CLI; former Streamlit **Cola outreach marketing** page removed).
 - [`build_archive_send_batch` / archive outreach audit](../src/origenlab_email_pipeline/archive_send_batch_builder.py) — archive lane.
 - [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — optional export sample from **`contact_master`** (advanced).
 
@@ -1039,7 +1029,7 @@ Optional: `--db /path/to/emails.sqlite`. Interpretation: **eligible** = gate ret
 ```bash
 cd apps/email-pipeline
 uv run pytest tests/test_candidate_export_gate.py -q
-uv run pytest tests/test_business_mart_app_ux.py -q
+uv run pytest tests/test_streamlit_today_workspace.py tests/test_contacto_gmail_source_contract.py -q
 ```
 
 ---

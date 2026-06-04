@@ -46,3 +46,25 @@ def test_launch_plan_documents_streamlit_docker_removal() -> None:
     assert not (_REPO / "Dockerfile").exists()
     assert not (_REPO / "docker-compose.yml").exists()
     assert (_REPO / "docker-compose.dashboard-postgres.yml").is_file()
+
+
+def test_streamlit_python_ui_modules_removed() -> None:
+    text = _LAUNCH_PLAN.read_text(encoding="utf-8")
+    for name in (
+        "business_mart_app.py",
+        "streamlit_prioridad_pages.py",
+        "streamlit_prioridad_handoffs.py",
+        "streamlit_page_status.py",
+    ):
+        assert name in text
+        assert "removed" in text.lower()
+    assert not (_REPO / "apps" / "business_mart_app.py").exists()
+    assert not (_REPO / "src" / "origenlab_email_pipeline" / "streamlit_prioridad_pages.py").exists()
+    assert not (_REPO / "src" / "origenlab_email_pipeline" / "streamlit_prioridad_handoffs.py").exists()
+    assert not (_REPO / "src" / "origenlab_email_pipeline" / "streamlit_page_status.py").exists()
+
+
+def test_active_stack_doc_still_names_dashboard_api_mirror() -> None:
+    text = _PLAN.read_text(encoding="utf-8")
+    for term in ("apps/dashboard", "apps/api", "Postgres mirror"):
+        assert term in text, f"plan doc must still mention {term!r}"

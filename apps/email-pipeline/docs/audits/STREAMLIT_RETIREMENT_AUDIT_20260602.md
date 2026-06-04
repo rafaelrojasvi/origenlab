@@ -6,7 +6,7 @@
 
 **Operator decision (2026-06-04):** Active UI = `apps/dashboard`; active API = `apps/api`; Streamlit retired from product path. Phased plan: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
-**Verdict (executive):** Streamlit **cannot be removed safely today**. The React dashboard and Postgres mirror API cover a growing **read-only** slice, but several **operator workflows** (SQLite sidecar writes, marketing queue preview, Tatiana borrador export, mart/data-health diagnostics) still live only in `apps/business_mart_app.py` and `streamlit_*` modules. Retirement requires **extracting read logic**, **parity for writes (API or CLIs)**, and **doc/test migration** — not a single delete PR.
+**Verdict (executive, 2026-06-02):** Full removal required **phased** extraction first. **Update (2026-06-04):** Python Streamlit UI (`business_mart_app.py`, `streamlit_prioridad_pages.py`, `streamlit_prioridad_handoffs.py`, `streamlit_page_status.py`) **deleted**; active UI = dashboard + API. Remaining: `streamlit_draft_helpers.py`, env-flag `streamlit_*` helpers, and read modules under `read/`. See [`STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
 
 ---
 

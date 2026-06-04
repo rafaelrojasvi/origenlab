@@ -26,23 +26,23 @@ See monorepo [`docs/PROJECT_CONTEXT.md`](../../../../docs/PROJECT_CONTEXT.md), r
 
 ---
 
-## Legacy / parked stack (Streamlit)
+## Legacy / retired stack (Streamlit)
 
 **Product decision:** Streamlit is **not** the operator UI anymore. Do **not** add Streamlit features. Do **not** treat Streamlit as source of truth for sends, DNR, or mirror state.
 
 | Artifact | Path / note |
 |----------|-------------|
-| Streamlit app | [`apps/business_mart_app.py`](../../apps/business_mart_app.py) (~3.6k LOC) |
-| Streamlit renderers | `streamlit_prioridad_pages.py`, `streamlit_prioridad_handoffs.py`, `streamlit_page_status.py` |
-| Tatiana Streamlit export | `tatiana_copilot/streamlit_draft_helpers.py` |
-| Neutral read helpers (already extracted) | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` — **keep**; used by API/library paths |
-| LAN launcher | ~~`scripts/tools/run_streamlit_lan.sh`~~ **removed** (was docs-only; use `streamlit run` flags locally) |
-| Docker UI image | ~~`Dockerfile`~~, ~~`docker-compose.yml`~~ (**removed** 2026-06-04). Active mirror dev: [`docker-compose.dashboard-postgres.yml`](../../docker-compose.dashboard-postgres.yml) |
-| Dependency group | `pyproject.toml` → `[dependency-groups] ui` (`streamlit`, `pandas`, `xlrd`) |
-| Streamlit-focused tests | `tests/test_streamlit_*.py`, `tests/test_business_mart_app_ux.py`, `tests/test_business_mart_internal_domains.py` |
-| Streamlit operator docs | `docs/pipeline/STREAMLIT_DATA_FRESHNESS.md`, sections in `RUNBOOK.md` (`#m-eprun-docker-streamlit`), README Streamlit blocks |
+| ~~Streamlit app~~ | ~~`apps/business_mart_app.py`~~ **removed** 2026-06-04 |
+| ~~Streamlit renderers~~ | ~~`streamlit_prioridad_pages.py`~~, ~~`streamlit_prioridad_handoffs.py`~~, ~~`streamlit_page_status.py`~~ **removed** 2026-06-04 |
+| Tatiana export helper (name legacy) | `tatiana_copilot/streamlit_draft_helpers.py` — **keep**; tests + borrador export |
+| Neutral read helpers | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` — **keep**; session keys on `today_workspace` |
+| LAN launcher | ~~`scripts/tools/run_streamlit_lan.sh`~~ **removed** |
+| Docker UI image | ~~`Dockerfile`~~, ~~`docker-compose.yml`~~ **removed**. Active mirror dev: [`docker-compose.dashboard-postgres.yml`](../../docker-compose.dashboard-postgres.yml) |
+| Dependency group | `pyproject.toml` → `[dependency-groups] ui` — **keep** until remaining `test_streamlit_*` / draft-helper tests retired |
+| Remaining Streamlit-named tests | `tests/test_streamlit_today_workspace.py`, `test_streamlit_draft_helpers.py`, etc. — not the product UI |
+| Streamlit operator docs | `docs/pipeline/STREAMLIT_DATA_FRESHNESS.md`, historical RUNBOOK sections — migrate over time |
 
-**Already removed (Phase 5E–5G):** `streamlit_leads_browse`, `streamlit_suppliers_browse`, `streamlit_today_workspace`, `streamlit_borrador_support`, `streamlit_prioridad_copy`, `streamlit_api_preview`, `streamlit_canonical_dashboard_sql` — logic lives under `read/` or `canonical_operational_sql.py`. See [`tests/test_read_module_shim_parity.py`](../../tests/test_read_module_shim_parity.py).
+**Already removed (Phase 5E–5G + 2026-06-04 UI):** browse/today/copy shims, `streamlit_api_preview`, `streamlit_canonical_dashboard_sql`, **`business_mart_app.py`**, **`streamlit_prioridad_*`**, **`streamlit_page_status`**. See [`tests/test_read_module_shim_parity.py`](../../tests/test_read_module_shim_parity.py) and [`STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
 
 ---
 
@@ -63,8 +63,8 @@ See monorepo [`docs/PROJECT_CONTEXT.md`](../../../../docs/PROJECT_CONTEXT.md), r
 | **0** | Mark legacy/parked; document active stack | **Yes** — this doc + surgical README/RUNBOOK/APP_CONTEXT/AGENTS notes |
 | **1** | Remove Streamlit as *primary* path in top-level docs | **Partial** — README/RUNBOOK pointers; full RUNBOOK dedup deferred |
 | **2** | API/dashboard parity checklist per Streamlit page | Documented below — implementation in follow-up PRs |
-| **3** | Move remaining Streamlit-only files to `legacy/` or archive | **No** — no file moves/deletes |
-| **4** | Drop `ui` group, Docker Streamlit service, LAN script | **No** — after zero references + CI update |
+| **3** | Delete Streamlit Python UI (`business_mart_app`, `streamlit_prioridad_*`, `streamlit_page_status`) | **Done** (2026-06-04) — see launch-surface plan |
+| **4** | Drop `ui` group after draft-helper tests retired | **No** — CI still syncs `--group ui` |
 
 ---
 
@@ -92,20 +92,16 @@ Use before deleting Streamlit pages. Status from [`STREAMLIT_RETIREMENT_AUDIT_20
 
 ## Candidate files — remove now / later / needs parity
 
-| Category | Path | Remove now? | Notes |
-|----------|------|-------------|-------|
-| App | `apps/business_mart_app.py` | **Later** | Last — after page parity + write paths documented |
-| UI modules | `streamlit_prioridad_pages.py`, `streamlit_prioridad_handoffs.py`, `streamlit_page_status.py` | **Later** | Still imported by app |
-| Tatiana UI | `tatiana_copilot/streamlit_draft_helpers.py` | **Later** | Borrador export; rename to non-streamlit name first |
-| Read helpers | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` | **Keep** | Not Streamlit-only; API/library |
-| Docker Streamlit | ~~`Dockerfile`~~, ~~`docker-compose.yml`~~ | **Removed** | Deleted — use local `streamlit run` or dashboard stack |
-| Script | ~~`scripts/tools/run_streamlit_lan.sh`~~ | **Removed** | Deleted — docs-only launcher |
-| Deps | `pyproject.toml` `ui` group | **Later** | CI still syncs `--group ui` for tests |
-| Tests | `tests/test_streamlit_*.py`, `test_business_mart_app_*` | **Later** | Rename/move with modules; keep green CI until Phase 4 |
-| Docs | `STREAMLIT_DATA_FRESHNESS.md`, RUNBOOK docker section | **Later** | Migrate to UI-agnostic `DATA_HEALTH.md` |
-| Already gone | `streamlit_*_browse`, `streamlit_api_preview`, `streamlit_canonical_dashboard_sql` | **Done** | Phase 5E–5G |
-
-**Do not delete** based on low fan-in alone — `business_mart_app.py` is still a manual entrypoint for some operators until parity is explicit.
+| Category | Path | Status | Notes |
+|----------|------|--------|-------|
+| App | ~~`apps/business_mart_app.py`~~ | **Removed** | 2026-06-04 — no `apps/api`/`apps/dashboard` imports |
+| UI modules | ~~`streamlit_prioridad_pages.py`~~, ~~`streamlit_prioridad_handoffs.py`~~, ~~`streamlit_page_status.py`~~ | **Removed** | Handoff keys on `read/today_workspace.py` |
+| Tatiana helper | `tatiana_copilot/streamlit_draft_helpers.py` | **Keep** | Rename in follow-up PR |
+| Read helpers | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` | **Keep** | API/library |
+| Docker Streamlit | ~~`Dockerfile`~~, ~~`docker-compose.yml`~~ | **Removed** | Dashboard stack uses `docker-compose.dashboard-postgres.yml` |
+| Deps | `pyproject.toml` `ui` group | **Keep** | Remaining `test_streamlit_*` + draft helpers |
+| Tests | UI-only tests (`test_business_mart_app_ux`, etc.) | **Removed** | Read-module tests remain |
+| Already gone | browse/today/copy shims, `streamlit_api_preview`, canonical SQL shim | **Done** | Phase 5E–5G |
 
 ---
 
@@ -122,7 +118,7 @@ Use before deleting Streamlit pages. Status from [`STREAMLIT_RETIREMENT_AUDIT_20
 
 ## Non-goals (this initiative)
 
-- **No** deletion of Streamlit Python files in Phase 0–1 PRs.  
+- **No** runtime changes to Gmail, Postgres sync, send, mirror, purge, or `--apply` in retirement PRs.
 - **No** runtime behavior changes (Gmail, Postgres sync, send, purge, mirror, `--apply`).  
 - **No** import migrations or `core/` facade churn for Streamlit retirement.  
 - **No** generic developer-doc expansion unrelated to retirement (prefer this plan + parity checklist).  
@@ -141,7 +137,7 @@ See [`STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](STREAMLIT_LAUNCH_SURFA
 3. **api/dashboard:** Wire `GET /emails/recent`, expand cases/contacts parity (read-only).  
 4. **extract:** `streamlit_draft_helpers` → `tatiana_copilot/draft_export.py` (no `streamlit_` prefix).  
 5. **ci:** Optional job without `--group ui` once Streamlit tests removed.  
-6. **delete:** `business_mart_app.py` + `ui` group — only after parity sign-off.
+6. **rename + ci:** `streamlit_draft_helpers` → neutral name; drop `ui` group when tests allow.
 
 ---
 
