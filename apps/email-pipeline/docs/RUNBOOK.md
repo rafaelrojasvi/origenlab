@@ -1029,7 +1029,7 @@ Optional: `--db /path/to/emails.sqlite`. Interpretation: **eligible** = gate ret
 ```bash
 cd apps/email-pipeline
 uv run pytest tests/test_candidate_export_gate.py -q
-uv run pytest tests/test_streamlit_today_workspace.py tests/test_contacto_gmail_source_contract.py -q
+uv run pytest tests/test_today_workspace_read.py tests/test_contacto_gmail_source_contract.py -q
 ```
 
 ---

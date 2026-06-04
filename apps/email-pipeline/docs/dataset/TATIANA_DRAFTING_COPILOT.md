@@ -130,17 +130,15 @@ Small **file-driven** batches: generate drafts into `reports/out/YYYYMMDD_HHMMSS
 
 See **`docs/dataset/TATIANA_PILOT_WORKFLOW.md`** for input formats, CLI, and safety rules.
 
-### Streamlit: Borrador comercial (revisión)
+### Borrador comercial (revisión — library)
 
-The business mart Streamlit app ([`apps/business_mart_app.py`](../../apps/business_mart_app.py)) includes **Borrador comercial** — a **human-in-the-loop only** surface:
+Human-in-the-loop draft review helpers live in [`tatiana_copilot/draft_review_helpers.py`](../../src/origenlab_email_pipeline/tatiana_copilot/draft_review_helpers.py) (Streamlit UI **removed** 2026-06-04; use pilot batch or future dashboard wiring):
 
-- **No sending** (no Gmail/Titan send, no CRM). Review fields and exports are for workflow only; `approved_for_send` in exported CSV is always **`n`** from this page.
+- **No sending** (no Gmail/Titan send, no CRM). Review fields and exports are for workflow only; `approved_for_send` in exported CSV is always **`n`**.
 - **OrigenLab mode always** — same stack as the pilot (`build_draft_package` + `DRAFTING_PROFILE_ORIGENLAB` + `load_origenlab_drafting_context()`), cohort TF-IDF index from the usual `reports/out/tatiana_candidate_cohort_marketing_top200_*.csv` seeds.
-- **Intake for the exact customer message** is either typed manually or loaded from the raw **`emails`** table (`source_file` like `gmail:contacto@origenlab.cl/%`). Business marts are **not** required for this page and are not the canonical source for verbatim message text.
-- **Generator choice:** use **Mock explícito** for offline runs, or **OpenAI** when API keys are configured. There is **no silent fallback** to mock when OpenAI is selected but misconfigured — the UI shows a clear error.
-- **Optional export** writes `draft_package.json`, `pilot_review_row.csv`, and `origenlab_context_snapshot.json` under `reports/out/<timestamp>_streamlit_borrador_comercial/` (same column conventions as pilot review CSVs). SQLite remains read-only.
-
-Run locally (from monorepo root: `cd apps/email-pipeline`; if you are already in that folder, skip the inner `cd`): `uv sync --group ui --group lab` once, then `uv run --group ui streamlit run apps/business_mart_app.py`.
+- **Intake for the exact customer message** is either typed manually (`draft_case_from_manual`) or loaded from the raw **`emails`** table (`draft_case_from_email_row`; `source_file` like `gmail:contacto@origenlab.cl/%`).
+- **Generator choice:** `resolve_draft_review_generator` — mock only when explicitly requested; no silent fallback when OpenAI is selected but misconfigured.
+- **Optional export** via `export_draft_review_artifact` writes under `reports/out/<timestamp>_streamlit_borrador_comercial/` (legacy folder suffix unchanged). Same column conventions as pilot review CSVs.
 
 ## Guardrails
 

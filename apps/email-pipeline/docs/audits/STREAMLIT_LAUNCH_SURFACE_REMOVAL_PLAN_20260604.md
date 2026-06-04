@@ -21,7 +21,7 @@ Parent: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_
 
 **Still active (not Streamlit):** [`docker-compose.dashboard-postgres.yml`](../../docker-compose.dashboard-postgres.yml) — local Postgres for dashboard mirror proof-of-life (:5433).
 
-**Kept (not UI modules):** `tatiana_copilot/streamlit_draft_helpers.py` (export helper + tests); `streamlit_*` env helpers in `contact_email_suppression.py` / `lead_contact_research.py`.
+**Renamed (2026-06-04 naming PR):** `tatiana_copilot/draft_review_helpers.py` (was `streamlit_draft_helpers.py`). **Kept:** `streamlit_*` env-flag helpers in `contact_email_suppression.py` / `lead_contact_research.py`.
 
 ---
 
@@ -33,7 +33,7 @@ Parent: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_
 | `streamlit_prioridad_pages.py` | No | No | Removed: `test_streamlit_prioridad_pages_import`, `test_business_mart_app_ux` | Audits | `business_mart_app` only | **Yes** ✓ |
 | `streamlit_prioridad_handoffs.py` | No | No | Removed: handoffs, navigate, page tests; `test_streamlit_today_workspace` → `read/today_workspace` session keys | Audits | `streamlit_prioridad_pages`, `business_mart_app` | **Yes** ✓ |
 | `streamlit_page_status.py` | No | No | Removed: `test_streamlit_page_status`, `test_streamlit_api_preview` | Audits | `business_mart_app`, `streamlit_prioridad_pages` | **Yes** ✓ |
-| `streamlit_draft_helpers.py` | No | No | `test_streamlit_draft_helpers`, `test_streamlit_borrador_support`, `test_contacto_gmail_source_contract` | Tatiana docs | Library/tests only | **No** — keep |
+| ~~`streamlit_draft_helpers.py`~~ → `draft_review_helpers.py` | No | No | `test_tatiana_draft_review_helpers`, `test_contacto_gmail_source_contract` | Tatiana docs | Library/tests | **Renamed** ✓ |
 
 ---
 
@@ -51,8 +51,8 @@ Parent: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_
 | **`pyproject.toml` `[dependency-groups] ui`** | CI + remaining Streamlit tests | **CI-required** | **Keep** until draft-helper tests retired |
 | ~~**`apps/business_mart_app.py`**~~ | Was legacy local UI | **Removed** | Deleted ✓ |
 | ~~**`streamlit_prioridad_*.py`**, **`streamlit_page_status.py`**~~ | Was app imports | **Removed** | Deleted ✓ |
-| **`tatiana_copilot/streamlit_draft_helpers.py`** | Tests, borrador export | **Library** | **Keep** |
-| **`tests/test_streamlit_*.py`** (remaining) | pytest | **CI** | **Keep** (read modules, draft helpers, canonical SQL) |
+| **`tatiana_copilot/draft_review_helpers.py`** | Tests, borrador export | **Library** | **Keep** (renamed) |
+| **`tests/test_today_workspace_read.py`**, **`test_tatiana_draft_review_helpers.py`**, etc. | pytest | **CI** | **Keep** |
 
 ---
 
@@ -64,7 +64,8 @@ Parent: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_
 | **LAN launcher** | Delete `run_streamlit_lan.sh` |
 | **Docker/compose** | Delete `Dockerfile`, `docker-compose.yml`; update docs/tests |
 | **Python UI** | Delete `business_mart_app.py` + three `streamlit_*` UI modules; drop UI-only tests; guardrails in `test_active_stack_docs.py` |
-| **Next** | Drop `--group ui` from CI after remaining Streamlit-named tests/helpers retired |
+| **Naming** | `streamlit_draft_helpers` → `draft_review_helpers`; test renames; import guardrails |
+| **Next** | Drop `--group ui` from CI when pandas tests no longer need the group |
 
 ---
 
