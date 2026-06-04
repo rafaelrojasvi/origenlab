@@ -22,5 +22,5 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --group dev --group ui --group postgres --group lab --frozen
+      - run: uv sync --group dev --group data-tools --group postgres --group lab --frozen
       - run: uv run pytest

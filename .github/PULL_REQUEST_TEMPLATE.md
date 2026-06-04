@@ -24,7 +24,7 @@
 ### Email pipeline (`apps/email-pipeline`)
 
 - [ ] `cd apps/email-pipeline`
-- [ ] `uv sync --group dev --group ui --group postgres --group lab --frozen`
+- [ ] `uv sync --group dev --group data-tools --group postgres --group lab --frozen`
 - [ ] `uv run pytest tests -q`
 - [ ] `uv run origenlab refresh-dashboard` for plan-only operator check when relevant
 - [ ] No Gmail/Postgres/send/purge/`--apply` unless explicitly intended and documented

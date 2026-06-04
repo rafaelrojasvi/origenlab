@@ -16,7 +16,7 @@ npm run build
 
 section "email-pipeline"
 cd "$ROOT_DIR/apps/email-pipeline"
-uv sync --group dev --group ui --group postgres --group lab --frozen
+uv sync --group dev --group data-tools --group postgres --group lab --frozen
 uv run pytest tests -q
 uv run origenlab refresh-dashboard
 
