@@ -46,6 +46,8 @@ apps/email-pipeline/logs/
 apps/email-pipeline/reports/out/*
 !apps/email-pipeline/reports/out/README.md
 !apps/email-pipeline/reports/out/.gitkeep
+# Local ad-hoc audits/reports; may contain operational data and should not be committed.
+apps/email-pipeline/reports/local/
 
 # Email archive & databases
 *.pst
