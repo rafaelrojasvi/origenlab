@@ -31,8 +31,8 @@ def test_streamlit_launch_surface_removal_plan_exists() -> None:
     assert _LAUNCH_PLAN.is_file()
 
 
-def test_launch_plan_marks_streamlit_legacy_not_primary() -> None:
+def test_launch_plan_documents_lan_launcher_removal() -> None:
     text = _LAUNCH_PLAN.read_text(encoding="utf-8")
     assert "run_streamlit_lan.sh" in text
-    assert "legacy" in text.lower()
-    assert "PR 1" in text
+    assert "removed" in text.lower()
+    assert not (_REPO / "scripts/tools/run_streamlit_lan.sh").exists()
