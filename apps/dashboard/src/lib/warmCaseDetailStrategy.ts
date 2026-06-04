@@ -54,7 +54,6 @@ function linkedSectionForCategory(category: WarmCaseCategory): DashboardSection 
       return "deals";
     case "client_opportunity":
     case "opportunity":
-      return "opportunities";
     case "client_response":
     case "client_reply":
     case "quote_sent":

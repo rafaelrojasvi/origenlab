@@ -217,17 +217,17 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
     for (const label of [
       "Hoy",
       "Bandeja de revisión",
-      "Oportunidades",
       "Negocios",
       "Catálogo",
       "Proveedores",
-      "Licitaciones",
+      "Licitaciones / equipos",
       "Pagos y logística",
       "Contactos",
       "Sistema",
     ]) {
       expect(within(nav).getByRole("link", { name: label })).toBeTruthy();
     }
+    expect(within(nav).queryByRole("link", { name: "Oportunidades" })).toBeNull();
   });
 
   it("Today summary renders queue count cards", async () => {
@@ -238,7 +238,7 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
     screen.getByText("Oportunidades de clientes");
     screen.getByText("Cotizaciones y seguimientos de proveedores");
     screen.getByText("Evidencia de negocio");
-    screen.getByText("Licitaciones / equipos");
+    screen.getByLabelText(/Licitaciones \/ equipos:/);
     screen.getByText("Productos catalogados");
     expect(screen.queryByText(/Casos tibios \/ Warm cases/)).toBeNull();
   });
