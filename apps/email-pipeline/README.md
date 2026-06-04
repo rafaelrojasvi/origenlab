@@ -223,7 +223,7 @@ Do **not** use Streamlit as the operator product UI. Launch surfaces remain for 
 ```bash
 uv sync --group ui   # not installed by default uv sync
 uv run --group ui streamlit run apps/business_mart_app.py
-# LAN (legacy): bash scripts/tools/run_streamlit_lan.sh  → :8501
+# LAN: use streamlit CLI flags if needed (run_streamlit_lan.sh removed — see launch-surface audit)
 ```
 
 Docker/compose for Streamlit only: [`Dockerfile`](Dockerfile), [`docker-compose.yml`](docker-compose.yml) — see [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-eprun-legacy-streamlit-docker).

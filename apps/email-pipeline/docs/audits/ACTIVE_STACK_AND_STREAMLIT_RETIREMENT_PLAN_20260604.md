@@ -36,7 +36,7 @@ See monorepo [`docs/PROJECT_CONTEXT.md`](../../../../docs/PROJECT_CONTEXT.md), r
 | Streamlit renderers | `streamlit_prioridad_pages.py`, `streamlit_prioridad_handoffs.py`, `streamlit_page_status.py` |
 | Tatiana Streamlit export | `tatiana_copilot/streamlit_draft_helpers.py` |
 | Neutral read helpers (already extracted) | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` — **keep**; used by API/library paths |
-| LAN launcher | [`scripts/tools/run_streamlit_lan.sh`](../../scripts/tools/run_streamlit_lan.sh) |
+| LAN launcher | ~~`scripts/tools/run_streamlit_lan.sh`~~ **removed** (was docs-only; use `streamlit run` flags locally) |
 | Docker UI image | [`Dockerfile`](../../Dockerfile), [`docker-compose.yml`](../../docker-compose.yml) (port **8501**) |
 | Dependency group | `pyproject.toml` → `[dependency-groups] ui` (`streamlit`, `pandas`, `xlrd`) |
 | Streamlit-focused tests | `tests/test_streamlit_*.py`, `tests/test_business_mart_app_ux.py`, `tests/test_business_mart_internal_domains.py` |
@@ -99,7 +99,7 @@ Use before deleting Streamlit pages. Status from [`STREAMLIT_RETIREMENT_AUDIT_20
 | Tatiana UI | `tatiana_copilot/streamlit_draft_helpers.py` | **Later** | Borrador export; rename to non-streamlit name first |
 | Read helpers | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` | **Keep** | Not Streamlit-only; API/library |
 | Docker | `Dockerfile`, `docker-compose.yml` | **Later** | After no deploy dependency |
-| Script | `scripts/tools/run_streamlit_lan.sh` | **Later** | With Docker |
+| Script | ~~`scripts/tools/run_streamlit_lan.sh`~~ | **Removed** | Deleted — docs-only launcher |
 | Deps | `pyproject.toml` `ui` group | **Later** | CI still syncs `--group ui` for tests |
 | Tests | `tests/test_streamlit_*.py`, `test_business_mart_app_*` | **Later** | Rename/move with modules; keep green CI until Phase 4 |
 | Docs | `STREAMLIT_DATA_FRESHNESS.md`, RUNBOOK docker section | **Later** | Migrate to UI-agnostic `DATA_HEALTH.md` |

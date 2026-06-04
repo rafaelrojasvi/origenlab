@@ -23,7 +23,7 @@
 ```bash
 cd apps/email-pipeline
 uv run --group ui streamlit run apps/business_mart_app.py
-# LAN: scripts/tools/run_streamlit_lan.sh  (0.0.0.0:8501)
+# LAN (removed): was scripts/tools/run_streamlit_lan.sh — use streamlit --server.address 0.0.0.0
 ```
 
 ### 1.2 `streamlit_*` modules (`src/origenlab_email_pipeline/`)
@@ -67,7 +67,7 @@ ui = [
 ]
 ```
 
-- **`streamlit`** is only pulled via `--group ui` (Dockerfile, README, `run_streamlit_lan.sh`).
+- **`streamlit`** is only pulled via `--group ui` (Dockerfile, README).
 - **`pandas`** is also in the `ml` group — removing `ui` does not remove pandas from ML installs.
 - **`xlrd`** may still be needed outside Streamlit (spreadsheet ingest); verify before dropping from `ui`.
 
@@ -240,7 +240,7 @@ Priority extractions (behavior-preserving renames; tests move with modules):
 |----------------------|---------------------|
 | `streamlit>=1.36` (`ui` group) | After app + all `import streamlit` renderers removed |
 | `Dockerfile` + `docker-compose.yml` (business-mart) | After operators confirm no Docker Streamlit deploys |
-| `scripts/tools/run_streamlit_lan.sh` | With Dockerfile |
+| ~~`scripts/tools/run_streamlit_lan.sh`~~ | **Removed** (2026-06-04) |
 | `apps/business_mart_app.py` | Last — after all pages migrated |
 | `streamlit_*` modules | Per-module after extraction + zero imports |
 | `ui` group `xlrd` | Only if no other script needs it via `ui` |
