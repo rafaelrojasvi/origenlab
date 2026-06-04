@@ -51,7 +51,7 @@ This runs web, email-pipeline, API, and dashboard gates. It is intentionally hea
 ### Email pipeline (`apps/email-pipeline`)
 
 - Python 3.12 with [`uv`](https://docs.astral.sh/uv/).
-- From `apps/email-pipeline/`: `uv sync --group dev --group ui --group lab` (matches CI for Streamlit- and Tatiana-related tests).
+- From `apps/email-pipeline/`: `uv sync --group dev --group data-tools --group lab` (matches CI for pandas/xlrd tests and Tatiana lab deps).
 - Copy [`apps/email-pipeline/.env.example`](apps/email-pipeline/.env.example) to `.env` and point paths at a **directory outside the repo** for real data (see [`apps/email-pipeline/docs/DATA_LOCATIONS.md`](apps/email-pipeline/docs/DATA_LOCATIONS.md)).
 
 ## What must not be committed
