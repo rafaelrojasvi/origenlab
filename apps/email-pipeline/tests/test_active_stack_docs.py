@@ -36,3 +36,13 @@ def test_launch_plan_documents_lan_launcher_removal() -> None:
     assert "run_streamlit_lan.sh" in text
     assert "removed" in text.lower()
     assert not (_REPO / "scripts/tools/run_streamlit_lan.sh").exists()
+
+
+def test_launch_plan_documents_streamlit_docker_removal() -> None:
+    text = _LAUNCH_PLAN.read_text(encoding="utf-8")
+    assert "Dockerfile" in text
+    assert "docker-compose.yml" in text
+    assert "removed" in text.lower()
+    assert not (_REPO / "Dockerfile").exists()
+    assert not (_REPO / "docker-compose.yml").exists()
+    assert (_REPO / "docker-compose.dashboard-postgres.yml").is_file()

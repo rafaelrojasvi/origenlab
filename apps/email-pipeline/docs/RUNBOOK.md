@@ -17,7 +17,7 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 | **Daily outbound + equipment-first** | [Daily outbound](#m-eprun-daily-outbound) | Send safety, DNR, campaigns, tenders — **default** |
 | **Gmail ingest + mart (SQLite)** | [Primary mailbox](#m-eprun-mailbox-primary) · [Post–Gmail ingest](#m-eprun-post-gmail-ingest) | Ingest freshness, `build-mart` on host |
 | **Active operator UI** | [Dashboard stack](#m-eprun-dashboard-optional) | `apps/dashboard` + `apps/api` + Postgres mirror (not Streamlit) |
-| **Legacy Streamlit** | [Legacy Streamlit Docker](#m-eprun-legacy-streamlit-docker) | Parked SQLite review UI only |
+| **Legacy Streamlit** | [Legacy Streamlit (local only)](#m-eprun-legacy-streamlit-docker) | Parked SQLite review UI — Docker image removed |
 | **Postgres DDL / migrate loaders** | [Optional PostgreSQL](#m-eprun-postgres-optional) | Scratch DB trials — not daily truth |
 | **Which status command?** | [Operator health matrix](#m-eprun-operator-health-matrix) | `make doctor` vs `make audit` vs health report vs API |
 | **`reports/out` cleanup** | [`reports/out` cleanup flow](#m-eprun-reports-out-cleanup) | Plan → archive moves → hygiene check |
@@ -255,59 +255,21 @@ After **`05_workspace_gmail_imap_to_sqlite.py`** succeeds against the **same** S
 
 <a id="m-eprun-docker-streamlit"></a>
 <a id="m-eprun-legacy-streamlit-docker"></a>
-## Legacy: Docker Streamlit business mart (parked)
+## Legacy: Streamlit business mart (local only — Docker removed)
 
-> **Not the active operator UI.** Product UI is [`apps/dashboard`](../../dashboard/README.md) + [`apps/api`](../../api/README.md). This section is for the **legacy** Streamlit container only. Removal plan: [`audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
+> **Not the active operator UI.** Use [`apps/dashboard`](../../dashboard/README.md) + [`apps/api`](../../api/README.md). The Streamlit-only **`Dockerfile`** and **`docker-compose.yml`** (port 8501) were **removed** (2026-06-04). See [`audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
 
-Optional container for [`apps/business_mart_app.py`](../apps/business_mart_app.py). **Does not** run ingest, reports, ML, leads QA, or `apps/web`. **SQLite stays on the host** via a bind mount (not baked into the image).
-
-### Build context
-
-Use **`apps/email-pipeline/`** (directory that contains `pyproject.toml`, `Dockerfile`, and `apps/business_mart_app.py`):
+Rare local review on SQLite (host paths, not containerized):
 
 ```bash
 cd apps/email-pipeline
-docker build -t origenlab-business-mart .
+uv sync --group ui
+uv run --group ui streamlit run apps/business_mart_app.py
 ```
 
-### Run (`docker run`)
+Build mart on the host first if needed: [`build_business_mart.py`](../scripts/mart/build_business_mart.py). **Borrador comercial** does not send mail.
 
-Mount the host data tree at **`/data/origenlab-email`** inside the container so it matches **`ORIGENLAB_DATA_ROOT`** (set in the `Dockerfile`):
-
-```bash
-docker run --rm -p 8501:8501 \
-  -e ORIGENLAB_DATA_ROOT=/data/origenlab-email \
-  -v "$HOME/data/origenlab-email:/data/origenlab-email:ro" \
-  origenlab-business-mart
-```
-
-| Variable | Role |
-|----------|------|
-| `ORIGENLAB_DATA_ROOT` | Root inside the container; default layout expects `sqlite/emails.sqlite` under it. |
-| `ORIGENLAB_SQLITE_PATH` | Optional full path **inside the container** if the DB is not at `$ORIGENLAB_DATA_ROOT/sqlite/emails.sqlite`. |
-
-The image does **not** copy `.env`. Use `-e` / `--env-file` with **container-side** paths (`/data/...`).
-
-Open **http://localhost:8501/**.
-
-### Run (`docker compose`)
-
-[`docker-compose.yml`](../docker-compose.yml) in the same folder:
-
-```bash
-cd apps/email-pipeline
-# Optional override (default pattern: $HOME/data/origenlab-email)
-export ORIGENLAB_HOST_DATA_ROOT="$HOME/data/origenlab-email"
-docker compose up --build
-```
-
-On **Windows** (Docker Desktop), set `ORIGENLAB_HOST_DATA_ROOT` to the host folder that contains `sqlite/emails.sqlite` (e.g. `C:\Users\you\data\origenlab-email`).
-
-### Limitations
-
-- **UI only** — build the business mart on the host first: [`build_business_mart.py`](../scripts/mart/build_business_mart.py).
-- Read-only volume is OK; the app opens SQLite with immutable + query-only mode.
-- **Borrador comercial** (Streamlit) is review-only and does not send mail; optional **export** writes under `reports/out/<timestamp>_streamlit_borrador_comercial/`. If the data mount is read-only, use the in-app JSON download instead or mount `ORIGENLAB_REPORTS_DIR` writable.
+**Postgres for dashboard mirror (active stack):** use [`docker-compose.dashboard-postgres.yml`](../docker-compose.dashboard-postgres.yml) — not the removed Streamlit compose file.
 
 ---
 
