@@ -217,15 +217,9 @@ def _str_iso(value: object) -> str:
     return str(value).strip()
 
 
-def gather_today_workspace_rows(
-    conn: sqlite3.Connection,
-    spec: TodayWorkspaceSpec | None = None,
-) -> list[TodayWorkspaceRow]:
-    """Recolecta filas de cada fuente disponible, ordena y trunca a ``max_total_rows``."""
-    sp = spec or TodayWorkspaceSpec()
-    out: list[TodayWorkspaceRow] = []
-
-    # --- Tier 0: casos contacto + señal positiva
+def _collect_caso_rows(conn: sqlite3.Connection, sp: TodayWorkspaceSpec) -> list[TodayWorkspaceRow]:
+    """Tier 0: contacto Gmail cases with positive commercial signal."""
+    rows: list[TodayWorkspaceRow] = []
     try:
         caso_res = fetch_cases_review_queue(
             conn,
@@ -241,7 +235,7 @@ def gather_today_workspace_rows(
             subj = _str_iso(r.get("subject_preview"))[:72]
             strength = _float_metric(r.get("max_positive_strength"), default=0.0)
             date_s = _str_iso(r.get("date_iso"))[:10]
-            out.append(
+            rows.append(
                 TodayWorkspaceRow(
                     tier=TIER_CASO_SENAL_POSITIVA,
                     tier_label_es=TIER_LABELS_ES[TIER_CASO_SENAL_POSITIVA],
@@ -258,56 +252,65 @@ def gather_today_workspace_rows(
             )
     except sqlite3.Error:
         pass
+    return rows
 
-    # --- Tier 1: candidatos needs_review
-    if _table_exists(conn, "v_commercial_candidate_queue"):
-        try:
-            ci_rows = _fetch_ci_needs_review_slim(
-                conn,
-                min_confidence=float(sp.candidate_min_confidence),
-                limit=int(sp.candidate_limit),
+
+def _collect_ci_review_rows(conn: sqlite3.Connection, sp: TodayWorkspaceSpec) -> list[TodayWorkspaceRow]:
+    """Tier 1: commercial candidates in ``needs_review``."""
+    rows: list[TodayWorkspaceRow] = []
+    if not _table_exists(conn, "v_commercial_candidate_queue"):
+        return rows
+    try:
+        ci_rows = _fetch_ci_needs_review_slim(
+            conn,
+            min_confidence=float(sp.candidate_min_confidence),
+            limit=int(sp.candidate_limit),
+        )
+        for r in ci_rows:
+            kind = str(r.get("entity_kind") or "").strip()
+            key = str(r.get("entity_key") or "").strip()
+            if not kind or not key:
+                continue
+            if sp.canonical_only and is_operational_noise_entity(kind, key):
+                continue
+            summ = _str_iso(r.get("reason_summary") or r.get("rationale_text"))
+            if len(summ) > 220:
+                summ = summ[:217] + "…"
+            conf = _float_metric(r.get("confidence_score"))
+            strength = _float_metric(r.get("strength_score"))
+            updated = _str_iso(r.get("updated_at"))[:19]
+            dispn = _str_iso(r.get("display_name"))[:48]
+            reason_line = (
+                f"Candidato **pendiente de revisión** "
+                f"(confianza ≥ {sp.candidate_min_confidence:.2f}; "
+                f"conf. {conf:.2f}, intensidad {strength:.2f})."
             )
-            for r in ci_rows:
-                kind = str(r.get("entity_kind") or "").strip()
-                key = str(r.get("entity_key") or "").strip()
-                if not kind or not key:
-                    continue
-                if sp.canonical_only and is_operational_noise_entity(kind, key):
-                    continue
-                summ = _str_iso(r.get("reason_summary") or r.get("rationale_text"))
-                if len(summ) > 220:
-                    summ = summ[:217] + "…"
-                conf = _float_metric(r.get("confidence_score"))
-                strength = _float_metric(r.get("strength_score"))
-                updated = _str_iso(r.get("updated_at"))[:19]
-                dispn = _str_iso(r.get("display_name"))[:48]
-                reason_line = (
-                    f"Candidato **pendiente de revisión** "
-                    f"(confianza ≥ {sp.candidate_min_confidence:.2f}; "
-                    f"conf. {conf:.2f}, intensidad {strength:.2f})."
+            if summ:
+                reason_line += f" Resumen: {summ}"
+            rows.append(
+                TodayWorkspaceRow(
+                    tier=TIER_CANDIDATO_NEEDS_REVIEW,
+                    tier_label_es=TIER_LABELS_ES[TIER_CANDIDATO_NEEDS_REVIEW],
+                    source_code="candidato",
+                    reason_es=reason_line,
+                    reference_es=f"{kind} · `{key}` · {dispn}",
+                    next_step_es="Revisar en **Candidatos comerciales** (aprobar / rechazar / posponer según política).",
+                    navigate_page="Candidatos comerciales",
+                    sort_primary=conf * max(strength, 0.01),
+                    sort_secondary=updated,
+                    handoff_kind="ci",
+                    handoff_ci_entity_kind=kind,
+                    handoff_ci_entity_key=key,
                 )
-                if summ:
-                    reason_line += f" Resumen: {summ}"
-                out.append(
-                    TodayWorkspaceRow(
-                        tier=TIER_CANDIDATO_NEEDS_REVIEW,
-                        tier_label_es=TIER_LABELS_ES[TIER_CANDIDATO_NEEDS_REVIEW],
-                        source_code="candidato",
-                        reason_es=reason_line,
-                        reference_es=f"{kind} · `{key}` · {dispn}",
-                        next_step_es="Revisar en **Candidatos comerciales** (aprobar / rechazar / posponer según política).",
-                        navigate_page="Candidatos comerciales",
-                        sort_primary=conf * max(strength, 0.01),
-                        sort_secondary=updated,
-                        handoff_kind="ci",
-                        handoff_ci_entity_kind=kind,
-                        handoff_ci_entity_key=key,
-                    )
-                )
-        except sqlite3.Error:
-            pass
+            )
+    except sqlite3.Error:
+        pass
+    return rows
 
-    # --- Tier 2: leads high/medium sin next_action (consulta ligera sin joins al mart)
+
+def _collect_lead_rows(conn: sqlite3.Connection, sp: TodayWorkspaceSpec) -> list[TodayWorkspaceRow]:
+    """Tier 2: upstream-active leads without ``next_action``."""
+    rows: list[TodayWorkspaceRow] = []
     try:
         lead_rows = _fetch_leads_today_slim(conn, limit=int(sp.lead_limit))
         for d in lead_rows:
@@ -316,7 +319,7 @@ def gather_today_workspace_rows(
             fit = _str_iso(d.get("fit_bucket")) or "—"
             prio = _float_metric(d.get("priority_score"))
             seen = _str_iso(d.get("last_seen_at"))[:10]
-            out.append(
+            rows.append(
                 TodayWorkspaceRow(
                     tier=TIER_LEAD_SIN_NEXT_ACTION,
                     tier_label_es=TIER_LABELS_ES[TIER_LEAD_SIN_NEXT_ACTION],
@@ -334,56 +337,82 @@ def gather_today_workspace_rows(
             )
     except (KeyError, TypeError, ValueError, sqlite3.Error):
         pass
+    return rows
 
-    # --- Tier 4: dormant signals (canonical Gmail linkage when canonical_only)
-    if _table_exists(conn, "opportunity_signals"):
-        try:
-            dormant_where = "signal_type = 'dormant_contact'"
-            if sp.canonical_only and _table_exists(conn, "emails"):
-                dormant_where += f" AND {sqlite_opportunity_signal_operational_predicate('os')}"
-            cur = conn.execute(
-                f"""
-                SELECT signal_type, entity_kind, entity_key, score, created_at
-                FROM opportunity_signals os
-                WHERE {dormant_where}
-                ORDER BY score DESC, created_at DESC
-                LIMIT ?
-                """,
-                (int(sp.dormant_limit),),
-            )
-            cols = [d[0] for d in cur.description] if cur.description else []
-            for tup in cur.fetchall():
-                d = dict(zip(cols, tup, strict=True))
-                ek = str(d.get("entity_key") or "")
-                ekind = str(d.get("entity_kind") or "")
-                if sp.canonical_only and is_operational_noise_entity(ekind, ek):
-                    continue
-                score = _float_metric(d.get("score"))
-                ct = _str_iso(d.get("created_at"))[:19]
-                out.append(
-                    TodayWorkspaceRow(
-                        tier=TIER_CUENTA_DORMIDA,
-                        tier_label_es=TIER_LABELS_ES[TIER_CUENTA_DORMIDA],
-                        source_code="oportunidad",
-                        reason_es=(
-                            "Fila en `opportunity_signals` tipo **dormant_contact** "
-                            + (
-                                "ligada a **Gmail operativo**."
-                                if sp.canonical_only
-                                else "(heurística sobre historial/archivo)."
-                            )
-                        ),
-                        reference_es=f"{ekind} · `{ek}` · intensidad **{score:.1f}**",
-                        next_step_es="Abrir **Oportunidades** (vista «Cuenta dormida») para contexto y seguimiento.",
-                        navigate_page="Oportunidades",
-                        sort_primary=score,
-                        sort_secondary=ct,
-                        handoff_kind="dormant",
-                    )
+
+def _collect_dormant_rows(conn: sqlite3.Connection, sp: TodayWorkspaceSpec) -> list[TodayWorkspaceRow]:
+    """Tier 3: top ``dormant_contact`` opportunity signals."""
+    rows: list[TodayWorkspaceRow] = []
+    if not _table_exists(conn, "opportunity_signals"):
+        return rows
+    try:
+        dormant_where = "signal_type = 'dormant_contact'"
+        if sp.canonical_only and _table_exists(conn, "emails"):
+            dormant_where += f" AND {sqlite_opportunity_signal_operational_predicate('os')}"
+        cur = conn.execute(
+            f"""
+            SELECT signal_type, entity_kind, entity_key, score, created_at
+            FROM opportunity_signals os
+            WHERE {dormant_where}
+            ORDER BY score DESC, created_at DESC
+            LIMIT ?
+            """,
+            (int(sp.dormant_limit),),
+        )
+        cols = [d[0] for d in cur.description] if cur.description else []
+        for tup in cur.fetchall():
+            d = dict(zip(cols, tup, strict=True))
+            ek = str(d.get("entity_key") or "")
+            ekind = str(d.get("entity_kind") or "")
+            if sp.canonical_only and is_operational_noise_entity(ekind, ek):
+                continue
+            score = _float_metric(d.get("score"))
+            ct = _str_iso(d.get("created_at"))[:19]
+            rows.append(
+                TodayWorkspaceRow(
+                    tier=TIER_CUENTA_DORMIDA,
+                    tier_label_es=TIER_LABELS_ES[TIER_CUENTA_DORMIDA],
+                    source_code="oportunidad",
+                    reason_es=(
+                        "Fila en `opportunity_signals` tipo **dormant_contact** "
+                        + (
+                            "ligada a **Gmail operativo**."
+                            if sp.canonical_only
+                            else "(heurística sobre historial/archivo)."
+                        )
+                    ),
+                    reference_es=f"{ekind} · `{ek}` · intensidad **{score:.1f}**",
+                    next_step_es="Abrir **Oportunidades** (vista «Cuenta dormida») para contexto y seguimiento.",
+                    navigate_page="Oportunidades",
+                    sort_primary=score,
+                    sort_secondary=ct,
+                    handoff_kind="dormant",
                 )
-        except sqlite3.Error:
-            pass
+            )
+    except sqlite3.Error:
+        pass
+    return rows
 
-    sorted_rows = sort_today_rows(out)
+
+def _finalize_today_workspace_rows(
+    rows: list[TodayWorkspaceRow],
+    sp: TodayWorkspaceSpec,
+) -> list[TodayWorkspaceRow]:
+    """Sort by tier / metrics and truncate to ``max_total_rows``."""
+    sorted_rows = sort_today_rows(rows)
     cap = max(5, min(int(sp.max_total_rows), 300))
     return sorted_rows[:cap]
+
+
+def gather_today_workspace_rows(
+    conn: sqlite3.Connection,
+    spec: TodayWorkspaceSpec | None = None,
+) -> list[TodayWorkspaceRow]:
+    """Recolecta filas de cada fuente disponible, ordena y trunca a ``max_total_rows``."""
+    sp = spec or TodayWorkspaceSpec()
+    out: list[TodayWorkspaceRow] = []
+    out.extend(_collect_caso_rows(conn, sp))
+    out.extend(_collect_ci_review_rows(conn, sp))
+    out.extend(_collect_lead_rows(conn, sp))
+    out.extend(_collect_dormant_rows(conn, sp))
+    return _finalize_today_workspace_rows(out, sp)
