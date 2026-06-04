@@ -130,9 +130,13 @@ Use before deleting Streamlit pages. Status from [`STREAMLIT_RETIREMENT_AUDIT_20
 
 ---
 
+## Launch surfaces (detail)
+
+See [`STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md) — per-path grep evidence, active/legacy, and PR 1 vs PR 3+ delete list.
+
 ## Follow-up PR ideas (ordered)
 
-1. **docs:** RUNBOOK — demote `#m-eprun-docker-streamlit` to “legacy”; dashboard section first in operator map.  
+1. **docs:** RUNBOOK — demote `#m-eprun-docker-streamlit` to “legacy”; dashboard section first in operator map. **(PR 1 — done in launch-surface batch)**
 2. **docs:** `EXPERIMENTAL_PARKED.md` — Streamlit row → legacy/parked; React = active UI.  
 3. **api/dashboard:** Wire `GET /emails/recent`, expand cases/contacts parity (read-only).  
 4. **extract:** `streamlit_draft_helpers` → `tatiana_copilot/draft_export.py` (no `streamlit_` prefix).  

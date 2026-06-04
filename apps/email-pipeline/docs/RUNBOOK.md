@@ -15,8 +15,9 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 | Track | Section | When |
 |-------|---------|------|
 | **Daily outbound + equipment-first** | [Daily outbound](#m-eprun-daily-outbound) | Send safety, DNR, campaigns, tenders — **default** |
-| **Gmail ingest / Streamlit** | [Primary mailbox](#m-eprun-mailbox-primary) · [Post–Gmail ingest](#m-eprun-post-gmail-ingest) | SQLite freshness, mart on host |
-| **Optional dashboard (parked)** | [Dashboard preview stack](#m-eprun-dashboard-optional) | React panel over Postgres mirror — **explicit approval only** |
+| **Gmail ingest + mart (SQLite)** | [Primary mailbox](#m-eprun-mailbox-primary) · [Post–Gmail ingest](#m-eprun-post-gmail-ingest) | Ingest freshness, `build-mart` on host |
+| **Active operator UI** | [Dashboard stack](#m-eprun-dashboard-optional) | `apps/dashboard` + `apps/api` + Postgres mirror (not Streamlit) |
+| **Legacy Streamlit** | [Legacy Streamlit Docker](#m-eprun-legacy-streamlit-docker) | Parked SQLite review UI only |
 | **Postgres DDL / migrate loaders** | [Optional PostgreSQL](#m-eprun-postgres-optional) | Scratch DB trials — not daily truth |
 | **Which status command?** | [Operator health matrix](#m-eprun-operator-health-matrix) | `make doctor` vs `make audit` vs health report vs API |
 | **`reports/out` cleanup** | [`reports/out` cleanup flow](#m-eprun-reports-out-cleanup) | Plan → archive moves → hygiene check |
@@ -253,7 +254,10 @@ After **`05_workspace_gmail_imap_to_sqlite.py`** succeeds against the **same** S
 ---
 
 <a id="m-eprun-docker-streamlit"></a>
-## Docker: Streamlit business mart only
+<a id="m-eprun-legacy-streamlit-docker"></a>
+## Legacy: Docker Streamlit business mart (parked)
+
+> **Not the active operator UI.** Product UI is [`apps/dashboard`](../../dashboard/README.md) + [`apps/api`](../../api/README.md). This section is for the **legacy** Streamlit container only. Removal plan: [`audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
 
 Optional container for [`apps/business_mart_app.py`](../apps/business_mart_app.py). **Does not** run ingest, reports, ML, leads QA, or `apps/web`. **SQLite stays on the host** via a bind mount (not baked into the image).
 
@@ -361,7 +365,7 @@ Example URL form: `postgresql+psycopg://user:pass@host:5432/dbname`. Template li
 | **5. FastAPI** | Read-only HTTP over Postgres | **No writes** — serves whatever mirror was last synced |
 | **6. React dashboard** | Commercial panel (`apps/dashboard`) | **No** — polls FastAPI; never ingests Gmail |
 
-**Streamlit** (`business_mart_app.py`) still reads **SQLite** directly and remains the internal operator tool. React is a **read-only commercial view** over the Postgres mirror.
+**Streamlit** (`business_mart_app.py`) is **legacy/parked** (SQLite review only). **React** (`apps/dashboard`) is the **active** operator UI over the Postgres mirror via `apps/api`.
 
 **Scope:** API and React **default to canonical Gmail** (`source_file LIKE 'gmail:contacto@origenlab.cl/%'`). Full historical mart requires `?scope=archive` — never treat archive counts as the headline KPI.
 
