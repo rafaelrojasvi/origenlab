@@ -50,8 +50,28 @@ class ContactEmailSuppressionPayload:
     updated_by: str | None
 
 
+_OPERATOR_CONTACT_SUPPRESSION_RW = "ORIGENLAB_OPERATOR_CONTACT_SUPPRESSION_RW"
+_LEGACY_STREAMLIT_CONTACT_SUPPRESSION_RW = "ORIGENLAB_STREAMLIT_CONTACT_SUPPRESSION_RW"
+
+
+def _operator_env_flag_enabled(*, new_var: str, legacy_var: str) -> bool:
+    """Return True when ``new_var`` or (if unset) ``legacy_var`` equals ``"1"``."""
+    if os.environ.get(new_var) is not None:
+        return os.environ.get(new_var) == "1"
+    return os.environ.get(legacy_var) == "1"
+
+
+def operator_contact_suppression_rw_enabled() -> bool:
+    """True when operator may write ``contact_email_suppression`` (opt-in via env)."""
+    return _operator_env_flag_enabled(
+        new_var=_OPERATOR_CONTACT_SUPPRESSION_RW,
+        legacy_var=_LEGACY_STREAMLIT_CONTACT_SUPPRESSION_RW,
+    )
+
+
 def streamlit_contact_suppression_rw_enabled() -> bool:
-    return os.environ.get("ORIGENLAB_STREAMLIT_CONTACT_SUPPRESSION_RW") == "1"
+    """Deprecated alias for :func:`operator_contact_suppression_rw_enabled`."""
+    return operator_contact_suppression_rw_enabled()
 
 
 def ensure_contact_email_suppression_table(conn: sqlite3.Connection) -> None:

@@ -1145,7 +1145,7 @@ uv run python scripts/commercial/review_commercial_candidate.py \
   --entity-kind organization --entity-key example.com --action snooze --actor you@example.com
 ```
 
-Optional UI: the business mart Streamlit app includes **Candidatos comerciales** (read-only by default). Enable writes only with a writable SQLite file and `ORIGENLAB_STREAMLIT_COMMERCIAL_REVIEW_RW=1`.
+**Candidatos comerciales** (Streamlit UI removed): use [`review_commercial_candidate.py`](../scripts/commercial/review_commercial_candidate.py) on a writable SQLite file. Optional RW env when supported: `ORIGENLAB_OPERATOR_COMMERCIAL_REVIEW_RW=1` (legacy alias: `ORIGENLAB_STREAMLIT_COMMERCIAL_REVIEW_RW=1`).
 
 Contract summary:
 
