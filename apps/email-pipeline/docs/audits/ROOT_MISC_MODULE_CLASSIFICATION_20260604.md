@@ -81,16 +81,18 @@ Fan-in = count of **other** `src/origenlab_email_pipeline/**/*.py` files importi
 
 ## 3. Safe low-risk candidates
 
+See [`../SHARED_UTILITY_CONTRACTS.md`](../SHARED_UTILITY_CONTRACTS.md) for characterization-tested shared utility contracts (`timeutil`, `freshness_dates`, `contact_export_queries`, `pipeline_meta_schema`, `pipeline_run_recorder`).
+
 Work safe **without** runtime refactors (docs / tests / read-only tooling only):
 
 | Module | Why low risk | Suggested PR |
 |--------|--------------|--------------|
-| `timeutil.py` | Tiny, pure, heavy fan-in | Contract test already (`test_timeutil_contract.py`); doc one-liner in `PACKAGE_DOMAINS.md` |
-| `freshness_dates.py` | Pure date policy, tested | Extend edge-case tests only |
-| `contact_export_queries.py` | SQL-only, script contract | Doc + lock column order in existing tests |
+| `timeutil.py` | Tiny, pure, heavy fan-in | `SHARED_UTILITY_CONTRACTS.md` + `test_shared_utility_contracts.py` |
+| `freshness_dates.py` | Pure date policy, tested | `SHARED_UTILITY_CONTRACTS.md` + shared utility contract tests |
+| `contact_export_queries.py` | SQL-only, script contract | `SHARED_UTILITY_CONTRACTS.md` + `test_shared_utility_contracts.py` |
 | `hunt_csv_alignment.py` | CSV QA, no DB writes | Script README + trust-audit cross-link |
 | `dr50_payload_loader.py` | File-read + SHA256 | Campaign doc note |
-| `pipeline_meta_schema.py` | DDL only | Cross-link in `SCHEMA_OWNERSHIP.md` |
+| `pipeline_meta_schema.py` | DDL only | `SHARED_UTILITY_CONTRACTS.md` + contract tests |
 | `cli.py` | Stable entrypoint | Operator handoff: “not misc unknown” |
 | Facade roots (4) | Shims exist | Doc: “import `core.*` for new code” (no file moves) |
 
@@ -109,7 +111,7 @@ Logic or schema changes require explicit review (Gmail, outreach, Postgres, SQLi
 | `cases_review_queue.py` | Gmail-scoped operator queue + API | Read-only fetch tests |
 | `reported_non_delivery_signals.py` | NDR heuristics / false-positive risk | Parity tests |
 | `supplier_schema.py` | Supplier DDL + imports | Schema tests |
-| `pipeline_run_recorder.py` | Writes `pipeline_run` / `pipeline_kv` | Dry-run script tests |
+| `pipeline_run_recorder.py` | Writes `pipeline_run` / `pipeline_kv` | `SHARED_UTILITY_CONTRACTS.md` + in-memory contract tests |
 | `export_jsonl.py` | Large data export side effect | Document non-daily; no CLI without approval |
 
 ---
