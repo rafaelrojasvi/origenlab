@@ -1,6 +1,6 @@
 """Shared pre-export eligibility for cold outreach (lead path + contact_master path).
 
-Single policy implementation: Streamlit and CLIs must not duplicate these rules.
+Single policy implementation: operator CLIs and read modules must not duplicate these rules.
 Reuses email suppression, optional domain suppression (``contact_domain_suppression``),
 Sent parse, outreach state, supplier_master, and noise heuristics.
 """

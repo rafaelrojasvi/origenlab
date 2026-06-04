@@ -15,7 +15,7 @@ This script materializes:
 Raw archive tables are not modified.
 
 **Source tiers:** the mart scans **all** rows in ``emails`` (mbox/PST legacy plus Workspace Gmail).
-Operational views (Streamlit, outbound readiness, case queues) default to **canonical** rows
+Operational views (dashboard/API, outbound readiness, case queues) default to **canonical** rows
 ``gmail:contacto@origenlab.cl/…`` only — see :mod:`origenlab_email_pipeline.contacto_gmail_source`
 and ``docs/RUNBOOK.md`` (source of truth).
 """

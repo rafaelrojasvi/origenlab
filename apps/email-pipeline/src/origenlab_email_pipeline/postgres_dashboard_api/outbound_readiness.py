@@ -93,7 +93,7 @@ def assess_postgres_outbound_readiness(
 
     warnings.append(
         "Sent-folder history is not evaluated here (requires SQLite `emails` ingest). "
-        "Use CLI/Streamlit preflight for full gate readiness."
+        "Use CLI Sent-history preflight for full gate readiness."
     )
 
     verdict: str = "ready"

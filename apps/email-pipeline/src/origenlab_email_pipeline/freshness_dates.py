@@ -15,7 +15,7 @@ Rule (aligned with **Salud de datos** / ``load_email_date_health``):
   ``email_date_iso_for_mart_timeline``).
 - ``slack_days`` default **2** (clock/skew tolerance).
 
-This module has no Streamlit dependency so tests and mart scripts can import it.
+This module has no UI dependency so tests and mart scripts can import it.
 """
 
 from __future__ import annotations

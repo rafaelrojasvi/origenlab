@@ -1,4 +1,4 @@
-"""Orchestrate business mart build stages (SQLite; no Streamlit)."""
+"""Orchestrate business mart build stages (SQLite; CLI/mart scripts only)."""
 
 from __future__ import annotations
 

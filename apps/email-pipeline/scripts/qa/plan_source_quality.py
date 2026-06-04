@@ -159,10 +159,10 @@ def classify_vertical(rel_posix: str) -> str:
         return "tooling"
 
     if "read/today_workspace" in p or base == "today_workspace.py":
-        return "streamlit_read"
+        return "read_module"
 
     if "streamlit" in p:
-        return "streamlit_ui"
+        return "removed_ui_module"
 
     if _is_tatiana_lab_path(p):
         return "tatiana_lab"

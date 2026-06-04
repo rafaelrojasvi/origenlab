@@ -2,7 +2,7 @@
 """Export the next N lead contacts for cold outreach (``lead_master`` only).
 
 Uses ``compute_next_marketing_recipients`` → shared ``candidate_export_gate.evaluate_export_eligibility``
-(same as Streamlit **Cola outreach marketing**). Automatic exclusions, in order:
+(same gate as the retired **Cola outreach marketing** page). Automatic exclusions, in order:
 
 - Invalid email / internal domains (default block: ``origenlab.cl``, ``labdelivery.cl``).
 - ``contact_email_suppression`` (if the table exists).

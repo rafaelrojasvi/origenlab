@@ -94,7 +94,7 @@ def test_phase8c_research_lab() -> None:
 
 
 def test_phase8c_read_modules() -> None:
-    assert _classify("src/origenlab_email_pipeline/read/today_workspace.py") == "streamlit_read"
+    assert _classify("src/origenlab_email_pipeline/read/today_workspace.py") == "read_module"
 
 
 def test_phase8c_draft_review_helpers_is_tatiana_lab() -> None:

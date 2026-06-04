@@ -18,11 +18,11 @@
 |------|---------------|------|
 | [`apps/business_mart_app.py`](../../apps/business_mart_app.py) | 3,619 | Single Streamlit process: sidebar nav, SQLite RO connection, page router, inline SQL for contacts/orgs/documents/equipment |
 
-**Run locally:**
+**Run locally (historical — pre-2026-06-04 retirement; do not use):**
 
 ```bash
-cd apps/email-pipeline
-uv run --group ui streamlit run apps/business_mart_app.py
+# cd apps/email-pipeline
+# uv run --group ui streamlit run apps/business_mart_app.py
 # LAN (removed): was scripts/tools/run_streamlit_lan.sh — use streamlit --server.address 0.0.0.0
 ```
 
@@ -257,7 +257,7 @@ Priority extractions (behavior-preserving renames; tests move with modules):
 1. [`RUNBOOK.md`](../RUNBOOK.md) — remove/replace `#m-eprun-docker-streamlit`, Streamlit-first troubleshooting, redirect to dashboard + CLIs  
 2. [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) — drop Streamlit Cola env bypass section or map to CLI-only  
 3. [`EXPERIMENTAL_PARKED.md`](../EXPERIMENTAL_PARKED.md) — clarify single operator UI = React  
-4. [`README.md`](../../README.md) — drop `uv run --group ui streamlit` primary path  
+4. [`README.md`](../../README.md) — ~~drop `uv run --group ui streamlit run apps/business_mart_app.py` primary path~~ **done** (2026-06-04); that launch command is historical only — **do not use**
 5. [`STREAMLIT_DATA_FRESHNESS.md`](../pipeline/STREAMLIT_DATA_FRESHNESS.md) — **migrate** to `DATA_HEALTH.md` (UI-agnostic)  
 6. [`COMMERCIAL_INTEL_V1.md`](../pipeline/COMMERCIAL_INTEL_V1.md), [`CASOS_PARA_REVISAR.md`](../pipeline/CASOS_PARA_REVISAR.md) — operator paths via dashboard/API/CLI  
 7. Root [`AGENTS.md`](../../../AGENTS.md) — operator stack table  

@@ -38,8 +38,8 @@ def main() -> None:
     ap.add_argument(
         "--origenlab",
         action="store_true",
-        help="OrigenLab drafting profile + load OrigenLab drafting context (facts). Matches Streamlit "
-        "Borrador comercial and run_tatiana_pilot_batch.py --origenlab. Default (historical curator profile) is unchanged.",
+        help="OrigenLab drafting profile + load OrigenLab drafting context (facts). Matches the retired "
+        "Borrador comercial page and run_tatiana_pilot_batch.py --origenlab. Default (historical curator profile) is unchanged.",
     )
     args = ap.parse_args()
 

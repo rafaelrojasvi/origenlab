@@ -16,8 +16,7 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 |-------|---------|------|
 | **Daily outbound + equipment-first** | [Daily outbound](#m-eprun-daily-outbound) | Send safety, DNR, campaigns, tenders — **default** |
 | **Gmail ingest + mart (SQLite)** | [Primary mailbox](#m-eprun-mailbox-primary) · [Post–Gmail ingest](#m-eprun-post-gmail-ingest) | Ingest freshness, `build-mart` on host |
-| **Active operator UI** | [Dashboard stack](#m-eprun-dashboard-optional) | `apps/dashboard` + `apps/api` + Postgres mirror (not Streamlit) |
-| **Legacy Streamlit** | [Legacy Streamlit (local only)](#m-eprun-legacy-streamlit-docker) | Parked SQLite review UI — Docker image removed |
+| **Active operator UI** | [Dashboard stack](#m-eprun-dashboard-optional) | `apps/dashboard` + `apps/api` + Postgres mirror |
 | **Postgres DDL / migrate loaders** | [Optional PostgreSQL](#m-eprun-postgres-optional) | Scratch DB trials — not daily truth |
 | **Which status command?** | [Operator health matrix](#m-eprun-operator-health-matrix) | `make doctor` vs `make audit` vs health report vs API |
 | **`reports/out` cleanup** | [`reports/out` cleanup flow](#m-eprun-reports-out-cleanup) | Plan → archive moves → hygiene check |
@@ -219,7 +218,7 @@ For **live** mail for **contacto@origenlab.cl** on **Google Workspace**, the ope
 
 | Tier | `source_file` pattern | Role |
 |------|------------------------|------|
-| **Canonical operational** | `gmail:contacto@origenlab.cl/%` | Live Google Workspace mailbox — Streamlit operational panels, outbound readiness hints, case queues, conversation export **default**. Refresh with **`05_workspace_gmail_imap_to_sqlite.py`**. |
+| **Canonical operational** | `gmail:contacto@origenlab.cl/%` | Live Google Workspace mailbox — operator read paths, outbound readiness hints, case queues, conversation export **default**. Refresh with **`05_workspace_gmail_imap_to_sqlite.py`**. |
 | **Legacy / reference** | mbox paths containing `contacto@labdelivery` (and other PST/mbox trees) | Historical archive in the same `emails` table — **not** equivalent to the live OrigenLab mailbox for operational metrics. Inspect via **Salud de datos** or pass **`--include-legacy-email-sources`** to `export_email_conversation_intelligence.py`. |
 | **Do not** | Full mbox reload via **`02_mbox_to_sqlite.py`** | **Deletes all `emails` rows** before reload — never run against production unless intentional and backed up. |
 
@@ -243,13 +242,13 @@ Index: [`SCRIPT_MAP.md`](SCRIPT_MAP.md) (Stage 6D1) · [`CRUD_SAFETY.md`](CRUD_S
 
 After **`05_workspace_gmail_imap_to_sqlite.py`** succeeds against the **same** SQLite file your operators use (`ORIGENLAB_SQLITE_PATH` or default under `ORIGENLAB_DATA_ROOT`):
 
-1. **Mount / process** — Confirm Docker or local Streamlit points at that DB path (see [Docker: Streamlit business mart only](#m-eprun-docker-streamlit)).
-2. **Safe to inspect immediately (raw `emails`)** — **Actividad contacto Gmail** and **Casos para revisar** read **`emails`** for **`gmail:contacto@...`**. After ingest, reopen or refresh the app so it rereads SQLite; new messages appear without rebuilding marts. If the UI is empty, verify Workspace ingest actually wrote **`gmail:`** rows (not only **`imap:`**).
-3. **Rebuild business mart when** — You changed data that feeds organization/contact/document rollups, or Streamlit pages backed by mart tables look wrong. Run **[`build_business_mart.py`](../scripts/mart/build_business_mart.py)** on the host before expecting updated drill-downs (the Docker image does not build the mart).
+1. **SQLite path** — Confirm `ORIGENLAB_SQLITE_PATH` (or default under `ORIGENLAB_DATA_ROOT`) is the file operators and CLIs use.
+2. **Safe to inspect immediately (raw `emails`)** — Case queues and Gmail activity read **`emails`** for **`gmail:contacto@...`**. After ingest, re-run read CLIs or refresh the dashboard mirror; new messages appear in raw `emails` without rebuilding marts. If views are empty, verify Workspace ingest actually wrote **`gmail:`** rows (not only **`imap:`**).
+3. **Rebuild business mart when** — You changed data that feeds organization/contact/document rollups, or mart-backed drill-downs look wrong. Run **[`build_business_mart.py`](../scripts/mart/build_business_mart.py)** on the host before expecting updated rollups.
 4. **Rebuild commercial intel when** — You want **Candidatos comerciales**, exports, or signal-driven views to reflect new mail outside a full **`refresh-dashboard --apply`**. Run **`uv run origenlab build-commercial-intel`** after Gmail ingest + **`build-mart`** (see [Commercial intelligence v1](#m-eprun-commercial-intel-v1); incremental by default; use **`-- --rebuild`** or **`-- --reprocess-days N`** via passthrough when you need a broader refresh). **`refresh-dashboard --apply`** runs **`build-commercial-intel`** incrementally after mart rebuild.
 5. **Likely stale until rebuild** — Pages and widgets that join **`emails`** to **mart** or **`commercial_*`** tables may show old rollups or sparse signals until steps 3–4 complete. **Borrador comercial** can use verbatim text from **`emails`** immediately; richer context panels may still lag mart/commercial builds.
 
-**React dashboard:** mart/commercial rebuilds here are for **Streamlit/SQLite** workflows. Refreshing the **React** panel also requires the [optional dashboard stack](#m-eprun-dashboard-optional) (Postgres mirror) — not required for daily DNR or equipment-first.
+**React dashboard:** mart/commercial rebuilds on SQLite are independent of the Postgres mirror. Refreshing the **React** panel also requires the [optional dashboard stack](#m-eprun-dashboard-optional) (Postgres mirror) — not required for daily DNR or equipment-first.
 
 ---
 
@@ -290,7 +289,7 @@ Example URL form: `postgresql+psycopg://user:pass@host:5432/dbname`. Template li
 <a id="m-eprun-api-slice1"></a>
 ### Read-only dashboard API (Slice 1 — FastAPI)
 
-**Status:** experimental read-only API over **PostgreSQL mirrors** only — part of the [optional dashboard stack](#m-eprun-dashboard-optional). SQLite remains authoritative for ingest, gates, Streamlit, and daily outbound.
+**Status:** experimental read-only API over **PostgreSQL mirrors** only — part of the [optional dashboard stack](#m-eprun-dashboard-optional). SQLite remains authoritative for ingest, gates, and daily outbound.
 
 **Hard limits (v1):** canonical scope by default (`?scope=archive` for full mart); no write endpoints; no Gmail send; no ingest/mart over HTTP. Use **scratch Postgres** only.
 
@@ -489,7 +488,7 @@ curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary?scope=archive' | jq '.s
 | **Postgres connection refused** | Docker/local Postgres not running | Start scratch Postgres; verify `ORIGENLAB_POSTGRES_URL` |
 | Headline KPIs look like **full archive** | Scope regression | Default must be canonical; archive only with `?scope=archive` |
 | Classification empty | Sync before 0009 migration or no canonical rows in SQLite | `alembic upgrade head`; re-sync after ingest |
-| Streamlit matches SQLite but React does not | Expected until sync | Streamlit reads SQLite; React reads Postgres mirror |
+| SQLite looks fresh but React does not | Expected until sync | CLIs/read modules use SQLite; React reads Postgres mirror |
 | `RPROMPT: parameter not set` after `set -u` | zsh / VS Code prompt vs nounset | Use `set -eo pipefail` only, or fix theme; do not use `set -euo pipefail` in integrated zsh |
 | Confused daily vs dashboard | Wrong section | Daily: [Daily outbound](#m-eprun-daily-outbound); React: this section only |
 
@@ -692,7 +691,7 @@ uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/ar
 # Archive lane — audit CSV + summary only (no shortlist / precheck)
 uv run python scripts/leads/build_archive_send_batch.py --audit-only --out-dir reports/out/archive/audits/archive_audit
 
-# Lead lane — next recipients from lead_master (same gate as Streamlit Cola)
+# Lead lane — next recipients from lead_master (same gate as marketing queue / retired Cola page)
 uv run python scripts/leads/export_next_marketing_recipients.py -o reports/out/next_marketing.csv
 
 # Optional: write Postgres outbound audit rows (batch + recipients)
@@ -718,7 +717,7 @@ uv run python scripts/leads/mark_sent_batch_contacted.py \
 
 **Optional Postgres outbound audit:** `--write-postgres-audit` records one row in `outbound.outbound_batch` plus recipient rows in `outbound.outbound_batch_recipient`. URL resolution is `--postgres-url` → `ORIGENLAB_POSTGRES_URL` → `ALEMBIC_DATABASE_URL` (this matches migrate scripts; **Alembic alone** uses `ALEMBIC_DATABASE_URL` first — see [Optional PostgreSQL](#m-eprun-postgres-optional)). If audit writing is requested and unavailable/failing, the command exits non-zero; CSV/JSON artifacts remain generated and unchanged.
 
-**Sent-history fail-closed preflight (both lanes):** before building a batch, [`outbound_sent_preflight.py`](../src/origenlab_email_pipeline/outbound_sent_preflight.py) checks that SQLite has **matching** Sent rows for that mailbox and folder set and that **`recipients`** parse to at least one address (same predicates as gate Sent blocking). Exports **fail closed** when Sent history is **missing**, **folder-mismatched**, or **unparsable**. **Exit code `3`** means outbound Sent-history preflight failed (stderr lists counts, optional distinct folder sample, and hints). **`--allow-empty-sent-history`** is an explicit, **audited** override on either CLI and should be **rare**. **Discover the exact Gmail Sent label:** `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders`. **Ingest that folder** (example): `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"`. On success, archive **`archive_outreach_build_summary.json`** includes a top-level **`sent_preflight`** object (`ok`, `override_used`, counts, folders, errors/warnings). Streamlit **Cola outreach marketing** applies the same shared preflight; the **only** override is **`ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1`** (use only if you accept weaker Sent blocking in the UI). Details: [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md#sent-history-preflight-fail-closed).
+**Sent-history fail-closed preflight (both lanes):** before building a batch, [`outbound_sent_preflight.py`](../src/origenlab_email_pipeline/outbound_sent_preflight.py) checks that SQLite has **matching** Sent rows for that mailbox and folder set and that **`recipients`** parse to at least one address (same predicates as gate Sent blocking). Exports **fail closed** when Sent history is **missing**, **folder-mismatched**, or **unparsable**. **Exit code `3`** means outbound Sent-history preflight failed (stderr lists counts, optional distinct folder sample, and hints). **`--allow-empty-sent-history`** is an explicit, **audited** override on either CLI and should be **rare**. **Discover the exact Gmail Sent label:** `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --list-folders`. **Ingest that folder** (example): `uv run python scripts/ingest/05_workspace_gmail_imap_to_sqlite.py --folder "[Gmail]/Enviados"`. On success, archive **`archive_outreach_build_summary.json`** includes a top-level **`sent_preflight`** object (`ok`, `override_used`, counts, folders, errors/warnings). Export CLIs share this preflight; optional env override: **`ORIGENLAB_OPERATOR_ALLOW_EMPTY_SENT_HISTORY=1`** (legacy alias: **`ORIGENLAB_STREAMLIT_ALLOW_EMPTY_SENT_HISTORY=1`** — rare; weaker Sent blocking). Details: [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md#sent-history-preflight-fail-closed).
 
 **Preflight (read-only):** when ingest or sidecar freshness is uncertain, **run readiness before batch generation**: [`check_outbound_readiness.py`](../scripts/qa/check_outbound_readiness.py) — SQLite presence, core tables, Sent-folder coverage (**same resolution as** `outbound_core`, including **`probe_sent_history`**-style row/recipient counts and a **distinct folder sample** when Sent rows are missing), sidecar row counts, mart freshness, and optional commercial-layer checks (`--strict-commercial-required`). Use `--json-out` for a machine-readable summary; exit code `1` only when the verdict is `not_ready`.
 
@@ -748,7 +747,7 @@ uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
 
 **How to review the CSV:** sort by `likely_false_positive_reason` (non-empty) and `matching_high_fit_count` / `matching_medium_fit_count`. `recommended_action` is advisory only (`review_supplier_exclusion`, `likely_true_supplier`, `no_matching_leads`, `needs_manual_review`). The script prints a short terminal summary (totals, likely false positives, high/medium impact sum, top 10 domains). **Do not treat output as permission to unblock**—decisions stay in supplier review workflows and data changes outside this export.
 
-**Streamlit** is for **review**, **read/write** on `contact_email_suppression` / `outreach_contact_state`, and **visibility**; it is **not** the final record of what was exported in a given run. **Canonical CLI CSV/JSON** (and optional readiness JSON) are the reproducible record; update **Sent ingest** and **outreach/suppression sidecars** after sends so the next run’s blocker memory stays accurate.
+**Operator review** (dashboard read-only panels, documented CLIs, optional `ORIGENLAB_OPERATOR_*_RW` env gates) is for **visibility** and sidecar updates; it is **not** the final record of what was exported in a given run. **Canonical CLI CSV/JSON** (and optional readiness JSON) are the reproducible record; update **Sent ingest** and **outreach/suppression sidecars** after sends so the next run’s blocker memory stays accurate.
 
 **Recommended post-send sequence:**
 

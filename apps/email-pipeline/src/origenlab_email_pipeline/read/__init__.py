@@ -1,1 +1,1 @@
-"""Read-only SQLite query helpers (no Streamlit dependency)."""
+"""Read-only SQLite query helpers (extracted from the retired operator UI)."""
