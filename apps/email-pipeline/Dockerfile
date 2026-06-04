@@ -1,4 +1,6 @@
-# Business mart Streamlit UI only — not the full ingest/report pipeline.
+# LEGACY (parked): Business mart Streamlit UI only — not the active apps/dashboard stack.
+# Not the full ingest/report pipeline. Removal: docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md
+#
 #
 # Build context MUST be this directory (apps/email-pipeline), not the monorepo root:
 #   cd apps/email-pipeline && docker build -t origenlab-business-mart .

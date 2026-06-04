@@ -1,5 +1,7 @@
-# Streamlit business mart only. Build from apps/email-pipeline:
-#   docker compose up --build
+# LEGACY (parked): Streamlit business mart only — not apps/dashboard.
+# Build from apps/email-pipeline: docker compose up --build
+# Removal plan: docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md
+#
 #
 # Host data directory must contain your SQLite layout (default: sqlite/emails.sqlite
 # under ORIGENLAB_DATA_ROOT). Override bind source if your data lives elsewhere.

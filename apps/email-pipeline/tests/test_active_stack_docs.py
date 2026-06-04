@@ -6,6 +6,7 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _PLAN = _REPO / "docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md"
+_LAUNCH_PLAN = _REPO / "docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md"
 
 
 def test_active_stack_retirement_plan_exists() -> None:
@@ -24,3 +25,14 @@ def test_active_stack_retirement_plan_covers_required_terms() -> None:
     )
     for term in required:
         assert term in text, f"plan doc must mention {term!r}"
+
+
+def test_streamlit_launch_surface_removal_plan_exists() -> None:
+    assert _LAUNCH_PLAN.is_file()
+
+
+def test_launch_plan_marks_streamlit_legacy_not_primary() -> None:
+    text = _LAUNCH_PLAN.read_text(encoding="utf-8")
+    assert "run_streamlit_lan.sh" in text
+    assert "legacy" in text.lower()
+    assert "PR 1" in text

@@ -211,46 +211,22 @@ Optional: override internal domains:
 uv run python scripts/mart/build_business_mart.py --rebuild --internal-domain labdelivery.cl
 ```
 
-2) **Legacy — Streamlit review UI only** (not the active operator dashboard; pandas/streamlit in group **`ui`** — not installed by default `uv sync`):
-
-```bash
-uv sync --group ui   # once per machine / after clone
-uv run --group ui streamlit run apps/business_mart_app.py
-```
-
-**Share on Wi‑Fi (same LAN):** Streamlit must listen on all interfaces, and if you use **WSL2** Windows must forward the chosen port to WSL (same idea as other local dev ports).
-
-```bash
-# From repo root — binds 0.0.0.0:8501 (override with STREAMLIT_PORT=8502)
-bash scripts/tools/run_streamlit_lan.sh
-```
-
-On **Windows (PowerShell as Admin)**, replace `172.17.x.x` with your current WSL IP (`hostname -I` in WSL) and `8501` if you changed the port:
-
-```powershell
-netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=8501 connectaddress=172.17.34.203 connectport=8501
-New-NetFirewallRule -DisplayName "WSL Streamlit 8501" -Direction Inbound -LocalPort 8501 -Protocol TCP -Action Allow
-```
-
-Then the client opens **`http://<your-PC-WiFi-IPv4>:8501/`** (e.g. `http://192.168.4.182:8501/`).  
-**Note:** Streamlit has no built-in Basic Auth like the CSV helper; treat this as trusted-LAN only or put a reverse proxy in front.
-
-### Docker (Streamlit only)
-
-The [`Dockerfile`](Dockerfile) runs **only** the business mart Streamlit app. It does **not** containerize ingest, reports, or the website. Build **from `apps/email-pipeline/`** (required context for `COPY pyproject.toml` / `COPY apps/...`):
-
-```bash
-cd apps/email-pipeline
-docker build -t origenlab-business-mart .
-docker run --rm -p 8501:8501 \
-  -e ORIGENLAB_DATA_ROOT=/data/origenlab-email \
-  -v "$HOME/data/origenlab-email:/data/origenlab-email:ro" \
-  origenlab-business-mart
-```
-
-Or: `docker compose up --build` using [`docker-compose.yml`](docker-compose.yml) (set `ORIGENLAB_HOST_DATA_ROOT` if your data is not under `$HOME/data/origenlab-email`). See [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-eprun-docker-streamlit) for env vars, compose notes, and Windows paths.
+2) **Operator UI (active):** use [`apps/dashboard`](../../dashboard/README.md) + [`apps/api`](../../api/README.md) over the Postgres mirror — not Streamlit. See [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-eprun-dashboard-optional).
 
 Docs: `docs/pipeline/BUSINESS_MART.md`
+
+<a id="legacy-streamlit-parked"></a>
+### Legacy Streamlit (parked — not primary UI)
+
+Do **not** use Streamlit as the operator product UI. Launch surfaces remain for rare SQLite-only review until removed ([`docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md)).
+
+```bash
+uv sync --group ui   # not installed by default uv sync
+uv run --group ui streamlit run apps/business_mart_app.py
+# LAN (legacy): bash scripts/tools/run_streamlit_lan.sh  → :8501
+```
+
+Docker/compose for Streamlit only: [`Dockerfile`](Dockerfile), [`docker-compose.yml`](docker-compose.yml) — see [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-eprun-legacy-streamlit-docker).
 
 **3. SQLite → JSONL**
 
@@ -424,7 +400,7 @@ origenlab-email-pipeline/
 ├── pyproject.toml
 ├── README.md
 ├── apps/
-│   └── business_mart_app.py      # Streamlit UI (mart + equipment explorer)
+│   └── business_mart_app.py      # Legacy Streamlit UI (parked; active UI is apps/dashboard)
 ├── docs/                         # Detailed docs (BUSINESS_MART, REPORTING, RUNBOOK, ML, etc.)
 ├── reports/
 │   └── out/                      # Generated outputs; contents gitignored except README + .gitkeep

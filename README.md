@@ -9,7 +9,6 @@
 <p align="center">
   <img alt="Astro" src="https://img.shields.io/badge/Astro-5.x-ff5d01?logo=astro&logoColor=white" />
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" />
-  <img alt="Streamlit" src="https://img.shields.io/badge/Streamlit-App-FF4B4B?logo=streamlit&logoColor=white" />
   <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" />
 </p>
 
@@ -41,7 +40,7 @@ Send/outreach truth stays in **SQLite + email-pipeline scripts**, not in Postgre
 | App | Path | Stack |
 |-----|------|-------|
 | Website | [`apps/web/`](apps/web/) | Astro 5, Tailwind 4, TypeScript, Node 20 |
-| Email pipeline | [`apps/email-pipeline/`](apps/email-pipeline/) | Python 3.12, `uv`, SQLite, Streamlit, optional CUDA ML (**no FastAPI**) |
+| Email pipeline | [`apps/email-pipeline/`](apps/email-pipeline/) | Python 3.12, `uv`, SQLite, operator CLIs/scripts, optional CUDA ML (**no product UI**) |
 | Operator API | [`apps/api/`](apps/api/) | FastAPI :8001 — operator routes + `GET /mirror/*` Postgres reporting |
 | Dashboard | [`apps/dashboard/`](apps/dashboard/) | React + Vite — read-only operator **Today** UI |
 
@@ -55,12 +54,12 @@ npm run preview
 ```
 
 ```bash
-cd apps/email-pipeline
-uv sync --group ui
-uv run --group ui streamlit run apps/business_mart_app.py
+cd apps/api && uv sync && uv run uvicorn origenlab_api.main:app --port 8001
+cd apps/dashboard && npm ci && npm run dev
 ```
 
-Open `http://localhost:4321` for web preview and `http://localhost:8501` for Streamlit.
+Open `http://localhost:4321` (web preview) and `http://localhost:5173` (operator dashboard → API on **:8001**).
+Legacy Streamlit (`apps/email-pipeline/apps/business_mart_app.py`) is **not** the active UI — see [`apps/email-pipeline/docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](apps/email-pipeline/docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
 
 ## Public release checklist
 
