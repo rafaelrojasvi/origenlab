@@ -23,7 +23,7 @@ The package root lists **many modules at one namespace level**. That is workable
 | **Leads (pipeline + master)** | `leads_*.py`, `lead_*.py`, `lead_accounts_schema.py`, `hunt_csv_alignment.py`, `dr50_payload_loader.py` | **Core** for Chile external-lead ingest → `lead_master`; **lead accounts** are additive. See [naming](#m-pkg-naming) below. |
 | **Client reports** | `client_report_*.py`, `attachment_report_sql.py` | **Secondary** (client-facing narrative/metrics); not on the outbound send path. |
 | **Operational trust** | [`operational_trust/`](../../src/origenlab_email_pipeline/operational_trust/) — facade [`__init__.py`](../../src/origenlab_email_pipeline/operational_trust/__init__.py) + `operational_trust_*.py` submodules (**no** root-level `operational_trust_*.py`) | **Core** for publish-safe QA **consistency** checks; not eligibility for send lists. |
-| **Streamlit UI helpers** | `streamlit_*.py` | **Secondary** for `business_mart_app.py` UX; must **reuse** library paths for queue/eligibility, not redefine policy. |
+| **Read / operator browse** | [`read/`](../../src/origenlab_email_pipeline/read/) (`today_workspace`, `leads_browse`, `suppliers_browse`), `operator_copy_es.py` | **Secondary** SQLite read helpers (Streamlit UI **removed** 2026-06-04); must **reuse** gate/queue modules, not redefine policy. |
 | **Suppliers** | `supplier_schema.py`, `supplier_workbook.py`, `marketing_supplier_domains.py` | **Core** for supplier domain exclusion in the gate; workbook tooling is **operator-facing** but not send logic. |
 | **Tatiana / drafting** | `tatiana_copilot/` (subpackage), `tatiana_review_cohort.py`, `tatiana_voice_cohort.py` | **Optional** copilot; **no send path**; must not own export eligibility. |
 
@@ -42,8 +42,8 @@ Convention today (historical but consistent):
 <a id="m-pkg-import-rules"></a>
 ## Import and dependency rules
 
-1. **Export eligibility is centralized** — Archive and lead marketing exports must use **`candidate_export_gate.evaluate_export_eligibility`** (and **`marketing_export_context.build_marketing_export_gate_context`** for DB-backed sets). Do not duplicate gate rules in Streamlit, Tatiana, or one-off scripts.
-2. **Streamlit is not send truth** — UI may rank, review, and write sidecars (`contact_email_suppression`, `outreach_contact_state`); **canonical batch selection** for operators remains **documented CLIs** and reproducible CSVs ([`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md)).
+1. **Export eligibility is centralized** — Archive and lead marketing exports must use **`candidate_export_gate.evaluate_export_eligibility`** (and **`marketing_export_context.build_marketing_export_gate_context`** for DB-backed sets). Do not duplicate gate rules in Tatiana, dashboard read paths, or one-off scripts.
+2. **Dashboard/API are not send truth** — Mirror and React panels are read-only; sidecar writes stay on **documented CLIs** (and legacy `ORIGENLAB_STREAMLIT_*_RW` env gates where still documented). **Canonical batch selection** remains CLIs and reproducible CSVs ([`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md)).
 3. **Tatiana does not own eligibility** — Drafting and retrieval must **not** implement or bypass marketing/archive export gates. Copilot code stays in `tatiana_copilot/` + small cohort entry modules.
 4. **Operational trust ≠ export gate** — `operational_trust*` checks **publish consistency** (pack, CSVs, cohorts, URLs). It does not replace `candidate_export_gate` for “who may be emailed.”
 5. **Stable root anchors (for now)** — **`candidate_export_gate.py`**, **`marketing_export_context.py`**, and **`outbound_core.py`** remain at package root intentionally. Future package restructures should **move other domains first** and treat these as last-mile moves.

@@ -93,7 +93,7 @@ def test_phase8c_research_lab() -> None:
     assert _classify("scripts/qa/verify_research_candidate_evidence.py") == "research_lab"
 
 
-def test_phase8c_streamlit_read() -> None:
+def test_phase8c_read_modules() -> None:
     assert _classify("src/origenlab_email_pipeline/read/today_workspace.py") == "streamlit_read"
 
 

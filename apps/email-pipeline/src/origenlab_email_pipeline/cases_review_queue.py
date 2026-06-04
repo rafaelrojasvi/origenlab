@@ -1,4 +1,4 @@
-"""Message-level review queue for Streamlit «Casos para revisar» (v1: Gmail contacto only).
+"""Message-level review queue for operator «Casos para revisar» (v1: Gmail contacto only).
 
 Read-only helpers; no drafting here. See docs/pipeline/CASOS_PARA_REVISAR.md.
 """

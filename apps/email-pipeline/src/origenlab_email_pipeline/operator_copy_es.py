@@ -1,10 +1,10 @@
-"""Spanish operator copy for Prioridad del día views (neutral module; Streamlit S2)."""
+"""Spanish operator copy for Prioridad del día views (extracted read module)."""
 
 from __future__ import annotations
 
 from typing import Any
 
-# Etiquetas de grupo de navegación (histórico Streamlit; UI retirada 2026-06-04).
+# Etiquetas de grupo de navegación (histórico panel lateral; UI retirada 2026-06-04).
 PRIORIDAD_DEL_DIA_GROUP_TITLE = "Prioridad del día"
 
 PRIORIDAD_GROUP_NAV_CAPTION_ES = (
@@ -45,7 +45,7 @@ PRIORIDAD_ACTION_HINT_BY_PAGE_ES: dict[str, str] = {
     ),
     "Borrador comercial": (
         "**Abre Borrador comercial** para generar (si aplica), revisar y **exportar** a disco; el envío lo hace usted "
-        "fuera de Streamlit. Si llegó desde **Casos** o **Cola outreach**, el contexto ya viene sugerido."
+        "fuera de esta herramienta (export manual / CLI). Si llegó desde **Casos** o **Cola outreach**, el contexto ya viene sugerido."
     ),
 }
 

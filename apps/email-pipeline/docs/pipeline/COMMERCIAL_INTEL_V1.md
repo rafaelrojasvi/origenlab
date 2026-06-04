@@ -114,7 +114,7 @@ uv run python scripts/commercial/review_commercial_candidate.py \
   --entity-kind organization --entity-key example.com --action approve --note "validated"
 ```
 
-Streamlit (`apps/business_mart_app.py`): section **Candidatos comerciales** lists the same view with filters. Writes require a **writable** database and `ORIGENLAB_STREAMLIT_COMMERCIAL_REVIEW_RW=1` (Docker/read-only mounts stay read-only by design).
+**Streamlit UI removed (2026-06-04).** Use the CLIs above and [`review_commercial_candidate.py`](../scripts/commercial/review_commercial_candidate.py) for review writes on a **writable** SQLite file. Optional RW env (legacy name): `ORIGENLAB_STREAMLIT_COMMERCIAL_REVIEW_RW=1`. Active read UI: [`apps/dashboard`](../../../dashboard/README.md) + Postgres mirror via [`apps/api`](../../../api/README.md). Plan: [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](../audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 ## Non-goals for v1
 

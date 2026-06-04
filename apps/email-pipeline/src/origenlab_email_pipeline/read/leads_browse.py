@@ -1,9 +1,9 @@
-"""Read-only lead browse: pipeline + archive linkage (neutral module; Streamlit S2).
+"""Read-only lead browse: pipeline + archive linkage (extracted read module).
 
 Uses the same upstream-active and best-per-lead match semantics as lead exports (MIN match row id).
 
 ``lead_contact_research`` is joined when that table exists (operator enrichment; distinct from import fields).
-Writes to enrichment are done only from the Streamlit app when ``ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW=1``.
+Writes to enrichment require ``ORIGENLAB_STREAMLIT_LEADS_REVIEW_RW=1`` (legacy env; product UI removed 2026-06-04).
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def _contact_best_join_sql() -> str:
 
 
 def _sql_left_join_best_org_match_detail(alias_lm: str = "lm", alias_m: str = "orgm") -> str:
-    """Same MIN(id) rule as exports, with columns needed for the Streamlit browse UI."""
+    """Same MIN(id) rule as exports, with columns needed for the leads browse read module."""
     return (
         f"LEFT JOIN (\n"
         f"          SELECT m1.lead_id, m1.matched_org_name, m1.matched_domain, "

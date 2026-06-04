@@ -1,20 +1,22 @@
-# Streamlit: salud de datos y vigencia
+# Salud de datos y vigencia (referencia histórica Streamlit)
 
-Status: canonical  
+Status: canonical (concepts); **Streamlit UI removed 2026-06-04**
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-03-29
+Last reviewed: 2026-06-04
+
+> **Active operator UI:** [`apps/dashboard`](../../../dashboard/README.md) + [`apps/api`](../../../api/README.md) (:8001) over the Postgres mirror. This doc preserves the **Salud de datos** heuristics that lived in the removed Streamlit app. Launch inventory: [`audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](../audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
 
 <a id="m-streamlit-freshness"></a>
 ## Propósito
 
-La sección **Salud de datos** en `apps/business_mart_app.py` ayuda a comprobar si el **archivo SQLite montado** en la app refleja operación reciente y si el **mart** está alineado con el archivo crudo, **sin ejecutar ingest ni rebuilds**.
+La sección **Salud de datos** (antes en `apps/business_mart_app.py`, **eliminada**) ayudaba a comprobar si el **archivo SQLite** refleja operación reciente y si el **mart** está alineado con el archivo crudo, **sin ejecutar ingest ni rebuilds**.
 
-La app sigue siendo **solo lectura** sobre SQLite (salvo la página opcional de revisión comercial con variable de entorno explícita).
+Operadores hoy usan el dashboard + mirror para lectura; diagnósticos profundos siguen en SQLite vía CLIs y SQL directo ([`RUNBOOK.md`](../RUNBOOK.md)).
 
 <a id="m-streamlit-nav"></a>
-## Navegación (2026-05)
+## Navegación (histórico)
 
-El panel `apps/business_mart_app.py` usa un **menú lateral** en español. La página por defecto es **Inicio** (operativo Gmail `contacto@origenlab.cl`). Las herramientas avanzadas (p. ej. «Qué hacer hoy», cola marketing, borrador) viven bajo **Herramientas / Runbook**. Los handoffs internos siguen aceptando nombres de página antiguos; `navigate_to_page` los redirige al destino nuevo (ver tests `test_streamlit_navigate_to_page_redirects.py`).
+El panel Streamlit usaba un menú lateral en español (**Inicio**, **Herramientas / Runbook**, etc.). Esa UI fue retirada; no hay `streamlit run` en este repo.
 
 <a id="m-streamlit-freshness-what"></a>
 ## Qué muestra
@@ -50,25 +52,22 @@ No se infieren horas de ejecución de ingest: para eso hay que fiarse de procedi
 <a id="m-streamlit-freshness-warnings"></a>
 ## Advertencias mostradas
 
-1. **Correo “viejo”:** si el último `date_iso` (prefijo de día) tiene **más de 90 días** respecto a hoy (fecha local del servidor que ejecuta Streamlit).
+1. **Correo “viejo”:** si el último `date_iso` (prefijo de día) tiene **más de 90 días** respecto a hoy (fecha local del entorno que evalúa SQLite).
 2. **Sin filas contacto:** si hay emails pero **ninguno** coincide con los prefijos `gmail:contacto@origenlab.cl*` ni `imap:contacto@origenlab.cl*` (si el buzón usa otra etiqueta, validar la tabla de orígenes).
 
 <a id="m-streamlit-contacto-activity"></a>
 ## Actividad contacto Gmail (página relacionada)
 
-La sección **Actividad contacto Gmail** en la misma app lista correos con `gmail:contacto@origenlab.cl/%` (equivalente SQL: `lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'`) y un resumen 7/30/90 días coherente con las mismas reglas de `date()` que la vigencia plausible. No reemplaza **Salud de datos** (sigue siendo la vista de todos los orígenes). Detalle: [`BUSINESS_MART.md`](BUSINESS_MART.md) (Streamlit UI).
+La sección **Actividad contacto Gmail** en la misma app lista correos con `gmail:contacto@origenlab.cl/%` (equivalente SQL: `lower(source_file) LIKE 'gmail:contacto@origenlab.cl/%'`) y un resumen 7/30/90 días coherente con las mismas reglas de `date()` que la vigencia plausible. No reemplaza **Salud de datos** (sigue siendo la vista de todos los orígenes). Detalle: [`BUSINESS_MART.md`](BUSINESS_MART.md).
 
 <a id="m-streamlit-freshness-run"></a>
-## Cómo abrir la app
+## Cómo operar hoy (sin Streamlit)
 
-Desde `apps/email-pipeline` (grupo de dependencias **`ui`**: `streamlit` + `pandas`):
+1. **Dashboard:** `cd apps/dashboard && npm run dev` (lee [`apps/api`](../../../api/README.md) :8001 + mirror Postgres).
+2. **SQLite truth / mart:** `cd apps/email-pipeline` → `uv run origenlab status`, `uv run python scripts/mart/build_business_mart.py` según [`RUNBOOK.md`](../RUNBOOK.md).
+3. **Mismas agregaciones:** SQL directo sobre `ORIGENLAB_SQLITE_PATH` usando las tablas descritas arriba.
 
-```bash
-uv sync --group ui   # si aún no lo tiene
-uv run --group ui streamlit run apps/business_mart_app.py
-```
-
-Docker: ver [README.md](../../README.md) y `Dockerfile` (montaje de datos en `/data/origenlab-email`).
+No existe `apps/business_mart_app.py` ni imagen Docker Streamlit en el repo (ver [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](../audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md)).
 
 <a id="m-streamlit-freshness-limits"></a>
 ## Límites

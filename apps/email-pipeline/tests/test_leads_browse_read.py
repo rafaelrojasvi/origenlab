@@ -1,4 +1,4 @@
-"""Streamlit leads browse helpers: availability, SQL shape, filters, account rollup."""
+"""read/leads_browse: availability, SQL shape, filters, account rollup."""
 
 from __future__ import annotations
 
