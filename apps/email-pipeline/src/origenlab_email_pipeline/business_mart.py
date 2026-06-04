@@ -146,6 +146,9 @@ _EQUIPMENT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("osmometro", re.compile(r"osmometro|osm[oó]metr|osmo\s*met", re.I)),
     ("termobalanza", re.compile(r"termobalanza|termo\s*balanza|termogravimetr", re.I)),
     ("humedad_granos", re.compile(r"medidor de humedad|grain moisture", re.I)),
+    ("lector_placas", re.compile(r"lector(?:es)?\s+de\s+placas|plate\s+reader|microplate\s+reader", re.I)),
+    ("fluorescencia", re.compile(r"fluorescen(?:cia|t)|fluorescence\s+reader", re.I)),
+    ("shaker", re.compile(r"\bshaker\b|agitador\s+orbital", re.I)),
 ]
 
 
