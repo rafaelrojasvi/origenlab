@@ -40,7 +40,7 @@
 - **SQLite** (`ORIGENLAB_SQLITE_PATH` / settings) + **Gmail Sent in `emails`** = outbound safety truth.
 - **Active operator UI** = [`apps/dashboard`](../../dashboard/README.md) + [`apps/api`](../../api/README.md) (Postgres mirror read model). Not Streamlit.
 - **Postgres mirror sync** = parked for *daily outbound* but required when using the React dashboard; not send approval.
-- **Streamlit** (`apps/business_mart_app.py`) = **legacy/parked** SQLite review UI — do not extend; see [`docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
+- **Streamlit Python UI** = **removed** (2026-06-04). Do not reintroduce; active UI is **`apps/dashboard`** — see [`docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 ## Safe default workflow
 

@@ -31,7 +31,7 @@ The following are **optional**. None are needed for:
 | **Dataset / cohort tools** | `scripts/dataset/*` | Tatiana cohort exports and label review CLIs. |
 | **Old campaign pilots** | `scripts/leads/campaigns/*` | e.g. DR50 reconciliation, ready8 patches — niche, not current equipment-first policy. |
 
-**Streamlit** (`apps/business_mart_app.py`) is **legacy/parked** — not the active operator UI. Prefer `apps/dashboard` + `apps/api`. Retirement plan: [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
+**Streamlit Python UI** (`business_mart_app.py` and related UI modules) **removed** (2026-06-04). Active operator UI: `apps/dashboard` + `apps/api`. Retirement plan: [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 ---
 

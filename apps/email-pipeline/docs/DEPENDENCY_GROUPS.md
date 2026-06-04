@@ -121,10 +121,10 @@ See: [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md).
 
 | | |
 |---|---|
-| **Purpose** | Legacy **Streamlit** app (`apps/business_mart_app.py`) — not the primary React dashboard |
+| **Purpose** | CI/tests for remaining Streamlit-named helpers (`streamlit_draft_helpers`, read-module tests) — **not** a product UI |
 | **Main packages** | `streamlit`, `pandas`, `xlrd` |
-| **Example** | `uv sync --group ui` · `uv run --group ui streamlit run apps/business_mart_app.py` |
-| **Daily operator?** | **No** — optional review UI; primary operator UI is `apps/dashboard` |
+| **Example** | `uv sync --group ui` · `uv run pytest tests/test_streamlit_draft_helpers.py -q` |
+| **Daily operator?** | **No** — primary operator UI is `apps/dashboard` |
 
 ### `dev`
 

@@ -35,7 +35,7 @@ Optional **OrigenLab / Labdelivery** commercial-email support: retrieval over cu
 <a id="m-epapp-model"></a>
 ## Current operating model
 
-**Active operator UI:** [`apps/dashboard`](../../dashboard/README.md) (React) + [`apps/api`](../../api/README.md) (read API on **:8001**) over the **Postgres mirror**. **Streamlit** ([`apps/business_mart_app.py`](../apps/business_mart_app.py)) is **legacy/parked** — not the product UI. Plan: [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
+**Active operator UI:** [`apps/dashboard`](../../dashboard/README.md) (React) + [`apps/api`](../../api/README.md) (read API on **:8001**) over the **Postgres mirror**. Streamlit Python UI **removed** (2026-06-04). Plan: [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 - Local-first processing with Python 3.12 + uv ([`pyproject.toml`](../pyproject.toml)).
 - Sensitive artifacts and large outputs remain outside git by default ([`DATA_LOCATIONS.md`](DATA_LOCATIONS.md#m-epdata-root), [`.env.example`](../.env.example)).

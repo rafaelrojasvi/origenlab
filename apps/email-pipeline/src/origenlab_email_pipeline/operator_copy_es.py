@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# Debe coincidir con la etiqueta del grupo en ``business_mart_app._NAV_GROUPS``.
+# Etiquetas de grupo de navegación (histórico Streamlit; UI retirada 2026-06-04).
 PRIORIDAD_DEL_DIA_GROUP_TITLE = "Prioridad del día"
 
 PRIORIDAD_GROUP_NAV_CAPTION_ES = (

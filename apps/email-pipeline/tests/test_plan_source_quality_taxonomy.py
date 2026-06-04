@@ -96,7 +96,17 @@ def test_phase8c_research_lab() -> None:
 def test_phase8c_streamlit_read() -> None:
     assert _classify("src/origenlab_email_pipeline/read/today_workspace.py") == "streamlit_read"
     assert _classify("src/origenlab_email_pipeline/tatiana_copilot/streamlit_draft_helpers.py") == "streamlit_read"
-    assert _classify("src/origenlab_email_pipeline/streamlit_prioridad_pages.py") == "streamlit_ui"
+
+
+def test_phase8c_streamlit_ui_modules_removed() -> None:
+    root = Path(__file__).resolve().parents[1]
+    for rel in (
+        "apps/business_mart_app.py",
+        "src/origenlab_email_pipeline/streamlit_prioridad_pages.py",
+        "src/origenlab_email_pipeline/streamlit_prioridad_handoffs.py",
+        "src/origenlab_email_pipeline/streamlit_page_status.py",
+    ):
+        assert not (root / rel).is_file(), rel
 
 
 def test_phase8c_purge_break_glass() -> None:

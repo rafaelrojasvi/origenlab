@@ -42,7 +42,7 @@ Fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>` (same beh
 
 **HTTP API:** FastAPI does **not** live in this package. Mirror reporting is `GET /mirror/*` on **`apps/api`**.
 
-**Streamlit (legacy/parked):** [`apps/business_mart_app.py`](apps/business_mart_app.py) is **not** the active operator UI. See [`docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
+**Streamlit (retired):** The Python Streamlit app and UI modules were **removed** (2026-06-04). Operator UI is [`apps/dashboard`](../dashboard/README.md). See [`docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 ## GitHub & what not to commit
 
@@ -215,18 +215,7 @@ uv run python scripts/mart/build_business_mart.py --rebuild --internal-domain la
 
 Docs: `docs/pipeline/BUSINESS_MART.md`
 
-<a id="legacy-streamlit-parked"></a>
-### Legacy Streamlit (parked — not primary UI)
-
-Do **not** use Streamlit as the operator product UI. Launch surfaces remain for rare SQLite-only review until removed ([`docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md)).
-
-```bash
-uv sync --group ui   # not installed by default uv sync
-uv run --group ui streamlit run apps/business_mart_app.py
-# LAN: use streamlit CLI flags if needed (run_streamlit_lan.sh removed — see launch-surface audit)
-```
-
-Legacy Streamlit Docker (`Dockerfile`, `docker-compose.yml`) **removed** — local `streamlit run` only. Postgres mirror dev: [`docker-compose.dashboard-postgres.yml`](docker-compose.dashboard-postgres.yml).
+**Streamlit UI removed (2026-06-04):** `business_mart_app.py`, Docker Streamlit image, and LAN launcher are gone. Use **`apps/dashboard`** + **`apps/api`** + [`docker-compose.dashboard-postgres.yml`](docker-compose.dashboard-postgres.yml) for mirror dev. Details: [`docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](docs/audits/STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
 
 **3. SQLite → JSONL**
 
@@ -399,8 +388,7 @@ origenlab-email-pipeline/
 ├── .env.example
 ├── pyproject.toml
 ├── README.md
-├── apps/
-│   └── business_mart_app.py      # Legacy Streamlit UI (parked; active UI is apps/dashboard)
+├── apps/                         # (Streamlit app removed — active UI is apps/dashboard)
 ├── docs/                         # Detailed docs (BUSINESS_MART, REPORTING, RUNBOOK, ML, etc.)
 ├── reports/
 │   └── out/                      # Generated outputs; contents gitignored except README + .gitkeep
@@ -423,7 +411,7 @@ origenlab-email-pipeline/
 │   ├── attachment_extract.py
 │   ├── email_business_filters.py
 │   └── ...
-└── tests/                        # pytest (test_parse_mbox_body, test_business_mart_app_ux, etc.)
+└── tests/                        # pytest (operator CLI, read modules, safety, etc.)
 ```
 
 Pipeline scripts live under `scripts/`; day-to-day ops use **`uv run origenlab`** (see [Operator CLI](#operator-cli)). Index: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md), [docs/SCRIPT_MAP.md](docs/SCRIPT_MAP.md), [scripts/README.md](scripts/README.md).
