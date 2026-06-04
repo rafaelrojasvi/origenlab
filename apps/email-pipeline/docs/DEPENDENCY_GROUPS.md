@@ -121,9 +121,9 @@ See: [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md).
 
 | | |
 |---|---|
-| **Purpose** | CI/tests for remaining Streamlit-named helpers (`streamlit_draft_helpers`, read-module tests) — **not** a product UI |
+| **Purpose** | CI/tests needing **pandas** (Tatiana draft review helpers, contacto picker queries) — **not** a product UI |
 | **Main packages** | `streamlit`, `pandas`, `xlrd` |
-| **Example** | `uv sync --group ui` · `uv run pytest tests/test_streamlit_draft_helpers.py -q` |
+| **Example** | `uv sync --group ui` · `uv run pytest tests/test_tatiana_draft_review_helpers.py -q` |
 | **Daily operator?** | **No** — primary operator UI is `apps/dashboard` |
 
 ### `dev`

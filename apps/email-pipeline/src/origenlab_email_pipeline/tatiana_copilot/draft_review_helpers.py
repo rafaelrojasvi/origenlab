@@ -1,4 +1,4 @@
-"""Shared helpers for Streamlit OrigenLab-mode drafting (review-only; no send)."""
+"""Tatiana OrigenLab-mode draft review helpers (human-in-the-loop; no send)."""
 
 from __future__ import annotations
 
@@ -31,6 +31,12 @@ from .origenlab_facts_loader import load_origenlab_drafting_context
 from .pilot_schemas import PILOT_REVIEW_ALL_FIELDS, extract_asunto_from_draft, text_preview
 from .schemas import DraftCase, DraftPackage
 
+# Legacy export artifact identifiers (unchanged for downstream tooling).
+_EXPORT_KIND_LEGACY = "streamlit_borrador_comercial"
+_EXPORT_DIR_SUFFIX_LEGACY = "_streamlit_borrador_comercial"
+_INTAKE_MANUAL_LEGACY = "streamlit_manual"
+_DEFAULT_MANUAL_CASE_ID_LEGACY = "streamlit_manual_case"
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
@@ -54,7 +60,7 @@ def seed_paths_mtime(paths: tuple[Path, Path, Path]) -> tuple[float, float, floa
 
 
 def get_cached_tatiana_index(settings: Settings, session_state: dict[str, Any]) -> TatianaExampleIndex:
-    """Reuse Tatiana TF-IDF index in Streamlit session while cohort CSV mtimes are unchanged."""
+    """Reuse Tatiana TF-IDF index while cohort CSV mtimes are unchanged (caller-owned cache dict)."""
     paths = default_tatiana_seed_paths(settings)
     mts = seed_paths_mtime(paths)
     cache = session_state.get("tatiana_index_cache")
@@ -86,13 +92,13 @@ def load_tatiana_index(
     return TatianaExampleIndex.build(style_examples=style_ex, retrieval_examples=retr_ex, method="tfidf")
 
 
-def resolve_streamlit_generator(
+def resolve_draft_review_generator(
     *,
     generator_name: str,
     use_mock_explicit: bool,
     settings: Settings,
 ) -> tuple[DraftGenerator, str]:
-    """Like pilot ``resolve_pilot_generator`` but raises ``RuntimeError``/``ValueError`` for UI (no ``SystemExit``)."""
+    """Like pilot ``resolve_pilot_generator`` but raises ``RuntimeError``/``ValueError`` (no ``SystemExit``)."""
     if use_mock_explicit:
         return MockDraftGenerator(), "mock"
     name = (generator_name or "openai_chat").strip().lower()
@@ -121,7 +127,7 @@ def run_origenlab_draft_package(
     style_top_k: int = 3,
     retrieval_top_k: int = 5,
 ) -> DraftPackage:
-    gen, _ = resolve_streamlit_generator(
+    gen, _ = resolve_draft_review_generator(
         generator_name=generator_name,
         use_mock_explicit=use_mock_explicit,
         settings=settings,
@@ -146,7 +152,7 @@ def load_contacto_gmail_email_choices_df(
 ) -> "pd.DataFrame":
     """Recent Gmail contacto rows for picker (read-only).
 
-    ``ensure_email_ids`` adds specific ``emails.id`` rows if missing (e.g. handoff from Casos para revisar).
+    ``ensure_email_ids`` adds specific ``emails.id`` rows if missing (e.g. case handoff).
     """
     import pandas as pd
 
@@ -236,7 +242,7 @@ def draft_case_from_email_row(
     )
 
 
-def export_streamlit_review_artifact(
+def export_draft_review_artifact(
     *,
     out_dir: Path,
     pkg: DraftPackage,
@@ -293,7 +299,7 @@ def export_streamlit_review_artifact(
     )
 
     summary = {
-        "kind": "streamlit_borrador_comercial",
+        "kind": _EXPORT_KIND_LEGACY,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "draft_package_json": str(pkg_path.resolve()),
         "pilot_review_csv": str(csv_path.resolve()),
@@ -301,14 +307,15 @@ def export_streamlit_review_artifact(
     }
     (out_dir / "export_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2),
-        encoding="utf-8"
+        encoding="utf-8",
     )
     return {"out_dir": str(out_dir.resolve()), "draft_package_json": str(pkg_path), "csv": str(csv_path)}
 
 
-def new_streamlit_export_dir(settings: Settings) -> Path:
+def new_draft_review_export_dir(settings: Settings) -> Path:
+    """Reports dir subfolder; suffix kept for compatibility with existing ``reports/out`` artifacts."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    return settings.resolved_reports_dir() / f"{ts}_streamlit_borrador_comercial"
+    return settings.resolved_reports_dir() / f"{ts}{_EXPORT_DIR_SUFFIX_LEGACY}"
 
 
 def draft_case_from_manual(
@@ -349,7 +356,7 @@ def draft_case_from_manual(
         )
     meta: dict[str, Any] = {
         "pilot": True,
-        "intake": "streamlit_manual",
+        "intake": _INTAKE_MANUAL_LEGACY,
         "requester_name": requester_name,
         "requester_email": requester_email,
         "requested_product_or_category": requested_product_or_category,
@@ -367,7 +374,7 @@ def draft_case_from_manual(
         "marketing_outreach": marketing_outreach,
     }
     meta = {k: v for k, v in meta.items() if v not in (None, "", [])}
-    cid = (case_id or "").strip() or "streamlit_manual_case"
+    cid = (case_id or "").strip() or _DEFAULT_MANUAL_CASE_ID_LEGACY
     subj = (subject or "").strip()
     return DraftCase(
         case_id=cid,

@@ -7,7 +7,7 @@ from origenlab_email_pipeline.contacto_gmail_source import (
     CONTACTO_GMAIL_SOURCE_SQL,
     sql_predicate_contacto_gmail_source,
 )
-from origenlab_email_pipeline.tatiana_copilot.streamlit_draft_helpers import (
+from origenlab_email_pipeline.tatiana_copilot.draft_review_helpers import (
     load_contacto_gmail_email_choices_df,
 )
 

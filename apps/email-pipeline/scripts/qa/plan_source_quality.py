@@ -160,8 +160,6 @@ def classify_vertical(rel_posix: str) -> str:
 
     if "read/today_workspace" in p or base == "today_workspace.py":
         return "streamlit_read"
-    if "streamlit_draft_helpers" in p or "tatiana_copilot/streamlit" in p:
-        return "streamlit_read"
 
     if "streamlit" in p:
         return "streamlit_ui"

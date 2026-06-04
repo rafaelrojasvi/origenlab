@@ -7,16 +7,16 @@ import pytest
 from origenlab_email_pipeline.config import Settings
 from origenlab_email_pipeline.tatiana_copilot.generator import MockDraftGenerator
 from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import MARKETING_VARIANT_UNIVERSIDADES
-from origenlab_email_pipeline.tatiana_copilot.streamlit_draft_helpers import (
+from origenlab_email_pipeline.tatiana_copilot.draft_review_helpers import (
     draft_case_from_email_row,
     draft_case_from_manual,
-    resolve_streamlit_generator,
+    resolve_draft_review_generator,
 )
 
 
-def test_resolve_streamlit_generator_mock_explicit() -> None:
+def test_resolve_draft_review_generator_mock_explicit() -> None:
     s = Settings()
-    gen, name = resolve_streamlit_generator(
+    gen, name = resolve_draft_review_generator(
         generator_name="openai_chat",
         use_mock_explicit=True,
         settings=s,
@@ -25,10 +25,10 @@ def test_resolve_streamlit_generator_mock_explicit() -> None:
     assert isinstance(gen, MockDraftGenerator)
 
 
-def test_resolve_streamlit_generator_rejects_mock_without_explicit_flag() -> None:
+def test_resolve_draft_review_generator_rejects_mock_without_explicit_flag() -> None:
     s = Settings()
     with pytest.raises(ValueError, match="Simulación|simulación|OpenAI"):
-        resolve_streamlit_generator(
+        resolve_draft_review_generator(
             generator_name="mock",
             use_mock_explicit=False,
             settings=s,

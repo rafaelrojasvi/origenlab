@@ -34,12 +34,12 @@ See monorepo [`docs/PROJECT_CONTEXT.md`](../../../../docs/PROJECT_CONTEXT.md), r
 |----------|-------------|
 | ~~Streamlit app~~ | ~~`apps/business_mart_app.py`~~ **removed** 2026-06-04 |
 | ~~Streamlit renderers~~ | ~~`streamlit_prioridad_pages.py`~~, ~~`streamlit_prioridad_handoffs.py`~~, ~~`streamlit_page_status.py`~~ **removed** 2026-06-04 |
-| Tatiana export helper (name legacy) | `tatiana_copilot/streamlit_draft_helpers.py` — **keep**; tests + borrador export |
+| Tatiana draft review | `tatiana_copilot/draft_review_helpers.py` — borrador export; legacy artifact dir suffix unchanged |
 | Neutral read helpers | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` — **keep**; session keys on `today_workspace` |
 | LAN launcher | ~~`scripts/tools/run_streamlit_lan.sh`~~ **removed** |
 | Docker UI image | ~~`Dockerfile`~~, ~~`docker-compose.yml`~~ **removed**. Active mirror dev: [`docker-compose.dashboard-postgres.yml`](../../docker-compose.dashboard-postgres.yml) |
 | Dependency group | `pyproject.toml` → `[dependency-groups] ui` — **keep** until remaining `test_streamlit_*` / draft-helper tests retired |
-| Remaining Streamlit-named tests | `tests/test_streamlit_today_workspace.py`, `test_streamlit_draft_helpers.py`, etc. — not the product UI |
+| Renamed tests | `test_today_workspace_read.py`, `test_tatiana_draft_review_helpers.py`, etc. — not the product UI |
 | Streamlit operator docs | `docs/pipeline/STREAMLIT_DATA_FRESHNESS.md`, historical RUNBOOK sections — migrate over time |
 
 **Already removed (Phase 5E–5G + 2026-06-04 UI):** browse/today/copy shims, `streamlit_api_preview`, `streamlit_canonical_dashboard_sql`, **`business_mart_app.py`**, **`streamlit_prioridad_*`**, **`streamlit_page_status`**. See [`tests/test_read_module_shim_parity.py`](../../tests/test_read_module_shim_parity.py) and [`STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md).
@@ -82,7 +82,7 @@ Use before deleting Streamlit pages. Status from [`STREAMLIT_RETIREMENT_AUDIT_20
 | Outbound / suppressions | `/mirror/outbound/*` + SQLite CLIs | Read partial |
 | Salud de datos | — | **Missing** in React |
 | Cola outreach marketing | `export_next_marketing_recipients.py` | CLI only |
-| Borrador comercial | Tatiana scripts / `streamlit_draft_helpers` | Streamlit-only export |
+| Borrador comercial | Tatiana scripts / `draft_review_helpers` | CLI/library export (legacy `reports/out/*_streamlit_borrador_comercial/`) |
 | Candidatos comerciales | — | **Missing** (RW was Streamlit-only) |
 | Sidecar writes (suppression, lead research, commercial review) | CLIs + env-gated Streamlit | **API is GET-only** — CLIs remain truth for writes |
 
@@ -96,7 +96,7 @@ Use before deleting Streamlit pages. Status from [`STREAMLIT_RETIREMENT_AUDIT_20
 |----------|------|--------|-------|
 | App | ~~`apps/business_mart_app.py`~~ | **Removed** | 2026-06-04 — no `apps/api`/`apps/dashboard` imports |
 | UI modules | ~~`streamlit_prioridad_pages.py`~~, ~~`streamlit_prioridad_handoffs.py`~~, ~~`streamlit_page_status.py`~~ | **Removed** | Handoff keys on `read/today_workspace.py` |
-| Tatiana helper | `tatiana_copilot/streamlit_draft_helpers.py` | **Keep** | Rename in follow-up PR |
+| Tatiana helper | `tatiana_copilot/draft_review_helpers.py` | **Keep** | Renamed from `streamlit_draft_helpers` |
 | Read helpers | `read/today_workspace.py`, `read/leads_browse.py`, `read/suppliers_browse.py` | **Keep** | API/library |
 | Docker Streamlit | ~~`Dockerfile`~~, ~~`docker-compose.yml`~~ | **Removed** | Dashboard stack uses `docker-compose.dashboard-postgres.yml` |
 | Deps | `pyproject.toml` `ui` group | **Keep** | Remaining `test_streamlit_*` + draft helpers |
@@ -135,9 +135,8 @@ See [`STREAMLIT_LAUNCH_SURFACE_REMOVAL_PLAN_20260604.md`](STREAMLIT_LAUNCH_SURFA
 1. **docs:** RUNBOOK — demote `#m-eprun-docker-streamlit` to “legacy”; dashboard section first in operator map. **(PR 1 — done in launch-surface batch)**
 2. **docs:** `EXPERIMENTAL_PARKED.md` — Streamlit row → legacy/parked; React = active UI.  
 3. **api/dashboard:** Wire `GET /emails/recent`, expand cases/contacts parity (read-only).  
-4. **extract:** `streamlit_draft_helpers` → `tatiana_copilot/draft_export.py` (no `streamlit_` prefix).  
-5. **ci:** Optional job without `--group ui` once Streamlit tests removed.  
-6. **rename + ci:** `streamlit_draft_helpers` → neutral name; drop `ui` group when tests allow.
+4. **ci:** Optional job without `--group ui` once pandas tests move to default deps or `lab` group.
+5. **rename:** remaining `test_streamlit_*` browse/copy tests → neutral names when touched.
 
 ---
 

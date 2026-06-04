@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -68,3 +69,41 @@ def test_active_stack_doc_still_names_dashboard_api_mirror() -> None:
     text = _PLAN.read_text(encoding="utf-8")
     for term in ("apps/dashboard", "apps/api", "Postgres mirror"):
         assert term in text, f"plan doc must still mention {term!r}"
+
+
+_REMOVED_UI_IMPORT = re.compile(
+    r"^\s*(?:from\s+origenlab_email_pipeline\.(?:"
+    r"streamlit_prioridad_pages|streamlit_prioridad_handoffs|streamlit_page_status"
+    r")\b|import\s+origenlab_email_pipeline\.(?:"
+    r"streamlit_prioridad_pages|streamlit_prioridad_handoffs|streamlit_page_status"
+    r")\b)",
+)
+
+
+def test_draft_review_helpers_module_renamed() -> None:
+    path = _REPO / "src" / "origenlab_email_pipeline" / "tatiana_copilot" / "draft_review_helpers.py"
+    assert path.is_file()
+    assert not (
+        _REPO / "src" / "origenlab_email_pipeline" / "tatiana_copilot" / "streamlit_draft_helpers.py"
+    ).exists()
+
+
+def test_no_active_python_imports_removed_streamlit_ui_modules() -> None:
+    roots = (_REPO / "src", _REPO / "tests", _REPO / "scripts")
+    violations: list[str] = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*.py"):
+            if path.name.startswith("."):
+                continue
+            for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                if line.strip().startswith("#"):
+                    continue
+                if _REMOVED_UI_IMPORT.search(line):
+                    violations.append(f"{path.relative_to(_REPO)}:{i}:{line.strip()}")
+                if "business_mart_app" in line and (
+                    "import" in line or "from " in line
+                ):
+                    violations.append(f"{path.relative_to(_REPO)}:{i}:{line.strip()}")
+    assert not violations, "removed Streamlit UI modules must not be imported:\n" + "\n".join(violations)
