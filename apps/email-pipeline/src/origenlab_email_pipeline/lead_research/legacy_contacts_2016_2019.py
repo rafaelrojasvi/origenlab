@@ -25,6 +25,10 @@ from origenlab_email_pipeline.leads.new_customer_research import ExclusionLists,
 from origenlab_email_pipeline.marketing_export_context import load_sent_recipient_norms, load_suppressed_norms
 from origenlab_email_pipeline.marketing_supplier_domains import is_supplier_email_domain, supplier_email_domains
 
+# ---------------------------------------------------------------------------
+# 1. Constants / status codes / output columns
+# ---------------------------------------------------------------------------
+
 SOURCE_TYPE_LEGACY = "legacy_2016_2019"
 BATCH_KEY_LEGACY = "legacy_contacts_2016_2019"
 SOURCE_NAME_LEGACY = "legacy_contacts_2016_2019_import"
@@ -33,7 +37,6 @@ STATUS_REVIEW_LEGACY = "review_legacy_contact"
 CLASSIFICATION_LEGACY = "legacy_contact_review"
 DEFAULT_SUGGESTED_ACTION = "review_legacy_contact"
 
-# Stable normalized_status codes (review buckets).
 STATUS_ALREADY_CONTACTED_EXACT = "already_contacted_exact"
 STATUS_DOMAIN_HAS_HISTORY = "domain_has_history"
 STATUS_BOUNCED_SUPPRESSED = "bounced_or_suppressed"
@@ -103,7 +106,6 @@ _GENERIC_LOCAL_PARTS: frozenset[str] = frozenset(
     }
 )
 
-# Known Sheet1 headers (Spanish workbook); aliases for inference.
 _COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "contact_name": ("contacto", "nombre", "name", "contact"),
     "email": ("correo", "email", "e-mail", "mail"),
@@ -117,6 +119,33 @@ _COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 _EMAIL_CELL_SPLIT_RE = re.compile(r"[\s,;|/]+")
+
+_SUMMARY_MARKDOWN_BUCKET_ORDER: tuple[str, ...] = (
+    STATUS_POSSIBLE_BUYER,
+    STATUS_ALREADY_CONTACTED_EXACT,
+    STATUS_DOMAIN_HAS_HISTORY,
+    STATUS_BOUNCED_SUPPRESSED,
+    STATUS_INVALID_EMAIL,
+    STATUS_NO_EMAIL,
+    STATUS_SUPPLIER_VENDOR,
+    STATUS_LIKELY_PERSONAL,
+    STATUS_GENERIC_ORG,
+    STATUS_DUP_EMAIL,
+    STATUS_DUP_DOMAIN_SECONDARY,
+)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _collapse_ws(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip())
+
+
+# ---------------------------------------------------------------------------
+# 2. Dataclasses / inspection markdown
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -165,33 +194,7 @@ class WorkbookInspection:
     sheets: list[dict[str, Any]] = field(default_factory=list)
 
     def to_markdown(self) -> str:
-        lines = [
-            "# Legacy contacts 2016–2019 — workbook inspection",
-            "",
-            f"- **Path:** `{self.path}`",
-            f"- **Sheets:** {len(self.sheets)}",
-            "",
-        ]
-        for sh in self.sheets:
-            lines.append(f"## {sh['name']}")
-            lines.append("")
-            lines.append(f"- Rows: **{sh['row_count']}**")
-            lines.append(f"- Columns ({len(sh['columns'])}): `{', '.join(sh['columns'])}`")
-            if sh.get("inferred_mapping"):
-                lines.append("- Inferred mapping:")
-                for k, v in sh["inferred_mapping"].items():
-                    lines.append(f"  - `{k}` ← `{v}`")
-            if sh.get("sample_rows"):
-                lines.append("")
-                lines.append("Sample rows (first non-empty):")
-                lines.append("")
-                lines.append("| row | " + " | ".join(sh["columns"][:6]) + " |")
-                lines.append("| --- | " + " | ".join(["---"] * min(6, len(sh["columns"]))) + " |")
-                for sr in sh["sample_rows"][:5]:
-                    vals = [str(sr.get(c, "")).replace("|", "/")[:40] for c in sh["columns"][:6]]
-                    lines.append("| " + str(sr.get("_row", "")) + " | " + " | ".join(vals) + " |")
-            lines.append("")
-        return "\n".join(lines)
+        return _workbook_inspection_markdown(self)
 
 
 @dataclass
@@ -202,12 +205,43 @@ class LegacyReviewBuildResult:
     buckets: dict[str, list[LegacyNormalizedRow]]
 
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+def _workbook_inspection_markdown(inspection: WorkbookInspection) -> str:
+    lines = [
+        "# Legacy contacts 2016–2019 — workbook inspection",
+        "",
+        f"- **Path:** `{inspection.path}`",
+        f"- **Sheets:** {len(inspection.sheets)}",
+        "",
+    ]
+    for sh in inspection.sheets:
+        _append_workbook_sheet_markdown(lines, sh)
+    return "\n".join(lines)
 
 
-def _collapse_ws(s: str) -> str:
-    return re.sub(r"\s+", " ", (s or "").strip())
+def _append_workbook_sheet_markdown(lines: list[str], sh: dict[str, Any]) -> None:
+    lines.append(f"## {sh['name']}")
+    lines.append("")
+    lines.append(f"- Rows: **{sh['row_count']}**")
+    lines.append(f"- Columns ({len(sh['columns'])}): `{', '.join(sh['columns'])}`")
+    if sh.get("inferred_mapping"):
+        lines.append("- Inferred mapping:")
+        for k, v in sh["inferred_mapping"].items():
+            lines.append(f"  - `{k}` ← `{v}`")
+    if sh.get("sample_rows"):
+        lines.append("")
+        lines.append("Sample rows (first non-empty):")
+        lines.append("")
+        lines.append("| row | " + " | ".join(sh["columns"][:6]) + " |")
+        lines.append("| --- | " + " | ".join(["---"] * min(6, len(sh["columns"]))) + " |")
+        for sr in sh["sample_rows"][:5]:
+            vals = [str(sr.get(c, "")).replace("|", "/")[:40] for c in sh["columns"][:6]]
+            lines.append("| " + str(sr.get("_row", "")) + " | " + " | ".join(vals) + " |")
+    lines.append("")
+
+
+# ---------------------------------------------------------------------------
+# 3. Header alias and email parsing helpers
+# ---------------------------------------------------------------------------
 
 
 def normalize_organization_name(raw: str | None) -> str:
@@ -262,7 +296,6 @@ def infer_column_mapping(columns: Iterable[str]) -> dict[str, str]:
                     break
             if field in mapping:
                 break
-    # Unnamed columns by position (known 2016–2019 export pattern).
     cols_list = list(norm_cols.keys())
     if "email" not in mapping:
         for c in cols_list:
@@ -287,6 +320,32 @@ def infer_column_mapping(columns: Iterable[str]) -> dict[str, str]:
     if "category" not in mapping and len(unnamed) >= 3:
         mapping["category"] = unnamed[2]
     return mapping
+
+
+def _mapped_cell(raw: LegacyRawRow, mapping: dict[str, str], field: str) -> str:
+    col = mapping.get(field, "")
+    return raw.cells.get(col, "") if col else ""
+
+
+def _parse_legacy_raw_row(raw: LegacyRawRow) -> tuple[str, list[str], str, str, str, str, str, str, str]:
+    """Return email cell, emails, org, contact, product, region, phone, category, notes."""
+    mapping = infer_column_mapping(raw.cells.keys())
+    raw_email_cell = _mapped_cell(raw, mapping, "email")
+    emails = split_emails_from_cell(raw_email_cell)
+    org = normalize_organization_name(_mapped_cell(raw, mapping, "organization"))
+    contact = _collapse_ws(_mapped_cell(raw, mapping, "contact_name"))
+    product = _collapse_ws(_mapped_cell(raw, mapping, "product_angle"))
+    region = _collapse_ws(_mapped_cell(raw, mapping, "region"))
+    phone = _collapse_ws(_mapped_cell(raw, mapping, "phone"))
+    category = _collapse_ws(_mapped_cell(raw, mapping, "category"))
+    notes_parts = [_mapped_cell(raw, mapping, "notes"), category]
+    original_notes = _collapse_ws("; ".join(p for p in notes_parts if p))
+    return raw_email_cell, emails, org, contact, product, region, phone, category, original_notes
+
+
+# ---------------------------------------------------------------------------
+# 4. Workbook reading / raw-row normalization
+# ---------------------------------------------------------------------------
 
 
 def _cell_str(value: Any) -> str:
@@ -343,44 +402,56 @@ def read_legacy_workbook_xls(path: Path) -> tuple[list[LegacyRawRow], WorkbookIn
     return raw_rows, inspection
 
 
+def _no_email_normalized_row(
+    raw: LegacyRawRow,
+    *,
+    organization: str,
+    contact_name: str,
+    phone: str,
+    region: str,
+    original_notes: str,
+    product_angle: str,
+    category: str,
+    raw_email_cell: str,
+) -> LegacyNormalizedRow:
+    return LegacyNormalizedRow(
+        email="",
+        domain="",
+        organization=organization,
+        contact_name=contact_name,
+        phone=phone,
+        region=region,
+        source_sheet=raw.source_sheet,
+        source_row=raw.source_row,
+        original_notes=original_notes,
+        product_angle=product_angle,
+        category=category,
+        raw_email_cell=raw_email_cell,
+        normalized_status=STATUS_NO_EMAIL,
+        safety_reason="sin_correo_en_celda",
+        suggested_action=DEFAULT_SUGGESTED_ACTION,
+    )
+
+
 def normalize_legacy_raw_rows(raw_rows: Iterable[LegacyRawRow]) -> list[LegacyNormalizedRow]:
     """Expand raw sheet rows to one row per extracted email."""
     out: list[LegacyNormalizedRow] = []
     for raw in raw_rows:
-        mapping = infer_column_mapping(raw.cells.keys())
-        email_col = mapping.get("email", "")
-        raw_email_cell = raw.cells.get(email_col, "") if email_col else ""
-        emails = split_emails_from_cell(raw_email_cell)
-        org = normalize_organization_name(raw.cells.get(mapping.get("organization", ""), ""))
-        contact = _collapse_ws(raw.cells.get(mapping.get("contact_name", ""), ""))
-        product = _collapse_ws(raw.cells.get(mapping.get("product_angle", ""), ""))
-        region = _collapse_ws(raw.cells.get(mapping.get("region", ""), ""))
-        phone = _collapse_ws(raw.cells.get(mapping.get("phone", ""), ""))
-        category = _collapse_ws(raw.cells.get(mapping.get("category", ""), ""))
-        notes_parts = [
-            raw.cells.get(mapping.get("notes", ""), ""),
-            category,
-        ]
-        original_notes = _collapse_ws("; ".join(p for p in notes_parts if p))
-
+        raw_email_cell, emails, org, contact, product, region, phone, category, original_notes = (
+            _parse_legacy_raw_row(raw)
+        )
         if not emails:
             out.append(
-                LegacyNormalizedRow(
-                    email="",
-                    domain="",
+                _no_email_normalized_row(
+                    raw,
                     organization=org,
                     contact_name=contact,
                     phone=phone,
                     region=region,
-                    source_sheet=raw.source_sheet,
-                    source_row=raw.source_row,
                     original_notes=original_notes,
                     product_angle=product,
                     category=category,
                     raw_email_cell=raw_email_cell,
-                    normalized_status=STATUS_NO_EMAIL,
-                    safety_reason="sin_correo_en_celda",
-                    suggested_action=DEFAULT_SUGGESTED_ACTION,
                 )
             )
             continue
@@ -406,12 +477,38 @@ def normalize_legacy_raw_rows(raw_rows: Iterable[LegacyRawRow]) -> list[LegacyNo
     return out
 
 
+# ---------------------------------------------------------------------------
+# 5. Safety context loading
+# ---------------------------------------------------------------------------
+
+
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     row = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
         (name,),
     ).fetchone()
     return bool(row)
+
+
+def _load_active_lead_research_email_domain_sets(
+    conn: sqlite3.Connection,
+) -> tuple[set[str], set[str]]:
+    emails: set[str] = set()
+    domains: set[str] = set()
+    if not _table_exists(conn, "lead_research_prospect"):
+        return emails, domains
+    for em, dom in conn.execute(
+        """
+        SELECT lower(trim(email)), lower(trim(domain))
+        FROM lead_research_prospect
+        WHERE is_active = 1 AND email IS NOT NULL AND trim(email) != ''
+        """
+    ):
+        if em:
+            emails.add(str(em))
+        if dom:
+            domains.add(str(dom))
+    return emails, domains
 
 
 def load_legacy_safety_context(
@@ -435,18 +532,7 @@ def load_legacy_safety_context(
         supplier_sqlite = supplier_email_domains(conn)
         if gmail_user and sent_folders:
             gmail_sent |= load_sent_recipient_norms(conn, gmail_user=gmail_user, sent_folders=sent_folders)
-        if _table_exists(conn, "lead_research_prospect"):
-            for em, dom in conn.execute(
-                """
-                SELECT lower(trim(email)), lower(trim(domain))
-                FROM lead_research_prospect
-                WHERE is_active = 1 AND email IS NOT NULL AND trim(email) != ''
-                """
-            ):
-                if em:
-                    lr_emails.add(str(em))
-                if dom:
-                    lr_domains.add(str(dom))
+        lr_emails, lr_domains = _load_active_lead_research_email_domain_sets(conn)
 
     return LegacySafetyContext(
         exclusion=excl,
@@ -457,6 +543,11 @@ def load_legacy_safety_context(
         lead_research_domains=frozenset(lr_domains),
         supplier_domains_sqlite=supplier_sqlite,
     )
+
+
+# ---------------------------------------------------------------------------
+# 6. Classification and duplicate labeling
+# ---------------------------------------------------------------------------
 
 
 def _is_generic_mailbox(email: str) -> bool:
@@ -503,9 +594,19 @@ def _base_safety_status(row: LegacyNormalizedRow, ctx: LegacySafetyContext) -> t
     return STATUS_POSSIBLE_BUYER, "legacy_sin_historial_negativo"
 
 
-def apply_duplicate_labels(rows: list[LegacyNormalizedRow]) -> None:
+def _apply_row_classification(row: LegacyNormalizedRow, ctx: LegacySafetyContext) -> None:
+    status, reason = _base_safety_status(row, ctx)
+    row.normalized_status = status
+    row.safety_reason = reason
+    if status == STATUS_POSSIBLE_BUYER:
+        row.confidence = "media" if row.contact_name and row.organization else "baja"
+    else:
+        row.confidence = "baja"
+    row.suggested_action = DEFAULT_SUGGESTED_ACTION
+
+
+def _mark_duplicate_emails(rows: list[LegacyNormalizedRow]) -> None:
     seen_email: dict[str, int] = {}
-    seen_domain_primary: dict[str, str] = {}
     for idx, row in enumerate(rows):
         if row.normalized_status in (STATUS_NO_EMAIL, STATUS_INVALID_EMAIL):
             continue
@@ -517,6 +618,9 @@ def apply_duplicate_labels(rows: list[LegacyNormalizedRow]) -> None:
             continue
         seen_email[em] = idx
 
+
+def _mark_duplicate_domains(rows: list[LegacyNormalizedRow]) -> None:
+    seen_domain_primary: dict[str, str] = {}
     for row in rows:
         if row.normalized_status not in ("", STATUS_POSSIBLE_BUYER):
             continue
@@ -532,6 +636,11 @@ def apply_duplicate_labels(rows: list[LegacyNormalizedRow]) -> None:
             row.confidence = "baja"
 
 
+def apply_duplicate_labels(rows: list[LegacyNormalizedRow]) -> None:
+    _mark_duplicate_emails(rows)
+    _mark_duplicate_domains(rows)
+
+
 def classify_legacy_rows(
     rows: list[LegacyNormalizedRow],
     ctx: LegacySafetyContext,
@@ -539,15 +648,13 @@ def classify_legacy_rows(
     for row in rows:
         if row.normalized_status == STATUS_NO_EMAIL:
             continue
-        status, reason = _base_safety_status(row, ctx)
-        row.normalized_status = status
-        row.safety_reason = reason
-        if status == STATUS_POSSIBLE_BUYER:
-            row.confidence = "media" if row.contact_name and row.organization else "baja"
-        else:
-            row.confidence = "baja"
-        row.suggested_action = DEFAULT_SUGGESTED_ACTION
+        _apply_row_classification(row, ctx)
     apply_duplicate_labels(rows)
+
+
+# ---------------------------------------------------------------------------
+# 7. Bucket / summary / output writing
+# ---------------------------------------------------------------------------
 
 
 def row_to_review_dict(row: LegacyNormalizedRow) -> dict[str, str]:
@@ -653,7 +760,7 @@ def build_legacy_contacts_review(
     )
 
 
-def _write_csv(path: Path, rows: list[LegacyNormalizedRow]) -> None:
+def _write_review_csv(path: Path, rows: list[LegacyNormalizedRow]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(REVIEW_OUTPUT_COLUMNS))
@@ -675,23 +782,11 @@ def summary_markdown(summary: dict[str, Any]) -> str:
         "",
         "## Safety buckets",
         "",
-        f"| Bucket | Count |",
-        f"| --- | ---: |",
+        "| Bucket | Count |",
+        "| --- | ---: |",
     ]
     sc = summary.get("status_counts") or {}
-    for key in (
-        STATUS_POSSIBLE_BUYER,
-        STATUS_ALREADY_CONTACTED_EXACT,
-        STATUS_DOMAIN_HAS_HISTORY,
-        STATUS_BOUNCED_SUPPRESSED,
-        STATUS_INVALID_EMAIL,
-        STATUS_NO_EMAIL,
-        STATUS_SUPPLIER_VENDOR,
-        STATUS_LIKELY_PERSONAL,
-        STATUS_GENERIC_ORG,
-        STATUS_DUP_EMAIL,
-        STATUS_DUP_DOMAIN_SECONDARY,
-    ):
+    for key in _SUMMARY_MARKDOWN_BUCKET_ORDER:
         lines.append(f"| {key} | {sc.get(key, 0)} |")
     lines.extend(["", "## Top possible buyers (review only)", ""])
     for i, b in enumerate(summary.get("top_possible_buyers") or [], 1):
@@ -712,30 +807,27 @@ def summary_markdown(summary: dict[str, Any]) -> str:
 def write_legacy_review_outputs(result: LegacyReviewBuildResult, out_dir: Path) -> dict[str, Path]:
     out_dir = out_dir.resolve()
     paths: dict[str, Path] = {}
-    all_rows = result.normalized_rows
     buckets = result.buckets
 
     paths["all"] = out_dir / "legacy_contacts_2016_2019_all_normalized.csv"
-    _write_csv(paths["all"], all_rows)
+    _write_review_csv(paths["all"], result.normalized_rows)
 
     paths["possible_buyers"] = out_dir / "legacy_contacts_2016_2019_possible_buyers_review.csv"
-    _write_csv(paths["possible_buyers"], buckets.get(STATUS_POSSIBLE_BUYER, []))
+    _write_review_csv(paths["possible_buyers"], buckets.get(STATUS_POSSIBLE_BUYER, []))
 
-    contacted = buckets.get(STATUS_ALREADY_CONTACTED_EXACT, [])
     paths["already_contacted"] = out_dir / "legacy_contacts_2016_2019_already_contacted.csv"
-    _write_csv(paths["already_contacted"], contacted)
+    _write_review_csv(paths["already_contacted"], buckets.get(STATUS_ALREADY_CONTACTED_EXACT, []))
 
-    bounced = buckets.get(STATUS_BOUNCED_SUPPRESSED, [])
     paths["bounced_suppressed"] = out_dir / "legacy_contacts_2016_2019_bounced_suppressed.csv"
-    _write_csv(paths["bounced_suppressed"], bounced)
+    _write_review_csv(paths["bounced_suppressed"], buckets.get(STATUS_BOUNCED_SUPPRESSED, []))
 
     invalid = buckets.get(STATUS_INVALID_EMAIL, []) + buckets.get(STATUS_NO_EMAIL, [])
     paths["invalid_incomplete"] = out_dir / "legacy_contacts_2016_2019_invalid_or_incomplete.csv"
-    _write_csv(paths["invalid_incomplete"], invalid)
+    _write_review_csv(paths["invalid_incomplete"], invalid)
 
     domain_dups = buckets.get(STATUS_DUP_DOMAIN_SECONDARY, []) + buckets.get(STATUS_DUP_EMAIL, [])
     paths["domain_duplicates"] = out_dir / "legacy_contacts_2016_2019_domain_duplicates.csv"
-    _write_csv(paths["domain_duplicates"], domain_dups)
+    _write_review_csv(paths["domain_duplicates"], domain_dups)
 
     paths["inspection"] = out_dir / "legacy_contacts_2016_2019_inspection.md"
     paths["inspection"].write_text(result.inspection.to_markdown(), encoding="utf-8")
@@ -751,7 +843,9 @@ def write_legacy_review_outputs(result: LegacyReviewBuildResult, out_dir: Path) 
     return paths
 
 
-# --- Optional SQLite staging (review-only; no outreach writes) ---
+# ---------------------------------------------------------------------------
+# Optional SQLite staging (review-only; no outreach writes)
+# ---------------------------------------------------------------------------
 
 LEGACY_RAW_DDL = """
 CREATE TABLE IF NOT EXISTS legacy_contact_raw (
@@ -790,6 +884,47 @@ def ensure_legacy_contact_staging_tables(conn: sqlite3.Connection) -> None:
     conn.executescript(LEGACY_RAW_DDL + LEGACY_NORMALIZED_DDL)
 
 
+def _stage_legacy_raw_row(conn: sqlite3.Connection, raw: LegacyRawRow, imported_at: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO legacy_contact_raw (source_sheet, source_row, cells_json, imported_at)
+        VALUES (?,?,?,?)
+        """,
+        (raw.source_sheet, raw.source_row, json.dumps(raw.cells, ensure_ascii=False), imported_at),
+    )
+
+
+def _stage_legacy_normalized_row(conn: sqlite3.Connection, row: LegacyNormalizedRow, imported_at: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO legacy_contact_normalized (
+          email, domain, organization, contact_name, phone, region,
+          source_sheet, source_row, original_notes, product_angle,
+          normalized_status, safety_reason, suggested_action,
+          source_type, dataset_label, imported_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            row.email or None,
+            row.domain or None,
+            row.organization or None,
+            row.contact_name or None,
+            row.phone or None,
+            row.region or None,
+            row.source_sheet,
+            row.source_row,
+            row.original_notes or None,
+            row.product_angle or None,
+            row.normalized_status,
+            row.safety_reason,
+            row.suggested_action,
+            row.source_type,
+            row.dataset_label,
+            imported_at,
+        ),
+    )
+
+
 def stage_legacy_contacts_to_sqlite(
     conn: sqlite3.Connection,
     raw_rows: list[LegacyRawRow],
@@ -802,49 +937,17 @@ def stage_legacy_contacts_to_sqlite(
     if replace:
         conn.execute("DELETE FROM legacy_contact_raw")
         conn.execute("DELETE FROM legacy_contact_normalized")
-    raw_n = 0
     for raw in raw_rows:
-        conn.execute(
-            """
-            INSERT INTO legacy_contact_raw (source_sheet, source_row, cells_json, imported_at)
-            VALUES (?,?,?,?)
-            """,
-            (raw.source_sheet, raw.source_row, json.dumps(raw.cells, ensure_ascii=False), now),
-        )
-        raw_n += 1
-    norm_n = 0
+        _stage_legacy_raw_row(conn, raw, now)
     for row in normalized:
-        conn.execute(
-            """
-            INSERT INTO legacy_contact_normalized (
-              email, domain, organization, contact_name, phone, region,
-              source_sheet, source_row, original_notes, product_angle,
-              normalized_status, safety_reason, suggested_action,
-              source_type, dataset_label, imported_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                row.email or None,
-                row.domain or None,
-                row.organization or None,
-                row.contact_name or None,
-                row.phone or None,
-                row.region or None,
-                row.source_sheet,
-                row.source_row,
-                row.original_notes or None,
-                row.product_angle or None,
-                row.normalized_status,
-                row.safety_reason,
-                row.suggested_action,
-                row.source_type,
-                row.dataset_label,
-                now,
-            ),
-        )
-        norm_n += 1
+        _stage_legacy_normalized_row(conn, row, now)
     conn.commit()
-    return {"legacy_contact_raw": raw_n, "legacy_contact_normalized": norm_n}
+    return {"legacy_contact_raw": len(raw_rows), "legacy_contact_normalized": len(normalized)}
+
+
+# ---------------------------------------------------------------------------
+# 8. lead_research payload + merge
+# ---------------------------------------------------------------------------
 
 
 def legacy_row_to_lead_research_payload(row: LegacyNormalizedRow) -> dict[str, Any] | None:
@@ -879,6 +982,76 @@ def legacy_row_to_lead_research_payload(row: LegacyNormalizedRow) -> dict[str, A
     }
 
 
+def _resolve_legacy_batch_id(conn: sqlite3.Connection, now: str) -> int:
+    existing_batch = conn.execute(
+        "SELECT id FROM lead_research_batch WHERE batch_key = ?", (BATCH_KEY_LEGACY,)
+    ).fetchone()
+    if existing_batch:
+        return int(existing_batch[0])
+    batch_row = conn.execute(
+        """
+        INSERT INTO lead_research_batch
+          (batch_key, source_name, generated_at, input_file_name, row_count, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            BATCH_KEY_LEGACY,
+            SOURCE_NAME_LEGACY,
+            now,
+            DATASET_LABEL_LEGACY,
+            0,
+            now,
+        ),
+    )
+    return int(batch_row.lastrowid)
+
+
+def _insert_legacy_lead_research_prospect(
+    conn: sqlite3.Connection,
+    batch_id: int,
+    payload: dict[str, Any],
+    created_at: str,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO lead_research_prospect (
+          batch_id, prospect_key, organization_name, contact_name, email, domain,
+          product_angle, region, classification, status, source_type, dataset_label,
+          block_or_review_reason, recommended_next_action, spanish_message_angle,
+          is_blocked, final_score, input_priority_score, confidence, source,
+          campaign_bucket, is_active, created_at
+        ) VALUES (
+          ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+        )
+        """,
+        (
+            batch_id,
+            payload["prospect_key"],
+            payload["organization_name"],
+            payload.get("contact_name"),
+            payload["email"],
+            payload.get("domain"),
+            payload.get("product_angle"),
+            payload.get("region"),
+            payload["classification"],
+            payload["status"],
+            payload["source_type"],
+            payload["dataset_label"],
+            payload["block_or_review_reason"],
+            payload["recommended_next_action"],
+            payload["spanish_message_angle"],
+            payload["is_blocked"],
+            payload["final_score"],
+            payload["input_priority_score"],
+            payload["confidence"],
+            payload["source"],
+            payload["campaign_bucket"],
+            1,
+            created_at,
+        ),
+    )
+
+
 def merge_legacy_possible_buyers_to_lead_research(
     conn: sqlite3.Connection,
     rows: list[LegacyNormalizedRow],
@@ -906,67 +1079,9 @@ def merge_legacy_possible_buyers_to_lead_research(
     inserted = 0
     if not dry_run and to_insert:
         now = _utc_now()
-        existing_batch = conn.execute(
-            "SELECT id FROM lead_research_batch WHERE batch_key = ?", (BATCH_KEY_LEGACY,)
-        ).fetchone()
-        if existing_batch:
-            batch_id = int(existing_batch[0])
-        else:
-            batch_row = conn.execute(
-                """
-                INSERT INTO lead_research_batch
-                  (batch_key, source_name, generated_at, input_file_name, row_count, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    BATCH_KEY_LEGACY,
-                    SOURCE_NAME_LEGACY,
-                    now,
-                    DATASET_LABEL_LEGACY,
-                    0,
-                    now,
-                ),
-            )
-            batch_id = int(batch_row.lastrowid)
+        batch_id = _resolve_legacy_batch_id(conn, now)
         for payload in to_insert:
-            conn.execute(
-                """
-                INSERT INTO lead_research_prospect (
-                  batch_id, prospect_key, organization_name, contact_name, email, domain,
-                  product_angle, region, classification, status, source_type, dataset_label,
-                  block_or_review_reason, recommended_next_action, spanish_message_angle,
-                  is_blocked, final_score, input_priority_score, confidence, source,
-                  campaign_bucket, is_active, created_at
-                ) VALUES (
-                  ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
-                )
-                """,
-                (
-                    batch_id,
-                    payload["prospect_key"],
-                    payload["organization_name"],
-                    payload.get("contact_name"),
-                    payload["email"],
-                    payload.get("domain"),
-                    payload.get("product_angle"),
-                    payload.get("region"),
-                    payload["classification"],
-                    payload["status"],
-                    payload["source_type"],
-                    payload["dataset_label"],
-                    payload["block_or_review_reason"],
-                    payload["recommended_next_action"],
-                    payload["spanish_message_angle"],
-                    payload["is_blocked"],
-                    payload["final_score"],
-                    payload["input_priority_score"],
-                    payload["confidence"],
-                    payload["source"],
-                    payload["campaign_bucket"],
-                    1,
-                    now,
-                ),
-            )
+            _insert_legacy_lead_research_prospect(conn, batch_id, payload, now)
             inserted += 1
         conn.commit()
     return {
