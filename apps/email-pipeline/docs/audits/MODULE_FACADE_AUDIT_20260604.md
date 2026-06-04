@@ -66,6 +66,17 @@ See also: [`ROOT_CORE_COMPATIBILITY_AUDIT_20260602.md`](ROOT_CORE_COMPATIBILITY_
 - **`.gitignore`:** ignore `apps/email-pipeline/reports/local/` so ad-hoc operator reports (e.g. daily-health text dumps) are not committed.
 - **This file:** short facade audit note for future agents; no runtime or import changes.
 
+## Reusable check
+
+```bash
+cd apps/email-pipeline
+uv run origenlab audit-facades
+uv run origenlab audit-facades -- --json
+uv run origenlab audit-facades -- --fail-on-manual-review
+```
+
+Read-only: inspects tracked `src/origenlab_email_pipeline/**/*.py` via `git ls-files`; does not import or mutate pipeline data.
+
 ## Non-goals
 
 - No file moves, deletions, or refactors.
