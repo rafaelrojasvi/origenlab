@@ -38,8 +38,9 @@
 ## Runtime truth
 
 - **SQLite** (`ORIGENLAB_SQLITE_PATH` / settings) + **Gmail Sent in `emails`** = outbound safety truth.
-- **Postgres + FastAPI + React dashboard** = optional / **parked** — not required to mark sends or build equipment queues.
-- **Streamlit** (`apps/business_mart_app.py`) = supporting review UI on SQLite; not autonomous send.
+- **Active operator UI** = [`apps/dashboard`](../../dashboard/README.md) + [`apps/api`](../../api/README.md) (Postgres mirror read model). Not Streamlit.
+- **Postgres mirror sync** = parked for *daily outbound* but required when using the React dashboard; not send approval.
+- **Streamlit** (`apps/business_mart_app.py`) = **legacy/parked** SQLite review UI — do not extend; see [`docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 ## Safe default workflow
 

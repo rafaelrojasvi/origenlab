@@ -25,13 +25,13 @@ The following are **optional**. None are needed for:
 | **Dashboard mirror** | `scripts/sync/sync_dashboard_postgres_mirror.py` | Loads Postgres mirror from SQLite; **not** send/export truth. |
 | **Dashboard stack wrapper** | `scripts/ops/refresh_operational_dashboard_stack.py` | Mart + mirror orchestration; **DASHBOARD_ONLY**; Gmail ingest off by default. |
 | **HTTP mirror API** | [`apps/api`](../../api/README.md) (`GET /mirror/*` on :8001) | Legacy `apps/email-pipeline/src/origenlab_api` on :8000 **removed** (API-3 Phase 6) — see [`apps/api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md`](../../api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md). |
-| **React dashboard** | [`apps/dashboard`](../../dashboard/README.md) | Active **Today** UI polls `apps/api` operator routes only; parked multi-tab client under `src/legacy/`. |
+| **React dashboard** | [`apps/dashboard`](../../dashboard/README.md) | **Active operator UI** — polls `apps/api` (operator + mirror read paths). Legacy multi-tab client under `src/legacy/`. |
 | **Tatiana pilots** | `scripts/tatiana/*`, `src/origenlab_email_pipeline/tatiana_copilot/` | Drafting / eval; not volume or precision daily lanes. |
 | **ML exploration** | `scripts/ml/*` | Embeddings / clustering experiments. |
 | **Dataset / cohort tools** | `scripts/dataset/*` | Tatiana cohort exports and label review CLIs. |
 | **Old campaign pilots** | `scripts/leads/campaigns/*` | e.g. DR50 reconciliation, ready8 patches — niche, not current equipment-first policy. |
 
-**Streamlit** (`apps/business_mart_app.py`) is **supporting** review UI on SQLite — useful, but not parked in the same sense as Postgres/API.
+**Streamlit** (`apps/business_mart_app.py`) is **legacy/parked** — not the active operator UI. Prefer `apps/dashboard` + `apps/api`. Retirement plan: [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 ---
 
