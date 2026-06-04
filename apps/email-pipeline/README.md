@@ -38,7 +38,11 @@ uv run origenlab refresh-dashboard --apply --mirror-dry-run
 
 Fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>` (same behavior). Script flags after ``--`` (e.g. `uv run origenlab validate-csvs -- --strict`). `gmail-ingest` rejects `--replace-source`. Postgres mirror is **parked** — see [docs/EXPERIMENTAL_PARKED.md](docs/EXPERIMENTAL_PARKED.md). More: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
-**HTTP API:** This package does **not** ship FastAPI. Operator and Postgres mirror HTTP live in [`apps/api`](../api/README.md) on port **8001** (`GET /mirror/*` for mirror reporting). The React dashboard [`apps/dashboard`](../dashboard/README.md) uses operator routes only.
+**Operator UI (active):** [`apps/dashboard`](../dashboard/README.md) (React, **:5173**) backed by [`apps/api`](../api/README.md) (FastAPI, **:8001**) and the Postgres mirror. This package has **no** product UI — only CLIs, scripts, and SQLite jobs.
+
+**HTTP API:** FastAPI does **not** live in this package. Mirror reporting is `GET /mirror/*` on **`apps/api`**.
+
+**Streamlit (legacy/parked):** [`apps/business_mart_app.py`](apps/business_mart_app.py) is **not** the active operator UI. See [`docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
 ## GitHub & what not to commit
 
@@ -207,7 +211,7 @@ Optional: override internal domains:
 uv run python scripts/mart/build_business_mart.py --rebuild --internal-domain labdelivery.cl
 ```
 
-2) Run Streamlit MVP UI (Streamlit and pandas live in dependency group **`ui`** — not installed by default `uv sync`):
+2) **Legacy — Streamlit review UI only** (not the active operator dashboard; pandas/streamlit in group **`ui`** — not installed by default `uv sync`):
 
 ```bash
 uv sync --group ui   # once per machine / after clone

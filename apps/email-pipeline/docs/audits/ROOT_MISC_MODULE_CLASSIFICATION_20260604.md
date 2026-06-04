@@ -81,6 +81,8 @@ Fan-in = count of **other** `src/origenlab_email_pipeline/**/*.py` files importi
 
 ## 3. Safe low-risk candidates
 
+**Active stack (not Streamlit):** [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md) — `apps/dashboard` + `apps/api` + Postgres mirror; Streamlit legacy/parked.
+
 See [`../SHARED_UTILITY_CONTRACTS.md`](../SHARED_UTILITY_CONTRACTS.md) for characterization-tested shared utility contracts (`timeutil`, `freshness_dates`, `contact_export_queries`, `pipeline_meta_schema`, `pipeline_run_recorder`).
 
 Work safe **without** runtime refactors (docs / tests / read-only tooling only):

@@ -8,6 +8,8 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 
 **Preferred operator CLI (Phase 6C):** `uv run python -m origenlab_email_pipeline.cli <subcommand>` — see [Operator health matrix](#m-eprun-operator-health-matrix) and [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md). Raw `scripts/qa/…` paths remain valid **advanced/manual** fallbacks.
 
+**Active operator UI:** [`apps/dashboard`](../../dashboard/README.md) (React) backed by [`apps/api`](../../api/README.md) (:8001) and the Postgres mirror — not Streamlit. Streamlit ([`apps/business_mart_app.py`](../apps/business_mart_app.py)) is **legacy/parked**; see [`audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
+
 ### Runbook map (pick one track)
 
 | Track | Section | When |

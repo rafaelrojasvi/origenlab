@@ -4,6 +4,8 @@
 **Scope:** `apps/email-pipeline` Streamlit stack vs `apps/api` (:8001) + `apps/dashboard` (React)  
 **Rules for this audit:** read-only inventory — **no deletions**, **no runtime behavior changes**
 
+**Operator decision (2026-06-04):** Active UI = `apps/dashboard`; active API = `apps/api`; Streamlit retired from product path. Phased plan: [`ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
+
 **Verdict (executive):** Streamlit **cannot be removed safely today**. The React dashboard and Postgres mirror API cover a growing **read-only** slice, but several **operator workflows** (SQLite sidecar writes, marketing queue preview, Tatiana borrador export, mart/data-health diagnostics) still live only in `apps/business_mart_app.py` and `streamlit_*` modules. Retirement requires **extracting read logic**, **parity for writes (API or CLIs)**, and **doc/test migration** — not a single delete PR.
 
 ---
