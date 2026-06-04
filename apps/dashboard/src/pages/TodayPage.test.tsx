@@ -148,7 +148,7 @@ describe("DashboardApp (legacy TodayPage tests)", () => {
     expect(screen.queryByText(/body_preview/)).toBeNull();
 
     const nav = screen.getByRole("navigation", { name: "Navegación del panel" });
-    fireEvent.click(within(nav).getByRole("link", { name: "Oportunidades" }));
+    fireEvent.click(within(nav).getByRole("link", { name: "Licitaciones / equipos" }));
     await waitFor(() => screen.getByText("Hospital Regional"));
     expect(screen.queryByText(/\/secret\/path/)).toBeNull();
   });
