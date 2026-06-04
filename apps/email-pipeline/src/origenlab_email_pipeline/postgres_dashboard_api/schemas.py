@@ -12,10 +12,70 @@ from origenlab_email_pipeline.catalog.catalog_mirror_safety import (
     validate_catalog_prose_field,
 )
 
+# ---------------------------------------------------------------------------
+# Shared mirror disclaimers, constants, and prose helpers
+# ---------------------------------------------------------------------------
+
 POSTGRES_MIRROR_NOTE: str = (
     "Espejo Postgres de solo lectura; SQLite/Gmail sigue siendo la fuente operativa. "
     "Los correos nuevos no aparecen aquí hasta ingest Gmail, rebuild del mart y sync del espejo."
 )
+
+COMMERCIAL_PURCHASE_DISCLAIMER: str = (
+    "Eventos de compra confirmados promovidos desde Gmail/SQLite. "
+    "No sustituyen revisión operativa de OC, factura o despacho."
+)
+
+COMMERCIAL_DEAL_DISCLAIMER: str = (
+    "Espejo Postgres redactado del ledger comercial SQLite. "
+    "No incluye cuerpos de correo, IDs de transferencia completos ni rutas locales. "
+    "SQLite sigue siendo la fuente operativa."
+)
+
+CATALOG_DISCLAIMER: str = (
+    "Catálogo operador (espejo Postgres redactado). "
+    "Precios de proveedor son datos internos (is_public_safe=false). "
+    "SQLite sigue siendo la fuente operativa; no incluye cuerpos de correo ni datos bancarios."
+)
+
+LEAD_RESEARCH_DISCLAIMER: str = (
+    "Prospectos generados desde investigación y deduplicados contra historial OrigenLab. "
+    "Revisión humana requerida antes de cualquier contacto."
+)
+# Canonical operator-facing text (single sentence break; avoid split-literal join bugs).
+assert "OrigenLab. Revisión" in LEAD_RESEARCH_DISCLAIMER
+assert "OrigenLab.Revisión" not in LEAD_RESEARCH_DISCLAIMER
+
+# Regression guard: implicit multi-line concat must not yield "OrigenLab.Revisión".
+_LEAD_DISCLAIMER_JOINED_ORIGENLAB_RE = re.compile(r"OrigenLab\.Revisión", re.IGNORECASE)
+
+
+def prepare_lead_research_disclaimer(value: object) -> object:
+    """Ensure sentence break after OrigenLab before API/dashboard render."""
+    if not isinstance(value, str):
+        return value
+    return _LEAD_DISCLAIMER_JOINED_ORIGENLAB_RE.sub("OrigenLab. Revisión", value)
+
+
+def _validate_catalog_product_prose(value: object, info: Any) -> object:
+    return validate_catalog_prose_field(value, field=f"product.{info.field_name}")
+
+
+def _validate_catalog_response_disclaimer(value: object) -> object:
+    return validate_catalog_prose_field(value, field="response.disclaimer")
+
+
+def _validate_lead_research_disclaimer_field(value: object) -> object:
+    return prepare_lead_research_disclaimer(value)
+
+
+def _validate_catalog_history_prose(value: object, info: Any) -> object:
+    return validate_catalog_prose_field(value, field=f"commercial_history.{info.field_name}")
+
+
+# ---------------------------------------------------------------------------
+# Dashboard summary, sync meta, health
+# ---------------------------------------------------------------------------
 
 
 class DashboardSummaryResponse(BaseModel):
@@ -37,42 +97,95 @@ class DashboardSummaryResponse(BaseModel):
     archive_mirror_counts: dict[str, int] = Field(default_factory=dict)
 
 
-class EmailSuppressionRow(BaseModel):
+class DependencyStatus(BaseModel):
+    name: str
+    status: Literal["ok", "error", "skipped"]
+    detail: str = ""
+
+
+class HealthDependenciesResponse(BaseModel):
+    status: Literal["ok", "degraded", "error"]
+    dependencies: list[DependencyStatus]
+    postgres_url_redacted: str = ""
+    note: str = (
+        "API reads Postgres mirrors only. SQLite ingest remains authoritative until cutover."
+    )
+
+
+class DashboardSyncMetaResponse(BaseModel):
+    """Latest dashboard Postgres mirror sync (reporting.dashboard_sync_run)."""
+
+    table_available: bool = False
+    status: Literal[
+        "missing_table", "no_rows", "success", "failed", "dry_run", "unknown"
+    ] = "no_rows"
+    latest_sync_id: int | None = None
+    started_at: datetime | str | None = None
+    finished_at: datetime | str | None = None
+    elapsed_seconds: float | None = None
+    postgres_mirror_note: str = POSTGRES_MIRROR_NOTE
+    canonical_contact_count: int = 0
+    canonical_organization_count: int = 0
+    canonical_opportunity_signal_count: int = 0
+    archive_contact_count: int = 0
+    archive_organization_count: int = 0
+    archive_opportunity_signal_count: int = 0
+    email_suppression_count: int = 0
+    domain_suppression_count: int = 0
+    outreach_state_count: int = 0
+    error_message: str | None = None
+
+
+class ContactRow(BaseModel):
     email: str
-    suppression_reason_code: str
-    suppression_reason_text: str | None = None
-    suppression_source: str | None = None
-    last_bounced_at: datetime | str | None = None
-    updated_at: datetime | str | None = None
-    updated_by: str | None = None
+    contact_name_best: str | None = None
+    domain: str | None = None
+    organization_name_guess: str | None = None
+    organization_type_guess: str | None = None
+    first_seen_at: datetime | str | None = None
+    last_seen_at: datetime | str | None = None
+    total_emails: int | None = None
+    confidence_score: float | None = None
+    top_equipment_tags: str | None = None
 
 
-class PaginatedEmailSuppressionsResponse(BaseModel):
-    items: list[EmailSuppressionRow]
+class OrganizationRow(BaseModel):
+    domain: str
+    organization_name_guess: str | None = None
+    organization_type_guess: str | None = None
+    first_seen_at: datetime | str | None = None
+    last_seen_at: datetime | str | None = None
+    total_emails: int | None = None
+    total_contacts: int | None = None
+    top_equipment_tags: str | None = None
+    key_contacts: str | None = None
+
+
+class PaginatedContactsResponse(BaseModel):
+    items: list[ContactRow]
     total: int
     limit: int
     offset: int
     table_available: bool = True
+    scope: Literal["canonical", "archive"] = "canonical"
+    scope_available: bool = True
+    scope_note: str = ""
 
 
-class OutreachContactStateRow(BaseModel):
-    contact_email_norm: str
-    state: str
-    first_contacted_at: datetime | str | None = None
-    last_contacted_at: datetime | str | None = None
-    source: str | None = None
-    notes: str | None = None
-    updated_at: datetime | str | None = None
-    updated_by: str | None = None
-    lead_id: int | None = None
-
-
-class PaginatedOutreachStateResponse(BaseModel):
-    items: list[OutreachContactStateRow]
+class PaginatedOrganizationsResponse(BaseModel):
+    items: list[OrganizationRow]
     total: int
     limit: int
     offset: int
     table_available: bool = True
+    scope: Literal["canonical", "archive"] = "canonical"
+    scope_available: bool = True
+    scope_note: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Classification (recent / actions)
+# ---------------------------------------------------------------------------
 
 
 class ClassificationSummaryResponse(BaseModel):
@@ -130,6 +243,72 @@ class ClassificationActionsResponse(BaseModel):
     )
 
 
+# ---------------------------------------------------------------------------
+# Outbound suppressions, outreach state, readiness
+# ---------------------------------------------------------------------------
+
+
+class EmailSuppressionRow(BaseModel):
+    email: str
+    suppression_reason_code: str
+    suppression_reason_text: str | None = None
+    suppression_source: str | None = None
+    last_bounced_at: datetime | str | None = None
+    updated_at: datetime | str | None = None
+    updated_by: str | None = None
+
+
+class PaginatedEmailSuppressionsResponse(BaseModel):
+    items: list[EmailSuppressionRow]
+    total: int
+    limit: int
+    offset: int
+    table_available: bool = True
+
+
+class OutreachContactStateRow(BaseModel):
+    contact_email_norm: str
+    state: str
+    first_contacted_at: datetime | str | None = None
+    last_contacted_at: datetime | str | None = None
+    source: str | None = None
+    notes: str | None = None
+    updated_at: datetime | str | None = None
+    updated_by: str | None = None
+    lead_id: int | None = None
+
+
+class PaginatedOutreachStateResponse(BaseModel):
+    items: list[OutreachContactStateRow]
+    total: int
+    limit: int
+    offset: int
+    table_available: bool = True
+
+
+class OutboundReadinessResponse(BaseModel):
+    verdict: Literal["ready", "ready_with_warnings", "not_ready", "unknown"]
+    data_source: Literal["postgres_mirror"] = "postgres_mirror"
+    eventually_consistent: bool = True
+    postgres_url_redacted: str = ""
+    gmail_user: str = ""
+    tables: dict[str, bool] = Field(default_factory=dict)
+    counts: dict[str, int] = Field(default_factory=dict)
+    mart: dict[str, Any] = Field(default_factory=dict)
+    sidecars: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    disclaimer: str = (
+        "Based on Postgres mirror tables only. Sent-folder ingest and live gates still use "
+        "SQLite; sync lag may make this differ from CLI/SQLite operational truth."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Commercial purchase events
+# ---------------------------------------------------------------------------
+
+
 class CommercialPurchaseEventItemRow(BaseModel):
     line_number: int
     ref_code: str | None = None
@@ -165,12 +344,6 @@ class CommercialPurchaseEventRow(BaseModel):
     product_summary: str | None = None
 
 
-COMMERCIAL_PURCHASE_DISCLAIMER: str = (
-    "Eventos de compra confirmados promovidos desde Gmail/SQLite. "
-    "No sustituyen revisión operativa de OC, factura o despacho."
-)
-
-
 class CommercialPurchaseEventsListResponse(BaseModel):
     table_available: bool = False
     items: list[CommercialPurchaseEventRow] = Field(default_factory=list)
@@ -183,6 +356,11 @@ class CommercialPurchaseEventDetailResponse(BaseModel):
     table_available: bool = False
     event: CommercialPurchaseEventRow | None = None
     disclaimer: str = COMMERCIAL_PURCHASE_DISCLAIMER
+
+
+# ---------------------------------------------------------------------------
+# Commercial deals
+# ---------------------------------------------------------------------------
 
 
 class CommercialDealProductLineSummary(BaseModel):
@@ -243,13 +421,6 @@ class CommercialDealRow(BaseModel):
     margin_blockers: list[str] = Field(default_factory=list)
 
 
-COMMERCIAL_DEAL_DISCLAIMER: str = (
-    "Espejo Postgres redactado del ledger comercial SQLite. "
-    "No incluye cuerpos de correo, IDs de transferencia completos ni rutas locales. "
-    "SQLite sigue siendo la fuente operativa."
-)
-
-
 class CommercialDealsListResponse(BaseModel):
     table_available: bool = False
     items: list[CommercialDealRow] = Field(default_factory=list)
@@ -268,6 +439,11 @@ class CommercialDealDetailResponse(BaseModel):
     disclaimer: str = COMMERCIAL_DEAL_DISCLAIMER
 
 
+# ---------------------------------------------------------------------------
+# Catalog mirror (products, specs, supplier offers)
+# ---------------------------------------------------------------------------
+
+
 class CatalogProductListItem(BaseModel):
     product_key: str
     display_name: str
@@ -281,8 +457,7 @@ class CatalogProductListItem(BaseModel):
     @field_validator("display_name", "public_summary", mode="before")
     @classmethod
     def _prepare_product_prose(cls, value: object, info) -> object:
-        field = f"product.{info.field_name}"
-        return validate_catalog_prose_field(value, field=field)
+        return _validate_catalog_product_prose(value, info)
 
 
 class CatalogProductAliasRow(BaseModel):
@@ -398,7 +573,7 @@ class CatalogProductCommercialHistoryRow(BaseModel):
     )
     @classmethod
     def _prepare_history_prose(cls, value: object, info) -> object:
-        return validate_catalog_prose_field(value, field=f"commercial_history.{info.field_name}")
+        return _validate_catalog_history_prose(value, info)
 
 
 class CatalogProductDetail(BaseModel):
@@ -426,15 +601,7 @@ class CatalogProductDetail(BaseModel):
     @field_validator("display_name", "public_summary", "manufacturer_name", mode="before")
     @classmethod
     def _prepare_product_prose(cls, value: object, info) -> object:
-        field = f"product.{info.field_name}"
-        return validate_catalog_prose_field(value, field=field)
-
-
-CATALOG_DISCLAIMER: str = (
-    "Catálogo operador (espejo Postgres redactado). "
-    "Precios de proveedor son datos internos (is_public_safe=false). "
-    "SQLite sigue siendo la fuente operativa; no incluye cuerpos de correo ni datos bancarios."
-)
+        return _validate_catalog_product_prose(value, info)
 
 
 class CatalogProductsListResponse(BaseModel):
@@ -449,7 +616,7 @@ class CatalogProductsListResponse(BaseModel):
     @field_validator("disclaimer", mode="before")
     @classmethod
     def _prepare_disclaimer(cls, value: object) -> object:
-        return validate_catalog_prose_field(value, field="response.disclaimer")
+        return _validate_catalog_response_disclaimer(value)
 
 
 class CatalogProductDetailResponse(BaseModel):
@@ -462,26 +629,12 @@ class CatalogProductDetailResponse(BaseModel):
     @field_validator("disclaimer", mode="before")
     @classmethod
     def _prepare_disclaimer(cls, value: object) -> object:
-        return validate_catalog_prose_field(value, field="response.disclaimer")
+        return _validate_catalog_response_disclaimer(value)
 
 
-LEAD_RESEARCH_DISCLAIMER: str = (
-    "Prospectos generados desde investigación y deduplicados contra historial OrigenLab. "
-    "Revisión humana requerida antes de cualquier contacto."
-)
-# Canonical operator-facing text (single sentence break; avoid split-literal join bugs).
-assert "OrigenLab. Revisión" in LEAD_RESEARCH_DISCLAIMER
-assert "OrigenLab.Revisión" not in LEAD_RESEARCH_DISCLAIMER
-
-# Regression guard: implicit multi-line concat must not yield "OrigenLab.Revisión".
-_LEAD_DISCLAIMER_JOINED_ORIGENLAB_RE = re.compile(r"OrigenLab\.Revisión", re.IGNORECASE)
-
-
-def prepare_lead_research_disclaimer(value: object) -> object:
-    """Ensure sentence break after OrigenLab before API/dashboard render."""
-    if not isinstance(value, str):
-        return value
-    return _LEAD_DISCLAIMER_JOINED_ORIGENLAB_RE.sub("OrigenLab. Revisión", value)
+# ---------------------------------------------------------------------------
+# Lead research / prospect detail
+# ---------------------------------------------------------------------------
 
 
 class LeadProspectListItem(BaseModel):
@@ -579,7 +732,7 @@ class LeadProspectsListResponse(BaseModel):
     @field_validator("disclaimer", mode="before")
     @classmethod
     def _prepare_disclaimer(cls, value: object) -> object:
-        return prepare_lead_research_disclaimer(value)
+        return _validate_lead_research_disclaimer_field(value)
 
 
 class LeadProspectDetailResponse(BaseModel):
@@ -595,7 +748,7 @@ class LeadProspectDetailResponse(BaseModel):
     @field_validator("disclaimer", mode="before")
     @classmethod
     def _prepare_disclaimer(cls, value: object) -> object:
-        return prepare_lead_research_disclaimer(value)
+        return _validate_lead_research_disclaimer_field(value)
 
 
 class LeadResearchSummaryResponse(BaseModel):
@@ -618,108 +771,4 @@ class LeadResearchSummaryResponse(BaseModel):
     @field_validator("disclaimer", mode="before")
     @classmethod
     def _prepare_disclaimer(cls, value: object) -> object:
-        return prepare_lead_research_disclaimer(value)
-
-
-class DependencyStatus(BaseModel):
-    name: str
-    status: Literal["ok", "error", "skipped"]
-    detail: str = ""
-
-
-class HealthDependenciesResponse(BaseModel):
-    status: Literal["ok", "degraded", "error"]
-    dependencies: list[DependencyStatus]
-    postgres_url_redacted: str = ""
-    note: str = (
-        "API reads Postgres mirrors only. SQLite ingest remains authoritative until cutover."
-    )
-
-
-class DashboardSyncMetaResponse(BaseModel):
-    """Latest dashboard Postgres mirror sync (reporting.dashboard_sync_run)."""
-
-    table_available: bool = False
-    status: Literal[
-        "missing_table", "no_rows", "success", "failed", "dry_run", "unknown"
-    ] = "no_rows"
-    latest_sync_id: int | None = None
-    started_at: datetime | str | None = None
-    finished_at: datetime | str | None = None
-    elapsed_seconds: float | None = None
-    postgres_mirror_note: str = POSTGRES_MIRROR_NOTE
-    canonical_contact_count: int = 0
-    canonical_organization_count: int = 0
-    canonical_opportunity_signal_count: int = 0
-    archive_contact_count: int = 0
-    archive_organization_count: int = 0
-    archive_opportunity_signal_count: int = 0
-    email_suppression_count: int = 0
-    domain_suppression_count: int = 0
-    outreach_state_count: int = 0
-    error_message: str | None = None
-
-
-class ContactRow(BaseModel):
-    email: str
-    contact_name_best: str | None = None
-    domain: str | None = None
-    organization_name_guess: str | None = None
-    organization_type_guess: str | None = None
-    first_seen_at: datetime | str | None = None
-    last_seen_at: datetime | str | None = None
-    total_emails: int | None = None
-    confidence_score: float | None = None
-    top_equipment_tags: str | None = None
-
-
-class OrganizationRow(BaseModel):
-    domain: str
-    organization_name_guess: str | None = None
-    organization_type_guess: str | None = None
-    first_seen_at: datetime | str | None = None
-    last_seen_at: datetime | str | None = None
-    total_emails: int | None = None
-    total_contacts: int | None = None
-    top_equipment_tags: str | None = None
-    key_contacts: str | None = None
-
-
-class PaginatedContactsResponse(BaseModel):
-    items: list[ContactRow]
-    total: int
-    limit: int
-    offset: int
-    table_available: bool = True
-    scope: Literal["canonical", "archive"] = "canonical"
-    scope_available: bool = True
-    scope_note: str = ""
-
-
-class PaginatedOrganizationsResponse(BaseModel):
-    items: list[OrganizationRow]
-    total: int
-    limit: int
-    offset: int
-    table_available: bool = True
-    scope: Literal["canonical", "archive"] = "canonical"
-    scope_available: bool = True
-    scope_note: str = ""
-
-
-class OutboundReadinessResponse(BaseModel):
-    verdict: Literal["ready", "ready_with_warnings", "not_ready", "unknown"]
-    data_source: Literal["postgres_mirror"] = "postgres_mirror"
-    eventually_consistent: bool = True
-    postgres_url_redacted: str = ""
-    gmail_user: str = ""
-    tables: dict[str, bool] = Field(default_factory=dict)
-    counts: dict[str, int] = Field(default_factory=dict)
-    mart: dict[str, Any] = Field(default_factory=dict)
-    sidecars: dict[str, Any] = Field(default_factory=dict)
-    warnings: list[str] = Field(default_factory=list)
-    errors: list[str] = Field(default_factory=list)
-    disclaimer: str = (
-        "Based on Postgres mirror tables only. Sent-folder ingest and live gates still use "
-        "SQLite; sync lag may make this differ from CLI/SQLite operational truth."
-    )
+        return _validate_lead_research_disclaimer_field(value)
