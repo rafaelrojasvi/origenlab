@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,10 @@ from origenlab_api.settings import Settings
 
 _CONTACTO_INBOX = "gmail:contacto@origenlab.cl/INBOX"
 _CONTACTO_SENT = "gmail:contacto@origenlab.cl/[Gmail]/Enviados"
+
+
+def _recent_iso(days_ago: int, time_part: str = "12:00:00-04:00") -> str:
+    return f"{date.today() - timedelta(days=days_ago)}T{time_part}"
 
 
 def _item(
@@ -416,49 +421,49 @@ def _warm_client(tmp_path: Path, rows: list[tuple]) -> TestClient:
 def test_cases_warm_api_normalizes_audit_samples(tmp_path: Path) -> None:
     rows = [
         (
-            "2026-05-22T16:09:00-04:00",
+            _recent_iso(2, "16:09:00-04:00"),
             _CONTACTO_INBOX,
             "INBOX",
             "Monica Silva <monica.silva@dhl.com>",
             "PROPUESTA COMERCIAL DHL",
         ),
         (
-            "2026-05-22T16:31:00-04:00",
+            _recent_iso(2, "16:31:00-04:00"),
             _CONTACTO_INBOX,
             "INBOX",
             "chloe.yang@dlabsci.com",
             "DLAB catalogue visit",
         ),
         (
-            "2026-05-22T15:47:00-04:00",
+            _recent_iso(2, "15:47:00-04:00"),
             _CONTACTO_INBOX,
             "INBOX",
             "Serva_Order <order@serva.de>",
             "Automatic reply: Quotation Request",
         ),
         (
-            "2026-05-22T11:34:00-04:00",
+            _recent_iso(2, "11:34:00-04:00"),
             _CONTACTO_INBOX,
             "INBOX",
             "serviciodetransferencias@bancochile.cl",
             "FACTURA 6",
         ),
         (
-            "2026-05-22T22:14:00-04:00",
+            _recent_iso(2, "22:14:00-04:00"),
             _CONTACTO_INBOX,
             "INBOX",
             "Kelly <kelly@ollital.com>",
             "Re: Ollital reactor 5L",
         ),
         (
-            "2026-05-20T18:19:00-04:00",
+            _recent_iso(3, "18:19:00-04:00"),
             _CONTACTO_INBOX,
             "INBOX",
             "Carmen Llorente <carmen.llorente@ortoalresa.com>",
             "RE: Cotizar Centrifuga",
         ),
         (
-            "2026-05-20T16:14:00-04:00",
+            _recent_iso(3, "16:14:00-04:00"),
             _CONTACTO_SENT,
             "[Gmail]/Enviados",
             "contacto@origenlab.cl",
