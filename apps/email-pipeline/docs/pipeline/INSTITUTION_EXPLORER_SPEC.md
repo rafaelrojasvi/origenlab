@@ -123,7 +123,7 @@ Preset: **“Buyer institutions (explorer)”** = not supplier, not `do_not_prom
 | Vendor | `supplier_master`, supplier heuristics | `supplier_vendor_warning` |
 | Aliases (future) | Signed-off seed CSV / proposed table | `proposed_aliases` display only — see [`INSTITUTION_ALIAS_POLICY.md`](INSTITUTION_ALIAS_POLICY.md) |
 
-Rebuild path: run `audit_institution_grouping.py` after mart rebuild; mirror to Postgres only when API Phase 1 exists.
+Rebuild path: run `uv run origenlab audit-institution-grouping` (or `audit_institution_grouping.py`) after mart rebuild; mirror to Postgres only when API Phase 1 exists.
 
 ---
 
