@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -72,6 +73,7 @@ def test_delay_dsn_excluded_by_subject() -> None:
 
 
 def _seed_db(db: Path) -> None:
+    seed_date = date.today().isoformat()
     conn = sqlite3.connect(db)
     conn.executescript(
         """
@@ -117,8 +119,8 @@ def _seed_db(db: Path) -> None:
             "Delivery Status Notification (Failure)",
             "mailer-daemon@x",
             "",
-            "2026-06-02",
-            "2026-06-02",
+            seed_date,
+            seed_date,
             "Final-Recipient: rfc822; a@example.cl\n550 5.1.1 User unknown",
         ),
         (
@@ -128,8 +130,8 @@ def _seed_db(db: Path) -> None:
             "Delivery Status Notification (Failure)",
             "mailer-daemon@x",
             "",
-            "2026-06-02",
-            "2026-06-02",
+            seed_date,
+            seed_date,
             "Final-Recipient: rfc822; b@example.cl\nDNS Error: code NXDOMAIN",
         ),
         (
@@ -139,8 +141,8 @@ def _seed_db(db: Path) -> None:
             "Delivery Status Notification (Failure)",
             "mailer-daemon@x",
             "",
-            "2026-06-02",
-            "2026-06-02",
+            seed_date,
+            seed_date,
             "Final-Recipient: rfc822; c@example.cl\n552 5.2.2 mailbox full",
         ),
         (
@@ -150,8 +152,8 @@ def _seed_db(db: Path) -> None:
             "Delivery Status Notification (Failure)",
             "mailer-daemon@x",
             "",
-            "2026-06-02",
-            "2026-06-02",
+            seed_date,
+            seed_date,
             "Final-Recipient: rfc822; d@example.cl\n554 5.7.1 relay denied",
         ),
         (
@@ -161,8 +163,8 @@ def _seed_db(db: Path) -> None:
             "Delivery Status Notification (Failure)",
             "mailer-daemon@x",
             "",
-            "2026-06-02",
-            "2026-06-02",
+            seed_date,
+            seed_date,
             "Final-Recipient: rfc822; e@example.cl\nunknown weird response",
         ),
     ]
