@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-02 (Phase 1 simplification map — see [`audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md`](audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md))
+Last reviewed: 2026-06-04 (post-#93 refactor checkpoint — script surface classification table + `origenlab` CLI index; see [`audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md`](audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md))
 
 **This document is the canonical operator map** for outbound and campaign work (tags, break-glass, removed paths). **Run commands via the unified CLI first** — behavior lives in code and [`RUNBOOK.md`](RUNBOOK.md).
 
@@ -15,6 +15,117 @@ uv run origenlab --help
 ```
 
 Detail and script fallbacks: [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md).
+
+**Active operator UI (2026-06-04):** **`apps/dashboard`** + **`apps/api`** (:8001 mirror). **No** Streamlit launch surfaces — retired in #75–#83; not listed as active commands below.
+
+**Full-tree planner (read-only):** `uv run python scripts/qa/plan_script_consolidation.py` — classifies all **180** `scripts/**/*.py` files into buckets (`daily`, `audit_readonly`, `break_glass`, `lab_archive`, …). **Does not change files.** Use before deprecating or moving entrypoints.
+
+---
+
+## Canonical classification table (operator index)
+
+**Columns:** `script path` | `category` | `entrypoint / importers` | `reads` | `writes` | `risk` | `recommended command` | `notes`
+
+**Category legend**
+
+| Category | Meaning |
+|----------|---------|
+| **active_operator_command** | Normal daily/weekly ops when labeled in RUNBOOK |
+| **read_only_qa_report** | Audits, planners, health — no production writes by default |
+| **import_ingest** | Loads external data into SQLite (Gmail, CSV, workbook) |
+| **write_apply_send_purge_dangerous** | `--apply`, send, purge, rebuild, or Postgres load |
+| **break_glass_manual** | Intentional high-blast-radius; dry-run default where implemented |
+| **superseded_by_origenlab** | Prefer `uv run origenlab <subcommand>`; script path is advanced fallback |
+| **parked_legacy** | Historical, lab, or removed — not for new operator work |
+| **unknown_review** | Triage with owner before move/delete |
+
+### Unified CLI (`origenlab`) — prefer these first
+
+Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operator_cli/constants.py) `SUBCOMMAND_SCRIPTS`. Passthrough flags after `--` where supported.
+
+| script path | category | entrypoint / importers | reads | writes | risk | recommended command | notes |
+|-------------|----------|------------------------|-------|--------|------|---------------------|-------|
+| `scripts/qa/operator_status.py` | superseded_by_origenlab | `origenlab status` | SQLite, `reports/out` | — | low | `uv run origenlab status` | READY / CAUTION / BLOCKED; not send approval |
+| `scripts/qa/run_daily_health_report.py` | superseded_by_origenlab | `origenlab daily-health` | SQLite, mirror JSON hints | `reports/out` only | low | `uv run origenlab daily-health` | Not full post-send loop |
+| `scripts/qa/refresh_outbound_safety_memory.py` | superseded_by_origenlab | `origenlab refresh-safety` | SQLite | `reports/out` exports | medium | `uv run origenlab refresh-safety` | Anti-repeat chain; stops on hard failure |
+| `scripts/qa/validate_campaign_csvs.py` | superseded_by_origenlab | `origenlab validate-csvs` | CSV files | — | low | `uv run origenlab validate-csvs -- --file …` | Contract validation |
+| `scripts/qa/check_outbound_readiness.py` | superseded_by_origenlab | `origenlab check-readiness` | SQLite, env | — | low | `uv run origenlab check-readiness` | Pre-send readiness |
+| `scripts/qa/build_post_send_digest.py` | superseded_by_origenlab | `origenlab post-send-digest` | SQLite | `reports/out` only | low | `uv run origenlab post-send-digest` | After `audit_contacted_universe` |
+| `scripts/qa/export_do_not_repeat_master.py` | superseded_by_origenlab | `origenlab export-dnr` | SQLite | `reports/out` only | low | `uv run origenlab export-dnr` | Volume lane DNR input |
+| `scripts/qa/build_ndr_review_queue.py` | superseded_by_origenlab | `origenlab ndr-review` | SQLite (read) | `reports/out` only | low | `uv run origenlab ndr-review` | **No** suppression apply |
+| `scripts/qa/export_contacted_lead_overlap_audit.py` | superseded_by_origenlab | `origenlab audit-overlap` | SQLite | `reports/out` only | low | `uv run origenlab audit-overlap` | Pre-send overlap |
+| `scripts/qa/audit_module_facades.py` | superseded_by_origenlab | `origenlab audit-facades` | `src/` scan | — | low | `uv run origenlab audit-facades` | Read-only facade audit |
+| `scripts/mart/build_business_mart.py` | superseded_by_origenlab | `origenlab build-mart` | SQLite raw | SQLite mart (**rebuild deletes**) | **high** | `uv run origenlab build-mart -- --help` first | Break-glass `--rebuild` |
+| `scripts/commercial/build_commercial_intel_v1.py` | superseded_by_origenlab | `origenlab build-commercial-intel` | SQLite | SQLite `commercial_*` | **high** | `uv run origenlab build-commercial-intel` | `--rebuild` break-glass |
+| `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | superseded_by_origenlab | `origenlab gmail-ingest` / `gmail-ingest-folders` | Gmail IMAP | SQLite `emails` | **medium** | `uv run origenlab gmail-ingest` | Rejects `--replace-source`; Sent required for gate |
+| `scripts/sync/sync_dashboard_postgres_mirror.py` | superseded_by_origenlab | `origenlab mirror-dashboard` | SQLite | Postgres mirror (**`--apply`**) | **high** | `uv run origenlab mirror-dashboard` (dry-run default) | Parked mirror path; not send truth |
+| *(orchestrator)* | active_operator_command | `origenlab refresh-dashboard` | Multi-step | SQLite + reports + optional PG | **high** | `uv run origenlab refresh-dashboard` (plan default) | `--apply` runs ingest→mart→commercial→safety→mirror |
+
+### Daily outbound lanes (scripts — no `origenlab` wrapper yet)
+
+| script path | category | entrypoint / importers | reads | writes | risk | recommended command | notes |
+|-------------|----------|------------------------|-------|--------|------|---------------------|-------|
+| `scripts/qa/prepare_outbound_campaign_workspace.py` | active_operator_command | RUNBOOK daily outbound | — | `reports/out/active/current/` | low | `uv run python scripts/qa/prepare_outbound_campaign_workspace.py` | **Not** `prepare_active_workspace.py` |
+| `scripts/leads/process_broad_marketing_contacts.py` | active_operator_command | RUNBOOK volume lane | SQLite | `reports/out` CSVs | medium | `uv run python scripts/leads/process_broad_marketing_contacts.py` | Shared gate; no send |
+| `scripts/leads/run_current_campaign_pipeline.py` | active_operator_command | RUNBOOK precision lane | SQLite, CSVs | SQLite with `--apply` | **high** | `uv run python scripts/leads/run_current_campaign_pipeline.py --stage …` | `process-reviewed --apply` writes research |
+| `scripts/leads/mark_sent_batch_contacted.py` | active_operator_command | Post-send loop | SQLite | `outreach_contact_state` | medium | `uv run python scripts/leads/mark_sent_batch_contacted.py …` | Sidecar only |
+| `scripts/leads/import_lead_contact_research_csv.py` | import_ingest | Precision lane | CSV | `lead_contact_research` | **high** | Dry-run first; `--apply` to write | Primary DeepSearch import path |
+| `scripts/leads/export_next_marketing_recipients.py` | active_operator_command | Lead lane export | SQLite | `reports/out` | medium | `uv run python scripts/leads/export_next_marketing_recipients.py` | Gate + preflight |
+| `scripts/leads/build_archive_send_batch.py` | active_operator_command | Archive lane | SQLite | `reports/out` | **high** | `--audit-only` for audit; apply needs approval | Alternate lane — not daily mental model |
+| `scripts/research/run_deep_research_prospecting.py` | active_operator_command | Research cadence | SQLite, OpenAI | `reports/out` artifacts | medium | `uv run python scripts/research/run_deep_research_prospecting.py` | Stops before send |
+
+### Read-only QA / planners / audits
+
+| script path | category | entrypoint / importers | reads | writes | risk | recommended command | notes |
+|-------------|----------|------------------------|-------|--------|------|---------------------|-------|
+| `scripts/qa/plan_reports_out_cleanup.py` | read_only_qa_report | SCRIPT_MAP, CRUD_SAFETY | `reports/out` tree | — | low | `uv run python scripts/qa/plan_reports_out_cleanup.py` | Plan before any cleanup |
+| `scripts/qa/plan_script_consolidation.py` | read_only_qa_report | This doc, audits | `scripts/` | — | low | `uv run python scripts/qa/plan_script_consolidation.py` | 180 scripts bucketed |
+| `scripts/qa/plan_source_quality.py` | read_only_qa_report | Refactor planning | `src/`, `scripts/` | — | low | `uv run python scripts/qa/plan_source_quality.py` | Heuristic LOC scan |
+| `scripts/qa/check_reproducibility.py` | read_only_qa_report | REPRODUCIBILITY.md | env, optional DB RO | — | low | `uv run python scripts/qa/check_reproducibility.py` | New machine checks |
+| `scripts/qa/audit_prospectos_safety_drift.py` | read_only_qa_report | Post-send loop | SQLite | `reports/out` | low | `uv run python scripts/qa/audit_prospectos_safety_drift.py` | Drift ≠ send failure |
+| `scripts/leads/audit_contacted_universe.py` | read_only_qa_report | Post-send loop | SQLite | exclusion CSVs in `reports/out` | low | Before `post-send-digest` | Rebuilds exclusion sets |
+| `scripts/validate_supplier_workbook.py` | read_only_qa_report | Supplier import prep | `.xlsx` | — | low | `uv run python scripts/validate_supplier_workbook.py -x …` | No DB writes |
+
+### Import / ingest (non-Gmail)
+
+| script path | category | entrypoint / importers | reads | writes | risk | recommended command | notes |
+|-------------|----------|------------------------|-------|--------|------|---------------------|-------|
+| `scripts/import_supplier_workbook.py` | import_ingest | Supplier ops | `.xlsx` | SQLite supplier tables | medium | `uv run python scripts/import_supplier_workbook.py …` | Library: `supplier_workbook.py` |
+| `scripts/leads/import_operator_outreach_blocklist.py` | import_ingest | Suppression ops | CSV | suppressions | **high** | Explicit operator approval | Sidecar writes |
+| `scripts/ingest/02_mbox_to_sqlite.py` | import_ingest | Legacy ingest | mbox | SQLite `emails` (destructive patterns) | **high** | Break-glass / migration only | Not daily Workspace path |
+| `scripts/ingest/04_imap_to_sqlite.py` | import_ingest | Legacy IMAP | IMAP | SQLite | **high** | Prefer `05_workspace_gmail_imap_to_sqlite.py` | Older ingest |
+
+### Postgres mirror / migrate (parked optional path)
+
+| script path | category | entrypoint / importers | reads | writes | risk | recommended command | notes |
+|-------------|----------|------------------------|-------|--------|------|---------------------|-------|
+| `scripts/migrate/sqlite_*_to_postgres.py` | write_apply_send_purge_dangerous | EXPERIMENTAL_PARKED | SQLite | Postgres **truncate/load** | **critical** | Scratch Postgres first | Never send approval |
+| `scripts/sync/sync_*_postgres_mirror.py` | write_apply_send_purge_dangerous | `mirror-dashboard`, ops shell | SQLite | Postgres mirror | **high** | `origenlab mirror-dashboard` dry-run | Read-only mirror for dashboard |
+| `scripts/qa/verify_*_postgres_mirror.py` | read_only_qa_report | Mirror QA | Postgres mirror | — | low | After sync only | Parity checks |
+
+### Break-glass / send / purge (manual only)
+
+| script path | category | entrypoint / importers | reads | writes | risk | recommended command | notes |
+|-------------|----------|------------------------|-------|--------|------|---------------------|-------|
+| `scripts/qa/send_inline_html_email_via_gmail_api.py` | break_glass_manual | Optional send | SQLite, templates | **Gmail send** | **critical** | Dry-run / build-only unless intentional send | Real mail |
+| `scripts/tools/purge_*_from_sqlite.py` | break_glass_manual | Maintenance | SQLite | **DELETE** rows | **critical** | `--apply` required | Multiple tables |
+| `scripts/tools/flag_ndr_bounces_from_contacto.py` | break_glass_manual | POST_SEND_SAFE_LOOP | SQLite, Gmail rows | suppressions with `--apply` | **high** | Dry-run default; allowlist apply | Prefer `--emails-file` + `--only-code` |
+| `scripts/tools/archive_reports_out_generated.py` | break_glass_manual | reports/out hygiene | `reports/out` | **moves** files with `--apply` | medium | Dry-run default | No deletes |
+| `scripts/maintenance/dedupe_canonical_gmail_messages.py` | break_glass_manual | Gmail hygiene | SQLite | **DELETE** dup emails | **high** | `--apply --ack-sqlite-backup` | Dry-run default |
+
+### Parked / legacy / removed (do not use for new work)
+
+| script path | category | entrypoint / importers | reads | writes | risk | recommended command | notes |
+|-------------|----------|------------------------|-------|--------|------|---------------------|-------|
+| `scripts/tatiana/*`, `scripts/dataset/*`, `scripts/ml/*` | parked_legacy | TATIANA_LAB_BOUNDARY | varies | reports/lab | low–medium | See lab docs | Not daily outbound lanes |
+| `scripts/leads/advanced/prepare_active_workspace.py` | parked_legacy | Lead hunt / REPORTING | `reports/out/active/` | archives/moves | medium | Hunt workflows only | **Not** outbound `current/` prep |
+| *(removed)* `scripts/qa/build_legacy_contacts_2016_2019_review.py` | parked_legacy | — | — | — | — | Library `legacy_contacts_2016_2019.py` | Removed Phase 5R |
+| *(removed)* `business_mart_app.py`, `streamlit_*` UI | parked_legacy | — | — | — | — | **`apps/dashboard` + `apps/api`** | Removed 2026-06-04 (#75–#77) |
+| `scripts/_bootstrap.py`, `scripts/_script_warnings.py` | parked_legacy | Imported by scripts | — | — | low | *(internal)* | Not operator entrypoints |
+
+**Remaining scripts (~75 maintenance / 17 lab):** see planner output and folder tables below. **Do not delete** without doc/test updates and explicit approval.
+
+---
 
 **Reproducibility, safety, inventory:** [REPRODUCIBILITY.md](REPRODUCIBILITY.md) (machine setup) · [CRUD_SAFETY.md](CRUD_SAFETY.md) (read/create/update/delete rules) · [SCRIPT_INVENTORY.md](SCRIPT_INVENTORY.md) (group-level script classification) · read-only [check_reproducibility.py](../scripts/qa/check_reproducibility.py) · read-only [plan_reports_out_cleanup.py](../scripts/qa/plan_reports_out_cleanup.py) (scan `reports/out` before any cleanup; does not change files; buckets include `active_current`, `active_workspace_misc`, `client_pack_latest`, tmp/lab/archive/reference, etc.) · [archive_reports_out_generated.py](../scripts/tools/archive_reports_out_generated.py) (optional **move** of selected generated files into `archive/manual_cleanup/…`; **dry-run** default, `--apply` + `--archive-slug` to execute; no deletes) · read-only [plan_script_consolidation.py](../scripts/qa/plan_script_consolidation.py) (classify `scripts/` sprawl before deprecating, wrapping, or deleting entrypoints; does not change files) · read-only [plan_source_quality.py](../scripts/qa/plan_source_quality.py) (heuristic `src/` + `scripts/` size/vertical scan; planning only) · [`QUALITY_AND_REFACTOR_STRATEGY.md`](QUALITY_AND_REFACTOR_STRATEGY.md) (refactor rules; **new** code should **prefer** `core.*` imports where re-exports exist; no mass rewrites yet).
 
