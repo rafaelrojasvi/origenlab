@@ -29,6 +29,7 @@ from origenlab_email_pipeline.warm_case_sender_rules import (
     looks_like_supplier_followup_thread,
     looks_like_supplier_quote_response,
     looks_like_supplier_marketing_thread,
+    looks_like_suppressed_promotional_marketing_noise,
     looks_like_system_noise_contact,
     looks_like_unach_hielscher_supplier_wait,
     should_keep_visible_despite_suppression,
@@ -187,6 +188,14 @@ def infer_warm_case_role_category(
         return "system_noise"
 
     if looks_like_system_noise_contact(contact_email, sender_s, subject_s):
+        return "system_noise"
+
+    if looks_like_suppressed_promotional_marketing_noise(
+        contact_email,
+        sender_s,
+        subject_s,
+        has_suppression_signal=_bool_signal(row.get("has_suppression_signal")),
+    ):
         return "system_noise"
 
     source_early = row.get("source_file")
