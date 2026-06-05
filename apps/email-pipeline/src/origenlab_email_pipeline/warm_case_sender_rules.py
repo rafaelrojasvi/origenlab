@@ -41,6 +41,7 @@ _SUPPLIER_QUOTE_SUBJECT_MARKERS: tuple[str, ...] = (
     "price",
     "cotiz",
     "quote",
+    "quotation",
     "presupuesto",
     " rv",
     "re:",
@@ -80,7 +81,11 @@ _AUTO_REPLY_TEXT_MARKERS: tuple[str, ...] = (
 )
 
 _REAL_QUOTE_PRICE_RE = re.compile(
-    r"(?:\busd\b|\beur\b|\bexw\b|\bfob\b|\bus\$\s*\d|\$\s*\d|\d+[,.]\d{2}\s*(?:usd|eur|clp)?)",
+    r"(?:"
+    r"\busd\b|\beur\b|\bexw\b|\bfob\b|\bus\$\s*\d|\$\s*\d|\d+[,.]\d{2}\s*(?:usd|eur|clp)?"
+    r"|\d{2,}\s*usd(?:/pc|/unit|/ea)?|\d{2,}usd(?:/pc|/unit|/ea)?"
+    r"|\b(?:usd|us\$)\s*\d{2,}\b|\b(?:usd|us\$)\d{2,}\b"
+    r")",
     re.I,
 )
 
@@ -91,6 +96,7 @@ REAL_CLIENT_DOMAINS: frozenset[str] = frozenset({"ceaf.cl"})
 SUPPLIER_VENDOR_DOMAINS: frozenset[str] = frozenset(
     {
         "asynt.com",
+        "ciqtek.com",
         "crtopmachine.com",
         "dlabsci.com",
         "eppendorf.com",
@@ -100,9 +106,28 @@ SUPPLIER_VENDOR_DOMAINS: frozenset[str] = frozenset(
         "ollital.com",
         "ortoalresa.com",
         "serva.de",
+        "ultrassay.com",
         "valuenindustrial.com",
         "yuanhuai.com",
     }
+)
+
+_PROMO_MARKETING_SUBJECT_MARKERS: tuple[str, ...] = (
+    "descuento",
+    "discount",
+    "% off",
+    "promo",
+    "promoción",
+    "promocion",
+    "oferta especial",
+    "limited time offer",
+    "black friday",
+    "cyberday",
+    "cyber day",
+)
+
+_NO_REPLY_LOCAL_PARTS: frozenset[str] = frozenset(
+    {"no-reply", "noreply", "donotreply", "do-not-reply"}
 )
 
 _SECURITY_CONTACT_DOMAINS: frozenset[str] = frozenset({"accounts.google.com"})
@@ -397,6 +422,26 @@ def looks_like_system_noise_contact(
     return False
 
 
+def looks_like_suppressed_promotional_marketing_noise(
+    contact_email: str,
+    sender: str | None,
+    subject: str | None,
+    *,
+    has_suppression_signal: bool = False,
+) -> bool:
+    """No-reply vendor promo with suppression flag — not a client response."""
+    if not has_suppression_signal:
+        return False
+    email = _resolve_contact_email(contact_email, sender=sender)
+    if "@" not in email:
+        return False
+    local_part = email.split("@", 1)[0]
+    if local_part not in _NO_REPLY_LOCAL_PARTS:
+        return False
+    sub = (subject or "").lower()
+    return any(marker in sub for marker in _PROMO_MARKETING_SUBJECT_MARKERS)
+
+
 # ---------------------------------------------------------------------------
 # Internal / operator / admin
 # ---------------------------------------------------------------------------
@@ -470,6 +515,12 @@ def _weak_supplier_quote_markers_only(matched: list[str]) -> bool:
     return bool(matched) and all(marker in _WEAK_SUPPLIER_QUOTE_SUBJECT_MARKERS for marker in matched)
 
 
+def _vendor_domain_stem_in_hay(domain: str, hay: str) -> bool:
+    """Subject/snippet mentions vendor brand when body text is unavailable in preview."""
+    stem = (domain or "").split(".", 1)[0]
+    return len(stem) >= 4 and stem in hay
+
+
 def looks_like_auto_reply_text(
     subject: str | None,
     snippet: str | None = None,
@@ -515,6 +566,19 @@ def looks_like_real_supplier_quote_content(
         return True
     if "price response" in hay or "precio" in hay and "rv" in hay:
         return True
+    if any(word in hay for word in quote_words) and any(
+        cue in hay
+        for cue in (
+            "attached",
+            "adjunt",
+            "specs",
+            "specification",
+            "datasheet",
+            "ficha técnica",
+            "ficha tecnica",
+        )
+    ):
+        return True
     return False
 
 
@@ -538,7 +602,9 @@ def looks_like_supplier_quote_response(
     if not matched:
         return False
     if _weak_supplier_quote_markers_only(matched):
-        return looks_like_real_supplier_quote_content(subject, snippet)
+        if looks_like_real_supplier_quote_content(subject, snippet):
+            return True
+        return _vendor_domain_stem_in_hay(email_domain(email), hay)
     return True
 
 

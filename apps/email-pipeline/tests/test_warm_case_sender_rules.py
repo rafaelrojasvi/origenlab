@@ -468,6 +468,97 @@ def test_role_precedence_payment_admin_on_ceaf_bank_details() -> None:
     )
 
 
+# --- Classification quality regression (2026-06-05 new-day refresh) -------------------
+
+
+def _role_row_with_signals(
+    *,
+    sender: str,
+    subject: str,
+    snippet: str | None = None,
+    has_positive_signal: int = 0,
+    has_suppression_signal: int = 0,
+) -> dict:
+    row = _role_row(sender=sender, subject=subject, snippet=snippet)
+    row["has_positive_signal"] = has_positive_signal
+    row["has_suppression_signal"] = has_suppression_signal
+    return row
+
+
+def test_tidio_promo_suppressed_domain_not_client_response_warm_case() -> None:
+    """710893: Tidio promo from suppressed no-reply domain must not surface as client_response."""
+    row = _role_row_with_signals(
+        sender="Tidio <no-reply@tidio.net>",
+        subject="🚀 ¡95% de DESCUENTO en Tidio!",
+        has_suppression_signal=1,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role != "client_response"
+    assert role == "system_noise"
+
+
+def test_ciqtek_quotation_specs_classifies_supplier_quote_received() -> None:
+    """710890: CIQTEK quotation/spec attachment thread is supplier quote evidence, not client opportunity."""
+    row = _role_row_with_signals(
+        sender="Laura-CIQTEK <wangq@ciqtek.com>",
+        subject="Re: Fwd: 回复: [CIQTEK] Sicope 40",
+        snippet="Please find our quotation and specs attached.",
+        has_positive_signal=1,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role in {"supplier_quote_received", "supplier_reply", "deal_evidence_candidate"}
+
+
+def test_ultrassay_usd_price_quote_classifies_supplier_quote_received() -> None:
+    """710885/710888: Ultrassay price lines (15300usd/pc) are supplier quotes, not client opportunity."""
+    row = _role_row_with_signals(
+        sender='"bo@ultrassay.com" <bo@ultrassay.com>',
+        subject="Re: Re: Quotation request",
+        snippet="Feyond-F100 15300usd/pc and uMP96f 7000usd/pc",
+        has_positive_signal=1,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role == "supplier_quote_received"
+
+
+def test_ciqtek_live_preview_snippet_classifies_supplier_quote_received() -> None:
+    """710890: API preview snippet (no body) still routes vendor-branded Re: thread to supplier quote."""
+    row = _role_row_with_signals(
+        sender="Laura-CIQTEK <wangq@ciqtek.com>",
+        subject="Re: Fwd: 回复: [CIQTEK] Sicope 40",
+        snippet="Re: Fwd: 回复: [CIQTEK] Sicope 40 · Laura-CIQTEK <wangq@ciqtek.com>",
+        has_positive_signal=1,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role == "supplier_quote_received"
+
+
+def test_ultrassay_live_preview_snippet_classifies_supplier_quote_received() -> None:
+    """710888: API preview snippet (no body) still routes quotation-request thread to supplier quote."""
+    row = _role_row_with_signals(
+        sender='"bo@ultrassay.com" <bo@ultrassay.com>',
+        subject="Re: Re: Quotation request",
+        snippet='Re: Re: Quotation request · "bo@ultrassay.com" <bo@ultrassay.com>',
+        has_positive_signal=1,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role == "supplier_quote_received"
+
+
+def test_delay_dsn_remains_review_only_not_auto_suppressed() -> None:
+    """DSN Delay stays in NDR review/monitoring (batch E); never batch-suppression apply."""
+    from origenlab_email_pipeline.qa.ndr_review_queue import classify_ndr_candidate
+
+    batch, reason = classify_ndr_candidate(
+        proposed_code="bounce_other",
+        subject="Delivery Status Notification (Delay)",
+        body_blob="still trying",
+        multi_recipient_uncertain=False,
+    )
+    assert batch == "E"
+    assert reason == "delay_dsn_excluded"
+
+
 # --- Characterization: module contract ------------------------------------------------
 
 
