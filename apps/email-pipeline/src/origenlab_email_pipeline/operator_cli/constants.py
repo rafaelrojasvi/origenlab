@@ -26,6 +26,7 @@ SUBCOMMAND_SCRIPTS: dict[str, str] = {
     "ndr-review": "scripts/qa/build_ndr_review_queue.py",
     "audit-overlap": "scripts/qa/export_contacted_lead_overlap_audit.py",
     "audit-facades": "scripts/qa/audit_module_facades.py",
+    "audit-institution-grouping": "scripts/qa/audit_institution_grouping.py",
     "build-mart": "scripts/mart/build_business_mart.py",
     "build-commercial-intel": "scripts/commercial/build_commercial_intel_v1.py",
     "gmail-ingest-help": GMAIL_INGEST_SCRIPT,
@@ -56,6 +57,10 @@ SUBCOMMAND_HELP: dict[str, str] = {
     "ndr-review": "NDR human-review batches — read-only (build_ndr_review_queue.py)",
     "audit-overlap": "Contacted-lead overlap audit CSV (export_contacted_lead_overlap_audit.py)",
     "audit-facades": "Read-only module facade / duplicate basename audit (audit_module_facades.py)",
+    "audit-institution-grouping": (
+        "Read-only institution/domain grouping audit from business mart (audit_institution_grouping.py) — "
+        "reports only; not send safety"
+    ),
     "build-mart": (
         "Business mart rebuild (build_business_mart.py) — break-glass: optional --rebuild deletes mart tables"
     ),

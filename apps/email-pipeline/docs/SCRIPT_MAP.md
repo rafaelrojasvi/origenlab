@@ -55,6 +55,7 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | `scripts/qa/build_ndr_review_queue.py` | superseded_by_origenlab | `origenlab ndr-review` | SQLite (read) | `reports/out` only | low | `uv run origenlab ndr-review` | **No** suppression apply |
 | `scripts/qa/export_contacted_lead_overlap_audit.py` | superseded_by_origenlab | `origenlab audit-overlap` | SQLite | `reports/out` only | low | `uv run origenlab audit-overlap` | Pre-send overlap |
 | `scripts/qa/audit_module_facades.py` | superseded_by_origenlab | `origenlab audit-facades` | `src/` scan | — | low | `uv run origenlab audit-facades` | Read-only facade audit |
+| `scripts/qa/audit_institution_grouping.py` | superseded_by_origenlab | `origenlab audit-institution-grouping` | SQLite mart | `reports/out` only | low | `uv run origenlab audit-institution-grouping` | Institution/domain grouping — **not** send safety |
 | `scripts/mart/build_business_mart.py` | superseded_by_origenlab | `origenlab build-mart` | SQLite raw | SQLite mart (**rebuild deletes**) | **high** | `uv run origenlab build-mart -- --help` first | Break-glass `--rebuild` |
 | `scripts/commercial/build_commercial_intel_v1.py` | superseded_by_origenlab | `origenlab build-commercial-intel` | SQLite | SQLite `commercial_*` | **high** | `uv run origenlab build-commercial-intel` | `--rebuild` break-glass |
 | `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | superseded_by_origenlab | `origenlab gmail-ingest` / `gmail-ingest-folders` | Gmail IMAP | SQLite `emails` | **medium** | `uv run origenlab gmail-ingest` | Rejects `--replace-source`; Sent required for gate |
@@ -83,6 +84,7 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | `scripts/qa/plan_source_quality.py` | read_only_qa_report | Refactor planning | `src/`, `scripts/` | — | low | `uv run python scripts/qa/plan_source_quality.py` | Heuristic LOC scan |
 | `scripts/qa/check_reproducibility.py` | read_only_qa_report | REPRODUCIBILITY.md | env, optional DB RO | — | low | `uv run python scripts/qa/check_reproducibility.py` | New machine checks |
 | `scripts/qa/audit_prospectos_safety_drift.py` | read_only_qa_report | Post-send loop | SQLite | `reports/out` | low | `uv run python scripts/qa/audit_prospectos_safety_drift.py` | Drift ≠ send failure |
+| `scripts/qa/audit_institution_grouping.py` | read_only_qa_report | Institution explorer prep | SQLite mart | `reports/out` only | low | `uv run origenlab audit-institution-grouping` | Domain/org grouping — **not** send safety |
 | `scripts/leads/audit_contacted_universe.py` | read_only_qa_report | Post-send loop | SQLite | exclusion CSVs in `reports/out` | low | Before `post-send-digest` | Rebuilds exclusion sets |
 | `scripts/validate_supplier_workbook.py` | read_only_qa_report | Supplier import prep | `.xlsx` | — | low | `uv run python scripts/validate_supplier_workbook.py -x …` | No DB writes |
 
@@ -343,7 +345,7 @@ Research automation prompt templates: `prompts/deep_research_netnew_chile_market
 | `scripts/qa/build_ndr_review_queue.py` | OPS_AUDIT | **Read-only** NDR human-review batches + suggested allowlists; no `--apply` |
 | `scripts/qa/build_post_send_digest.py` | OPS_AUDIT | **Read-only** post-send digest (run **after** `audit_contacted_universe.py` in post-send loop) |
 | `scripts/qa/audit_prospectos_safety_drift.py` | OPS_AUDIT | Raw `lead_research_prospect` vs safety sidecars — drift ≠ send failure |
-| `scripts/qa/audit_institution_grouping.py` | OPS_AUDIT | Institution/domain grouping — **not** send safety |
+| `scripts/qa/audit_institution_grouping.py` | OPS_AUDIT | Institution/domain grouping — **not** send safety; prefer `origenlab audit-institution-grouping` |
 | `scripts/qa/smoke_dashboard_api_readiness.py` | OPS_AUDIT | **Read-only** HTTP smoke against deployed `apps/api` (:8001); debugging / deploy check only |
 
 **Overlap note:** **`export_do_not_repeat_master.py`** (operator *input list*) vs **`export_outreach_volume_rollup.py`** (*metrics*). Different jobs; do not delete one thinking it replaces the other.
@@ -463,7 +465,7 @@ Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match)
 | [`scripts/qa/build_post_send_digest.py`](../scripts/qa/build_post_send_digest.py) | Post-send digest CSV/MD/JSON | **Read-only** analysis | Output under `reports/out/active/current/` (gitignored) — not source of truth |
 | [`scripts/ops/refresh_render_dashboard_once.sh`](../scripts/ops/refresh_render_dashboard_once.sh) | Postgres mirror refresh | Postgres mirror load | Post-send: `RUN_GMAIL_INGEST=0`, `RUN_LEAD_RESEARCH_MIRROR=1`, `RUN_OUTBOUND_SIDECAR_MIRROR=1` |
 | [`scripts/qa/audit_prospectos_safety_drift.py`](../scripts/qa/audit_prospectos_safety_drift.py) | Raw `lead_research_prospect` vs safety sidecars | **Read-only** | Report under `reports/out/`; optional `--strict`; drift ≠ send failure |
-| [`scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py) | Institution/domain grouping audit | **Read-only** | Presentation/strategy only — **not** send safety; gitignored reports |
+| [`scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py) | Institution/domain grouping audit | **Read-only** | `uv run origenlab audit-institution-grouping`; presentation/strategy only — **not** send safety; gitignored reports |
 | [`scripts/qa/operator_status.py`](../scripts/qa/operator_status.py) | Operator READY / freshness | **Read-only** | LISTO / mirror_ok ≠ send approval |
 | [`scripts/qa/run_daily_health_report.py`](../scripts/qa/run_daily_health_report.py) | Daily health summary (NDR dry-run, drift, mirror JSON) | **Read-only** | Output under `reports/out/active/current/daily_health_report_*` (gitignored); verdict READY / REVIEW_NEEDED / BLOCKED |
 | [`scripts/qa/build_ndr_review_queue.py`](../scripts/qa/build_ndr_review_queue.py) | Build NDR human-review batches + suggested allowlists | **Read-only** | Output under `reports/out/active/current/ndr_review_queue_*`; no suppression apply |

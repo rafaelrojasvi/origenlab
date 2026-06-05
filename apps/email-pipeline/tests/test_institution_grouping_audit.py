@@ -411,3 +411,35 @@ def test_bancoestado_manual_review_collision(noise_filter_db: Path, tmp_path: Pa
     assert be[0]["recommended_action"] == "manual_review"
     seeds = _read_csv_rows(out / "alias_seed_candidates.csv")
     assert not any("bancoestado" in (r.get("alias_name") or "") for r in seeds)
+
+
+def test_operator_cli_maps_audit_institution_grouping() -> None:
+    from origenlab_email_pipeline.operator_cli.constants import SUBCOMMAND_SCRIPTS
+
+    repo = Path(__file__).resolve().parents[1]
+    assert (
+        SUBCOMMAND_SCRIPTS["audit-institution-grouping"]
+        == "scripts/qa/audit_institution_grouping.py"
+    )
+    script = repo / SUBCOMMAND_SCRIPTS["audit-institution-grouping"]
+    assert script.is_file()
+
+
+def test_audit_institution_grouping_in_operator_help() -> None:
+    import os
+    import subprocess
+    import sys
+
+    repo = Path(__file__).resolve().parents[1]
+    src = repo / "src"
+    env = {**os.environ, "PYTHONPATH": str(src)}
+    proc = subprocess.run(
+        [sys.executable, "-m", "origenlab_email_pipeline.cli", "--help"],
+        cwd=str(repo),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "audit-institution-grouping" in proc.stdout

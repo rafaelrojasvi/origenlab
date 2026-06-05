@@ -747,6 +747,16 @@ uv run python scripts/qa/export_supplier_domain_false_positive_audit.py \
 
 **How to review the CSV:** sort by `likely_false_positive_reason` (non-empty) and `matching_high_fit_count` / `matching_medium_fit_count`. `recommended_action` is advisory only (`review_supplier_exclusion`, `likely_true_supplier`, `no_matching_leads`, `needs_manual_review`). The script prints a short terminal summary (totals, likely false positives, high/medium impact sum, top 10 domains). **Do not treat output as permission to unblock**—decisions stay in supplier review workflows and data changes outside this export.
 
+**Institution/domain grouping audit (read-only):** [`audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py) reads the business mart from SQLite and writes CSV/JSON reports under `--out-dir` (default `reports/out/active/current/institution_grouping_audit_<date>`). It **does not** mutate SQLite, Gmail, Postgres, or send/export gates — use for presentation and alias-seed review only, **not** as send safety.
+
+```bash
+cd apps/email-pipeline
+uv run origenlab audit-institution-grouping
+# Optional: --sqlite-path /path/to/emails.sqlite --out-dir reports/local/my-audit --date-label 2026_06_05
+```
+
+Spec: [`pipeline/INSTITUTION_EXPLORER_SPEC.md`](pipeline/INSTITUTION_EXPLORER_SPEC.md).
+
 **Operator review** (dashboard read-only panels, documented CLIs, optional `ORIGENLAB_OPERATOR_*_RW` env gates) is for **visibility** and sidecar updates; it is **not** the final record of what was exported in a given run. **Canonical CLI CSV/JSON** (and optional readiness JSON) are the reproducible record; update **Sent ingest** and **outreach/suppression sidecars** after sends so the next run’s blocker memory stays accurate.
 
 **Recommended post-send sequence:**

@@ -132,6 +132,29 @@ def test_build_mart_passthrough_rebuild_flag() -> None:
     assert argv[1].endswith("scripts/mart/build_business_mart.py")
 
 
+def test_audit_institution_grouping_passthrough_flags() -> None:
+    argv = build_subcommand_argv(
+        "audit-institution-grouping",
+        [
+            "--sqlite-path",
+            "/tmp/test.sqlite",
+            "--out-dir",
+            "/tmp/out",
+            "--date-label",
+            "2026_06_05",
+        ],
+    )
+    assert argv[1].endswith("scripts/qa/audit_institution_grouping.py")
+    assert argv[-6:] == [
+        "--sqlite-path",
+        "/tmp/test.sqlite",
+        "--out-dir",
+        "/tmp/out",
+        "--date-label",
+        "2026_06_05",
+    ]
+
+
 def test_build_commercial_intel_subcommand_argv() -> None:
     argv = build_subcommand_argv("build-commercial-intel")
     assert argv[0] == sys.executable

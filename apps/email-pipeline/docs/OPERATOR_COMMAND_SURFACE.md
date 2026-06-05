@@ -20,6 +20,8 @@ uv run origenlab post-send-digest
 uv run origenlab export-dnr
 uv run origenlab ndr-review
 uv run origenlab audit-overlap
+uv run origenlab audit-facades
+uv run origenlab audit-institution-grouping
 uv run origenlab build-mart
 uv run origenlab build-commercial-intel
 uv run origenlab gmail-ingest
@@ -46,6 +48,8 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `export-dnr` | `qa/export_do_not_repeat_master.py` | Volume lane DNR |
 | `ndr-review` | `qa/build_ndr_review_queue.py` | Read-only NDR batches |
 | `audit-overlap` | `qa/export_contacted_lead_overlap_audit.py` | Pre-send overlap |
+| `audit-facades` | `qa/audit_module_facades.py` | Read-only module facade audit |
+| `audit-institution-grouping` | `qa/audit_institution_grouping.py` | Read-only institution/domain grouping — **not** send safety |
 | `build-mart` | `mart/build_business_mart.py` | Break-glass; `--rebuild` deletes mart tables |
 | `build-commercial-intel` | `commercial/build_commercial_intel_v1.py` | SQLite; incremental `commercial_*` refresh; `--rebuild` break-glass via passthrough |
 | `gmail-ingest` | `ingest/05_workspace_gmail_imap_to_sqlite.py` (INBOX + Sent) | SQLite; daily refresh; rejects `--replace-source` |
@@ -91,6 +95,8 @@ Workspace: `reports/out/active/current/`. Volume: `reviewed_marketing_contacts.c
 | `cli daily-health` | Bundled health | Reports |
 | `cli audit-overlap` | Overlap audit | Reports |
 | `cli ndr-review` | NDR review batches | Reports |
+| `cli audit-facades` | Module facade audit | No |
+| `cli audit-institution-grouping` | Institution/domain grouping audit | Reports only — **not** send safety |
 | `scripts/qa/export_gate_audit_csv.py` | Gate flags sample | Reports |
 | `scripts/qa/export_outreach_volume_rollup.py` | Saturation metrics | Reports |
 | `scripts/qa/plan_reports_out_cleanup.py` | Plan `reports/out` | No |
