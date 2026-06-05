@@ -110,15 +110,22 @@ def is_auto_reply_subject(subject: str | None) -> bool:
 
 
 def _item_to_classifier_row(item: WarmCaseItem) -> dict[str, object]:
-    return {
+    row: dict[str, object] = {
+        "email_id": item.last_email_id,
         "contact_email": item.contact_email,
-        "sender_preview": item.contact_email,
+        "sender_preview": item.sender_preview or item.contact_email,
         "subject_preview": item.subject,
         "snippet": item.snippet,
+        "body_snippet": item.body_snippet,
         "account_name": item.account_name,
         "has_positive_signal": item.category in ("opportunity", "client_opportunity"),
         "has_suppression_signal": item.status == "problem",
     }
+    if item.source_file:
+        row["source_file"] = item.source_file
+    if item.recipients_preview:
+        row["recipients_preview"] = item.recipients_preview
+    return row
 
 
 def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:

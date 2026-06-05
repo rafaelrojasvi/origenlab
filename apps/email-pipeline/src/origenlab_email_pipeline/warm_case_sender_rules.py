@@ -96,13 +96,16 @@ REAL_CLIENT_DOMAINS: frozenset[str] = frozenset({"ceaf.cl"})
 SUPPLIER_VENDOR_DOMAINS: frozenset[str] = frozenset(
     {
         "asynt.com",
+        "biosys.de",
         "ciqtek.com",
         "crtopmachine.com",
+        "dasitaly.com",
         "dlabsci.com",
         "eppendorf.com",
         "gzfanbolun.com",
         "hielscher.com",
         "ika.net.br",
+        "moldev.com",
         "ollital.com",
         "ortoalresa.com",
         "serva.de",
@@ -515,10 +518,38 @@ def _weak_supplier_quote_markers_only(matched: list[str]) -> bool:
     return bool(matched) and all(marker in _WEAK_SUPPLIER_QUOTE_SUBJECT_MARKERS for marker in matched)
 
 
-def _vendor_domain_stem_in_hay(domain: str, hay: str) -> bool:
-    """Subject/snippet mentions vendor brand when body text is unavailable in preview."""
-    stem = (domain or "").split(".", 1)[0]
-    return len(stem) >= 4 and stem in hay
+_SUPPLIER_NON_QUOTE_REPLY_CUES: tuple[str, ...] = (
+    "feedback from customer",
+    "feedback from the customer",
+    "any feedback from",
+    "before we share further brochures",
+    "before we share further",
+    "brochures and quotes",
+    "not in our production line",
+    "not in our production-line",
+    "not in production line",
+    "no longer in production",
+    "not part of our product",
+    "channel partner",
+    "local distributor",
+    "distributor in chile",
+    "authorized distributor",
+    "contact our partner",
+    "refer you to",
+    "redirect you to",
+    "reach out to our partner",
+)
+
+
+def looks_like_supplier_non_quote_reply(
+    subject: str | None,
+    snippet: str | None = None,
+    *,
+    sender: str | None = None,
+) -> bool:
+    """Vendor reply that is follow-up, routing, pre-quote, or no-fit — not a received quote."""
+    hay = _message_haystack(subject, snippet, sender)
+    return any(cue in hay for cue in _SUPPLIER_NON_QUOTE_REPLY_CUES)
 
 
 def looks_like_auto_reply_text(
@@ -552,6 +583,9 @@ def looks_like_real_supplier_quote_content(
         "rv 10",
         "3812200",
         "reactor",
+        "centrifug",
+        "microplate",
+        "fluorescence",
         "olt-hp",
         "olt hp",
         "stock dispon",
@@ -573,10 +607,15 @@ def looks_like_real_supplier_quote_content(
             "adjunt",
             "specs",
             "specification",
+            "specifications",
             "datasheet",
             "ficha técnica",
             "ficha tecnica",
         )
+    ):
+        return True
+    if any(c in hay for c in ("specifications", "specification", "specs")) and any(
+        w in hay for w in ("reviewed", "comments", "attached", "find our", "quotation", "quote")
     ):
         return True
     return False
@@ -597,15 +636,13 @@ def looks_like_supplier_quote_response(
         return False
     if looks_like_auto_reply_text(subject, snippet):
         return looks_like_real_supplier_quote_content(subject, snippet)
+    if looks_like_supplier_non_quote_reply(subject, snippet, sender=sender):
+        return False
     hay = _supplier_quote_haystack(subject, snippet)
     matched = _matched_supplier_quote_subject_markers(hay)
     if not matched:
         return False
-    if _weak_supplier_quote_markers_only(matched):
-        if looks_like_real_supplier_quote_content(subject, snippet):
-            return True
-        return _vendor_domain_stem_in_hay(email_domain(email), hay)
-    return True
+    return looks_like_real_supplier_quote_content(subject, snippet)
 
 
 # ---------------------------------------------------------------------------
@@ -917,6 +954,8 @@ def looks_like_supplier_followup_thread(
         subject, snippet
     ):
         return False
+    if looks_like_supplier_non_quote_reply(subject, snippet, sender=sender):
+        return True
     hay = _message_haystack(subject, snippet, sender)
     follow_cues = (
         "shipping",

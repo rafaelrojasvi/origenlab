@@ -83,6 +83,10 @@ class WarmCaseItem(BaseModel):
     next_action: str = ""
     equipment_signal: str = ""
     snippet: str = ""
+    body_snippet: str = Field(default="", exclude=True)
+    source_file: str = Field(default="", exclude=True)
+    recipients_preview: str = Field(default="", exclude=True)
+    sender_preview: str = Field(default="", exclude=True)
     gmail_url: str | None = None
     grouped_email_count: int = 1
 

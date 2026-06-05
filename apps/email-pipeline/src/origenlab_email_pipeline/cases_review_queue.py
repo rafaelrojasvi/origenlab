@@ -108,6 +108,11 @@ def fetch_cases_review_queue(
         if "recipients" in email_cols
         else "''"
     )
+    body_snippet_expr = (
+        "substr(COALESCE(e.top_reply_clean, ''), 1, 800)"
+        if "top_reply_clean" in email_cols
+        else "''"
+    )
 
     if cisf:
         sql = f"""
@@ -117,6 +122,7 @@ def fetch_cases_review_queue(
           substr(COALESCE(e.subject, ''), 1, 140) AS subject_preview,
           substr(COALESCE(e.sender, ''), 1, 140) AS sender_preview,
           {recipients_expr} AS recipients_preview,
+          {body_snippet_expr} AS body_snippet,
           e.source_file,
           COALESCE(agg.has_positive, 0) AS has_positive_signal,
           COALESCE(agg.has_suppression, 0) AS has_suppression_signal,
@@ -149,6 +155,7 @@ def fetch_cases_review_queue(
           substr(COALESCE(e.subject, ''), 1, 140) AS subject_preview,
           substr(COALESCE(e.sender, ''), 1, 140) AS sender_preview,
           {recipients_expr} AS recipients_preview,
+          {body_snippet_expr} AS body_snippet,
           e.source_file,
           NULL AS has_positive_signal,
           NULL AS has_suppression_signal,

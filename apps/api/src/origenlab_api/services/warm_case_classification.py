@@ -57,6 +57,7 @@ def row_to_warm_case_item(
     status = infer_warm_case_status(category, row_for_class)
     snippet_parts = [p for p in (subject.strip(), sender.strip()) if p]
     snippet = " · ".join(snippet_parts)[:280]
+    body_snippet = str(row.get("body_snippet") or row.get("top_reply_clean") or "")[:800]
 
     item = WarmCaseItem(
         case_id=f"gmail-contacto-{email_id}",
@@ -70,6 +71,10 @@ def row_to_warm_case_item(
         next_action=infer_next_action(category, row=row_for_class),
         equipment_signal=_equipment_signal(subject, row_for_class, enrichment_available=enrichment_available),
         snippet=snippet,
+        body_snippet=body_snippet,
+        source_file=source_file,
+        recipients_preview=str(row.get("recipients_preview") or ""),
+        sender_preview=sender,
         gmail_url=None,
     )
     return item, category

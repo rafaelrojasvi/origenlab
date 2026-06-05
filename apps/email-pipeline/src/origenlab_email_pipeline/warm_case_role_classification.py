@@ -131,6 +131,25 @@ def _row_sender(row: dict[str, Any]) -> str | None:
     return sender if isinstance(sender, str) else None
 
 
+def _row_body_snippet(row: dict[str, Any]) -> str | None:
+    for key in ("body_snippet", "top_reply_clean"):
+        raw = row.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def _row_heuristic_snippet(row: dict[str, Any]) -> str | None:
+    """Body text for classification heuristics (not API display snippet)."""
+    body = _row_body_snippet(row)
+    if body:
+        return body[:2000]
+    snippet = row.get("snippet")
+    if isinstance(snippet, str) and snippet.strip():
+        return snippet
+    return None
+
+
 def looks_like_deal_evidence_thread(
     contact_email: str,
     subject: str | None,
@@ -160,7 +179,7 @@ def infer_warm_case_role_category(
     sender_s = _row_sender(row)
     subject_s = _row_subject(row)
     contact_email = _row_contact_email(row)
-    snippet = row.get("snippet") if isinstance(row.get("snippet"), str) else None
+    snippet = _row_heuristic_snippet(row)
     account_name = row.get("account_name") if isinstance(row.get("account_name"), str) else None
 
     if looks_like_obvious_noise(sender_s, subject_s):
@@ -200,9 +219,10 @@ def infer_warm_case_role_category(
 
     source_early = row.get("source_file")
     if _is_sent_folder(source_early if isinstance(source_early, str) else None):
-        subj_early = (subject_s or "").lower()
-        if "cotiz" in subj_early or "quote" in subj_early or "presupuesto" in subj_early:
-            return "quote_sent"
+        if not is_internal_operator_contact(contact_email):
+            subj_early = (subject_s or "").lower()
+            if "cotiz" in subj_early or "quote" in subj_early or "presupuesto" in subj_early:
+                return "quote_sent"
 
     if looks_like_internal_forwarded_client_quote_request(
         contact_email=contact_email,
@@ -249,6 +269,8 @@ def infer_warm_case_role_category(
 
     source = row.get("source_file")
     if _is_sent_folder(source if isinstance(source, str) else None):
+        if is_supplier_vendor_domain(email_domain(contact_email)):
+            return "waiting_supplier"
         subj_l_early = (subject_s or "").lower()
         if "cotiz" in subj_l_early or "quote" in subj_l_early or "presupuesto" in subj_l_early:
             return "quote_sent"
