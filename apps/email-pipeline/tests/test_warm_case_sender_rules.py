@@ -476,13 +476,94 @@ def _role_row_with_signals(
     sender: str,
     subject: str,
     snippet: str | None = None,
+    body_snippet: str | None = None,
+    source_file: str = "gmail:contacto@origenlab.cl/INBOX",
+    recipients: str | None = None,
     has_positive_signal: int = 0,
     has_suppression_signal: int = 0,
 ) -> dict:
-    row = _role_row(sender=sender, subject=subject, snippet=snippet)
+    row = _role_row(
+        sender=sender,
+        subject=subject,
+        snippet=snippet,
+        source_file=source_file,
+        recipients=recipients,
+    )
     row["has_positive_signal"] = has_positive_signal
     row["has_suppression_signal"] = has_suppression_signal
+    if body_snippet is not None:
+        row["body_snippet"] = body_snippet
     return row
+
+
+def test_ollital_customer_feedback_is_supplier_followup_not_quote_received() -> None:
+    """710887: Ollital chasing customer feedback is follow-up, not a received quote."""
+    row = _role_row_with_signals(
+        sender="kelly@ollital.com",
+        subject="Re:  Ollital reactor 5L",
+        body_snippet="Good morning Tatiana,\nDo you have any feedback from customer?",
+        has_positive_signal=1,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role == "supplier_followup"
+    assert role != "supplier_quote_received"
+
+
+def test_biosys_pre_quote_evaluation_is_supplier_followup_not_client_opportunity() -> None:
+    """710889: BIOSYS pre-quote evaluation is vendor follow-up, not client opportunity."""
+    row = _role_row_with_signals(
+        sender="BIOSYS Scientific Devices <info@biosys.de>",
+        subject="BIOSYS online request",
+        body_snippet="Before we share further brochures and quotes, we need to evaluate that we are talking about the correct product.",
+        has_positive_signal=1,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role == "supplier_followup"
+    assert role != "client_opportunity"
+
+
+def test_dasitaly_no_production_line_is_supplier_followup_not_client_opportunity() -> None:
+    """710881: DAS Italy no-fit production-line reply is vendor follow-up."""
+    row = _role_row_with_signals(
+        sender="Francesca Rubino <commercial@dasitaly.com>",
+        subject="Re: Quotation request",
+        body_snippet="thanks for your kind enquiry, but I'm sorry to inform you that it is not in our production-line.",
+        has_positive_signal=1,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role == "supplier_followup"
+    assert role != "client_opportunity"
+
+
+def test_moldev_channel_partner_redirect_is_supplier_followup_not_client_opportunity() -> None:
+    """710882: Molecular Devices Chile channel-partner redirect is vendor routing follow-up."""
+    row = _role_row_with_signals(
+        sender='"Tavormina, Penny" <Penny.Tavormina@moldev.com>',
+        subject="RE: Fluorescence Microplate Reader Quotation request",
+        body_snippet="We have a channel partner in Chile. You can reach them for local support.",
+        has_positive_signal=1,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role == "supplier_followup"
+    assert role != "client_opportunity"
+
+
+def test_outbound_supplier_request_to_vendor_domain_is_waiting_supplier() -> None:
+    """710894/710895: Outbound quote requests to known vendor domains wait on supplier."""
+    for recipients, email_id in (
+        ("info@dasitaly.com", 710895),
+        ("nsd@moldev.com", 710894),
+    ):
+        row = _role_row_with_signals(
+            sender="Tatiana Vivanco | OrigenLab <contacto@origenlab.cl>",
+            subject="Quotation request",
+            recipients=recipients,
+            source_file="gmail:contacto@origenlab.cl/[Gmail]/Enviados",
+        )
+        row["email_id"] = email_id
+        role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+        assert role == "waiting_supplier"
+        assert role != "waiting_client"
 
 
 def test_tidio_promo_suppressed_domain_not_client_response_warm_case() -> None:
@@ -522,11 +603,12 @@ def test_ultrassay_usd_price_quote_classifies_supplier_quote_received() -> None:
 
 
 def test_ciqtek_live_preview_snippet_classifies_supplier_quote_received() -> None:
-    """710890: API preview snippet (no body) still routes vendor-branded Re: thread to supplier quote."""
+    """710890: With top_reply body, CIQTEK spec review classifies as supplier quote received."""
     row = _role_row_with_signals(
         sender="Laura-CIQTEK <wangq@ciqtek.com>",
         subject="Re: Fwd: 回复: [CIQTEK] Sicope 40",
         snippet="Re: Fwd: 回复: [CIQTEK] Sicope 40 · Laura-CIQTEK <wangq@ciqtek.com>",
+        body_snippet="We have reviewed the specifications, please find our comments in Yellow.",
         has_positive_signal=1,
     )
     role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
@@ -534,11 +616,12 @@ def test_ciqtek_live_preview_snippet_classifies_supplier_quote_received() -> Non
 
 
 def test_ultrassay_live_preview_snippet_classifies_supplier_quote_received() -> None:
-    """710888: API preview snippet (no body) still routes quotation-request thread to supplier quote."""
+    """710888: With top_reply body, Ultrassay USD prices classify as supplier quote received."""
     row = _role_row_with_signals(
         sender='"bo@ultrassay.com" <bo@ultrassay.com>',
         subject="Re: Re: Quotation request",
         snippet='Re: Re: Quotation request · "bo@ultrassay.com" <bo@ultrassay.com>',
+        body_snippet="Feyond-F100: 15300usd/pc (Ex-work)",
         has_positive_signal=1,
     )
     role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)

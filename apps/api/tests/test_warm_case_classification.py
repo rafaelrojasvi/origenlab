@@ -23,9 +23,20 @@ def test_classify_quote_sent() -> None:
         "email_id": 2,
         "sender_preview": "contacto@origenlab.cl",
         "subject_preview": "Cotización Sonicador",
+        "recipients_preview": "client@example.cl",
         "source_file": "gmail:contacto@origenlab.cl/[Gmail]/Enviados",
     }
     assert infer_warm_case_category(row, enrichment_available=False, include_noise=False) == "quote_sent"
+
+
+def test_classify_operator_sent_without_recipient_is_internal_not_quote_sent() -> None:
+    row = {
+        "email_id": 4,
+        "sender_preview": "contacto@origenlab.cl",
+        "subject_preview": "Cotización Sonicador",
+        "source_file": "gmail:contacto@origenlab.cl/[Gmail]/Enviados",
+    }
+    assert infer_warm_case_category(row, enrichment_available=False, include_noise=False) == "bounce"
 
 
 def test_row_to_item_has_no_body_fields() -> None:
