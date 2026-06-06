@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from origenlab_email_pipeline.contacto_gmail_source import sql_predicate_contacto_gmail_source
+from origenlab_email_pipeline.operator_cli.daily_core_manifest import (
+    MANIFEST_FILENAME,
+    summarize_daily_core_run_manifest,
+)
 from origenlab_email_pipeline.outbound_core import resolve_outbound_gmail_user, resolve_outbound_sent_folders
 from origenlab_email_pipeline.outbound_readiness_check import assess_outbound_readiness
 
@@ -136,6 +140,7 @@ class OperatorStatusReport:
     campaign_mode: str | None = None
     current_operator_focus: str | None = None
     manifest: dict[str, Any] = field(default_factory=dict)
+    daily_core_run: dict[str, Any] = field(default_factory=dict)
     postgres: dict[str, Any] = field(default_factory=dict)
     api: dict[str, Any] = field(default_factory=dict)
     outbound_readiness: dict[str, Any] = field(default_factory=dict)
@@ -257,6 +262,12 @@ def build_operator_status_report(
         errors.append(f"manifest.json parse error: {manifest_path}")
         manifest = {}
     manifest_warnings_raw = list(manifest.get("known_warnings") or [])
+
+    daily_core_path = active_current / MANIFEST_FILENAME
+    daily_core_run, daily_core_warning = summarize_daily_core_run_manifest(daily_core_path)
+    if daily_core_warning:
+        warnings.append(daily_core_warning)
+
     manifest_warnings = manifest_warnings_for_verdict(manifest_warnings_raw, manifest)
 
     sqlite_exists = sqlite_path.is_file()
@@ -379,6 +390,7 @@ def build_operator_status_report(
         campaign_mode=manifest.get("campaign_mode") if manifest else None,
         current_operator_focus=manifest.get("current_operator_focus") if manifest else None,
         manifest={"path": str(manifest_path), "loaded": bool(manifest), "keys": sorted(manifest.keys())},
+        daily_core_run=daily_core_run,
         postgres=probe_postgres_status(),
         api={
             "status": "parked",
@@ -427,6 +439,28 @@ def format_human_report(report: OperatorStatusReport) -> str:
     lines.append(f"Postgres: {report.postgres.get('status')} — {report.postgres.get('detail')}")
     lines.append(f"API: {report.api.get('status')} — {report.api.get('detail')}")
     lines.append(f"Outbound readiness: {report.outbound_readiness.get('verdict', 'n/a')}")
+    lines.append("")
+    lines.append("Daily core last run:")
+    dcr = report.daily_core_run
+    lines.append(f"  manifest: {dcr.get('path', 'n/a')}")
+    lines.append(f"  exists: {dcr.get('exists', False)}")
+    if dcr.get("exists") and dcr.get("loaded"):
+        lines.append(f"  status: {dcr.get('status', 'n/a')}")
+        lines.append(f"  generated_at_utc: {dcr.get('generated_at_utc', 'n/a')}")
+        lines.append(f"  returncode: {dcr.get('returncode', 'n/a')}")
+        lines.append(f"  steps: {dcr.get('step_count', 'n/a')}")
+        lines.append(f"  send_approval: {dcr.get('send_approval', 'n/a')}")
+        lines.append(f"  postgres_mirror: {dcr.get('postgres_mirror', 'n/a')}")
+    elif dcr.get("parse_error"):
+        lines.append("  status: n/a")
+        lines.append("  parse_error: true")
+    else:
+        lines.append("  status: n/a")
+        lines.append("  generated_at_utc: n/a")
+        lines.append("  returncode: n/a")
+        lines.append("  steps: n/a")
+        lines.append("  send_approval: n/a")
+        lines.append("  postgres_mirror: n/a")
     if report.warnings:
         lines.append("")
         lines.append("Warnings:")

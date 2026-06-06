@@ -103,3 +103,35 @@ def write_daily_core_run_manifest(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def summarize_daily_core_run_manifest(path: Path) -> tuple[dict[str, Any], str | None]:
+    """Read-only summary for operator status. Returns ``(summary, warning_or_none)``."""
+    summary: dict[str, Any] = {"path": str(path), "exists": path.is_file()}
+    if not path.is_file():
+        return summary, None
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {
+            **summary,
+            "loaded": False,
+            "parse_error": True,
+        }, f"daily_core_run_manifest.json parse error: {path}"
+
+    steps = data.get("steps") or []
+    last_step = steps[-1].get("label") if steps else None
+    return {
+        **summary,
+        "loaded": True,
+        "schema_version": data.get("schema_version"),
+        "workflow": data.get("workflow"),
+        "generated_at_utc": data.get("generated_at_utc"),
+        "status": data.get("status"),
+        "returncode": data.get("returncode"),
+        "step_count": len(steps),
+        "last_step": last_step,
+        "send_approval": data.get("send_approval"),
+        "postgres_mirror": data.get("postgres_mirror"),
+    }, None
