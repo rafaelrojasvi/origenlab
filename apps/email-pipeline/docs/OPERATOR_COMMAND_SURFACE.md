@@ -4,7 +4,7 @@ Status: canonical (navigation)
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-03 (Phase 7C)
 
-Procedures: [`RUNBOOK.md`](RUNBOOK.md) · post-send: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) · tags / break-glass: [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
+Procedures: [`pipeline/DAILY_CORE.md`](pipeline/DAILY_CORE.md) · [`RUNBOOK.md`](RUNBOOK.md) · post-send: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) · tags / break-glass: [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
 ## Operator CLI
 
