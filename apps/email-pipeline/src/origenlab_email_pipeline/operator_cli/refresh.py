@@ -6,7 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from origenlab_email_pipeline.core.step_runner import run_step_sequence
-from origenlab_email_pipeline.operator_cli.constants import REFRESH_DASHBOARD_USAGE
+from origenlab_email_pipeline.operator_cli.constants import (
+    DAILY_CORE_USAGE,
+    REFRESH_DASHBOARD_USAGE,
+)
 
 SubcommandRunner = Callable[..., int]
 
@@ -126,15 +129,54 @@ def refresh_dashboard_usage_line(*flags: str) -> str:
     return f"  {REFRESH_DASHBOARD_USAGE} {' '.join(flags)}"
 
 
-def print_refresh_dashboard_plan(steps: list[RefreshDashboardStep], options: RefreshDashboardOptions) -> None:
+def daily_core_usage_line(*flags: str) -> str:
+    return f"  {DAILY_CORE_USAGE} {' '.join(flags)}"
+
+
+def parse_daily_core_wrapper_args(argv: list[str]) -> RefreshDashboardOptions:
+    """Parse daily-core flags; always forces ``no_mirror=True``."""
+    opts = parse_refresh_dashboard_wrapper_args(argv)
+    if opts.mirror_dry_run:
+        raise ValueError(
+            "daily-core: --mirror-dry-run is not supported (daily core never runs mirror). "
+            "Use refresh-dashboard --apply --mirror-dry-run or mirror-dashboard separately."
+        )
+    return RefreshDashboardOptions(
+        apply=opts.apply,
+        no_mirror=True,
+        mirror_dry_run=False,
+        skip_ingest=opts.skip_ingest,
+        since_days=opts.since_days,
+    )
+
+
+def print_refresh_dashboard_plan(
+    steps: list[RefreshDashboardStep],
+    options: RefreshDashboardOptions,
+    *,
+    workflow_label: str = "refresh-dashboard",
+) -> None:
     total = len(steps)
-    print("refresh-dashboard — plan only (no Gmail ingest, mart rebuild, commercial intel, or Postgres writes)\n")
+    print(
+        f"{workflow_label} — plan only (no Gmail ingest, mart rebuild, commercial intel, or Postgres writes)\n"
+    )
     print(f"Planned steps ({total}) when you pass --apply:")
     for i, step in enumerate(steps, 1):
         note = ""
         if step.command == "build-mart":
             note = "  # break-glass: deletes mart tables"
         print(f"  {i}/{total} {step.label}{note}")
+    if workflow_label == "daily-core":
+        print("\nApply mode is equivalent to:")
+        print(refresh_dashboard_usage_line("--apply", "--no-mirror"))
+        print("\nVariants:")
+        print(daily_core_usage_line("--apply"))
+        print(daily_core_usage_line("--apply", "--skip-ingest"))
+        if options.since_days is None:
+            print(daily_core_usage_line("--apply", "--since-days", "14"))
+        print("\nNever includes mirror-dashboard. Use mirror-dashboard --apply separately when needed.")
+        print("No alembic in this workflow.")
+        return
     print("\nVariants:")
     print(refresh_dashboard_usage_line("--apply"))
     print(refresh_dashboard_usage_line("--apply", "--no-mirror"))
@@ -143,6 +185,38 @@ def print_refresh_dashboard_plan(steps: list[RefreshDashboardStep], options: Ref
     if options.since_days is None:
         print(refresh_dashboard_usage_line("--apply", "--since-days", "14"))
     print("\nNo alembic in this workflow; use mirror-dashboard --alembic --apply separately if needed.")
+
+
+def print_daily_core_help() -> None:
+    print(
+        "daily-core — canonical daily operating alias (SQLite + reports, no Postgres mirror)\n\n"
+        f"{daily_core_usage_line()}                              # plan only (safe default)\n"
+        f"{daily_core_usage_line('--apply')}                      # same as refresh-dashboard --apply --no-mirror\n"
+        f"{daily_core_usage_line('--apply', '--skip-ingest')}\n"
+        f"{daily_core_usage_line('--apply', '--since-days', '14')}\n\n"
+        "Runs the seven daily core steps only (no mirror-dashboard). "
+        "See docs/pipeline/DAILY_CORE.md.\n"
+    )
+
+
+def run_daily_core(
+    options: RefreshDashboardOptions,
+    runner: SubcommandRunner | None = None,
+) -> int:
+    """Run daily-core workflow (always ``no_mirror=True``)."""
+    if options.mirror_dry_run:
+        raise ValueError(
+            "daily-core: --mirror-dry-run is not supported (daily core never runs mirror). "
+            "Use refresh-dashboard --apply --mirror-dry-run or mirror-dashboard separately."
+        )
+    forced = RefreshDashboardOptions(
+        apply=options.apply,
+        no_mirror=True,
+        mirror_dry_run=False,
+        skip_ingest=options.skip_ingest,
+        since_days=options.since_days,
+    )
+    return run_refresh_dashboard(forced, runner=runner, workflow_label="daily-core")
 
 
 def print_refresh_dashboard_help() -> None:
@@ -162,6 +236,8 @@ def print_refresh_dashboard_help() -> None:
 def run_refresh_dashboard(
     options: RefreshDashboardOptions,
     runner: SubcommandRunner | None = None,
+    *,
+    workflow_label: str = "refresh-dashboard",
 ) -> int:
     """Run refresh-dashboard plan or apply workflow via existing CLI subcommands."""
     from origenlab_email_pipeline.operator_cli.runner import run_subcommand
@@ -169,7 +245,7 @@ def run_refresh_dashboard(
     execute = runner or run_subcommand
     steps = build_refresh_dashboard_steps(options)
     if not options.apply:
-        print_refresh_dashboard_plan(steps, options)
+        print_refresh_dashboard_plan(steps, options, workflow_label=workflow_label)
         return 0
 
     def _run_step(step: RefreshDashboardStep) -> int:
@@ -180,4 +256,4 @@ def run_refresh_dashboard(
             mirror_alembic=step.mirror_alembic,
         )
 
-    return run_step_sequence(steps, _run_step, prefix="[refresh-dashboard]")
+    return run_step_sequence(steps, _run_step, prefix=f"[{workflow_label}]")

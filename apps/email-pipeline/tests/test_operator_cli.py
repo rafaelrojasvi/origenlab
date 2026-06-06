@@ -35,6 +35,10 @@ from origenlab_email_pipeline.cli import (
     script_path_for,
     validate_gmail_ingest_passthrough,
 )
+from origenlab_email_pipeline.operator_cli.refresh import (
+    parse_daily_core_wrapper_args,
+    run_daily_core,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 _SRC = REPO / "src"
@@ -620,3 +624,103 @@ def test_run_gmail_ingest_help_mocked_only_help(monkeypatch: pytest.MonkeyPatch)
     assert run_subcommand("gmail-ingest-help") == 0
     assert calls[0][-1] == "--help"
     assert calls[0][1].endswith("05_workspace_gmail_imap_to_sqlite.py")
+
+
+def test_daily_core_default_plan_no_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.operator_cli.runner.run_subcommand",
+        lambda *a, **k: pytest.fail("run_subcommand must not run for plan-only"),
+    )
+    assert run_daily_core(_refresh_opts()) == 0
+    out = capsys.readouterr().out
+    assert "daily-core" in out
+    assert "plan only" in out
+    assert "Planned steps (7)" in out
+    assert "7/7 status" in out
+    step_lines = [ln for ln in out.splitlines() if ln.strip().startswith(("1/", "2/", "3/", "4/", "5/", "6/", "7/"))]
+    assert len(step_lines) == 7
+    assert all("mirror-dashboard" not in ln for ln in step_lines)
+    assert "refresh-dashboard --apply --no-mirror" in out
+
+
+def test_daily_core_main_default_no_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.operator_cli.runner.run_subcommand",
+        lambda *a, **k: pytest.fail("no subprocess"),
+    )
+    assert main(["daily-core"]) == 0
+    out = capsys.readouterr().out
+    assert "daily-core" in out
+    assert "plan only" in out
+    assert "Planned steps (7)" in out
+    step_lines = [ln for ln in out.splitlines() if ln.strip().startswith(("1/", "2/", "3/", "4/", "5/", "6/", "7/"))]
+    assert len(step_lines) == 7
+    assert all("mirror-dashboard" not in ln for ln in step_lines)
+
+
+def test_daily_core_help_no_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.operator_cli.runner.run_subcommand",
+        lambda *a, **k: pytest.fail("no subprocess"),
+    )
+    assert main(["daily-core", "--help"]) == 0
+    out = capsys.readouterr().out
+    assert "daily-core" in out
+    assert "refresh-dashboard --apply --no-mirror" in out
+
+
+def test_daily_core_apply_same_steps_as_refresh_no_mirror() -> None:
+    daily_calls: list[str] = []
+    refresh_calls: list[str] = []
+
+    def daily_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        daily_calls.append(cmd)
+        return 0
+
+    def refresh_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        refresh_calls.append(cmd)
+        return 0
+
+    assert run_daily_core(_refresh_opts(apply=True), runner=daily_runner) == 0
+    assert run_refresh_dashboard(_refresh_opts(apply=True, no_mirror=True), runner=refresh_runner) == 0
+    assert daily_calls == refresh_calls
+    assert "mirror-dashboard" not in daily_calls
+
+
+def test_daily_core_apply_no_mirror_flag_accepted() -> None:
+    calls: list[str] = []
+
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        calls.append(cmd)
+        return 0
+
+    assert (
+        run_daily_core(_refresh_opts(apply=True, no_mirror=True), runner=fake_runner) == 0
+    )
+    assert "mirror-dashboard" not in calls
+
+
+def test_daily_core_apply_mirror_dry_run_rejected() -> None:
+    with pytest.raises(ValueError, match="--mirror-dry-run is not supported"):
+        parse_daily_core_wrapper_args(["--apply", "--mirror-dry-run"])
+
+
+def test_daily_core_apply_since_days_only_on_ingest() -> None:
+    calls: list[tuple[str, list[str] | None]] = []
+
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        calls.append((cmd, passthrough))
+        return 0
+
+    run_daily_core(_refresh_opts(apply=True, since_days=14), runner=fake_runner)
+    assert calls[0] == ("gmail-ingest", ["--", "--since-days", "14"])
+    assert all(c[1] != ["--", "--since-days", "14"] for c in calls[1:])

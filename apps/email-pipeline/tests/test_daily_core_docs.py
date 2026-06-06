@@ -9,8 +9,10 @@ _DAILY_CORE = _REPO / "docs" / "pipeline" / "DAILY_CORE.md"
 _OPERATOR_SURFACE = _REPO / "docs" / "OPERATOR_COMMAND_SURFACE.md"
 _RUNBOOK = _REPO / "docs" / "RUNBOOK.md"
 
-_CANONICAL_CMD = "uv run origenlab refresh-dashboard --apply --no-mirror"
-_PLAN_CMD = "uv run origenlab refresh-dashboard"
+_CANONICAL_CMD = "uv run origenlab daily-core --apply"
+_PLAN_CMD = "uv run origenlab daily-core"
+_EQUIVALENT_APPLY = "uv run origenlab refresh-dashboard --apply --no-mirror"
+_EQUIVALENT_PLAN = "uv run origenlab refresh-dashboard"
 _CORE_STEPS = (
     "gmail-ingest",
     "build-mart",
@@ -29,11 +31,13 @@ def test_daily_core_md_exists() -> None:
 def test_daily_core_documents_canonical_apply_no_mirror_command() -> None:
     text = _DAILY_CORE.read_text(encoding="utf-8")
     assert _CANONICAL_CMD in text
+    assert _EQUIVALENT_APPLY in text
 
 
 def test_daily_core_documents_plan_only_command() -> None:
     text = _DAILY_CORE.read_text(encoding="utf-8")
     assert _PLAN_CMD in text
+    assert _EQUIVALENT_PLAN in text or "refresh-dashboard" in text
     assert "plan-only" in text.lower() or "plan only" in text.lower()
 
 

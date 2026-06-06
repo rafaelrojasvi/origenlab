@@ -14,7 +14,7 @@ Single entrypoint for **how to run** the email pipeline. **Daily core contract (
 
 | Track | Section | When |
 |-------|---------|------|
-| **Daily core (SQLite refresh)** | [`pipeline/DAILY_CORE.md`](pipeline/DAILY_CORE.md) | Canonical `refresh-dashboard --apply --no-mirror` — ingest, mart, commercial, safety, status |
+| **Daily core (SQLite refresh)** | [`pipeline/DAILY_CORE.md`](pipeline/DAILY_CORE.md) | Canonical `daily-core --apply` (alias for `refresh-dashboard --apply --no-mirror`) — ingest, mart, commercial, safety, status |
 | **Daily outbound + equipment-first** | [Daily outbound](#m-eprun-daily-outbound) | Send safety, DNR, campaigns, tenders — **default** |
 | **Gmail ingest + mart (SQLite)** | [Primary mailbox](#m-eprun-mailbox-primary) · [Post–Gmail ingest](#m-eprun-post-gmail-ingest) | Ingest freshness, `build-mart` on host |
 | **Active operator UI** | [Dashboard stack](#m-eprun-dashboard-optional) | `apps/dashboard` + `apps/api` + Postgres mirror |
