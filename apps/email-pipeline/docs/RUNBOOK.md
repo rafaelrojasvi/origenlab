@@ -4,7 +4,7 @@ Status: canonical
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-02
 
-Single entrypoint for **how to run** the email pipeline. Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.). **Operator quick index:** [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md). **Outbound script index + classifications:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
+Single entrypoint for **how to run** the email pipeline. **Daily core contract (canonical SQLite refresh):** [`pipeline/DAILY_CORE.md`](pipeline/DAILY_CORE.md). Deeper design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md#m-eparch-flow) and domain docs ([`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md), [`pipeline/BUSINESS_MART.md`](pipeline/BUSINESS_MART.md), etc.). **Operator quick index:** [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md). **Outbound script index + classifications:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
 **Preferred operator CLI (Phase 6C):** `uv run python -m origenlab_email_pipeline.cli <subcommand>` — see [Operator health matrix](#m-eprun-operator-health-matrix) and [`OPERATOR_COMMAND_SURFACE.md`](OPERATOR_COMMAND_SURFACE.md). Raw `scripts/qa/…` paths remain valid **advanced/manual** fallbacks.
 
@@ -14,6 +14,7 @@ Single entrypoint for **how to run** the email pipeline. Deeper design lives in 
 
 | Track | Section | When |
 |-------|---------|------|
+| **Daily core (SQLite refresh)** | [`pipeline/DAILY_CORE.md`](pipeline/DAILY_CORE.md) | Canonical `refresh-dashboard --apply --no-mirror` — ingest, mart, commercial, safety, status |
 | **Daily outbound + equipment-first** | [Daily outbound](#m-eprun-daily-outbound) | Send safety, DNR, campaigns, tenders — **default** |
 | **Gmail ingest + mart (SQLite)** | [Primary mailbox](#m-eprun-mailbox-primary) · [Post–Gmail ingest](#m-eprun-post-gmail-ingest) | Ingest freshness, `build-mart` on host |
 | **Active operator UI** | [Dashboard stack](#m-eprun-dashboard-optional) | `apps/dashboard` + `apps/api` + Postgres mirror |
