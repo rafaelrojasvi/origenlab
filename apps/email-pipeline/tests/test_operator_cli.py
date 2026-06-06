@@ -678,7 +678,11 @@ def test_daily_core_help_no_subprocess(
     assert "refresh-dashboard --apply --no-mirror" in out
 
 
-def test_daily_core_apply_same_steps_as_refresh_no_mirror() -> None:
+def test_daily_core_apply_same_steps_as_refresh_no_mirror(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REPORTS_DIR", str(tmp_path))
     daily_calls: list[str] = []
     refresh_calls: list[str] = []
 
@@ -696,7 +700,11 @@ def test_daily_core_apply_same_steps_as_refresh_no_mirror() -> None:
     assert "mirror-dashboard" not in daily_calls
 
 
-def test_daily_core_apply_no_mirror_flag_accepted() -> None:
+def test_daily_core_apply_no_mirror_flag_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REPORTS_DIR", str(tmp_path))
     calls: list[str] = []
 
     def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
@@ -714,7 +722,11 @@ def test_daily_core_apply_mirror_dry_run_rejected() -> None:
         parse_daily_core_wrapper_args(["--apply", "--mirror-dry-run"])
 
 
-def test_daily_core_apply_since_days_only_on_ingest() -> None:
+def test_daily_core_apply_since_days_only_on_ingest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REPORTS_DIR", str(tmp_path))
     calls: list[tuple[str, list[str] | None]] = []
 
     def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):

@@ -5,11 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from origenlab_email_pipeline.core.step_runner import run_step_sequence
+from origenlab_email_pipeline.core.step_runner import StepResult, run_step_sequence
 from origenlab_email_pipeline.operator_cli.constants import (
     DAILY_CORE_USAGE,
     REFRESH_DASHBOARD_USAGE,
 )
+from origenlab_email_pipeline.operator_cli.daily_core_manifest import write_daily_core_run_manifest
 
 SubcommandRunner = Callable[..., int]
 
@@ -216,7 +217,23 @@ def run_daily_core(
         skip_ingest=options.skip_ingest,
         since_days=options.since_days,
     )
-    return run_refresh_dashboard(forced, runner=runner, workflow_label="daily-core")
+    if not forced.apply:
+        return run_refresh_dashboard(forced, runner=runner, workflow_label="daily-core")
+
+    step_results: list[StepResult] = []
+    rc = run_refresh_dashboard(
+        forced,
+        runner=runner,
+        workflow_label="daily-core",
+        step_results=step_results,
+    )
+    write_daily_core_run_manifest(
+        step_results=step_results,
+        returncode=rc,
+        skip_ingest=forced.skip_ingest,
+        since_days=forced.since_days,
+    )
+    return rc
 
 
 def print_refresh_dashboard_help() -> None:
@@ -238,6 +255,7 @@ def run_refresh_dashboard(
     runner: SubcommandRunner | None = None,
     *,
     workflow_label: str = "refresh-dashboard",
+    step_results: list[StepResult] | None = None,
 ) -> int:
     """Run refresh-dashboard plan or apply workflow via existing CLI subcommands."""
     from origenlab_email_pipeline.operator_cli.runner import run_subcommand
@@ -249,11 +267,14 @@ def run_refresh_dashboard(
         return 0
 
     def _run_step(step: RefreshDashboardStep) -> int:
-        return execute(
+        rc = execute(
             step.command,
             list(step.passthrough) or None,
             mirror_apply=step.mirror_apply,
             mirror_alembic=step.mirror_alembic,
         )
+        if step_results is not None:
+            step_results.append(StepResult(label=step.command, returncode=rc))
+        return rc
 
     return run_step_sequence(steps, _run_step, prefix=f"[{workflow_label}]")
