@@ -127,6 +127,54 @@ def _is_tatiana_lab_path(p: str) -> bool:
     return False
 
 
+def _is_core_infrastructure_path(p: str, base: str) -> bool:
+    """Shared config, schema, SQL, and small utilities (audit: active_core)."""
+    if base == "__init__.py":
+        return True
+    if p.endswith("/core/safety.py") or p.endswith("/core/reports_out.py") or p.endswith("/core/step_runner.py"):
+        return True
+    if p.endswith("/core/config.py") or p.endswith("/core/db.py") or p.endswith("/core/sqlite_migrate.py"):
+        return True
+    return base in (
+        "config.py",
+        "db.py",
+        "timeutil.py",
+        "progress.py",
+        "csv_contracts.py",
+        "org_normalize.py",
+        "canonical_operational_sql.py",
+        "freshness_dates.py",
+        "bi_views.py",
+        "pipeline_meta_schema.py",
+        "pipeline_run_recorder.py",
+        "sqlite_migrate.py",
+        "active_current_manifest.py",
+        "operational_scope.py",
+        "business_filter_rules.py",
+        "cases_review_queue.py",
+        "contact_export_queries.py",
+        "dr50_payload_loader.py",
+        "hunt_csv_alignment.py",
+        "lead_export_queries.py",
+        "lead_identity_norm.py",
+        "leads_schema.py",
+        "leads_equipment.py",
+        "leads_enrich.py",
+        "leads_score.py",
+        "leads_match.py",
+        "leads_ingest.py",
+        "leads_normalize.py",
+        "lead_contact_research.py",
+        "lead_upstream_reconcile.py",
+        "lead_normalize_upsert.py",
+        "lead_accounts_schema.py",
+        "lead_provenance.py",
+        "attachment_report_sql.py",
+        "outreach_queue_compare.py",
+        "reported_non_delivery_signals.py",
+    )
+
+
 def classify_likely_bucket(rel_posix: str) -> str:
     """Heuristic owner/domain bucket; first match wins."""
     p = rel_posix.replace("\\", "/").lower()
@@ -135,12 +183,19 @@ def classify_likely_bucket(rel_posix: str) -> str:
     if p.startswith("src/origenlab_email_pipeline/operator_cli/") or base == "cli.py":
         return "operator_cli"
 
+    if base in ("_bootstrap.py", "_script_warnings.py"):
+        return "scripts_tools"
+
     if (
         p.startswith("scripts/ingest/")
         or "/ingest/" in p
         or "gmail_imap" in p
         or base.startswith("gmail_")
         or "gmail_workspace" in p
+        or base == "canonical_gmail_dedupe.py"
+        or "outreach_ingest_sync" in p
+        or base == "contacto_gmail_source.py"
+        or p.startswith("scripts/maintenance/dedupe_canonical_gmail")
     ):
         return "gmail_ingest"
 
@@ -149,6 +204,40 @@ def classify_likely_bucket(rel_posix: str) -> str:
 
     if "warm_case_" in p or "warm_case" in base:
         return "warm_cases"
+
+    if (
+        "postgres_dashboard_api" in p
+        or "postgres_mirror" in p
+        or "mart_core_postgres" in p
+        or "dashboard_postgres" in p
+        or "cloud_postgres" in p
+        or "_to_postgres" in p
+        or "alembic" in p
+        or p.startswith("scripts/sync/")
+        or p.startswith("scripts/migrate/")
+        or (
+            p.startswith("scripts/ops/")
+            and ("postgres" in p or "dashboard" in p or "mirror" in p)
+        )
+        or "_mirror" in base
+        or "catalog_mirror" in p
+    ):
+        return "postgres_mirror"
+
+    if "postgres_dashboard_api" in p or "dashboard_api" in p:
+        return "dashboard_api"
+
+    if "research_automation" in p or "chilecompra_licitacion_lab" in p:
+        return "research_lab"
+
+    if _is_tatiana_lab_path(p):
+        return "tatiana_lab"
+
+    if (
+        p.startswith("src/origenlab_email_pipeline/campaigns/")
+        or "/origenlab_email_pipeline/campaigns/" in p
+    ):
+        return "campaigns"
 
     if "commercial" in p and ("/commercial/" in f"/{p}/" or "commercial_intel" in p):
         return "commercial_intel"
@@ -160,27 +249,63 @@ def classify_likely_bucket(rel_posix: str) -> str:
         or "mark_sent" in p
         or "operational_trust" in p
         or "outreach_contact" in p
+        or base.startswith("archive_")
+        or "manual_html_outreach" in p
+        or "email_business_filters" in p
+        or "marketing_export_context" in p
+        or "next_marketing_queue" in p
+        or "marketing_contact_noise" in p
+        or "merge_marketing_contact" in p
     ):
         return "outbound_safety"
 
-    if (
-        "postgres_dashboard_api" in p
-        or "postgres_mirror" in p
-        or p.startswith("scripts/sync/")
-        or p.startswith("scripts/migrate/")
-        or "_to_postgres" in p
-        or "alembic" in p
-    ):
-        return "postgres_mirror"
+    if "ndr_" in p or "reported_non_delivery" in p:
+        return "ndr"
 
-    if "postgres_dashboard_api" in p or "dashboard_api" in p:
-        return "dashboard_api"
+    if "equipment" in p or "licitacion" in p:
+        return "equipment"
+
+    if (
+        p.startswith("src/origenlab_email_pipeline/catalog/")
+        or "/origenlab_email_pipeline/catalog/" in p
+    ):
+        return "catalog"
+
+    if (
+        p.startswith("src/origenlab_email_pipeline/read/")
+        or "/origenlab_email_pipeline/read/" in p
+    ):
+        return "read_modules"
+
+    if p.startswith("scripts/reports/") or "client_report" in p:
+        return "client_reports"
+
+    if (
+        p.startswith("scripts/validation/")
+        or p.startswith("src/origenlab_email_pipeline/validation/")
+    ):
+        return "validation"
+
+    if (
+        base in ("parse_mbox.py", "attachment_extract.py", "export_jsonl.py")
+        or p.startswith("scripts/ingest/02_")
+        or p.startswith("scripts/ingest/04_")
+    ):
+        return "legacy_ingest"
+
+    if base.startswith("operator_") and (base.endswith("_report.py") or base.endswith("_copy_es.py")):
+        return "operator_reports"
+
+    if _is_core_infrastructure_path(p, base):
+        return "core_infrastructure"
 
     if (
         p.startswith("scripts/research/")
         or p.startswith("src/origenlab_email_pipeline/lead_research/")
         or "/lead_research/" in p
         or "lead_master" in p
+        or base.startswith("lead_")
+        or base.startswith("leads_")
         or p.startswith("scripts/leads/")
         or "/leads/" in f"/{p}/"
     ):
@@ -188,9 +313,6 @@ def classify_likely_bucket(rel_posix: str) -> str:
 
     if "supplier" in p or p.startswith("scripts/catalog/"):
         return "supplier_catalog"
-
-    if _is_tatiana_lab_path(p):
-        return "tatiana_lab"
 
     if (
         p.startswith("scripts/qa/")
@@ -200,6 +322,7 @@ def classify_likely_bucket(rel_posix: str) -> str:
         or base.startswith("plan_")
         or base.startswith("validate_")
         or base.startswith("check_")
+        or base == "email_classification_qa.py"
     ):
         return "qa_reports"
 
@@ -467,6 +590,109 @@ def scan_roots(src_root: Path, scripts_root: Path) -> ScanResult:
     return combined
 
 
+HIGH_RISK_BUCKETS = frozenset(
+    {
+        "send_or_purge",
+        "gmail_ingest",
+        "postgres_mirror_or_migration",
+        "outbound_apply",
+    }
+)
+
+BUCKET_NEXT_ACTIONS: dict[str, str] = {
+    "warm_cases": "characterize_then_split_later",
+    "postgres_mirror": "freeze_unless_mirror_work",
+    "gmail_ingest": "freeze_ingest_path",
+    "outbound_safety": "freeze_safety_path",
+    "tatiana_lab": "park_or_document",
+    "research_lab": "park_or_document",
+    "qa_reports": "keep_as_read_only_reports",
+    "client_reports": "keep_as_read_only_reports",
+    "lead_research": "characterize_large_reports",
+    "campaigns": "characterize_campaign_oneoffs",
+    "equipment": "characterize_equipment_lane",
+    "catalog": "document_catalog_owner",
+    "read_modules": "keep_with_api_read_path",
+    "validation": "review_break_glass_scripts",
+    "legacy_ingest": "document_break_glass_only",
+    "operator_reports": "keep_with_origenlab_status",
+    "core_infrastructure": "no_move_without_tests",
+    "ndr": "keep_with_ndr_review",
+    "unknown_review": "classify_owner_first",
+}
+
+
+def suggest_bucket_next_action(likely_bucket: str) -> str:
+    return BUCKET_NEXT_ACTIONS.get(likely_bucket, "review_bucket_ownership")
+
+
+def _is_script_entrypoint(mod: ModuleInfo) -> bool:
+    return mod.area == "script" and (
+        mod.has_main_guard or mod.has_argparse or mod.has_click_or_typer
+    )
+
+
+def build_bucket_summary(modules: list[ModuleInfo]) -> list[dict[str, Any]]:
+    by_bucket: dict[str, list[ModuleInfo]] = {}
+    for mod in modules:
+        by_bucket.setdefault(mod.likely_bucket, []).append(mod)
+
+    rows: list[dict[str, Any]] = []
+    for bucket in sorted(by_bucket.keys()):
+        group = by_bucket[bucket]
+        largest = max(group, key=lambda m: (m.loc, m.path))
+        rows.append(
+            {
+                "likely_bucket": bucket,
+                "file_count": len(group),
+                "src_file_count": sum(1 for m in group if m.area == "src"),
+                "script_file_count": sum(1 for m in group if m.area == "script"),
+                "total_loc": sum(m.loc for m in group),
+                "total_functions": sum(m.function_count for m in group),
+                "public_functions": sum(m.public_function_count for m in group),
+                "private_functions": sum(m.private_function_count for m in group),
+                "total_classes": sum(m.class_count for m in group),
+                "public_classes": sum(m.public_class_count for m in group),
+                "script_entrypoint_count": sum(1 for m in group if _is_script_entrypoint(m)),
+                "high_risk_file_count": sum(1 for m in group if m.risk_bucket in HIGH_RISK_BUCKETS),
+                "sqlite_write_file_count": sum(1 for m in group if m.has_sqlite_write_markers),
+                "postgres_file_count": sum(1 for m in group if m.has_postgres_markers),
+                "gmail_file_count": sum(1 for m in group if m.has_gmail_markers),
+                "send_or_purge_file_count": sum(
+                    1 for m in group if m.risk_bucket == "send_or_purge"
+                ),
+                "largest_file_path": largest.path,
+                "largest_file_loc": largest.loc,
+                "suggested_next_action": suggest_bucket_next_action(bucket),
+            }
+        )
+    rows.sort(key=lambda r: (-r["total_loc"], r["likely_bucket"]))
+    return rows
+
+
+BUCKET_SUMMARY_FIELDS = [
+    "likely_bucket",
+    "file_count",
+    "src_file_count",
+    "script_file_count",
+    "total_loc",
+    "total_functions",
+    "public_functions",
+    "private_functions",
+    "total_classes",
+    "public_classes",
+    "script_entrypoint_count",
+    "high_risk_file_count",
+    "sqlite_write_file_count",
+    "postgres_file_count",
+    "gmail_file_count",
+    "send_or_purge_file_count",
+    "largest_file_path",
+    "largest_file_loc",
+    "suggested_next_action",
+]
+
+
 def _risk_rank(risk: str) -> int:
     order = {
         "send_or_purge": 0,
@@ -564,7 +790,10 @@ def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
         ["path", "area", "symbol", "kind", "count", "likely_bucket", "risk_bucket"],
     )
 
-    summary = build_summary(result, out_dir)
+    bucket_rows = build_bucket_summary(modules)
+    _write_csv(out_dir / "bucket_summary.csv", bucket_rows, BUCKET_SUMMARY_FIELDS)
+
+    summary = build_summary(result, out_dir, bucket_rows)
     (out_dir / "summary.md").write_text(summary, encoding="utf-8")
 
     return build_json_summary(result, out_dir)
@@ -617,12 +846,19 @@ def build_json_summary(result: ScanResult, out_dir: Path) -> dict[str, Any]:
             {"path": m.path, "loc": m.loc, "likely_bucket": m.likely_bucket, "risk_bucket": m.risk_bucket}
             for m in sorted(modules, key=lambda x: (_risk_rank(x.risk_bucket), -x.loc, x.path))[:10]
         ],
+        "bucket_summary": build_bucket_summary(modules),
     }
 
 
-def build_summary(result: ScanResult, out_dir: Path) -> str:
+def build_summary(
+    result: ScanResult,
+    out_dir: Path,
+    bucket_rows: list[dict[str, Any]] | None = None,
+) -> str:
     modules = result.modules
     data = build_json_summary(result, out_dir)
+    if bucket_rows is None:
+        bucket_rows = data["bucket_summary"]
     lines = [
         "# Function surface audit (read-only planner)",
         "",
@@ -660,6 +896,18 @@ def build_summary(result: ScanResult, out_dir: Path) -> str:
         lines.append(
             f"- `{row['path']}` — {row['loc']} LOC — `{row['likely_bucket']}` / `{row['risk_bucket']}`"
         )
+    lines.extend(["", "## Bucket summary", ""])
+    lines.append(
+        "| Bucket | Files | LOC | Functions | Entrypoints | High risk | Largest file | Next action |"
+    )
+    lines.append("|--------|-------|-----|-----------|-------------|-----------|--------------|-------------|")
+    for row in bucket_rows[:20]:
+        lines.append(
+            f"| `{row['likely_bucket']}` | {row['file_count']} | {row['total_loc']} | "
+            f"{row['total_functions']} | {row['script_entrypoint_count']} | "
+            f"{row['high_risk_file_count']} | `{row['largest_file_path']}` ({row['largest_file_loc']}) | "
+            f"`{row['suggested_next_action']}` |"
+        )
     lines.extend(
         [
             "",
@@ -667,6 +915,7 @@ def build_summary(result: ScanResult, out_dir: Path) -> str:
             "",
             "- `module_inventory.csv` — per-file metrics",
             "- `function_inventory.csv` — per-function metrics",
+            "- `bucket_summary.csv` — aggregated owner/domain buckets",
             "- `risk_inventory.csv` — non-`read_only` files",
             "- `largest_files.csv` / `largest_functions.csv`",
             "- `script_entrypoints.csv` — scripts with `main` / argparse / click",
