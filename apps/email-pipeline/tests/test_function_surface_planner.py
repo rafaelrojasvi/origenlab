@@ -189,6 +189,7 @@ def test_creates_expected_csv_and_summary_outputs(tmp_path: Path) -> None:
         "summary.md",
         "module_inventory.csv",
         "function_inventory.csv",
+        "bucket_summary.csv",
         "risk_inventory.csv",
         "largest_files.csv",
         "largest_functions.csv",
@@ -266,6 +267,17 @@ def test_repo_cli_exits_zero() -> None:
     assert "warm_case_sender_rules.py" in proc.stdout or (out / "module_inventory.csv").exists()
 
 
+def test_bucket_summary_aggregates_by_likely_bucket() -> None:
+    m = _load()
+    result = m.scan_roots(REPO / "src" / "origenlab_email_pipeline", REPO / "scripts")
+    rows = m.build_bucket_summary(result.modules)
+    assert rows
+    warm = next((r for r in rows if r["likely_bucket"] == "warm_cases"), None)
+    assert warm is not None
+    assert warm["suggested_next_action"] == "characterize_then_split_later"
+    assert warm["file_count"] >= 1
+
+
 def test_planner_scripts_not_send_or_purge_risk() -> None:
     m = _load()
     result = m.scan_roots(REPO / "src" / "origenlab_email_pipeline", REPO / "scripts")
@@ -283,3 +295,61 @@ def test_likely_bucket_warm_cases_and_operator_cli() -> None:
     assert m.classify_likely_bucket("src/origenlab_email_pipeline/warm_case_sender_rules.py") == "warm_cases"
     assert m.classify_likely_bucket("src/origenlab_email_pipeline/operator_cli/constants.py") == "operator_cli"
     assert m.classify_likely_bucket("scripts/qa/audit_institution_grouping.py") == "qa_reports"
+
+
+def test_retagged_buckets_from_unknown_review_audit() -> None:
+    m = _load()
+    assert (
+        m.classify_likely_bucket(
+            "src/origenlab_email_pipeline/campaigns/presentacion_origenlab_quality.py"
+        )
+        == "campaigns"
+    )
+    assert (
+        m.classify_likely_bucket(
+            "src/origenlab_email_pipeline/equipment_deepsearch_vetted_queue.py"
+        )
+        == "equipment"
+    )
+    assert (
+        m.classify_likely_bucket("src/origenlab_email_pipeline/catalog/catalog_builder.py")
+        == "catalog"
+    )
+    assert (
+        m.classify_likely_bucket("src/origenlab_email_pipeline/read/today_workspace.py")
+        == "read_modules"
+    )
+    assert (
+        m.classify_likely_bucket("scripts/reports/generate_client_report.py")
+        == "client_reports"
+    )
+    assert (
+        m.classify_likely_bucket("src/origenlab_email_pipeline/ndr_bounce_extraction.py")
+        == "ndr"
+    )
+    assert (
+        m.classify_likely_bucket("src/origenlab_email_pipeline/core/research_automation.py")
+        == "research_lab"
+    )
+    assert m.classify_likely_bucket("src/origenlab_email_pipeline/config.py") == "core_infrastructure"
+    assert (
+        m.classify_likely_bucket("src/origenlab_email_pipeline/mart_core_postgres_migrate.py")
+        == "postgres_mirror"
+    )
+
+
+def test_manual_html_outreach_outbound_bucket_and_non_read_only_risk() -> None:
+    m = _load()
+    rel = "src/origenlab_email_pipeline/manual_html_outreach_batch.py"
+    path = REPO / "src" / "origenlab_email_pipeline" / "manual_html_outreach_batch.py"
+    mod, _ = m.scan_file(path, rel, "src")
+    assert mod.likely_bucket == "outbound_safety"
+    assert mod.risk_bucket != "read_only"
+
+
+def test_unknown_review_count_dropped_on_full_repo_scan() -> None:
+    m = _load()
+    result = m.scan_roots(REPO / "src" / "origenlab_email_pipeline", REPO / "scripts")
+    unknown = sum(1 for mod in result.modules if mod.likely_bucket == "unknown_review")
+    assert unknown < 118
+    assert unknown <= 15
