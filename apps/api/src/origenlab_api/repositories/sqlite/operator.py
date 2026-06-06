@@ -52,4 +52,5 @@ class SqliteOperatorStatusRepository:
             "operator_focus": report.current_operator_focus,
             "outbound_readiness": outbound_readiness,
             "warnings": list(report.warnings),
+            "daily_core_run": dict(report.daily_core_run or {}),
         }
