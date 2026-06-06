@@ -85,6 +85,18 @@ Mart rebuild (`build-mart --rebuild`) **does** mutate SQLite mart tables. That i
 
 ---
 
+## Run manifest (apply only)
+
+When `daily-core --apply` completes (success or first-step failure), the CLI writes:
+
+`reports/out/active/current/daily_core_run_manifest.json`
+
+This file is **operator visibility / evidence only**. It records which daily-core steps ran and their exit codes. It is **not send approval**, does **not** replace SQLite or Gmail Sent operational truth, and is **separate** from the existing campaign workspace index at `reports/out/active/current/manifest.json`.
+
+Plan-only (`uv run origenlab daily-core`) and `--help` do **not** write this file.
+
+---
+
 ## Optional mirror (separate step)
 
 Postgres reporting visibility is **outside** daily core. Run mirror only when a Postgres URL is configured and reporting visibility is needed:

@@ -86,3 +86,12 @@ def test_operator_command_surface_links_daily_core() -> None:
 def test_runbook_links_daily_core() -> None:
     text = _RUNBOOK.read_text(encoding="utf-8")
     assert "pipeline/DAILY_CORE.md" in text or "DAILY_CORE.md" in text
+
+
+def test_daily_core_documents_run_manifest() -> None:
+    text = _DAILY_CORE.read_text(encoding="utf-8")
+    assert "daily_core_run_manifest.json" in text
+    assert "manifest.json" in text
+    lower = text.lower()
+    assert "not send approval" in lower or "visibility" in lower
+    assert "separate" in lower
