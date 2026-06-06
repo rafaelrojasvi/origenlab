@@ -19,6 +19,7 @@ const panelSqlite: TodayPanelData = {
     operator_focus: "warm_cases",
     outbound_readiness: "ready",
     warnings: ["low volume this week"],
+    daily_core_run: { exists: false },
   },
 };
 
@@ -142,15 +143,92 @@ describe("DashboardApp (legacy TodayPage tests)", () => {
 
   it("does not expose sqlite paths or raw body fields", async () => {
     mockAllOk();
+    vi.mocked(fetchTodayPanel).mockResolvedValue({
+      ...panelSqlite,
+      operator: {
+        ...panelSqlite.operator,
+        daily_core_run: {
+          exists: true,
+          loaded: true,
+          status: "success",
+          returncode: 0,
+          step_count: 7,
+          send_approval: false,
+          postgres_mirror: "not included",
+          path: "/secret/active/current/daily_core_run_manifest.json",
+        },
+      },
+    });
     render(<DashboardApp />);
     await waitFor(() => screen.getByText("LISTO"));
     expect(screen.queryByText(/\/tmp\/emails\.sqlite/)).toBeNull();
+    expect(screen.queryByText(/daily_core_run_manifest\.json/)).toBeNull();
+    expect(screen.queryByText(/\/secret\/active/)).toBeNull();
     expect(screen.queryByText(/body_preview/)).toBeNull();
 
     const nav = screen.getByRole("navigation", { name: "Navegación del panel" });
     fireEvent.click(within(nav).getByRole("link", { name: "Licitaciones / equipos" }));
     await waitFor(() => screen.getByText("Hospital Regional"));
     expect(screen.queryByText(/\/secret\/path/)).toBeNull();
+  });
+
+  it("shows daily-core section when no run is registered", async () => {
+    mockAllOk();
+    render(<DashboardApp />);
+    await waitFor(() => screen.getByText("Última ejecución daily-core"));
+    screen.getByText("Sin ejecución registrada todavía.");
+    screen.getByText(/No aprueba envíos/);
+  });
+
+  it("shows valid daily-core run summary", async () => {
+    mockAllOk();
+    vi.mocked(fetchTodayPanel).mockResolvedValue({
+      ...panelSqlite,
+      operator: {
+        ...panelSqlite.operator,
+        daily_core_run: {
+          exists: true,
+          loaded: true,
+          workflow: "daily-core",
+          status: "success",
+          returncode: 0,
+          step_count: 7,
+          send_approval: false,
+          postgres_mirror: "not included",
+          generated_at_utc: "2026-06-05T12:00:00+00:00",
+          path: "/hidden/daily_core_run_manifest.json",
+        },
+      },
+    });
+    render(<DashboardApp />);
+    await waitFor(() => screen.getByText("Última ejecución daily-core"));
+    const note = screen.getByTestId("daily-core-run-note");
+    within(note).getByText("success");
+    within(note).getByText("7");
+    within(note).getByText("0");
+    within(note).getByText("2026-06-05T12:00:00+00:00");
+    within(note).getByText("not included");
+    within(note).getByText(/No aprueba envíos/);
+    expect(screen.queryByText(/\/hidden\/daily_core/)).toBeNull();
+  });
+
+  it("shows readable warning when daily-core manifest has parse error", async () => {
+    mockAllOk();
+    vi.mocked(fetchTodayPanel).mockResolvedValue({
+      ...panelSqlite,
+      operator: {
+        ...panelSqlite.operator,
+        daily_core_run: {
+          exists: true,
+          loaded: false,
+          parse_error: true,
+          path: "/hidden/daily_core_run_manifest.json",
+        },
+      },
+    });
+    render(<DashboardApp />);
+    await waitFor(() => screen.getByText("Manifest no legible; revisar status en CLI."));
+    expect(screen.queryByText(/\/hidden\/daily_core/)).toBeNull();
   });
 
   it("shows postgres mirror labels when backend is postgres", async () => {

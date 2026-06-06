@@ -10,6 +10,22 @@ export interface HealthResponse {
   postgres_configured: boolean;
 }
 
+export interface DailyCoreRunStatus {
+  path?: string;
+  exists: boolean;
+  loaded?: boolean;
+  parse_error?: boolean;
+  schema_version?: number;
+  workflow?: string;
+  generated_at_utc?: string;
+  status?: string;
+  returncode?: number;
+  step_count?: number;
+  last_step?: string;
+  send_approval?: boolean;
+  postgres_mirror?: string;
+}
+
 export interface OperatorStatusResponse {
   verdict: string;
   sqlite_path: string;
@@ -17,6 +33,7 @@ export interface OperatorStatusResponse {
   operator_focus: string | null;
   outbound_readiness: string;
   warnings: string[];
+  daily_core_run: DailyCoreRunStatus;
 }
 
 export interface TodayPanelData {

@@ -19,6 +19,7 @@ const panelSqlite: TodayPanelData = {
     operator_focus: "warm_cases",
     outbound_readiness: "ready",
     warnings: [],
+    daily_core_run: { exists: false },
   },
 };
 
