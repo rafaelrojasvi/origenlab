@@ -43,7 +43,7 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 
 | CLI subcommand | Advanced fallback (`scripts/…`) | Notes |
 |----------------|----------------------------------|--------|
-| `status` | `qa/operator_status.py` | READY / CAUTION / BLOCKED |
+| `status` | `qa/operator_status.py` | READY / CAUTION / BLOCKED; includes read-only `daily_core_run_manifest.json` summary when present |
 | `daily-health` | `qa/run_daily_health_report.py` | Not a substitute for full post-send loop |
 | `refresh-safety` | `qa/refresh_outbound_safety_memory.py` | Anti-repeat export chain |
 | `validate-csvs` | `qa/validate_campaign_csvs.py` | CSV contracts |

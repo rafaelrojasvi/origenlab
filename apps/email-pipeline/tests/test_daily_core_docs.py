@@ -95,3 +95,4 @@ def test_daily_core_documents_run_manifest() -> None:
     lower = text.lower()
     assert "not send approval" in lower or "visibility" in lower
     assert "separate" in lower
+    assert "origenlab status" in text.lower() or "uv run origenlab status" in text

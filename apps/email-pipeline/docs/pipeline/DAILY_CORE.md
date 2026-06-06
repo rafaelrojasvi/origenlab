@@ -95,6 +95,8 @@ This file is **operator visibility / evidence only**. It records which daily-cor
 
 Plan-only (`uv run origenlab daily-core`) and `--help` do **not** write this file.
 
+`uv run origenlab status` includes a read-only summary of this manifest when present (visibility only — **not send approval**).
+
 ---
 
 ## Optional mirror (separate step)
