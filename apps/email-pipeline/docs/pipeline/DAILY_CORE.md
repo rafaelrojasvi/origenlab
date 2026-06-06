@@ -15,10 +15,16 @@ This document defines the **daily operating layer** for `apps/email-pipeline`: w
 From `apps/email-pipeline/`:
 
 ```bash
-uv run origenlab refresh-dashboard --apply --no-mirror
+uv run origenlab daily-core --apply
 ```
 
-This is the **current daily core** command: it runs the seven steps below against **SQLite** and writes **reports** under `reports/out/`. It **does not** run Postgres mirror sync.
+This is the **daily core CLI alias**. It runs the seven steps below against **SQLite** and writes **reports** under `reports/out/`. It **never** runs Postgres mirror sync.
+
+Equivalent long form:
+
+```bash
+uv run origenlab refresh-dashboard --apply --no-mirror
+```
 
 ---
 
@@ -27,16 +33,16 @@ This is the **current daily core** command: it runs the seven steps below agains
 Inspect the workflow before any writes:
 
 ```bash
-uv run origenlab refresh-dashboard
+uv run origenlab daily-core
 ```
 
-Plan-only mode prints the step list and exits **without** Gmail ingest, mart rebuild, commercial intel refresh, or other mutating steps.
+Plan-only mode prints the seven-step list and exits **without** Gmail ingest, mart rebuild, commercial intel refresh, or other mutating steps. Equivalent to `uv run origenlab refresh-dashboard` (plan-only), but the plan shows **seven steps** (no mirror).
 
 ---
 
 ## Daily core steps (in order)
 
-When `--apply --no-mirror` is used, the orchestrator runs:
+When `daily-core --apply` (or `refresh-dashboard --apply --no-mirror`) is used, the orchestrator runs:
 
 | # | Step | CLI subcommand | Notes |
 |---|------|----------------|-------|
@@ -48,7 +54,7 @@ When `--apply --no-mirror` is used, the orchestrator runs:
 | 6 | Post-send digest | `post-send-digest` | Report artifacts after contacted-universe audit inputs |
 | 7 | Operator status | `status` | READY / CAUTION / BLOCKED snapshot |
 
-Optional flags (same contract, different shape): `--skip-ingest`, `--since-days N` — see `uv run origenlab refresh-dashboard --help`.
+Optional flags (same contract, different shape): `--skip-ingest`, `--since-days N` — see `uv run origenlab daily-core --help`.
 
 ---
 
@@ -66,13 +72,13 @@ Optional flags (same contract, different shape): `--skip-ingest`, `--since-days 
 
 ## Daily core safety boundaries
 
-The daily core workflow (`refresh-dashboard --apply --no-mirror`):
+The daily core workflow (`daily-core --apply` / `refresh-dashboard --apply --no-mirror`):
 
 - **Does not send emails.**
 - **Does not purge data.**
 - **Does not apply NDR suppressions** (`ndr-review` builds review batches only).
 - **Does not run Alembic.**
-- **Does not require Postgres** (`--no-mirror` skips mirror sync).
+- **Does not require Postgres** (mirror is never part of `daily-core`).
 - **Does not approve outbound sends** — use separate campaign / export / send procedures after readiness checks.
 
 Mart rebuild (`build-mart --rebuild`) **does** mutate SQLite mart tables. That is expected for daily core; it is not Gmail send and not Postgres mirror.
@@ -81,7 +87,7 @@ Mart rebuild (`build-mart --rebuild`) **does** mutate SQLite mart tables. That i
 
 ## Optional mirror (separate step)
 
-Postgres reporting visibility is **outside** daily core when using `--no-mirror`. Run mirror only when a Postgres URL is configured and reporting visibility is needed:
+Postgres reporting visibility is **outside** daily core. Run mirror only when a Postgres URL is configured and reporting visibility is needed:
 
 ```bash
 uv run origenlab mirror-dashboard --apply
@@ -107,10 +113,13 @@ Requires `ORIGENLAB_POSTGRES_URL`, `ALEMBIC_DATABASE_URL`, or `ORIGENLAB_CLOUD_P
 ```bash
 cd apps/email-pipeline
 
-# Plan only — no mutations
-uv run origenlab refresh-dashboard
+# Plan only — no mutations (seven steps, no mirror)
+uv run origenlab daily-core
 
 # Daily core — SQLite + reports, no Postgres mirror
+uv run origenlab daily-core --apply
+
+# Equivalent long form
 uv run origenlab refresh-dashboard --apply --no-mirror
 
 # Optional mirror (separate; Postgres required)

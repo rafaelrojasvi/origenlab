@@ -35,10 +35,12 @@ SUBCOMMAND_SCRIPTS: dict[str, str] = {
 # Multi-step or special wrappers (not 1:1 SUBCOMMAND_SCRIPTS).
 GMAIL_INGEST_COMMANDS: frozenset[str] = frozenset({"gmail-ingest", "gmail-ingest-folders"})
 MIRROR_DASHBOARD_COMMAND = "mirror-dashboard"
+DAILY_CORE_COMMAND = "daily-core"
+DAILY_CORE_USAGE = "uv run origenlab daily-core"
 REFRESH_DASHBOARD_COMMAND = "refresh-dashboard"
 REFRESH_DASHBOARD_USAGE = "uv run origenlab refresh-dashboard"
 SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset(
-    {MIRROR_DASHBOARD_COMMAND, REFRESH_DASHBOARD_COMMAND}
+    {MIRROR_DASHBOARD_COMMAND, REFRESH_DASHBOARD_COMMAND, DAILY_CORE_COMMAND}
 )
 
 CLI_COMMAND_NAMES: tuple[str, ...] = tuple(SUBCOMMAND_SCRIPTS.keys()) + tuple(sorted(SPECIAL_COMMANDS))
@@ -84,5 +86,9 @@ SUBCOMMAND_HELP: dict[str, str] = {
     ),
     "refresh-dashboard": (
         "Orchestrated Gmail→mart→commercial→safety→digest→status→mirror workflow (plan-only default)"
+    ),
+    "daily-core": (
+        "Daily operating alias: plan-only like refresh-dashboard; --apply runs refresh-dashboard "
+        "--apply --no-mirror (never includes mirror)"
     ),
 }

@@ -7,6 +7,7 @@ import sys
 
 from origenlab_email_pipeline.operator_cli.constants import (
     CLI_COMMAND_NAMES,
+    DAILY_CORE_COMMAND,
     GMAIL_INGEST_SCRIPT,
     HELP_ONLY_SUBCOMMANDS,
     MIRROR_DASHBOARD_COMMAND,
@@ -26,11 +27,41 @@ from origenlab_email_pipeline.operator_cli.mirror import (
 )
 from origenlab_email_pipeline.operator_cli.paths import normalize_passthrough_args
 from origenlab_email_pipeline.operator_cli.refresh import (
+    parse_daily_core_wrapper_args,
     parse_refresh_dashboard_wrapper_args,
+    print_daily_core_help,
     print_refresh_dashboard_help,
+    run_daily_core,
     run_refresh_dashboard,
 )
 from origenlab_email_pipeline.operator_cli.runner import run_subcommand
+
+
+def _add_refresh_wrapper_flags(
+    parser: argparse.ArgumentParser,
+    *,
+    include_mirror_dry_run: bool,
+    no_mirror_help: str = "With --apply: skip Postgres mirror step",
+) -> None:
+    parser.add_argument("--apply", action="store_true", help="Run workflow steps (stop on first failure)")
+    parser.add_argument("--no-mirror", action="store_true", help=no_mirror_help)
+    if include_mirror_dry_run:
+        parser.add_argument(
+            "--mirror-dry-run",
+            action="store_true",
+            help="With --apply: end with mirror-dashboard dry-run (not --apply)",
+        )
+    parser.add_argument(
+        "--skip-ingest",
+        action="store_true",
+        help="With --apply: skip gmail-ingest (use when already ingested)",
+    )
+    parser.add_argument(
+        "--since-days",
+        metavar="N",
+        type=int,
+        help="With --apply: pass --since-days N to gmail-ingest only",
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -43,32 +74,30 @@ def _build_parser() -> argparse.ArgumentParser:
             "gmail-ingest: safe INBOX + Sent ingest (--replace-source rejected). "
             "gmail-ingest-help: ingest --help only. "
             "mirror-dashboard: Postgres mirror sync (dry-run default; requires Postgres URL env). "
-            "refresh-dashboard: orchestrated stack refresh (plan-only default)."
+            "refresh-dashboard: orchestrated stack refresh (plan-only default). "
+            "daily-core: daily operating alias (plan-only default; --apply = refresh-dashboard --apply --no-mirror)."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True, metavar="command")
     for name in CLI_COMMAND_NAMES:
         script_rel = SUBCOMMAND_SCRIPTS.get(name, GMAIL_INGEST_SCRIPT)
-        if name == REFRESH_DASHBOARD_COMMAND:
+        if name in (REFRESH_DASHBOARD_COMMAND, DAILY_CORE_COMMAND):
             p = sub.add_parser(name, help=SUBCOMMAND_HELP[name], description=SUBCOMMAND_HELP[name])
-            p.add_argument("--apply", action="store_true", help="Run workflow steps (stop on first failure)")
-            p.add_argument("--no-mirror", action="store_true", help="With --apply: skip Postgres mirror step")
-            p.add_argument(
-                "--mirror-dry-run",
-                action="store_true",
-                help="With --apply: end with mirror-dashboard dry-run (not --apply)",
+            _add_refresh_wrapper_flags(
+                p,
+                include_mirror_dry_run=(name == REFRESH_DASHBOARD_COMMAND),
+                no_mirror_help=(
+                    "Accepted for compatibility; daily-core never runs mirror"
+                    if name == DAILY_CORE_COMMAND
+                    else "With --apply: skip Postgres mirror step"
+                ),
             )
-            p.add_argument(
-                "--skip-ingest",
-                action="store_true",
-                help="With --apply: skip gmail-ingest (use when already ingested)",
-            )
-            p.add_argument(
-                "--since-days",
-                metavar="N",
-                type=int,
-                help="With --apply: pass --since-days N to gmail-ingest only",
-            )
+            if name == DAILY_CORE_COMMAND:
+                p.add_argument(
+                    "--mirror-dry-run",
+                    action="store_true",
+                    help=argparse.SUPPRESS,
+                )
             continue
         if name == MIRROR_DASHBOARD_COMMAND:
             p = sub.add_parser(
@@ -123,6 +152,16 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             parser.error(str(exc))
         return run_refresh_dashboard(refresh_opts)
+
+    if command == DAILY_CORE_COMMAND:
+        if _wrapper_help_requested(argv[1:]):
+            print_daily_core_help()
+            return 0
+        try:
+            daily_opts = parse_daily_core_wrapper_args(argv[1:])
+        except ValueError as exc:
+            parser.error(str(exc))
+        return run_daily_core(daily_opts)
 
     mirror_apply = False
     mirror_alembic = False
