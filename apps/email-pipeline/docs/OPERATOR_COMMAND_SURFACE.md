@@ -100,7 +100,9 @@ Workspace: `reports/out/active/current/`. Volume: `reviewed_marketing_contacts.c
 | `scripts/qa/export_gate_audit_csv.py` | Gate flags sample | Reports |
 | `scripts/qa/export_outreach_volume_rollup.py` | Saturation metrics | Reports |
 | `scripts/qa/plan_reports_out_cleanup.py` | Plan `reports/out` | No |
-| `scripts/qa/plan_function_surface.py` | Function/module surface planner | Reports only — **not** deletion authority |
+| `scripts/qa/plan_function_surface.py` | Function/module size & risk planner | Reports only — **not** deletion authority |
+| `scripts/qa/plan_import_surface.py` | Import/reference surface planner | Reports only — use with function surface planner |
+| [`docs/audits/UNKNOWN_REVIEW_SURFACE_CLASSIFICATION_20260605.md`](audits/UNKNOWN_REVIEW_SURFACE_CLASSIFICATION_20260605.md) | Unknown-review bucket manual classification | Docs only — **not** deletion authority |
 
 ---
 
