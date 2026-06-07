@@ -59,8 +59,8 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `gmail-ingest` | `ingest/05_workspace_gmail_imap_to_sqlite.py` (INBOX + Sent) | SQLite; daily refresh; rejects `--replace-source` |
 | `gmail-ingest-folders` | same (`--list-folders`) | No; discover Sent label if `[Gmail]/Enviados` differs |
 | `gmail-ingest-help` | same (`--help` only) | No; ingest flags reference |
-| `mirror-dashboard` | `sync/sync_dashboard_postgres_mirror.py` | Postgres (dry-run default); `--apply` writes |
-| `mirror-dashboard --alembic --apply` | alembic + sync script | Postgres; schema + mirror |
+| `mirror-dashboard` | `sync/sync_dashboard_postgres_mirror.py` | Postgres (dry-run default); `--apply` writes — see [`pipeline/POSTGRES_MIRROR_REFRESH.md`](pipeline/POSTGRES_MIRROR_REFRESH.md) |
+| `mirror-dashboard --alembic --apply` | alembic + sync script | Postgres; schema + mirror — explicit/schema-only; same doc |
 | `refresh-dashboard` | orchestrates CLI steps above | Plan only (default) |
 | `refresh-dashboard --apply` | ingest → `build-mart --rebuild` → `build-commercial-intel` (incremental) → safety → digest → status → `mirror-dashboard --apply` | SQLite + reports + Postgres |
 | `refresh-dashboard --apply --no-mirror` | same without mirror | SQLite + reports |

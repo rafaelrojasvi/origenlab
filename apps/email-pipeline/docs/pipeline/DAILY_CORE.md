@@ -101,7 +101,9 @@ Plan-only (`uv run origenlab daily-core`) and `--help` do **not** write this fil
 
 ## Optional mirror (separate step)
 
-Postgres reporting visibility is **outside** daily core. Run mirror only when a Postgres URL is configured and reporting visibility is needed:
+Postgres reporting visibility is **outside** daily core. **Operator recipe (env, dry-run, apply, smoke):** [`POSTGRES_MIRROR_REFRESH.md`](POSTGRES_MIRROR_REFRESH.md).
+
+Run mirror only when a Postgres URL is configured and reporting visibility is needed — **after** `daily-core --apply` when SQLite truth is stale:
 
 ```bash
 uv run origenlab mirror-dashboard --apply
