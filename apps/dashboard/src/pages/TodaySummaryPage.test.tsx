@@ -156,6 +156,90 @@ describe("TodaySummaryPage operator landing layout", () => {
   });
 });
 
+describe("TodaySummaryPage prospect review card", () => {
+  it("renders Prospectos en revisión with review_count as the main value", () => {
+    renderToday({
+      leadResearchSummary: {
+        table_available: true,
+        total: 71,
+        review_count: 71,
+        blocked_count: 1,
+        net_new_safe: 0,
+        gmail_historico: 5,
+        followup_antiguo: 0,
+        caso_activo: 0,
+        public_tender_review: 2,
+        same_domain_review: 1,
+        research_needed: 3,
+        data_source: "postgres_mirror",
+        read_only: true,
+        disclaimer: "",
+      },
+    });
+
+    screen.getByText("Prospectos en revisión");
+    expect(screen.queryByText("Prospectos seguros")).toBeNull();
+    screen.getByLabelText(/Prospectos en revisión: 71/);
+    expect(screen.queryByLabelText(/Prospectos en revisión: 0/)).toBeNull();
+  });
+
+  it("shows net_new_safe in the hint when review_count is present", () => {
+    renderToday({
+      leadResearchSummary: {
+        table_available: true,
+        total: 71,
+        review_count: 71,
+        blocked_count: 1,
+        net_new_safe: 0,
+        gmail_historico: 5,
+        followup_antiguo: 0,
+        caso_activo: 0,
+        public_tender_review: 2,
+        same_domain_review: 1,
+        research_needed: 3,
+        data_source: "postgres_mirror",
+        read_only: true,
+        disclaimer: "",
+      },
+    });
+
+    screen.getByText("0 nuevos seguros · revisar historial antes de contactar");
+  });
+
+  it("shows missing-summary hint when leadResearchSummary is null", () => {
+    renderToday({ leadResearchSummary: null });
+    screen.getByText("Sin resumen de prospectos cargado");
+    screen.getByLabelText(/Prospectos en revisión: 0/);
+  });
+
+  it("shows prior-history warning when same_domain_review threshold is met", () => {
+    renderToday({
+      leadResearchSummary: {
+        table_available: true,
+        total: 10,
+        review_count: 10,
+        blocked_count: 0,
+        net_new_safe: 2,
+        gmail_historico: 0,
+        followup_antiguo: 0,
+        caso_activo: 0,
+        public_tender_review: 0,
+        same_domain_review: 3,
+        research_needed: 0,
+        data_source: "postgres_mirror",
+        read_only: true,
+        disclaimer: "",
+      },
+    });
+
+    screen.getByTestId("today-prospect-prior-history-warning");
+    screen.getByText(/Hay prospectos con historial previo/);
+    expect(screen.queryByRole("button", { name: /Enviar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Aplicar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Run$/i })).toBeNull();
+  });
+});
+
 describe("TodaySummaryPage equipment feed warning", () => {
   it("shows unavailable warning and N/D KPI when equipment reduced_mode", () => {
     render(

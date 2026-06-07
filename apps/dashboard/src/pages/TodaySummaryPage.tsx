@@ -223,9 +223,13 @@ export function TodaySummaryPage() {
                 section="catalogo"
               />
               <SummaryCard
-                label="Prospectos seguros"
-                value={leadResearchSummary?.net_new_safe ?? 0}
-                hint="Net-new seguros (investigación DeepSearch)"
+                label="Prospectos en revisión"
+                value={leadResearchSummary?.review_count ?? 0}
+                hint={
+                  leadResearchSummary
+                    ? `${leadResearchSummary.net_new_safe} nuevos seguros · revisar historial antes de contactar`
+                    : "Sin resumen de prospectos cargado"
+                }
                 section="prospectos"
               />
             </div>
