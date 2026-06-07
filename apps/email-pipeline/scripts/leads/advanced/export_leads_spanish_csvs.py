@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Write Spanish, client-friendly versions of lead exports.
+"""Write Spanish, client-friendly versions of lead exports (advanced / parked helper).
 
-Creates three files in reports/out/ by default:
+Default: **plan-only** — reads English inputs and prints row counts; pass ``--write-outputs``
+to write Spanish CSVs. Not a daily outbound lane and **not send approval**.
+
+Creates three files when ``--write-outputs`` is passed (under ``--out-dir``):
 - leads_shortlist_es.csv (weekly shortlist)
 - leads_client_review_es.csv (client review with archive comparison)
 - leads_export_es.csv (full export with Spanish headers)
+
+``--export`` is the **input path** to the full English export CSV (not a boolean write flag).
 """
 
 from __future__ import annotations
@@ -101,36 +106,71 @@ def _to_spanish_row(row: dict[str, str], *, mode: str) -> dict[str, str]:
     return out
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Create Spanish-friendly CSV versions of lead exports")
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(
+        description="Plan or write Spanish-friendly CSV versions of lead exports (plan-only by default)."
+    )
     ap.add_argument("--out-dir", type=Path, default=Path("reports/out"), help="Output directory (default: reports/out)")
     ap.add_argument("--shortlist", type=Path, default=Path("reports/out/leads_shortlist.csv"))
     ap.add_argument("--client-review", type=Path, default=Path("reports/out/leads_client_review.csv"))
-    ap.add_argument("--export", type=Path, default=Path("reports/out/leads_export.csv"))
-    args = ap.parse_args()
+    ap.add_argument(
+        "--export",
+        type=Path,
+        default=Path("reports/out/leads_export.csv"),
+        help="Input path to full English export CSV (not a write flag).",
+    )
+    ap.add_argument(
+        "--write-outputs",
+        action="store_true",
+        help="Write leads_shortlist_es.csv, leads_client_review_es.csv, and leads_export_es.csv.",
+    )
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Same as default (plan-only). Kept for compatibility.",
+    )
+    args = ap.parse_args(argv)
 
-    # 1) Shortlist
-    _, rows = _read_rows(args.shortlist)
-    s_rows = [_to_spanish_row(r, mode="shortlist") for r in rows]
+    if args.write_outputs and args.dry_run:
+        ap.error("--write-outputs and --dry-run cannot be used together")
+
+    write_outputs = bool(args.write_outputs)
+
+    _, shortlist_in = _read_rows(args.shortlist)
+    s_rows = [_to_spanish_row(r, mode="shortlist") for r in shortlist_in]
     s_headers = list(s_rows[0].keys()) if s_rows else []
-    _write_rows(args.out_dir / "leads_shortlist_es.csv", s_headers, s_rows)
 
-    # 2) Client review
-    _, rows = _read_rows(args.client_review)
-    c_rows = [_to_spanish_row(r, mode="client_review") for r in rows]
+    _, client_in = _read_rows(args.client_review)
+    c_rows = [_to_spanish_row(r, mode="client_review") for r in client_in]
     c_headers = list(c_rows[0].keys()) if c_rows else []
-    _write_rows(args.out_dir / "leads_client_review_es.csv", c_headers, c_rows)
 
-    # 3) Full export
-    _, rows = _read_rows(args.export)
-    e_rows = [_to_spanish_row(r, mode="export") for r in rows]
+    _, export_in = _read_rows(args.export)
+    e_rows = [_to_spanish_row(r, mode="export") for r in export_in]
     e_headers = list(e_rows[0].keys()) if e_rows else []
-    _write_rows(args.out_dir / "leads_export_es.csv", e_headers, e_rows)
 
-    print(f"Wrote Spanish CSVs to {args.out_dir}: leads_shortlist_es.csv, leads_client_review_es.csv, leads_export_es.csv")
+    shortlist_out = args.out_dir / "leads_shortlist_es.csv"
+    client_out = args.out_dir / "leads_client_review_es.csv"
+    export_out = args.out_dir / "leads_export_es.csv"
+
+    if write_outputs:
+        _write_rows(shortlist_out, s_headers, s_rows)
+        _write_rows(client_out, c_headers, c_rows)
+        _write_rows(export_out, e_headers, e_rows)
+        print(
+            f"Wrote Spanish CSVs to {args.out_dir}: "
+            "leads_shortlist_es.csv, leads_client_review_es.csv, leads_export_es.csv"
+        )
+    else:
+        print("Plan only: pass --write-outputs to write Spanish CSVs.")
+        print(f"Planned output: {shortlist_out}")
+        print(f"Planned output: {client_out}")
+        print(f"Planned output: {export_out}")
+        print(f"leads_shortlist_es.csv rows: {len(s_rows)}")
+        print(f"leads_client_review_es.csv rows: {len(c_rows)}")
+        print(f"leads_export_es.csv rows: {len(e_rows)}")
+
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

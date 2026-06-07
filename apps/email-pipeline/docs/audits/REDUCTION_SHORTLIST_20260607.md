@@ -53,6 +53,7 @@ Outputs live under `reports/local/reduction-shortlist-20260607/` — **do not co
 | **#122** | `export_marketing_from_contact_master.py` audit-only default | Exploratory `contact_master` export is audit-only by default; **`--export`** + **`--out`** required to write CSVs |
 | **#123** | `apply_ready8_contact_patch.py` apply gate | DR50 ready-8 hunt patch is plan-only by default; **`--apply`** required to write hunt/top20/plan files |
 | **#124** | Zero-ref advanced owner review (docs) | Documented decision point for `export_leads_spanish_csvs.py` and `run_contact_hunt_web_server.py` — no runtime change |
+| **#125** | `export_leads_spanish_csvs.py` plan-only default | Spanish `_es` helper is plan-only by default; **`--write-outputs`** required to write CSVs; **`--export`** remains input path |
 
 These are **done** — do not re-open unless regressions are found.
 
@@ -103,7 +104,7 @@ Action types used below: `docs_only_cleanup` · `apply_gate` · `audit_only_defa
 | `scripts/qa/export_all_known_marketing_contacts.py` | active_operator_command (overlap) | Alternate merge of marketing CSVs; overlaps DNR chain partially | RUNBOOK “not daily”; 7 refs; writes `reports/out/active/` by default | **docs_only_cleanup** — clarify vs `export-dnr` / volume lane; optional dry-run flag later | low | docs_only_cleanup |
 | `scripts/leads/precheck_archive_shortlist_commercial.py` | ARCHIVE_LANE helper | Standalone precheck after manual shortlist; already read-only | Docstring: no SQLite writes; 8 refs | **no_action** (already safe); optional doc link from archive RUNBOOK | low | docs_only_cleanup |
 | `scripts/leads/advanced/run_contact_hunt_web_server.py` | parked_legacy / advanced | Local HTTP CSV server for hunt workflows | import planner: **0** doc/test command refs; README + audit mentions only | **needs_owner_review** (#124) — owner confirms before wrapper; not delete-now | low | docs_only_cleanup |
-| `scripts/leads/advanced/export_leads_spanish_csvs.py` | parked_legacy / advanced | Spanish `_es` CSV helper | import planner: **0** total refs; LEAD_PIPELINE mentions generically | **needs_owner_review** (#124) — **`--export` is input path**; future gate uses **`--write-outputs`** or **`--emit`**, not boolean `--export` | low | docs_only_cleanup |
+| `scripts/leads/advanced/export_leads_spanish_csvs.py` | parked_legacy / advanced | Spanish `_es` CSV helper | import planner: **0** total refs; LEAD_PIPELINE mentions generically | **#125 done** — plan-only default + **`--write-outputs`**; **`--export` is input path** (not boolean write) | low | **no_action** |
 | `scripts/leads/advanced/compare_archive_vs_lead_outreach.py` | parked_legacy / advanced | Compare archive vs lead lane outputs | 4 python imports; 0 doc refs | **move_later** — keep; document as audit helper | low | docs_only_cleanup |
 | `scripts/leads/build_lead_research_sqlite.py` | unknown | Builds research SQLite artifact | 2 python imports; 0 doc refs | **needs_owner_review** | low | docs_only_cleanup |
 | `scripts/leads/advanced/prepare_active_workspace.py` | parked_legacy | Legacy hunt workspace cleanup | **#118 done** — plan-only + `--apply` | **no_action** | — | — |
@@ -120,7 +121,8 @@ Action types used below: `docs_only_cleanup` · `apply_gate` · `audit_only_defa
 2. ~~**`export_marketing_from_contact_master.py` safe default**~~ — done #122 (`audit_only_default`).
 3. ~~**`apply_ready8_contact_patch.py` apply gate**~~ — done #123 (`apply_gate`).
 4. ~~**Zero-ref advanced scripts owner review**~~ — done #124 (docs/tests only; see [Owner review](#owner-review-zero-ref-advanced-helpers-pr-124)).
-5. **`export_all_known_marketing_contacts.py` doc clarification** — vs DNR/volume lane (`docs_only_cleanup`).
+5. ~~**`export_leads_spanish_csvs.py` plan-only default**~~ — done #125 (`--write-outputs` for writes; **`--export` = input path**).
+6. **`export_all_known_marketing_contacts.py` doc clarification** — vs DNR/volume lane (`docs_only_cleanup`).
 
 ---
 
@@ -134,16 +136,16 @@ Both scripts live under `scripts/leads/advanced/`. They are **reporting / client
 
 | Script | Python imports | Doc/test mentions | Writes by default today |
 |--------|------------------|-------------------|-------------------------|
-| [`export_leads_spanish_csvs.py`](../../scripts/leads/advanced/export_leads_spanish_csvs.py) | 0 | [`LEAD_PIPELINE.md`](../leads/LEAD_PIPELINE.md) (generic regenerate list); not in RUNBOOK daily | Yes — three `*_es.csv` under `--out-dir` |
+| [`export_leads_spanish_csvs.py`](../../scripts/leads/advanced/export_leads_spanish_csvs.py) | 0 | [`LEAD_PIPELINE.md`](../leads/LEAD_PIPELINE.md) (generic regenerate list); not in RUNBOOK daily | **#125:** plan-only by default; **`--write-outputs`** writes three `*_es.csv` under `--out-dir` |
 | [`run_contact_hunt_web_server.py`](../../scripts/leads/advanced/run_contact_hunt_web_server.py) | 0 | [`scripts/leads/README.md`](../../scripts/leads/README.md) (local web UI); audit docs | Serves existing CSVs (no SQLite); local LAN only |
 
 Outputs touched: `leads_shortlist_es.csv`, `leads_client_review_es.csv`, `leads_export_es.csv` (Spanish helper); web server serves `leads_*.csv` from `reports/out/`.
 
 ### `export_leads_spanish_csvs.py`
 
-- **Today:** reads English inputs (`--shortlist`, `--client-review`) and uses **`--export` as the input path** to the full export CSV (`leads_export.csv` by default). Writes Spanish `_es` variants.
+- **#125 done:** plan-only by default — reads English inputs (`--shortlist`, `--client-review`) and uses **`--export` as the input path** to the full export CSV (`leads_export.csv` by default). Pass **`--write-outputs`** to write Spanish `_es` variants.
 - **Do not** add a boolean **`--export`** write flag — that name is already taken for the input file path.
-- **If kept** and write-gating is needed later: use **`--write-outputs`** or **`--emit`** (or plan-only default + explicit write flag with a **different** name).
+- **Advanced / parked** — not daily outbound and **not send approval**.
 - **If unused after owner review:** next safe step is a **`LEGACY_DO_NOT_USE`** compatibility wrapper pointing at canonical paths (`export_leads_shortlist.py`, `export_client_review_csv.py`, `run_weekly_focus.py` Spanish outputs) — **not** immediate deletion.
 
 ### `run_contact_hunt_web_server.py`
@@ -157,7 +159,7 @@ Outputs touched: `leads_shortlist_es.csv`, `leads_client_review_es.csv`, `leads_
 
 | Owner answer | Next PR type |
 |--------------|--------------|
-| Still used occasionally | Optional **`--write-outputs`** / plan-only gate (Spanish helper only); keep web server documented as advanced/parked |
+| Still used occasionally | Spanish helper: **`--write-outputs`** when needed (**#125**); keep web server documented as advanced/parked |
 | Unused / superseded | **`LEGACY_DO_NOT_USE`** wrapper at old path; update docs/tests; **defer delete** until wrapper period passes |
 | Active weekly workflow | Document canonical command in RUNBOOK; remove from reduction shortlist as **no_action** |
 
