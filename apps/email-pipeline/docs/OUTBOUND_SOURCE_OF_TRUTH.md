@@ -23,7 +23,7 @@ From `apps/email-pipeline/`:
 **Advanced / exploratory (not default daily workflow):**
 
 - `scripts/leads/build_archive_send_batch.py` — canonical archive audit export by default (`--build-batch` for full CSVs; `--audit-only` is equivalent to default; wrapper removed Phase 5D).
-- `scripts/leads/advanced/export_marketing_from_contact_master.py` — optional `contact_master` pool export; **`contact_master` is not CRM truth**; use for exploration, not as the default archive batch.
+- `scripts/leads/advanced/export_marketing_from_contact_master.py` — optional `contact_master` pool export (**audit-only by default**; pass **`--export --out`** to write CSVs); **`contact_master` is not CRM truth**; not send approval; use for exploration, not as the default archive batch.
 
 **Streamlit** (`apps/business_mart_app.py`): **review, read/write sidecars** (suppression, outreach state, visibility), and surfaces that call the **same library functions** as the CLIs. It must **not** be treated as the sole source of “what we exported for this send” — the canonical commands above produce reproducible artifacts under `reports/out/...`.
 
