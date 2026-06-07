@@ -870,6 +870,7 @@ def test_build_archive_send_batch_cli_works_without_refresh_sent(tmp_path: Path)
             str(db),
             "--out-dir",
             str(out_dir),
+            "--build-batch",
             "--shortlist-limit",
             "10",
             "--audit-limit",
@@ -883,6 +884,88 @@ def test_build_archive_send_batch_cli_works_without_refresh_sent(tmp_path: Path)
     )
     assert run.returncode == 0, run.stderr + run.stdout
     assert (out_dir / BUILD_SUMMARY_JSON_NAME).is_file()
+    assert (out_dir / SHORTLIST_CSV_NAME).is_file()
+
+
+def test_build_archive_send_batch_cli_default_is_audit_only(tmp_path: Path) -> None:
+    db = tmp_path / "t.sqlite"
+    _seed_db(db)
+    out_dir = tmp_path / "out_default_audit"
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--db",
+            str(db),
+            "--out-dir",
+            str(out_dir),
+            "--audit-limit",
+            "100",
+        ],
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr + run.stdout
+    assert (out_dir / AUDIT_CSV_NAME).is_file()
+    assert (out_dir / AUDIT_SUMMARY_JSON_NAME).is_file()
+    assert (out_dir / BUILD_SUMMARY_JSON_NAME).is_file()
+    assert not (out_dir / SHORTLIST_CSV_NAME).is_file()
+    assert not (out_dir / SEND_READY_CSV_NAME).is_file()
+    assert not (out_dir / REVIEW_REQUIRED_CSV_NAME).is_file()
+    assert "--build-batch" in run.stdout
+
+
+def test_build_archive_send_batch_cli_rejects_audit_only_and_build_batch(tmp_path: Path) -> None:
+    db = tmp_path / "t.sqlite"
+    _seed_db(db)
+    out_dir = tmp_path / "out_conflict"
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--db",
+            str(db),
+            "--out-dir",
+            str(out_dir),
+            "--audit-only",
+            "--build-batch",
+        ],
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode != 0
+    assert "cannot be used together" in run.stderr
+
+
+def test_build_archive_send_batch_cli_rejects_postgres_audit_without_build_batch(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "t.sqlite"
+    _seed_db(db)
+    out_dir = tmp_path / "out_pg"
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--db",
+            str(db),
+            "--out-dir",
+            str(out_dir),
+            "--write-postgres-audit",
+            "--postgres-url",
+            "postgresql://u:p@h/db",
+        ],
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode != 0
+    assert "--write-postgres-audit requires --build-batch" in run.stderr
 
 
 def test_build_archive_send_batch_personal_domain_client_signal_routes_to_review(tmp_path: Path) -> None:

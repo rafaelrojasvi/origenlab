@@ -72,7 +72,7 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | `scripts/leads/mark_sent_batch_contacted.py` | active_operator_command | Post-send loop | SQLite | `outreach_contact_state` | medium | `uv run python scripts/leads/mark_sent_batch_contacted.py …` | Sidecar only |
 | `scripts/leads/import_lead_contact_research_csv.py` | import_ingest | Precision lane | CSV | `lead_contact_research` | **high** | Dry-run first; `--apply` to write | Primary DeepSearch import path |
 | `scripts/leads/export_next_marketing_recipients.py` | active_operator_command | Lead lane export | SQLite | `reports/out` | medium | `uv run python scripts/leads/export_next_marketing_recipients.py` | Gate + preflight |
-| `scripts/leads/build_archive_send_batch.py` | active_operator_command | Archive lane | SQLite | `reports/out` | **high** | `--audit-only` for audit; apply needs approval | Alternate lane — not daily mental model |
+| `scripts/leads/build_archive_send_batch.py` | active_operator_command | Archive lane | SQLite | `reports/out` | **high** | Audit-only default; `--build-batch` for full CSVs; apply needs approval | Alternate lane — not daily mental model |
 | `scripts/research/run_deep_research_prospecting.py` | active_operator_command | Research cadence | SQLite, OpenAI | `reports/out` artifacts | medium | `uv run python scripts/research/run_deep_research_prospecting.py` | Stops before send |
 
 ### Read-only QA / planners / audits

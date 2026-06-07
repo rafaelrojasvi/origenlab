@@ -683,13 +683,16 @@ uv run python scripts/reports/generate_client_report.py --out reports/out/client
 From `apps/email-pipeline/`:
 
 ```bash
+# Archive lane — audit CSV + summary only (default; alternate lane — not send approval)
+uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/archive/audits/archive_audit
+
 # Archive lane — full batch (audit, shortlist, precheck, send_ready / review_required)
-uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/archive/campaigns/archive_send_batch
+uv run python scripts/leads/build_archive_send_batch.py --build-batch --out-dir reports/out/archive/campaigns/archive_send_batch
 
 # Same path, larger shortlist (e.g. 100–200 company-intro rows): tune --shortlist-limit (and --audit-limit if needed).
-uv run python scripts/leads/build_archive_send_batch.py --out-dir reports/out/archive/campaigns/archive_send_batch --shortlist-limit 100 --audit-limit 800
+uv run python scripts/leads/build_archive_send_batch.py --build-batch --out-dir reports/out/archive/campaigns/archive_send_batch --shortlist-limit 100 --audit-limit 800
 
-# Archive lane — audit CSV + summary only (no shortlist / precheck)
+# Explicit audit-only (same as default; kept for compatibility)
 uv run python scripts/leads/build_archive_send_batch.py --audit-only --out-dir reports/out/archive/audits/archive_audit
 
 # Lead lane — next recipients from lead_master (same gate as marketing queue / retired Cola page)
@@ -701,8 +704,9 @@ uv run python scripts/leads/export_next_marketing_recipients.py \
   --write-postgres-audit \
   --audit-created-by you@example.com
 
-# Optional on archive lane too
+# Optional on archive lane too (--build-batch required; send_ready CSV must exist)
 uv run python scripts/leads/build_archive_send_batch.py \
+  --build-batch \
   --out-dir reports/out/archive/campaigns/archive_send_batch \
   --write-postgres-audit \
   --audit-created-by you@example.com
@@ -924,7 +928,7 @@ Use a deterministic, read-only queue export to target research where high/medium
 
 **Demoted / advanced:**
 
-- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export; not the default archive path (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)). Archive audit-only work uses [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) `--audit-only` (Phase 5D removed legacy wrapper).
+- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export; not the default archive path (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)). Archive audit-only work uses [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) (default audit-only; `--build-batch` for full CSVs; Phase 5D removed legacy wrapper).
 
 ### Manual HTML outreach batch (packaging only)
 

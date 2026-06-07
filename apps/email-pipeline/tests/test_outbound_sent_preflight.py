@@ -385,6 +385,7 @@ def test_build_archive_send_batch_cli_fails_preflight_without_sent_rows(tmp_path
             str(db),
             "--out-dir",
             str(out_dir),
+            "--build-batch",
             "--shortlist-limit",
             "5",
             "--audit-limit",

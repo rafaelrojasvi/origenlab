@@ -106,7 +106,7 @@ More detail: [`SCRIPT_INVENTORY.md`](SCRIPT_INVENTORY.md#workspace-prep-which-sc
 
 | Script | Use |
 |--------|-----|
-| `scripts/leads/build_archive_send_batch.py` | **`contact_master`** / archive-derived batch: audit, shortlist, precheck, `send_ready` / review paths |
+| `scripts/leads/build_archive_send_batch.py` | **`contact_master`** / archive-derived lane: **audit-only by default**; `--build-batch` for shortlist, precheck, `send_ready` / review paths |
 
 **Different from** `scripts/leads/export_next_marketing_recipients.py`, which exports **`lead_master`** through the shared gate for the **lead** lane. That CLI **requires `--out` / `-o`**; **`send_ready.csv`** is a **recommended filename / convention**, not an automatic default (same shared gate family, different lane — [`SCRIPT_MAP.md`](SCRIPT_MAP.md) archive vs daily table).
 

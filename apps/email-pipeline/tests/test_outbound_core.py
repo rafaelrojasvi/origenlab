@@ -145,6 +145,7 @@ def test_build_archive_cli_includes_outbound_run_in_summary(tmp_path: Path) -> N
             str(db),
             "--out-dir",
             str(out_dir),
+            "--build-batch",
             "--shortlist-limit",
             "10",
             "--audit-limit",

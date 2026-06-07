@@ -15,8 +15,8 @@ Use this for **repeatable** cold-outreach batch prep — not as a substitute for
 
 | Step | Command (from `apps/email-pipeline/`) |
 |------|----------------------------------------|
-| Full batch | `uv run python scripts/leads/build_archive_send_batch.py --out-dir <dir>` |
-| Audit only | Same + `--audit-only` |
+| Audit only (default) | `uv run python scripts/leads/build_archive_send_batch.py --out-dir <dir>` |
+| Full batch | Same + `--build-batch` |
 
 ### What to open after the run
 
