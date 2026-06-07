@@ -110,13 +110,21 @@ For the **live React dashboard** and deployed API counts (warm cases, equipment 
 
 **`--live`** includes:
 
-- warm cases (`--include-warm-cases`)
+- warm cases (`--include-warm-cases`) with the same default window as **Hoy**: **14 days / 100 warm cases** (`--warm-days 14 --warm-limit 100`)
 - equipment opportunities (`--include-equipment-opportunities`)
 - commercial deals (`--include-commercial-deals`)
+
+Override the warm-case window via passthrough when needed:
+
+```bash
+uv run origenlab mirror-dashboard --live -- --warm-days 30 --warm-limit 200
+```
 
 **`mirror-dashboard --apply`** without **`--live`** refreshes **core mirror pieces only** (mart, outbound, canonical, purchase events). Use that when you intentionally skip optional dashboard loaders.
 
 **Daily core intentionally never includes mirror.**
+
+If local SQLite and live Postgres **Hoy** warm-case counts still differ after `mirror-dashboard --live --apply`, export both `/cases/warm` responses and run the [warm-case parity audit](#warm-case-parity-audit-sqlite-vs-postgres-caseswarm) (diagnostic only).
 
 ### Dry-run
 

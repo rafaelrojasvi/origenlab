@@ -589,20 +589,24 @@ def run_warm_case_promotion_sync(
     limit: int = 200,
 ) -> dict[str, Any]:
     if dry_run:
-        return preview_warm_case_promotion(
+        summary = preview_warm_case_promotion(
             sqlite_path,
             days_window=days_window,
             limit=limit,
             pg_url=pg_url,
         )
-    return apply_warm_case_promotion(
-        pg_url,
-        sqlite_path,
-        days_window=days_window,
-        limit=limit,
-        updated_by=str(updated_by or "").strip(),
-        reason=str(reason or "").strip(),
-    )
+    else:
+        summary = apply_warm_case_promotion(
+            pg_url,
+            sqlite_path,
+            days_window=days_window,
+            limit=limit,
+            updated_by=str(updated_by or "").strip(),
+            reason=str(reason or "").strip(),
+        )
+    summary["warm_days"] = days_window
+    summary["warm_limit"] = limit
+    return summary
 
 
 def run_optional_db2_loaders(
@@ -635,6 +639,8 @@ def run_optional_db2_loaders(
             dry_run=dry_run,
             updated_by=args.updated_by,
             reason=args.reason,
+            days_window=int(args.warm_days),
+            limit=int(args.warm_limit),
         )
         _raise_if_optional_loader_failed("warm_case_promotion", warm_summary)
 
@@ -649,6 +655,10 @@ _OPTIONAL_LOADER_ROW_KEYS = (
     "linked_emails",
     "source_id",
     "skipped",
+    "candidate_count",
+    "queue_row_count",
+    "warm_days",
+    "warm_limit",
 )
 
 
@@ -660,6 +670,10 @@ def _format_optional_loader_summary(name: str, summary: dict[str, Any]) -> list[
     for key in _OPTIONAL_LOADER_ROW_KEYS:
         if key in summary and summary[key] is not None:
             lines.append(f"      {key}: {summary[key]}")
+    categories = summary.get("categories_summary")
+    if isinstance(categories, dict) and categories:
+        compact = ", ".join(f"{cat}={count}" for cat, count in sorted(categories.items()))
+        lines.append(f"      categories_summary: {compact}")
     return lines
 
 
@@ -781,6 +795,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--reason",
         default=None,
         help="Audit reason for optional DB-2 loaders (required with --apply when flags set).",
+    )
+    p.add_argument(
+        "--warm-days",
+        type=int,
+        default=30,
+        help="Warm-case promotion lookback window in days (default: 30).",
+    )
+    p.add_argument(
+        "--warm-limit",
+        type=int,
+        default=200,
+        help="Warm-case promotion SQLite queue row limit (default: 200).",
     )
     return p
 

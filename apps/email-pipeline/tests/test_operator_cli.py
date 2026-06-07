@@ -496,6 +496,8 @@ def test_mirror_dashboard_live_dry_run_expands_passthrough() -> None:
         "--include-commercial-deals",
     ):
         assert flag in passthrough
+    assert passthrough[passthrough.index("--warm-days") + 1] == "14"
+    assert passthrough[passthrough.index("--warm-limit") + 1] == "100"
     sync = build_mirror_dashboard_argv_list(passthrough=passthrough)[0]
     assert "--dry-run" in sync
 
@@ -526,6 +528,20 @@ def test_mirror_dashboard_live_apply_passes_loader_flags_and_audit(
         assert flag in sync
     assert sync[sync.index("--updated-by") + 1] == "rafael"
     assert sync[sync.index("--reason") + 1] == "Daily live dashboard refresh"
+    assert sync[sync.index("--warm-days") + 1] == "14"
+    assert sync[sync.index("--warm-limit") + 1] == "100"
+
+
+def test_mirror_dashboard_live_does_not_duplicate_warm_window_passthrough() -> None:
+    from origenlab_email_pipeline.operator_cli.mirror import parse_mirror_dashboard_wrapper_args
+
+    _, _, passthrough = parse_mirror_dashboard_wrapper_args(
+        ["--live", "--", "--warm-days", "30", "--warm-limit", "200"]
+    )
+    assert passthrough.count("--warm-days") == 1
+    assert passthrough.count("--warm-limit") == 1
+    assert passthrough[passthrough.index("--warm-days") + 1] == "30"
+    assert passthrough[passthrough.index("--warm-limit") + 1] == "200"
 
 
 def test_mirror_dashboard_live_apply_rejects_missing_reason() -> None:
@@ -578,6 +594,8 @@ def test_mirror_dashboard_live_main_dry_run_subprocess_argv(
     assert "--include-equipment-opportunities" in calls[0]
     assert "--include-warm-cases" in calls[0]
     assert "--include-commercial-deals" in calls[0]
+    assert calls[0][calls[0].index("--warm-days") + 1] == "14"
+    assert calls[0][calls[0].index("--warm-limit") + 1] == "100"
 
 
 def _refresh_opts(**kwargs: object) -> RefreshDashboardOptions:

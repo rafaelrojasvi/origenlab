@@ -24,6 +24,9 @@ LIVE_DASHBOARD_FLAGS = (
     "--include-commercial-deals",
 )
 
+LIVE_WARM_DAYS = "14"
+LIVE_WARM_LIMIT = "100"
+
 
 @dataclass(frozen=True)
 class _MirrorDashboardStep:
@@ -96,6 +99,10 @@ def build_live_dashboard_passthrough(
     for flag in LIVE_DASHBOARD_FLAGS:
         if flag not in result:
             result.append(flag)
+    if not _passthrough_has_flag(result, "--warm-days"):
+        result.extend(["--warm-days", LIVE_WARM_DAYS])
+    if not _passthrough_has_flag(result, "--warm-limit"):
+        result.extend(["--warm-limit", LIVE_WARM_LIMIT])
     if updated_by and not (
         _passthrough_has_flag(result, "--updated-by")
         or _passthrough_has_flag(result, "--operator")
@@ -265,6 +272,10 @@ def print_mirror_dashboard_help() -> None:
         "  uv run origenlab mirror-dashboard --alembic --apply\n"
         "  uv run origenlab mirror-dashboard -- --only mart --json-out path\n\n"
         "--live includes warm cases, equipment opportunities, and commercial deals.\n"
+        "--live uses the same default warm-case window as Hoy: 14 days / 100 cases "
+        "(--warm-days 14 --warm-limit 100).\n"
+        "Override with passthrough after `--`, e.g. "
+        "mirror-dashboard --live -- --warm-days 30 --warm-limit 200.\n"
         "Dry-run remains the default. --live --apply requires --operator (or --updated-by) and --reason.\n"
         "daily-core remains separate and never runs mirror-dashboard.\n\n"
         f"Requires {' or '.join(POSTGRES_ENV_VARS)}.\n"
