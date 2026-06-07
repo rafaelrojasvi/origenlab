@@ -15,30 +15,16 @@ Creates three files when ``--write-outputs`` is passed (under ``--out-dir``):
 from __future__ import annotations
 
 import argparse
-import csv
-import sys
 from pathlib import Path
 
 from origenlab_email_pipeline.cli_modes import (
     add_write_outputs_dry_run_flags,
     resolve_write_outputs_dry_run_mode,
 )
+from origenlab_email_pipeline.csv_rows import read_dict_rows, write_dict_rows
 
 
-def _read_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    with open(path, encoding="utf-8", newline="") as f:
-        r = csv.DictReader(f)
-        rows = list(r)
-        return (r.fieldnames or []), rows
-
-
-def _write_rows(path: Path, headers: list[str], rows: list[dict[str, str]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore")
-        w.writeheader()
-        for row in rows:
-            w.writerow(row)
+from origenlab_email_pipeline.csv_rows import read_dict_rows, write_dict_rows
 
 
 def _map_fit_bucket(v: str) -> str:
@@ -134,15 +120,15 @@ def main(argv: list[str] | None = None) -> int:
     mode = resolve_write_outputs_dry_run_mode(ap, args)
     write_outputs = mode.write_outputs
 
-    _, shortlist_in = _read_rows(args.shortlist)
+    _, shortlist_in = read_dict_rows(args.shortlist)
     s_rows = [_to_spanish_row(r, mode="shortlist") for r in shortlist_in]
     s_headers = list(s_rows[0].keys()) if s_rows else []
 
-    _, client_in = _read_rows(args.client_review)
+    _, client_in = read_dict_rows(args.client_review)
     c_rows = [_to_spanish_row(r, mode="client_review") for r in client_in]
     c_headers = list(c_rows[0].keys()) if c_rows else []
 
-    _, export_in = _read_rows(args.export)
+    _, export_in = read_dict_rows(args.export)
     e_rows = [_to_spanish_row(r, mode="export") for r in export_in]
     e_headers = list(e_rows[0].keys()) if e_rows else []
 
@@ -151,9 +137,9 @@ def main(argv: list[str] | None = None) -> int:
     export_out = args.out_dir / "leads_export_es.csv"
 
     if write_outputs:
-        _write_rows(shortlist_out, s_headers, s_rows)
-        _write_rows(client_out, c_headers, c_rows)
-        _write_rows(export_out, e_headers, e_rows)
+        write_dict_rows(shortlist_out, s_headers, s_rows)
+        write_dict_rows(client_out, c_headers, c_rows)
+        write_dict_rows(export_out, e_headers, e_rows)
         print(
             f"Wrote Spanish CSVs to {args.out_dir}: "
             "leads_shortlist_es.csv, leads_client_review_es.csv, leads_export_es.csv"
