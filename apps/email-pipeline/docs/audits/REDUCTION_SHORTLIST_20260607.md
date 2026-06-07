@@ -1,6 +1,7 @@
 # Reduction shortlist — email-pipeline (2026-06-07)
 
-**Status:** read-only audit / planning doc (PR #120)  
+**Status:** read-only audit / planning doc (PR #120) — **first wave closed through #126**
+**Closing note:** [`REDUCTION_WAVE_20260607_SUMMARY.md`](REDUCTION_WAVE_20260607_SUMMARY.md) (PR #127) — do not reopen completed candidates unless regression
 **Date:** 2026-06-07  
 **Scope:** `apps/email-pipeline` scripts and docs — **next few PRs only**  
 **Authority for daily ops (unchanged):** [`SCRIPT_MAP.md`](../SCRIPT_MAP.md), [`RUNBOOK.md`](../RUNBOOK.md), [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md)
