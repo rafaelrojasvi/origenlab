@@ -18,6 +18,12 @@ from origenlab_email_pipeline.operator_cli.paths import (
     repo_root,
 )
 
+LIVE_DASHBOARD_FLAGS = (
+    "--include-equipment-opportunities",
+    "--include-warm-cases",
+    "--include-commercial-deals",
+)
+
 
 @dataclass(frozen=True)
 class _MirrorDashboardStep:
@@ -53,10 +59,60 @@ def mirror_dashboard_sync_safety_flags() -> list[str]:
     return []
 
 
+def _passthrough_flag_value(passthrough: list[str], flag: str) -> str | None:
+    for index, token in enumerate(passthrough):
+        if token == flag and index + 1 < len(passthrough):
+            return passthrough[index + 1]
+    return None
+
+
+def _passthrough_has_flag(passthrough: list[str], flag: str) -> bool:
+    return flag in passthrough
+
+
+def _effective_updated_by(updated_by: str | None, passthrough: list[str]) -> str | None:
+    if updated_by:
+        return updated_by
+    for flag in ("--updated-by", "--operator"):
+        value = _passthrough_flag_value(passthrough, flag)
+        if value:
+            return value
+    return None
+
+
+def _effective_reason(reason: str | None, passthrough: list[str]) -> str | None:
+    if reason:
+        return reason
+    return _passthrough_flag_value(passthrough, "--reason")
+
+
+def build_live_dashboard_passthrough(
+    *,
+    updated_by: str | None,
+    reason: str | None,
+    passthrough: list[str],
+) -> list[str]:
+    result = normalize_passthrough_args(passthrough)
+    for flag in LIVE_DASHBOARD_FLAGS:
+        if flag not in result:
+            result.append(flag)
+    if updated_by and not (
+        _passthrough_has_flag(result, "--updated-by")
+        or _passthrough_has_flag(result, "--operator")
+    ):
+        result.extend(["--updated-by", updated_by])
+    if reason and not _passthrough_has_flag(result, "--reason"):
+        result.extend(["--reason", reason])
+    return result
+
+
 def parse_mirror_dashboard_wrapper_args(argv: list[str]) -> tuple[bool, bool, list[str]]:
     """Return ``(apply, alembic, passthrough)`` for mirror-dashboard wrapper flags."""
     apply = False
     alembic = False
+    live = False
+    updated_by: str | None = None
+    reason: str | None = None
     rest: list[str] = []
     i = 0
     while i < len(argv):
@@ -76,13 +132,48 @@ def parse_mirror_dashboard_wrapper_args(argv: list[str]) -> tuple[bool, bool, li
             alembic = True
             i += 1
             continue
+        if tok == "--live":
+            live = True
+            i += 1
+            continue
+        if tok in ("--operator", "--updated-by"):
+            if i + 1 >= len(argv):
+                raise ValueError(f"mirror-dashboard {tok} requires a value")
+            updated_by = argv[i + 1]
+            i += 2
+            continue
+        if tok == "--reason":
+            if i + 1 >= len(argv):
+                raise ValueError("mirror-dashboard --reason requires a value")
+            reason = argv[i + 1]
+            i += 2
+            continue
         if tok.startswith("-"):
             raise ValueError(f"mirror-dashboard: unknown flag {tok!r}")
         rest.append(tok)
         i += 1
     if alembic and not apply:
         raise ValueError("mirror-dashboard --alembic requires --apply")
-    return apply, alembic, normalize_passthrough_args(rest)
+    if not live and (updated_by is not None or reason is not None):
+        raise ValueError(
+            "mirror-dashboard --operator/--updated-by/--reason require --live; "
+            "pass advanced sync flags after `--` when not using --live"
+        )
+    passthrough = normalize_passthrough_args(rest)
+    if live and apply:
+        if not _effective_updated_by(updated_by, passthrough):
+            raise ValueError(
+                "mirror-dashboard --live --apply requires --operator or --updated-by"
+            )
+        if not _effective_reason(reason, passthrough):
+            raise ValueError("mirror-dashboard --live --apply requires --reason")
+    if live:
+        passthrough = build_live_dashboard_passthrough(
+            updated_by=updated_by,
+            reason=reason,
+            passthrough=passthrough,
+        )
+    return apply, alembic, passthrough
 
 
 def build_mirror_dashboard_sync_argv(
@@ -167,9 +258,15 @@ def print_mirror_dashboard_help() -> None:
     print(
         "mirror-dashboard — Postgres dashboard mirror (EXPERIMENTAL_PARKED)\n\n"
         "  uv run origenlab mirror-dashboard              # dry-run sync (default)\n"
-        "  uv run origenlab mirror-dashboard --apply      # write Postgres mirror\n"
+        "  uv run origenlab mirror-dashboard --apply      # write Postgres mirror (core loaders only)\n"
+        "  uv run origenlab mirror-dashboard --live       # dry-run with live dashboard optional loaders\n"
+        "  uv run origenlab mirror-dashboard --live --apply --operator rafael "
+        '--reason "Daily live dashboard refresh"\n'
         "  uv run origenlab mirror-dashboard --alembic --apply\n"
         "  uv run origenlab mirror-dashboard -- --only mart --json-out path\n\n"
+        "--live includes warm cases, equipment opportunities, and commercial deals.\n"
+        "Dry-run remains the default. --live --apply requires --operator (or --updated-by) and --reason.\n"
+        "daily-core remains separate and never runs mirror-dashboard.\n\n"
         f"Requires {' or '.join(POSTGRES_ENV_VARS)}.\n"
         "When only ORIGENLAB_CLOUD_POSTGRES_URL is set, adds --allow-non-scratch-postgres "
         "(Render/cloud target).\n"

@@ -115,6 +115,29 @@ def _build_parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="With --apply: run alembic upgrade head before sync",
             )
+            p.add_argument(
+                "--live",
+                action="store_true",
+                help=(
+                    "Include live dashboard optional loaders (warm cases, equipment "
+                    "opportunities, commercial deals); dry-run unless --apply"
+                ),
+            )
+            p.add_argument(
+                "--operator",
+                metavar="VALUE",
+                help="With --live --apply: operator id for optional loader audit (alias: --updated-by)",
+            )
+            p.add_argument(
+                "--updated-by",
+                metavar="VALUE",
+                help="With --live --apply: operator id for optional loader audit",
+            )
+            p.add_argument(
+                "--reason",
+                metavar="VALUE",
+                help="With --live --apply: audit reason for optional loader writes",
+            )
             continue
         sub.add_parser(
             name,
