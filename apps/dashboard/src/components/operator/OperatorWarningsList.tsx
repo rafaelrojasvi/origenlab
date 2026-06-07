@@ -1,28 +1,79 @@
 import { ContactEmailButton } from "../commercial/ContactEmailButton";
-import { parseWarningSegments } from "../../lib/warningEmailLinks";
+import {
+  extractEmailsFromWarning,
+  parseWarningSegments,
+} from "../../lib/warningEmailLinks";
+
+export type OperatorWarningEntry =
+  | string
+  | {
+      display: string;
+      parseText: string;
+    };
+
+function normalizeWarningEntry(entry: OperatorWarningEntry): {
+  display: string;
+  parseText: string;
+} {
+  if (typeof entry === "string") {
+    return { display: entry, parseText: entry };
+  }
+  return entry;
+}
 
 function WarningLine({
-  text,
+  display,
+  parseText,
   onContactSelect,
 }: {
-  text: string;
+  display: string;
+  parseText: string;
   onContactSelect: (email: string) => void;
 }) {
-  const segments = parseWarningSegments(text);
+  const parseEmails = extractEmailsFromWarning(parseText);
+  const displayHasInlineEmail = parseEmails.some((email) =>
+    display.toLowerCase().includes(email.toLowerCase()),
+  );
+
+  if (displayHasInlineEmail && display === parseText) {
+    const segments = parseWarningSegments(parseText);
+    return (
+      <li className="text-sm text-amber-950">
+        {segments.map((seg, index) =>
+          seg.type === "email" ? (
+            <ContactEmailButton
+              key={`${index}-${seg.value}`}
+              email={seg.value}
+              onSelect={onContactSelect}
+              className="inline font-medium text-brand-800 underline decoration-brand-400 underline-offset-2 hover:text-brand-900"
+            />
+          ) : (
+            <span key={`${index}-t`}>{seg.value}</span>
+          ),
+        )}
+      </li>
+    );
+  }
+
+  const trailingEmails = parseEmails.filter(
+    (email) => !display.toLowerCase().includes(email.toLowerCase()),
+  );
+
   return (
     <li className="text-sm text-amber-950">
-      {segments.map((seg, index) =>
-        seg.type === "email" ? (
+      <span>{display}</span>
+      {trailingEmails.map((email) => (
+        <span key={email}>
+          {" "}
+          (
           <ContactEmailButton
-            key={`${index}-${seg.value}`}
-            email={seg.value}
+            email={email}
             onSelect={onContactSelect}
             className="inline font-medium text-brand-800 underline decoration-brand-400 underline-offset-2 hover:text-brand-900"
           />
-        ) : (
-          <span key={`${index}-t`}>{seg.value}</span>
-        ),
-      )}
+          )
+        </span>
+      ))}
     </li>
   );
 }
@@ -35,7 +86,7 @@ export function OperatorWarningsList({
   subtitle,
   showListSafetyNote = true,
 }: {
-  warnings: string[];
+  warnings: OperatorWarningEntry[];
   onContactSelect: (email: string) => void;
   moreCount?: number;
   title?: string;
@@ -58,9 +109,17 @@ export function OperatorWarningsList({
         <p className="mt-1 text-xs text-amber-900">{defaultSubtitle}</p>
       ) : null}
       <ul className="mt-2 list-disc space-y-1 pl-5">
-        {warnings.map((w) => (
-          <WarningLine key={w} text={w} onContactSelect={onContactSelect} />
-        ))}
+        {warnings.map((entry) => {
+          const { display, parseText } = normalizeWarningEntry(entry);
+          return (
+            <WarningLine
+              key={parseText}
+              display={display}
+              parseText={parseText}
+              onContactSelect={onContactSelect}
+            />
+          );
+        })}
       </ul>
       {moreCount > 0 ? (
         <p className="mt-2 text-xs text-amber-900">+{moreCount} advertencias más</p>

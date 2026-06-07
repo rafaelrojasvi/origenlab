@@ -92,7 +92,7 @@ describe("CommercialDealsTable", () => {
     screen.getByText("El espejo de negocios aún no está sincronizado.");
   });
 
-  it("shows humanized mirror unavailable error with optional technical detail", () => {
+  it("shows humanized mirror unavailable error with collapsible technical detail", () => {
     const raw = '{"detail":"Postgres audit requested but no Postgres URL resolved"}';
     render(
       <CommercialDealsTable
@@ -105,8 +105,14 @@ describe("CommercialDealsTable", () => {
     );
 
     screen.getByText(/El espejo Postgres no está configurado en este entorno/);
-    expect(screen.getByRole("alert").textContent).toContain("API 503");
-    expect(screen.getByRole("alert").textContent).toContain(raw);
+    screen.getByText("Ver detalle técnico");
+    const details = screen.getByText("Ver detalle técnico").closest("details");
+    expect(details).toBeTruthy();
+    expect(details?.hasAttribute("open")).toBe(false);
+    expect(screen.queryByRole("button", { name: /Enviar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Aplicar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Ejecutar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Run$/i })).toBeNull();
   });
 
   it("has no row links or action buttons beyond section retry", () => {

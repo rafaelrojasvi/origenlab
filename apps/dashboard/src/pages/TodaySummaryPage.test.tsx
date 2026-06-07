@@ -100,6 +100,56 @@ describe("TodaySummaryPage operator landing layout", () => {
     );
   });
 
+  it("humanizes Global MAX outlier warning in Atención section", () => {
+    renderToday({
+      data: {
+        ...BASE_PANEL,
+        operator: {
+          ...BASE_PANEL.operator,
+          warnings: [
+            "Global MAX(date_iso) outlier (2033-06-09T15:09:53+01:00) — prefer 2026-filtered freshness.",
+          ],
+        },
+      },
+    });
+    screen.getByText(
+      "Hay una fecha futura anómala en el archivo histórico. Para frescura diaria se usa la fecha filtrada de 2026.",
+    );
+    expect(screen.queryByText(/Global MAX\(date_iso\)/)).toBeNull();
+  });
+
+  it("humanizes FastLab not_contacted warning in Atención section", () => {
+    renderToday({
+      data: {
+        ...BASE_PANEL,
+        operator: {
+          ...BASE_PANEL.operator,
+          warnings: [
+            "FastLab (contacto@fastlab.cl): corrected to not_contacted; no Gmail Sent evidence; future outreach requires deliberate manual review.",
+          ],
+        },
+      },
+    });
+    screen.getByText(
+      "FastLab quedó marcado como no contactado porque no hay evidencia en Gmail Enviados. Revisar manualmente antes de contactar.",
+    );
+    expect(screen.queryByText(/corrected to not_contacted/i)).toBeNull();
+  });
+
+  it("shows unknown operator warnings unchanged", () => {
+    const raw = "Quiteca: institutional caution — jorgepc@quiteca.cl contacted April 2026.";
+    renderToday({
+      data: {
+        ...BASE_PANEL,
+        operator: {
+          ...BASE_PANEL.operator,
+          warnings: [raw],
+        },
+      },
+    });
+    screen.getByText(/Quiteca: institutional caution/);
+  });
+
   it("shows empty attention state when there are no warnings", () => {
     renderToday();
     screen.getByText("Sin advertencias por ahora.");

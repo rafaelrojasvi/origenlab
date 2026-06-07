@@ -73,13 +73,11 @@ function SummaryCard({
   );
 }
 
-function displayWarnings(warnings: string[]): string[] {
-  return warnings.map((warning) => {
-    if (warning.includes("@")) {
-      return warning;
-    }
-    return humanizeOperatorWarning(warning);
-  });
+function displayWarnings(warnings: string[]): { display: string; parseText: string }[] {
+  return warnings.map((warning) => ({
+    display: humanizeOperatorWarning(warning),
+    parseText: warning,
+  }));
 }
 
 export function TodaySummaryPage() {

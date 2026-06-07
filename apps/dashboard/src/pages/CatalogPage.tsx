@@ -5,6 +5,7 @@ import {
   fetchCatalogProductsMirror,
 } from "../api/mirrorCatalogClient";
 import { CatalogProductDrawer } from "../components/catalog/CatalogProductDrawer";
+import { TechnicalDetailDisclosure } from "../components/operator/TechnicalDetailDisclosure";
 import { formatMirrorLoadError } from "../lib/humanizeApiError";
 import {
   CATALOG_CATEGORY_FILTER_OPTIONS,
@@ -457,9 +458,7 @@ export function CatalogPage() {
           role="alert"
         >
           <p className="font-medium">{listError}</p>
-          {listErrorDetail ? (
-            <p className="mt-1 break-words text-xs text-red-700">{listErrorDetail}</p>
-          ) : null}
+          {listErrorDetail ? <TechnicalDetailDisclosure detail={listErrorDetail} /> : null}
           <button
             type="button"
             onClick={() => void loadList(appliedQuery)}

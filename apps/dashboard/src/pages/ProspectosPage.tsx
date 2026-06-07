@@ -12,6 +12,7 @@ import {
   fetchLeadResearchSummaryMirror,
 } from "../api/mirrorLeadIntelClient";
 import { ProspectosDrawer } from "../components/prospectos/ProspectosDrawer";
+import { TechnicalDetailDisclosure } from "../components/operator/TechnicalDetailDisclosure";
 import { formatMirrorLoadError } from "../lib/humanizeApiError";
 import { leadProspectsQueryFromOrigin } from "../lib/prospectOriginQuery";
 import { formatProspectosTableFooter } from "../lib/clientTablePagination";
@@ -268,9 +269,7 @@ export function ProspectosPage() {
       {listError ? (
         <div className="text-sm text-red-800" role="alert">
           <p className="font-medium">{listError}</p>
-          {listErrorDetail ? (
-            <p className="mt-1 break-words text-xs text-red-700">{listErrorDetail}</p>
-          ) : null}
+          {listErrorDetail ? <TechnicalDetailDisclosure detail={listErrorDetail} /> : null}
         </div>
       ) : null}
 
