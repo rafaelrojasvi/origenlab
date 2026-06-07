@@ -6,6 +6,7 @@ export function TableSection({
   dataSourceLabel,
   loading,
   error,
+  errorDetail,
   onRetry,
   empty,
   emptyMessage,
@@ -20,6 +21,7 @@ export function TableSection({
   dataSourceLabel?: string;
   loading: boolean;
   error: string | null;
+  errorDetail?: string | null;
   onRetry: () => void;
   empty: boolean;
   emptyMessage: string;
@@ -53,6 +55,9 @@ export function TableSection({
           role="alert"
         >
           <p className="font-medium">{error}</p>
+          {errorDetail ? (
+            <p className="mt-1 break-words text-xs text-red-800">{errorDetail}</p>
+          ) : null}
           <button
             type="button"
             onClick={onRetry}

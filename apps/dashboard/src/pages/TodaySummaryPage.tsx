@@ -170,7 +170,7 @@ export function TodaySummaryPage() {
 
           <section aria-labelledby="today-queues-heading">
             <h2 id="today-queues-heading" className="text-lg font-semibold text-brand-900">
-              Qué revisar hoy
+              Colas prioritarias
             </h2>
             <p className="mt-1 text-sm text-[var(--color-muted)]">
               Colas priorizadas según correos, oportunidades de equipos y señales comerciales

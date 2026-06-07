@@ -92,6 +92,23 @@ describe("CommercialDealsTable", () => {
     screen.getByText("El espejo de negocios aún no está sincronizado.");
   });
 
+  it("shows humanized mirror unavailable error with optional technical detail", () => {
+    const raw = '{"detail":"Postgres audit requested but no Postgres URL resolved"}';
+    render(
+      <CommercialDealsTable
+        data={null}
+        loading={false}
+        error="El espejo Postgres no está configurado en este entorno. Esta vista de espejo puede estar vacía, pero Hoy y las colas SQLite siguen disponibles."
+        errorDetail={`Negocios (API 503): ${raw}`}
+        onRetry={() => {}}
+      />,
+    );
+
+    screen.getByText(/El espejo Postgres no está configurado en este entorno/);
+    expect(screen.getByRole("alert").textContent).toContain("API 503");
+    expect(screen.getByRole("alert").textContent).toContain(raw);
+  });
+
   it("has no row links or action buttons beyond section retry", () => {
     const { container } = render(
       <CommercialDealsTable data={sampleDeal} loading={false} error={null} onRetry={() => {}} />,

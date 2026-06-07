@@ -3,8 +3,13 @@ import { CommercialDealHighlightCards } from "../components/commercial/Commercia
 import { CommercialDealsTable } from "../components/commercial/CommercialDealsTable";
 
 export function DealsPage() {
-  const { commercialDeals, commercialDealsLoading, commercialDealsError, loadCommercialDeals } =
-    useDashboardData();
+  const {
+    commercialDeals,
+    commercialDealsLoading,
+    commercialDealsError,
+    commercialDealsErrorDetail,
+    loadCommercialDeals,
+  } = useDashboardData();
 
   return (
     <div className="space-y-8">
@@ -13,6 +18,7 @@ export function DealsPage() {
         data={commercialDeals}
         loading={commercialDealsLoading}
         error={commercialDealsError}
+        errorDetail={commercialDealsErrorDetail}
         onRetry={() => void loadCommercialDeals()}
       />
     </div>

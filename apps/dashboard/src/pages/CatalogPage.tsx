@@ -5,7 +5,7 @@ import {
   fetchCatalogProductsMirror,
 } from "../api/mirrorCatalogClient";
 import { CatalogProductDrawer } from "../components/catalog/CatalogProductDrawer";
-import { OperatorApiError } from "../api/operatorClient";
+import { formatMirrorLoadError } from "../lib/humanizeApiError";
 import {
   CATALOG_CATEGORY_FILTER_OPTIONS,
   buildListLinksSummary,
@@ -33,14 +33,8 @@ function catalogProductKeyFromLocationHash(): string | null {
   return product || null;
 }
 
-function formatLoadError(label: string, e: unknown): string {
-  if (e instanceof OperatorApiError) {
-    return `${label} (API ${e.status}): ${e.message}`;
-  }
-  if (e instanceof Error) {
-    return `${label}: ${e.message}`;
-  }
-  return `${label}: error desconocido`;
+function formatLoadError(label: string, e: unknown): { message: string; detail: string | null } {
+  return formatMirrorLoadError(label, e);
 }
 
 function FilterChip({
@@ -93,6 +87,7 @@ export function CatalogPage() {
   const [disclaimer, setDisclaimer] = useState("");
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
+  const [listErrorDetail, setListErrorDetail] = useState<string | null>(null);
   const [detailsByKey, setDetailsByKey] = useState<Record<string, CatalogProductDetailUi>>({});
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -120,6 +115,7 @@ export function CatalogPage() {
   const loadList = useCallback(async (query: CatalogListQuery) => {
     setListLoading(true);
     setListError(null);
+    setListErrorDetail(null);
     try {
       const body = await fetchCatalogProductsMirror(query);
       setItems(body.items);
@@ -144,7 +140,9 @@ export function CatalogPage() {
       }
       setDetailsByKey(map);
     } catch (e) {
-      setListError(formatLoadError("Catálogo", e));
+      const formatted = formatLoadError("Catálogo", e);
+      setListError(formatted.message);
+      setListErrorDetail(formatted.detail);
       setItems([]);
       setTotal(0);
       setDetailsByKey({});
@@ -245,7 +243,7 @@ export function CatalogPage() {
         setDetailsByKey((prev) => ({ ...prev, [productKey]: body.product! }));
       })
       .catch((e) => {
-        setDetailError(formatLoadError("Detalle de producto", e));
+        setDetailError(formatLoadError("Detalle de producto", e).message);
         setDetail(null);
       })
       .finally(() => setDetailLoading(false));
@@ -459,6 +457,9 @@ export function CatalogPage() {
           role="alert"
         >
           <p className="font-medium">{listError}</p>
+          {listErrorDetail ? (
+            <p className="mt-1 break-words text-xs text-red-700">{listErrorDetail}</p>
+          ) : null}
           <button
             type="button"
             onClick={() => void loadList(appliedQuery)}

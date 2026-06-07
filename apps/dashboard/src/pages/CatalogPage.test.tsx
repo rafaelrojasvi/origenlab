@@ -19,6 +19,7 @@ import {
   fetchCatalogProductDetailMirror,
   fetchCatalogProductsMirror,
 } from "../api/mirrorCatalogClient";
+import { OperatorApiError } from "../api/operatorClient";
 
 function mockCatalogList() {
   vi.mocked(fetchCatalogProductsMirror).mockResolvedValue(catalogListFixture());
@@ -56,6 +57,18 @@ describe("CatalogPage", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("shows humanized Spanish copy when mirror Postgres is unavailable", async () => {
+    const raw = '{"detail":"Postgres audit requested but no Postgres URL resolved"}';
+    vi.mocked(fetchCatalogProductsMirror).mockRejectedValue(new OperatorApiError(raw, 503));
+    render(<CatalogPage />);
+    await waitFor(() => {
+      screen.getByText(/El espejo Postgres no está configurado en este entorno/);
+    });
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("API 503");
+    expect(alert.textContent).not.toMatch(/^Catálogo \(API 503\):/);
   });
 
   it("SERVA table rows show sold commercial summary not Sin oferta", async () => {
