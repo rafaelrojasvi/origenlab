@@ -36,8 +36,8 @@ The email-pipeline stack is **operationally sound** but **organically large**: *
 | 4 | `scripts/qa/export_email_conversation_intelligence.py` (~802 LOC) | Large read-only export; low daily use | **REFACTOR_SPLIT** or **DEPRECATE_CANDIDATE** if unused | Medium |
 | 5 | Two workspace prep scripts (`prepare_outbound_campaign_workspace` vs `leads/advanced/prepare_active_workspace`) | Operator confusion documented but still recurring | **KEEP_ENTRYPOINT** + doc consolidation only first | Medium |
 | 6 | `scripts/ops/run_post_send_2026_06_01_refresh.sh` + `run_manual_outreach_2026_06_01_post_send_refresh.sh` | Historical; **broad NDR `--apply`** called out in SCRIPT_MAP | **DEPRECATE_CANDIDATE** → archive | High if reused |
-| 7 | Four root lead-account shims (`scripts/build_lead_account_rollup.py`, etc.) | Documented **COMPATIBILITY_WRAPPER** | **COMPATIBILITY_WRAPPER** → warn, then remove in Phase 5 | Medium |
-| 8 | `scripts/qa/build_buyer_opportunity_queue.py` (**LEGACY_DO_NOT_USE**) | Superseded by `build_equipment_first_*` | **DEPRECATE_CANDIDATE** (keep tests until removal) | Low |
+| 7 | ~~Four root lead-account shims (`scripts/build_lead_account_rollup.py`, etc.)~~ | **Removed Phase 5B** — use `scripts/leads/advanced/…` only | **REMOVED** (5B) | — |
+| 8 | ~~`scripts/qa/build_buyer_opportunity_queue.py`~~ | **Removed Phase 5C** — use `build_equipment_first_*` | **REMOVED** (5C) | — |
 | 9 | ~~`scripts/tools/flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** — human-reported inbound via `flag_ndr_bounces_from_contacto.py --include-reported-non-delivery` | **REMOVED** (5Q) | — |
 | 10 | ~~`scripts/qa/build_legacy_contacts_2016_2019_review.py`~~ | **Removed Phase 5R** — `legacy_contacts_2016_2019.py` + `test_legacy_contacts_2016_2019.py` | **REMOVED** (5R) | — |
 | 11 | `sys.path.insert` in ~90 scripts + duplicate `gmail_workspace_oauth` top-level vs `core/gmail/` | Reproducibility / import hygiene | **REFACTOR_SPLIT** (bootstrap only) | Low |
@@ -116,10 +116,12 @@ These are **safety-critical** or **contract-locked**. Internal refactors require
 
 ### Lead / account paths
 
-| Root shim | Canonical |
-|-----------|-----------|
-| `scripts/build_lead_account_rollup.py` | `scripts/leads/advanced/build_lead_account_rollup.py` |
-| (+ 3 siblings) | (+ 3 siblings) |
+**Removed Phase 5B (2026-06-02):** root shims `scripts/build_lead_account_rollup.py` (+ three siblings) — canonical paths live under `scripts/leads/advanced/…` only (`test_lead_compatibility_wrappers.py`).
+
+| Former root shim (removed) | Canonical |
+|---------------------------|-----------|
+| ~~`scripts/build_lead_account_rollup.py`~~ | `scripts/leads/advanced/build_lead_account_rollup.py` |
+| (+ 3 siblings) | (+ 3 siblings under `leads/advanced/`) |
 
 ### Postgres / dashboard / API (parked)
 
@@ -135,7 +137,7 @@ These are **safety-critical** or **contract-locked**. Internal refactors require
 
 | Item | Evidence |
 |------|----------|
-| `scripts/qa/build_buyer_opportunity_queue.py` | Header `LEGACY_DO_NOT_USE`; AGENTS.md; manifest `legacy_do_not_use` |
+| ~~`scripts/qa/build_buyer_opportunity_queue.py`~~ | **Removed Phase 5C** — `build_equipment_first_*`; `test_phase1_simplification_banners.py` |
 | `apps/email-pipeline` FastAPI `:8000` | Removed API-3 Phase 6; dashboard tests for `:8000` warning |
 | ~~`scripts/tools/flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** — use `flag_ndr_bounces_from_contacto.py --include-reported-non-delivery` |
 | ~~`scripts/qa/build_legacy_contacts_2016_2019_review.py`~~ | **Removed Phase 5R** — `legacy_contacts_2016_2019.py` + `test_legacy_contacts_2016_2019.py` |
@@ -202,20 +204,20 @@ Planner baseline: `uv run python scripts/qa/plan_script_consolidation.py` → **
 
 | Path | Purpose | Evidence | Class | Risk | Action | Tests before removal |
 |------|---------|----------|-------|------|--------|----------------------|
-| `scripts/qa/build_buyer_opportunity_queue.py` | Legacy A/B queue | `LEGACY_DO_NOT_USE`, AGENTS.md | E | low | Archive after 1 release warning | `test_build_buyer_opportunity_queue.py`, `test_phase1_simplification_banners.py` |
+| ~~`scripts/qa/build_buyer_opportunity_queue.py`~~ | Legacy A/B queue | **Removed Phase 5C** | — | — | Done | `test_phase1_simplification_banners.py` |
 | `scripts/ops/run_post_send_2026_06_01_refresh.sh` | One-off orchestrator | SCRIPT_MAP “do not blindly reuse” | E | high | Move to `scripts/ops/archive/` or delete with doc-only procedure | `test_refresh_render_dashboard_once.py` (if referenced) |
 | `scripts/ops/run_manual_outreach_2026_06_01_post_send_refresh.sh` | Dated manual wave | Same family | E | high | Same | shell syntax tests if any |
 | ~~`scripts/tools/flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** | Canonical `flag_ndr_*` + `--include-reported-non-delivery` | — | — | Done | `test_ndr_tool_parity.py` |
 | `scripts/leads/advanced/export_archive_outreach_candidates.py` | Audit wrapper | Docstring points to `build_archive_send_batch --audit-only` | D/E | low | Deprecation stderr only | archive lane tests |
 
-### Compatibility wrappers (repo root — out of folder scope but locked)
+### Compatibility wrappers (repo root — **removed Phase 5B**)
 
-| Path | Canonical | Class |
-|------|-----------|-------|
-| `scripts/build_lead_account_rollup.py` | `scripts/leads/advanced/build_lead_account_rollup.py` | D |
-| `scripts/match_lead_accounts_to_existing_orgs.py` | `scripts/leads/advanced/...` | D |
-| `scripts/validate_lead_account_rollup.py` | `scripts/leads/advanced/...` | D |
-| `scripts/audit_lead_org_quality.py` | `scripts/leads/advanced/...` | D |
+| Former path (removed) | Canonical |
+|----------------------|-----------|
+| ~~`scripts/build_lead_account_rollup.py`~~ | `scripts/leads/advanced/build_lead_account_rollup.py` |
+| ~~`scripts/match_lead_accounts_to_existing_orgs.py`~~ | `scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py` |
+| ~~`scripts/validate_lead_account_rollup.py`~~ | `scripts/leads/advanced/validate_lead_account_rollup.py` |
+| ~~`scripts/audit_lead_org_quality.py`~~ | `scripts/leads/advanced/audit_lead_org_quality.py` |
 
 ### Folder summaries (remaining scoped files)
 
@@ -393,14 +395,14 @@ flowchart LR
 
 | Candidate | Evidence | Verdict |
 |-----------|----------|---------|
-| `build_buyer_opportunity_queue.py` | LEGACY header; equipment-first replacements; tests lock header only | **E** — not F until tests/docs removed |
+| ~~`build_buyer_opportunity_queue.py`~~ | **Removed Phase 5C** — equipment-first replacements; `test_phase1_simplification_banners.py` | **F** (done) |
 | `run_post_send_2026_06_01_refresh.sh` | Documented dangerous broad NDR apply | **E** — archive, not silent F |
 | ~~`flag_reported_non_delivery_from_contacto.py`~~ | **Removed Phase 5Q** | **F** (done) |
 | ~~`build_legacy_contacts_2016_2019_review.py`~~ | **Removed Phase 5R** — orphan QA CLI; library + tests remain | **F** (done) |
 | ~~`test_real_embeddings.py`~~, ~~`apply_deepresearch_top10_contacts_to_sheet.py`~~, ~~`review_marketing_labels_cli.py`~~ | **Removed Phase 5S** — zero-ref LAB one-offs | **F** (done) |
 | `03_sqlite_to_jsonl.py` | ARCHITECTURE / ML path only | **Keep** — not F |
 | `02_mbox_to_sqlite.py` | Still in ingest observability tests | **Keep** with break-glass label |
-| Root lead-account wrappers | `test_critical_script_paths` + `test_lead_compatibility_wrappers` | **D only** until Phase 5 |
+| ~~Root lead-account wrappers~~ | **Removed Phase 5B** — `test_lead_compatibility_wrappers.py` | **F** (done) |
 
 **No F-class (hard delete) items** identified without further grep across monorepo CI and operator bookmarks.
 
@@ -466,7 +468,7 @@ rg 'subprocess|scripts/' apps/api/src
 3. ~~**`flag_reported_non_delivery_from_contacto.py`**~~ — **removed Phase 5Q**; use `flag_ndr_bounces_from_contacto.py --include-reported-non-delivery`.
 4. **`refresh_operational_dashboard_stack.py`** — timeline for `--mode sqlite-status|postgres-mirror|full-dashboard` from design doc?
 5. **Streamlit** (`business_mart_app.py`) vs **React dashboard** — long-term single UI? Affects whether `postgres_dashboard_api` split continues in email-pipeline vs api package.
-6. **Root wrapper removal** — external bookmarks/CI outside monorepo still calling `scripts/build_lead_account_rollup.py`?
+| 6. ~~**Root wrapper removal**~~ — **Done Phase 5B**; external bookmarks should use `scripts/leads/advanced/…`. |
 7. **`05_workspace` `--replace-source`** — should it require `--ack` like dedupe script for parity?
 
 ---
