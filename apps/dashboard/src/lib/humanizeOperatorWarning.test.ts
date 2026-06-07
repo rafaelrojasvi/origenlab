@@ -14,6 +14,26 @@ describe("humanizeOperatorWarning", () => {
     );
   });
 
+  it("humanizes Global MAX(date_iso) outlier warnings", () => {
+    expect(
+      humanizeOperatorWarning(
+        "Global MAX(date_iso) outlier (2033-06-09T15:09:53+01:00) — prefer 2026-filtered freshness.",
+      ),
+    ).toBe(
+      "Hay una fecha futura anómala en el archivo histórico. Para frescura diaria se usa la fecha filtrada de 2026.",
+    );
+  });
+
+  it("humanizes FastLab not_contacted warnings", () => {
+    expect(
+      humanizeOperatorWarning(
+        "FastLab (contacto@fastlab.cl): corrected to not_contacted; no Gmail Sent evidence; future outreach requires deliberate manual review.",
+      ),
+    ).toBe(
+      "FastLab quedó marcado como no contactado porque no hay evidencia en Gmail Enviados. Revisar manualmente antes de contactar.",
+    );
+  });
+
   it("leaves unknown warnings unchanged", () => {
     const raw = "Quiteca: institutional caution — jorgepc@quiteca.cl contacted April 2026.";
     expect(humanizeOperatorWarning(raw)).toBe(raw);

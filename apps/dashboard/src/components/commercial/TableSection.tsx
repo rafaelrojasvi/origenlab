@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TechnicalDetailDisclosure } from "../operator/TechnicalDetailDisclosure";
 
 export function TableSection({
   title,
@@ -55,9 +56,7 @@ export function TableSection({
           role="alert"
         >
           <p className="font-medium">{error}</p>
-          {errorDetail ? (
-            <p className="mt-1 break-words text-xs text-red-800">{errorDetail}</p>
-          ) : null}
+          {errorDetail ? <TechnicalDetailDisclosure detail={errorDetail} /> : null}
           <button
             type="button"
             onClick={onRetry}

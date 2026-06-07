@@ -51,9 +51,11 @@ describe("ProspectosPage", () => {
     await waitFor(() => {
       screen.getByText(/El espejo Postgres no está configurado en este entorno/);
     });
-    const alert = screen.getByRole("alert");
-    expect(alert.textContent).toContain("API 503");
-    expect(alert.textContent).not.toMatch(/^Prospectos \(API 503\):/);
+    screen.getByText("Ver detalle técnico");
+    expect(screen.getByText("Ver detalle técnico").closest("details")?.hasAttribute("open")).toBe(
+      false,
+    );
+    expect(screen.queryByRole("button", { name: /Enviar/i })).toBeNull();
   });
 
   it("shows footer with loaded vs API total and numbered pagination", async () => {
