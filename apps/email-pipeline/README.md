@@ -38,6 +38,17 @@ uv run origenlab refresh-dashboard --apply --mirror-dry-run
 
 Fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>` (same behavior). Script flags after ``--`` (e.g. `uv run origenlab validate-csvs -- --strict`). `gmail-ingest` rejects `--replace-source`. Postgres mirror is **parked** — see [docs/EXPERIMENTAL_PARKED.md](docs/EXPERIMENTAL_PARKED.md). More: [docs/OPERATOR_COMMAND_SURFACE.md](docs/OPERATOR_COMMAND_SURFACE.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
+## Validate before PR
+
+Default local pre-PR check: frozen sync, focused operator/docs pytest, and plan-only CLI smoke (status, daily-core, refresh-dashboard). No `--apply`, ingest, mirror writes, or send paths.
+
+```bash
+cd apps/email-pipeline
+./scripts/validate.sh
+```
+
+Run `./scripts/validate.sh` before opening or merging email-pipeline PRs. Targeted pytest is fine while developing.
+
 **Operator UI (active):** [`apps/dashboard`](../dashboard/README.md) (React, **:5173**) backed by [`apps/api`](../api/README.md) (FastAPI, **:8001**) and the Postgres mirror. This package has **no** product UI — only CLIs, scripts, and SQLite jobs.
 
 **HTTP API:** FastAPI does **not** live in this package. Mirror reporting is `GET /mirror/*` on **`apps/api`**.
