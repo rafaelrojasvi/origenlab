@@ -6,7 +6,7 @@ Last reviewed: 2026-05-19 (RUNBOOK dedup: [dashboard section](RUNBOOK.md#m-eprun
 
 **Purpose:** Single index for infrastructure and pilots that are **built but not on the daily SQLite outbound path**. Agents and operators should read this **before** touching Postgres, the HTTP dashboard, Tatiana/ML tooling, or old campaign pilots.
 
-**Companion:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md) · [`AGENTS.md`](../AGENTS.md) · [`reports/out/active/current/manifest.json`](../reports/out/active/current/manifest.json) (`postgres_status` / `api_status`: `parked`)
+**Companion:** [`SCRIPT_MAP.md`](SCRIPT_MAP.md) · [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) · [`audits/REDUCTION_SHORTLIST_20260607.md`](audits/REDUCTION_SHORTLIST_20260607.md) · [`AGENTS.md`](../AGENTS.md) · [`reports/out/active/current/manifest.json`](../reports/out/active/current/manifest.json) (`postgres_status` / `api_status`: `parked`)
 
 ---
 
@@ -26,8 +26,8 @@ The following are **optional**. None are needed for:
 | **Dashboard stack wrapper** | `scripts/ops/refresh_operational_dashboard_stack.py` | Mart + mirror orchestration; **DASHBOARD_ONLY**; Gmail ingest off by default. |
 | **HTTP mirror API** | [`apps/api`](../../api/README.md) (`GET /mirror/*` on :8001) | Legacy `apps/email-pipeline/src/origenlab_api` on :8000 **removed** (API-3 Phase 6) — see [`apps/api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md`](../../api/docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md). |
 | **React dashboard** | [`apps/dashboard`](../../dashboard/README.md) | **Active operator UI** — polls `apps/api` (operator + mirror read paths). Legacy multi-tab client under `src/legacy/`. |
-| **Tatiana pilots** | `scripts/tatiana/*`, `src/origenlab_email_pipeline/tatiana_copilot/` | Drafting / eval; not volume or precision daily lanes. |
-| **ML exploration** | `scripts/ml/*` | Embeddings / clustering experiments. |
+| **Tatiana pilots** | `scripts/tatiana/*`, `src/origenlab_email_pipeline/tatiana_copilot/` | Drafting / eval; **lab boundary — not daily outbound** — see [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md). |
+| **ML exploration** | `scripts/ml/*`, `scripts/reports/build_ml_report.py` | Embeddings / clustering experiments; lab report path. |
 | **Dataset / cohort tools** | `scripts/dataset/*` | Tatiana cohort exports and label review CLIs. |
 | **Old campaign pilots** | `scripts/leads/campaigns/*` | e.g. DR50 reconciliation, ready8 patches — niche, not current equipment-first policy. |
 
@@ -51,7 +51,7 @@ Scripts in the parked paths above carry top-of-file comments:
 - **`# EXPERIMENTAL_PARKED`** — migrate loaders, mirror sync
 - **`# EXPERIMENTAL_PARKED / DASHBOARD_ONLY`** — `refresh_operational_dashboard_stack.py`
 
-Tatiana/ML/dataset/campaign files are listed here **without** mass header edits (avoid risky churn). Treat entire directories as parked per [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md).
+Tatiana/ML/dataset/campaign files are listed here **without** mass header edits (avoid risky churn). Treat entire directories as parked per [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) and reduction planning in [`audits/REDUCTION_SHORTLIST_20260607.md`](audits/REDUCTION_SHORTLIST_20260607.md).
 
 ---
 

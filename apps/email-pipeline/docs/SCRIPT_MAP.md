@@ -88,7 +88,7 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | `scripts/reports/build_leads_client_pack.py` | read_only_qa_report | Client pack assembly | SQLite, CSV inputs | `reports/out` | low | `uv run python scripts/reports/build_leads_client_pack.py` | Works with generate_client_report |
 | `scripts/reports/run_all_reports.py` | read_only_qa_report | Report batch driver | SQLite | `reports/out` | low | `uv run python scripts/reports/run_all_reports.py` | Orchestrates report scripts |
 | `scripts/reports/generate_business_filter_report.py` | read_only_qa_report | Filter diagnostics | SQLite | `reports/out` | low | `uv run python scripts/reports/generate_business_filter_report.py` | Read-only report |
-| `scripts/reports/build_ml_report.py` | read_only_qa_report | ML/Tatiana lab report | SQLite / exports | `reports/out` | low | `uv run python scripts/reports/build_ml_report.py` | Lab path — not daily ops |
+| `scripts/reports/build_ml_report.py` | read_only_qa_report | ML/Tatiana lab report | SQLite / exports | `reports/out` | low | `uv run python scripts/reports/build_ml_report.py` | **Lab boundary — not daily outbound** — see [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) |
 | `scripts/qa/check_reproducibility.py` | read_only_qa_report | REPRODUCIBILITY.md | env, optional DB RO | — | low | `uv run python scripts/qa/check_reproducibility.py` | New machine checks |
 | `scripts/qa/audit_prospectos_safety_drift.py` | read_only_qa_report | Post-send loop | SQLite | `reports/out` | low | `uv run python scripts/qa/audit_prospectos_safety_drift.py` | Drift ≠ send failure |
 | `scripts/qa/audit_institution_grouping.py` | read_only_qa_report | Institution explorer prep | SQLite mart | `reports/out` only | low | `uv run origenlab audit-institution-grouping` | Domain/org grouping — **not** send safety |
@@ -126,7 +126,8 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 
 | script path | category | entrypoint / importers | reads | writes | risk | recommended command | notes |
 |-------------|----------|------------------------|-------|--------|------|---------------------|-------|
-| `scripts/tatiana/*`, `scripts/dataset/*`, `scripts/ml/*` | parked_legacy | TATIANA_LAB_BOUNDARY | varies | reports/lab | low–medium | See lab docs | Not daily outbound lanes |
+| `scripts/tatiana/*`, `scripts/dataset/*`, `scripts/ml/*`, `scripts/leads/campaigns/*` | parked_legacy | [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) | varies | reports/lab | low–medium | See lab docs | **Lab boundary — not daily outbound** |
+| `scripts/reports/build_ml_report.py` | parked_legacy | [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) | SQLite / exports | `reports/out` | low | `uv run python scripts/reports/build_ml_report.py` | **Lab boundary — not daily outbound** (also in read-only QA table below) |
 | `scripts/leads/advanced/prepare_active_workspace.py` | parked_legacy | Lead hunt / REPORTING | `reports/out/active/` | archives/moves (**`--apply`**) | medium | Hunt workflows only; plan-only default | **Not** outbound `current/` prep |
 | *(removed)* `scripts/qa/build_legacy_contacts_2016_2019_review.py` | parked_legacy | — | — | — | — | Library `legacy_contacts_2016_2019.py` | Removed Phase 5R |
 | *(removed)* `business_mart_app.py`, `streamlit_*` UI | parked_legacy | — | — | — | — | **`apps/dashboard` + `apps/api`** | Removed 2026-06-04 (#75–#77) |
@@ -433,8 +434,9 @@ Shared helpers imported by other `scripts/` CLIs; not daily outbound or mirror o
 | Dataset / cohort exports | `scripts/dataset/*` |
 | ML / embeddings exploration | `scripts/ml/*` |
 | Niche campaign reconciliations | `scripts/leads/campaigns/*` (e.g. DR50 payload flows) |
+| ML lab report | `scripts/reports/build_ml_report.py` |
 
-These are **not** the volume or precision daily lanes; see [`dataset/TATIANA_PILOT_WORKFLOW.md`](dataset/TATIANA_PILOT_WORKFLOW.md) and [`RUNBOOK.md`](RUNBOOK.md). **Scope / safety:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) (Tatiana vs production outbound, OpenAI, `reports/out`). **Parked index (Postgres/API + pilots):** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md).
+These are **not** the volume or precision daily lanes and are **not send approval**; see [`dataset/TATIANA_PILOT_WORKFLOW.md`](dataset/TATIANA_PILOT_WORKFLOW.md) and [`RUNBOOK.md`](RUNBOOK.md). **Scope / safety:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) — **lab boundary — not daily outbound** (Tatiana vs production outbound, Gmail Sent truth, OpenAI, `reports/out`). **Parked index (Postgres/API + pilots):** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md). **Reduction planning:** [`audits/REDUCTION_SHORTLIST_20260607.md`](audits/REDUCTION_SHORTLIST_20260607.md).
 
 ---
 
