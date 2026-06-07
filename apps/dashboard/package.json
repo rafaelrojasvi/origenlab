@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "validate": "npm test && npm run build",
     "smoke": "node scripts/smoke-v1.mjs",
     "smoke:sqlite": "EXPECT_BACKEND=sqlite node scripts/smoke-v1.mjs",
     "smoke:postgres": "EXPECT_BACKEND=postgres node scripts/smoke-v1.mjs",
