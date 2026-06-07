@@ -587,6 +587,7 @@ def run_warm_case_promotion_sync(
     reason: str | None,
     days_window: int = 30,
     limit: int = 200,
+    close_missing: bool = False,
 ) -> dict[str, Any]:
     if dry_run:
         summary = preview_warm_case_promotion(
@@ -603,9 +604,11 @@ def run_warm_case_promotion_sync(
             limit=limit,
             updated_by=str(updated_by or "").strip(),
             reason=str(reason or "").strip(),
+            close_missing=close_missing,
         )
     summary["warm_days"] = days_window
     summary["warm_limit"] = limit
+    summary["close_missing"] = close_missing
     return summary
 
 
@@ -641,6 +644,7 @@ def run_optional_db2_loaders(
             reason=args.reason,
             days_window=int(args.warm_days),
             limit=int(args.warm_limit),
+            close_missing=bool(args.close_missing_warm_cases),
         )
         _raise_if_optional_loader_failed("warm_case_promotion", warm_summary)
 
@@ -659,6 +663,9 @@ _OPTIONAL_LOADER_ROW_KEYS = (
     "queue_row_count",
     "warm_days",
     "warm_limit",
+    "close_missing",
+    "closed_missing_cases",
+    "reopened_cases",
 )
 
 
@@ -807,6 +814,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=200,
         help="Warm-case promotion SQLite queue row limit (default: 200).",
+    )
+    p.add_argument(
+        "--close-missing-warm-cases",
+        action="store_true",
+        help=(
+            "Close promoted warm_queue_promotion cases absent from the current "
+            "candidate snapshot."
+        ),
     )
     return p
 

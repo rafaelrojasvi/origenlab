@@ -274,15 +274,65 @@ def preview_promotion(
     }
 
 
-def _lookup_case(cur: Any, case_key: str) -> tuple[int, str] | None:
+def _lookup_case(cur: Any, case_key: str) -> tuple[int, str, bool] | None:
     cur.execute(
-        "SELECT id, status FROM commercial.warm_case WHERE case_key = %s",
+        """
+        SELECT id, status, (closed_at IS NOT NULL)
+        FROM commercial.warm_case
+        WHERE case_key = %s
+        """,
         (case_key,),
     )
     row = cur.fetchone()
     if not row:
         return None
-    return int(row[0]), str(row[1])
+    return int(row[0]), str(row[1]), bool(row[2])
+
+
+def _close_stale_promoted_cases(
+    cur: Any,
+    *,
+    candidate_keys: list[str],
+    updated_by: str,
+    reason: str,
+) -> list[tuple[int, str]]:
+    if not candidate_keys:
+        return []
+    cur.execute(
+        """
+        UPDATE commercial.warm_case
+        SET closed_at = now(),
+            updated_at = now(),
+            updated_by = %s
+        WHERE source = %s
+          AND closed_at IS NULL
+          AND case_key <> ALL(%s)
+        RETURNING id, case_key
+        """,
+        (updated_by, PROMOTION_SOURCE, candidate_keys),
+    )
+    closed_rows = cur.fetchall() or []
+    for case_id, case_key in closed_rows:
+        cur.execute(
+            """
+            INSERT INTO commercial.warm_case_event (
+              case_id, event_type, payload_json, created_by
+            ) VALUES (%s, 'status_change', %s, %s)
+            """,
+            (
+                int(case_id),
+                Json(
+                    {
+                        "reason": reason,
+                        "closed_missing": True,
+                        "source": PROMOTION_SOURCE,
+                        "case_key": str(case_key),
+                    }
+                ),
+                updated_by,
+            ),
+        )
+    return [(int(row[0]), str(row[1])) for row in closed_rows]
 
 
 def _should_write_equipment_signal(rec: WarmCasePromotionRecord) -> bool:
@@ -298,6 +348,7 @@ def apply_promotion(
     limit: int = 200,
     updated_by: str,
     reason: str,
+    close_missing: bool = False,
 ) -> dict[str, Any]:
     _require_psycopg()
     assert psycopg is not None and Json is not None
@@ -319,6 +370,9 @@ def apply_promotion(
         "status_history_rows": 0,
         "events_inserted": 0,
         "equipment_signals_upserted": 0,
+        "close_missing": close_missing,
+        "closed_missing_cases": 0,
+        "reopened_cases": 0,
         "updated_by": updated_by,
         "reason": reason,
         "categories_summary": _categories_summary(candidates),
@@ -336,6 +390,7 @@ def apply_promotion(
             for rec in candidates.values():
                 existing = _lookup_case(cur, rec.case_key)
                 is_insert = existing is None
+                was_closed = bool(existing[2]) if existing else False
 
                 cur.execute(
                     """
@@ -359,6 +414,7 @@ def apply_promotion(
                         commercial.warm_case.last_activity_at, EXCLUDED.last_activity_at
                       ),
                       last_email_id = EXCLUDED.last_email_id,
+                      closed_at = NULL,
                       updated_at = now(),
                       updated_by = EXCLUDED.updated_by
                     RETURNING id, status
@@ -388,6 +444,8 @@ def apply_promotion(
                     summary["inserted_cases"] += 1
                 else:
                     summary["updated_cases"] += 1
+                if was_closed:
+                    summary["reopened_cases"] += 1
 
                 if old_status != new_status:
                     cur.execute(
@@ -451,6 +509,16 @@ def apply_promotion(
                         ),
                     )
                     summary["equipment_signals_upserted"] += 1
+
+            if close_missing:
+                closed_rows = _close_stale_promoted_cases(
+                    cur,
+                    candidate_keys=list(candidates.keys()),
+                    updated_by=updated_by,
+                    reason=reason,
+                )
+                summary["closed_missing_cases"] = len(closed_rows)
+                summary["events_inserted"] += len(closed_rows)
 
         conn.commit()
 

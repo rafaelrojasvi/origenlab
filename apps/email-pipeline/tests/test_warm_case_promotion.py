@@ -195,20 +195,22 @@ def test_no_body_fields_in_promotion_record() -> None:
 
 
 class _PromoCursor:
-    def __init__(self, *, existing: dict[str, tuple[int, str]] | None = None) -> None:
-        self.existing = existing or {}
-        self.cases: dict[str, tuple[int, str]] = dict(self.existing)
+    def __init__(self, *, existing: dict[str, tuple[int, str, str, bool]] | None = None) -> None:
+        # case_key -> (id, status, source, closed)
+        self.cases: dict[str, tuple[int, str, str, bool]] = dict(existing or {})
         self.next_id = max((v[0] for v in self.cases.values()), default=0) + 1
         self.statements: list[tuple[str, tuple[Any, ...] | None]] = []
         self._fetch: tuple[Any, ...] | None = None
+        self._fetchall: list[tuple[Any, ...]] = []
         self.linked: set[tuple[int, int]] = set()
 
     def execute(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         self.statements.append((sql, params))
-        if "SELECT id, status FROM commercial.warm_case WHERE case_key" in sql:
+        self._fetchall = []
+        if "SELECT id, status, (closed_at IS NOT NULL)" in sql:
             key = str(params[0]) if params else ""
             hit = self.cases.get(key)
-            self._fetch = (hit[0], hit[1]) if hit else None
+            self._fetch = (hit[0], hit[1], hit[3]) if hit else None
         elif "INSERT INTO commercial.warm_case_linked_email" in sql:
             assert params is not None
             pair = (int(params[0]), int(params[1]))
@@ -217,20 +219,35 @@ class _PromoCursor:
                 self._fetch = (pair[0],)
             else:
                 self._fetch = None
-        elif "INSERT INTO commercial.warm_case_equipment_signal" in sql:
-            self._fetch = (1,)
         elif "INSERT INTO commercial.warm_case (" in sql and "ON CONFLICT" in sql:
             assert params is not None
             key = str(params[0])
             status = str(params[6])
+            source = str(params[11])
             if key in self.cases:
-                case_id, _ = self.cases[key]
-                self.cases[key] = (case_id, status)
+                case_id, _, _, _ = self.cases[key]
+                self.cases[key] = (case_id, status, source, False)
             else:
                 case_id = self.next_id
                 self.next_id += 1
-                self.cases[key] = (case_id, status)
+                self.cases[key] = (case_id, status, source, False)
             self._fetch = (case_id, status)
+        elif (
+            "UPDATE commercial.warm_case" in sql
+            and "closed_at = now()" in sql
+            and "RETURNING id, case_key" in sql
+        ):
+            assert params is not None
+            updated_by = str(params[0])
+            source = str(params[1])
+            keys = {str(k) for k in params[2]}
+            closed: list[tuple[int, str]] = []
+            for key, (case_id, status, case_source, is_closed) in list(self.cases.items()):
+                if case_source == source and not is_closed and key not in keys:
+                    self.cases[key] = (case_id, status, case_source, True)
+                    closed.append((case_id, key))
+            self._fetchall = closed
+            self._fetch = None
         elif "INSERT INTO commercial.warm_case_status_history" in sql:
             self._fetch = (1,)
         elif "INSERT INTO commercial.warm_case_event" in sql:
@@ -242,6 +259,9 @@ class _PromoCursor:
 
     def fetchone(self) -> tuple[Any, ...] | None:
         return self._fetch
+
+    def fetchall(self) -> list[tuple[Any, ...]]:
+        return list(self._fetchall)
 
     def __enter__(self) -> _PromoCursor:
         return self
@@ -306,7 +326,7 @@ def test_apply_same_email_link_idempotent(tmp_path: Path, monkeypatch: pytest.Mo
     key = next(iter(candidates.keys()))
     case_id = 99
     rec = candidates[key]
-    cur = _PromoCursor(existing={key: (case_id, "open")})
+    cur = _PromoCursor(existing={key: (case_id, "open", promo.PROMOTION_SOURCE, False)})
     cur.linked.add((case_id, rec.last_email_id))
     monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
     monkeypatch.setattr(promo, "Json", lambda obj: obj)
@@ -332,7 +352,7 @@ def test_status_change_writes_status_history(tmp_path: Path, monkeypatch: pytest
     candidates, _ = promo.load_candidates_from_sqlite(db)
     key = next(iter(candidates.keys()))
     rec = candidates[key]
-    cur = _PromoCursor(existing={key: (7, "quoted")})
+    cur = _PromoCursor(existing={key: (7, "quoted", promo.PROMOTION_SOURCE, False)})
     monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
     monkeypatch.setattr(promo, "Json", lambda obj: obj)
 
@@ -345,6 +365,120 @@ def test_status_change_writes_status_history(tmp_path: Path, monkeypatch: pytest
     assert rec.status == "new"
     assert summary["status_history_rows"] == 1
     assert any("warm_case_status_history" in s for s, _ in cur.statements)
+
+
+def test_apply_close_missing_false_leaves_stale_promoted_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+    )
+    candidates, _ = promo.load_candidates_from_sqlite(db)
+    key = next(iter(candidates.keys()))
+    stale_key = "warm:stale"
+    cur = _PromoCursor(
+        existing={
+            key: (1, "open", promo.PROMOTION_SOURCE, False),
+            stale_key: (2, "open", promo.PROMOTION_SOURCE, False),
+        }
+    )
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    summary = promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="test",
+        close_missing=False,
+    )
+    assert summary["closed_missing_cases"] == 0
+    assert cur.cases[stale_key][3] is False
+
+
+def test_apply_close_missing_true_closes_stale_promoted_rows_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+    )
+    candidates, _ = promo.load_candidates_from_sqlite(db)
+    key = next(iter(candidates.keys()))
+    stale_key = "warm:stale"
+    manual_key = "warm:manual"
+    cur = _PromoCursor(
+        existing={
+            key: (1, "open", promo.PROMOTION_SOURCE, False),
+            stale_key: (2, "open", promo.PROMOTION_SOURCE, False),
+            manual_key: (3, "open", "manual_review", False),
+        }
+    )
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    summary = promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="close stale",
+        close_missing=True,
+    )
+    assert summary["closed_missing_cases"] == 1
+    assert cur.cases[stale_key][3] is True
+    assert cur.cases[manual_key][3] is False
+    assert cur.cases[key][3] is False
+    assert any("status_change" in s for s, _ in cur.statements)
+
+
+def test_apply_reopens_closed_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+    )
+    candidates, _ = promo.load_candidates_from_sqlite(db)
+    key = next(iter(candidates.keys()))
+    cur = _PromoCursor(existing={key: (1, "open", promo.PROMOTION_SOURCE, True)})
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    summary = promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="reopen",
+        close_missing=True,
+    )
+    assert summary["reopened_cases"] == 1
+    assert cur.cases[key][3] is False
+
+
+def test_apply_no_candidates_with_close_missing_does_not_close_all(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(db, [])
+    cur = _PromoCursor(existing={"warm:stale": (2, "open", promo.PROMOTION_SOURCE, False)})
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    summary = promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="empty snapshot",
+        close_missing=True,
+    )
+    assert summary["warning"] == "no_candidates"
+    assert summary["closed_missing_cases"] == 0
+    assert cur.cases["warm:stale"][3] is False
+    assert not any("UPDATE commercial.warm_case" in s for s, _ in cur.statements)
 
 
 def test_cli_apply_requires_operator_and_reason(tmp_path: Path) -> None:

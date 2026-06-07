@@ -109,3 +109,11 @@ def test_postgres_mirror_refresh_live_uses_hoy_warm_window() -> None:
     text = _MIRROR_REFRESH.read_text(encoding="utf-8")
     assert "--warm-days 14" in text or "14 days / 100" in text
     assert "--warm-limit 100" in text or "14 days / 100 warm cases" in text
+
+
+def test_postgres_mirror_refresh_live_closes_stale_warm_cases() -> None:
+    text = _MIRROR_REFRESH.read_text(encoding="utf-8")
+    lower = text.lower()
+    assert "close-missing-warm-cases" in text or "closed" in lower
+    assert "warm_queue_promotion" in text
+    assert "not send approval" in lower or "does not approve sends" in lower

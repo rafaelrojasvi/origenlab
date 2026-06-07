@@ -308,6 +308,9 @@ def test_summary_includes_warm_case_optional_loader() -> None:
                 "queue_row_count": 58,
                 "warm_days": 14,
                 "warm_limit": 100,
+                "close_missing": True,
+                "closed_missing_cases": 17,
+                "reopened_cases": 2,
                 "categories_summary": {
                     "waiting_client": 24,
                     "quote_sent": 4,
@@ -323,6 +326,9 @@ def test_summary_includes_warm_case_optional_loader() -> None:
     assert "queue_row_count: 58" in text
     assert "warm_days: 14" in text
     assert "warm_limit: 100" in text
+    assert "close_missing: True" in text
+    assert "closed_missing_cases: 17" in text
+    assert "reopened_cases: 2" in text
     assert "categories_summary: quote_sent=4, waiting_client=24" in text
 
 
@@ -763,8 +769,50 @@ def test_warm_case_promotion_receives_warm_days_and_limit(
     assert result["ok"] is True
     assert captured["days_window"] == 14
     assert captured["limit"] == 100
+    assert captured["close_missing"] is False
     assert result["warm_case_sync"]["warm_days"] == 14
     assert result["warm_case_sync"]["warm_limit"] == 100
+
+
+def test_warm_case_promotion_receives_close_missing_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    captured: dict[str, Any] = {}
+
+    def _warm(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {
+            "applied": False,
+            "dry_run": True,
+            "closed_missing_cases": 0,
+            "close_missing": kwargs["close_missing"],
+        }
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(
+        "origenlab_email_pipeline.dashboard_postgres_sync.run_warm_case_promotion_sync",
+        side_effect=_warm,
+    ):
+        result = run_dashboard_mirror_sync(
+            [
+                "--sqlite-db",
+                str(db),
+                "--dry-run",
+                "--include-warm-cases",
+                "--close-missing-warm-cases",
+            ],
+            repo_root=REPO,
+            loader_runner=lambda _c, _r: 0,
+        )
+
+    assert result["ok"] is True
+    assert captured["close_missing"] is True
+    assert result["warm_case_sync"]["close_missing"] is True
 
 
 def test_include_commercial_deals_flag_calls_deals_sync(
