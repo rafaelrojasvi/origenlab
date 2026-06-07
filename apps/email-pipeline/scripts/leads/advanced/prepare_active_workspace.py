@@ -31,6 +31,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from origenlab_email_pipeline.cli_modes import add_apply_dry_run_flags, resolve_apply_dry_run_mode
+
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -143,15 +145,9 @@ def main() -> int:
         default=Path("reports/out/active"),
         help="Carpeta active (default: reports/out/active)",
     )
-    ap.add_argument(
-        "--apply",
-        action="store_true",
-        help="Move files to archive/ and write generated CSVs (default is plan-only).",
-    )
-    ap.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Plan only (same as default; kept for compatibility).",
+    add_apply_dry_run_flags(
+        ap,
+        apply_help="Move files to archive/ and write generated CSVs (default is plan-only).",
     )
     ap.add_argument(
         "--deepsearch",
@@ -165,12 +161,13 @@ def main() -> int:
         help="Generar leads_active_unified.csv (weekly focus + hunt current por id_lead).",
     )
     args = ap.parse_args()
-    if args.dry_run and args.apply:
-        ap.error("--dry-run and --apply cannot be used together")
-
-    apply = bool(args.apply)
-    dry_run = not apply
-    if not apply:
+    mode = resolve_apply_dry_run_mode(
+        ap,
+        args,
+        conflict_message="--dry-run and --apply cannot be used together",
+    )
+    dry_run = mode.dry_run
+    if not mode.apply:
         print("Plan only: pass --apply to move files or write generated CSVs.")
 
     active = args.active_dir.resolve()
