@@ -210,8 +210,8 @@ def test_operator_status_no_postgres_env_required(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.delenv("ORIGENLAB_POSTGRES_URL", raising=False)
-    monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "")
+    monkeypatch.setenv("ALEMBIC_DATABASE_URL", "")
 
     db = _minimal_db(tmp_path)
     manifest = {
