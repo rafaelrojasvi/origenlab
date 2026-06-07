@@ -4,8 +4,10 @@ const EMPTY_DAILY_CORE_RUN: DailyCoreRunStatus = { exists: false };
 
 export function DailyCoreRunNote({
   dailyCoreRun,
+  showSafetyNote = true,
 }: {
   dailyCoreRun?: DailyCoreRunStatus | null;
+  showSafetyNote?: boolean;
 }) {
   const run = dailyCoreRun ?? EMPTY_DAILY_CORE_RUN;
   return (
@@ -14,9 +16,11 @@ export function DailyCoreRunNote({
       data-testid="daily-core-run-note"
     >
       <h3 className="text-sm font-semibold text-brand-900">Última ejecución daily-core</h3>
-      <p className="mt-1 text-xs text-[var(--color-muted)]">
-        Solo visibilidad operativa. No aprueba envíos.
-      </p>
+      {showSafetyNote ? (
+        <p className="mt-1 text-xs text-[var(--color-muted)]">
+          Solo visibilidad operativa. No aprueba envíos.
+        </p>
+      ) : null}
       {!run.exists ? (
         <p className="mt-2 text-sm text-slate-800">Sin ejecución registrada todavía.</p>
       ) : run.parse_error ? (
