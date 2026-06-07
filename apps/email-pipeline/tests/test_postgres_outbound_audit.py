@@ -321,6 +321,7 @@ def test_archive_export_calls_audit_when_flag_passed(tmp_path: Path, monkeypatch
             "prog",
             "--out-dir",
             str(tmp_path),
+            "--build-batch",
             "--write-postgres-audit",
             "--postgres-url",
             "postgresql://u:p@h/db",

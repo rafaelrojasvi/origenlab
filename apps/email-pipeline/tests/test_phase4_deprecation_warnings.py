@@ -108,6 +108,7 @@ def test_build_archive_send_batch_replacement_help_exits_zero() -> None:
     r = _run_help(_ARCHIVE_CANONICAL)
     assert r.returncode == 0, r.stderr + r.stdout
     assert "--audit-only" in r.stdout or "--audit-only" in r.stderr
+    assert "--build-batch" in r.stdout or "--build-batch" in r.stderr
 
 
 def test_all_phase2_deprecated_targets_have_runtime_or_shell_banner() -> None:

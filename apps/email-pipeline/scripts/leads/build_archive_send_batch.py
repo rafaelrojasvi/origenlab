@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Canonical archive outbound batch: audit → shortlist → gate snapshot → commercial precheck → CSVs.
+"""Canonical archive outbound batch (alternate lane — not daily outbound).
 
-Use ``--audit-only`` for audit CSV + JSON only (no shortlist/precheck). See RUNBOOK / OUTBOUND_SOURCE_OF_TRUTH."""
+Default: audit CSV + JSON only. Pass ``--build-batch`` for shortlist → gate snapshot →
+commercial precheck → send_ready / review CSVs. See RUNBOOK / OUTBOUND_SOURCE_OF_TRUTH."""
 
 from __future__ import annotations
 
@@ -108,8 +109,17 @@ def main() -> int:
         "--audit-only",
         action="store_true",
         help=(
-            "Write only archive_outreach_audit.csv and archive_outreach_audit_summary.json "
-            "(plus a small build summary). Same audit logic as a full batch; no shortlist/precheck."
+            "Same as default: write only archive_outreach_audit.csv and "
+            "archive_outreach_audit_summary.json (plus a small build summary). "
+            "Kept for compatibility; do not combine with --build-batch."
+        ),
+    )
+    ap.add_argument(
+        "--build-batch",
+        action="store_true",
+        help=(
+            "Generate full archive batch artifacts (shortlist, precheck, send_ready / review CSVs). "
+            "Default is audit-only."
         ),
     )
     ap.add_argument(
@@ -189,6 +199,14 @@ def main() -> int:
     )
     args = ap.parse_args()
 
+    build_batch = bool(args.build_batch)
+    if args.audit_only and build_batch:
+        ap.error("--audit-only and --build-batch cannot be used together")
+    audit_only = not build_batch
+
+    if audit_only and args.write_postgres_audit:
+        ap.error("--write-postgres-audit requires --build-batch")
+
     settings = load_settings()
     db_path = args.db or settings.resolved_sqlite_path()
     gmail_user = resolve_outbound_gmail_user(settings, explicit=args.gmail_user)
@@ -224,7 +242,7 @@ def main() -> int:
                 route_personal_domain_with_client_signals_to_review=bool(
                     args.route_personal_domain_with_client_signals_to_review
                 ),
-                audit_only=bool(args.audit_only),
+                audit_only=audit_only,
                 strict_commercial_drop=bool(args.strict_commercial_drop),
                 extra_exclude_domains=extra_exclude_domains,
                 manual_suppress_emails=manual_suppress_emails,
@@ -248,7 +266,8 @@ def main() -> int:
         for w in sp.get("warnings") or []:
             print(f"warning: {w}", file=sys.stderr)
 
-    if args.audit_only:
+    if audit_only:
+        print("Audit only: pass --build-batch to generate send-ready/review CSVs.")
         print(f"Wrote archive audit-only artifacts to {result.out_dir}")
     else:
         print(f"Wrote archive send batch to {result.out_dir}")

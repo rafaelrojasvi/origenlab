@@ -14,15 +14,15 @@ From `apps/email-pipeline/`:
 
 | Lane | Primary command | Purpose |
 |------|-----------------|--------|
-| **Archive (warm revival)** | `uv run python scripts/leads/build_archive_send_batch.py` | Full batch: audit → shortlist → gate snapshot → commercial precheck → `archive_outreach_send_ready.csv` / `archive_outreach_review_required.csv`. Default ``company_intro`` ordering favors non–free-personal domains, org procurement signals, and (when ``emails`` has ``sender``/``recipients``) historical **LabDelivery / voice-domain** touches (`last_contacted_by_labdelivery`, `labdelivery_last_contact_at`); tune pool size with ``--shortlist-limit`` / ``--audit-limit``. |
-| **Archive audit only** | Same script with `--audit-only` | Writes `archive_outreach_audit.csv` + `archive_outreach_audit_summary.json` only (no shortlist/precheck). Prefer this over legacy standalone audit scripts. |
+| **Archive audit (default)** | `uv run python scripts/leads/build_archive_send_batch.py` | **Alternate lane** — audit-only by default: `archive_outreach_audit.csv` + `archive_outreach_audit_summary.json` (no shortlist/precheck). Not send approval. |
+| **Archive full batch** | Same script with `--build-batch` | Full batch: audit → shortlist → gate snapshot → commercial precheck → `archive_outreach_send_ready.csv` / `archive_outreach_review_required.csv`. Default ``company_intro`` ordering favors non–free-personal domains, org procurement signals, and (when ``emails`` has ``sender``/``recipients``) historical **LabDelivery / voice-domain** touches (`last_contacted_by_labdelivery`, `labdelivery_last_contact_at`); tune pool size with ``--shortlist-limit`` / ``--audit-limit``. |
 | **Lead (curated prospects)** | `uv run python scripts/leads/export_next_marketing_recipients.py` | Next N from `lead_master` using the **same** shared export gate as Streamlit’s queue. |
 
 **Not a send lane:** ChileCompra / `external_leads_raw` / `lead_master` **ingest and scoring** are prospecting data prep, not a parallel mailbox-send path. Outbound still flows through one of the two lanes above plus human review.
 
 **Advanced / exploratory (not default daily workflow):**
 
-- `scripts/leads/build_archive_send_batch.py --audit-only` — canonical archive audit export (wrapper removed Phase 5D).
+- `scripts/leads/build_archive_send_batch.py` — canonical archive audit export by default (`--build-batch` for full CSVs; `--audit-only` is equivalent to default; wrapper removed Phase 5D).
 - `scripts/leads/advanced/export_marketing_from_contact_master.py` — optional `contact_master` pool export; **`contact_master` is not CRM truth**; use for exploration, not as the default archive batch.
 
 **Streamlit** (`apps/business_mart_app.py`): **review, read/write sidecars** (suppression, outreach state, visibility), and surfaces that call the **same library functions** as the CLIs. It must **not** be treated as the sole source of “what we exported for this send” — the canonical commands above produce reproducible artifacts under `reports/out/...`.
