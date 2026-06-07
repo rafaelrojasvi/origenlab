@@ -25,5 +25,4 @@ jobs:
         with:
           enable-cache: true
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - run: uv sync --group dev --frozen
-      - run: uv run pytest tests -q
+      - run: ./scripts/validate.sh
