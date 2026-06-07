@@ -13,7 +13,7 @@ def test_validate_script_exists_and_matches_ci_shape() -> None:
     assert _VALIDATE_SCRIPT.is_file()
     text = _VALIDATE_SCRIPT.read_text(encoding="utf-8")
     assert "uv sync --group dev --frozen" in text
-    assert "uv run pytest tests -q" in text
+    assert "uv run --frozen pytest tests -q" in text
 
 
 def test_readme_documents_validate_script() -> None:
