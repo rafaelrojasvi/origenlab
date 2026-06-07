@@ -99,7 +99,7 @@ cd apps/api
 ./scripts/validate.sh
 ```
 
-Targeted pytest is fine while developing; run `./scripts/validate.sh` before opening or merging API PRs.
+Targeted pytest is fine while developing; run `./scripts/validate.sh` before opening or merging API PRs. The validate script keeps both sync and test execution frozen so local validation does not rewrite `uv.lock`.
 
 ```bash
 cd apps/api
