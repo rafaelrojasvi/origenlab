@@ -58,3 +58,31 @@ def resolve_write_outputs_dry_run_mode(
         parser.error(conflict_message)
     write_outputs = bool(getattr(args, "write_outputs", False))
     return WriteOutputsDryRunMode(write_outputs=write_outputs, dry_run=not write_outputs)
+
+
+@dataclass(frozen=True)
+class AuditOnlyBuildBatchMode:
+    audit_only: bool
+    build_batch: bool
+
+
+def add_audit_only_build_batch_flags(
+    parser: ArgumentParser,
+    *,
+    build_help: str,
+    audit_help: str = "Audit only (same as default; kept for compatibility).",
+) -> None:
+    parser.add_argument("--audit-only", action="store_true", help=audit_help)
+    parser.add_argument("--build-batch", action="store_true", help=build_help)
+
+
+def resolve_audit_only_build_batch_mode(
+    parser: ArgumentParser,
+    args: Namespace,
+    *,
+    conflict_message: str = "--audit-only and --build-batch cannot be used together",
+) -> AuditOnlyBuildBatchMode:
+    if bool(getattr(args, "audit_only", False)) and bool(getattr(args, "build_batch", False)):
+        parser.error(conflict_message)
+    build_batch = bool(getattr(args, "build_batch", False))
+    return AuditOnlyBuildBatchMode(audit_only=not build_batch, build_batch=build_batch)
