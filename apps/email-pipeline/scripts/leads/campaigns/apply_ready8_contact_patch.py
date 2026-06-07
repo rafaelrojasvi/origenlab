@@ -15,11 +15,11 @@ Does not touch legacy reference/*DEEPRESEARCH* files.
 from __future__ import annotations
 
 import argparse
-import csv
 import sys
 from pathlib import Path
 
 from origenlab_email_pipeline.cli_modes import add_apply_dry_run_flags, resolve_apply_dry_run_mode
+from origenlab_email_pipeline.csv_rows import read_dict_rows, write_dict_rows
 
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
@@ -38,22 +38,6 @@ READY_IDS = {608694, 622998, 608621, 617311, 619403, 608386, 609442, 610539}
 NOTE = "Contacto público MP (DR50 ready8). Validar en ficha antes de outreach."
 CONF = "alta"
 ESTADO = "listo_dr50"
-
-
-def _read_csv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    with path.open(newline="", encoding="utf-8-sig") as f:
-        r = csv.DictReader(f)
-        h = list(r.fieldnames or [])
-        rows = [dict(row) for row in r]
-    return h, rows
-
-
-def _write_csv(path: Path, headers: list[str], rows: list[dict[str, str]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(rows)
 
 
 def _clear_contact_slots(row: dict[str, str]) -> None:
@@ -280,9 +264,9 @@ def main(argv: list[str] | None = None) -> int:
     mode = resolve_apply_dry_run_mode(ap, args)
     apply_requested = mode.apply
 
-    headers, hunt_rows = _read_csv(HUNT)
-    _, ready_rows = _read_csv(READY8)
-    _, needs_rows = _read_csv(NEEDS)
+    headers, hunt_rows = read_dict_rows(HUNT, encoding="utf-8-sig")
+    _, ready_rows = read_dict_rows(READY8, encoding="utf-8-sig")
+    _, needs_rows = read_dict_rows(NEEDS, encoding="utf-8-sig")
 
     ready_by_id = {int(r["id_lead"]): r for r in ready_rows}
     if set(ready_by_id) != READY_IDS:
@@ -353,9 +337,9 @@ def main(argv: list[str] | None = None) -> int:
     ]
 
     if apply_requested:
-        _write_csv(HUNT, headers, hunt_rows)
-        _write_csv(PATCH_OUT, headers, patched_rows)
-        _write_csv(TOP20_OUT, top_fields, top20)
+        write_dict_rows(HUNT, headers, hunt_rows)
+        write_dict_rows(PATCH_OUT, headers, patched_rows)
+        write_dict_rows(TOP20_OUT, top_fields, top20)
         write_plan_md(PLAN_MD, ready_meta, needs12, audit_cmd, import_cmd, pack_cmd)
         print(f"Updated {HUNT}")
         print(f"Wrote {PATCH_OUT}")
