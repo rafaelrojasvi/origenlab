@@ -118,9 +118,11 @@ uv run python scripts/leads/advanced/export_client_review_csv.py --out reports/o
 uv run python scripts/leads/advanced/export_contact_hunt_sheet.py --out reports/out/leads_contact_hunt_es.csv --limit 200
 ```
 
-## Local Web UI (CSV download)
+## Local Web UI (CSV download) — advanced / owner review
 
-If your client is on the same WiFi/LAN, you can host a simple authenticated page (no SQLite exposed).
+**Parked advanced helper** — not daily outbound, not send approval, not `apps/api`. See [`docs/audits/REDUCTION_SHORTLIST_20260607.md`](../../docs/audits/REDUCTION_SHORTLIST_20260607.md#owner-review-zero-ref-advanced-helpers-pr-124). Confirm with owner before relying on this in production workflows.
+
+If your client is on the same WiFi/LAN, you can host a simple authenticated page (no SQLite exposed):
 
 1. Start server:
 ```bash
