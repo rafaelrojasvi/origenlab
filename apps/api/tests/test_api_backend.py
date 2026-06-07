@@ -48,7 +48,7 @@ def test_create_app_postgres_without_url_fails_at_startup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ORIGENLAB_API_BACKEND", "postgres")
-    monkeypatch.delenv("ORIGENLAB_POSTGRES_URL", raising=False)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "")
     _clear_settings_cache()
     with pytest.raises(ValueError, match="ORIGENLAB_POSTGRES_URL"):
         create_app()
