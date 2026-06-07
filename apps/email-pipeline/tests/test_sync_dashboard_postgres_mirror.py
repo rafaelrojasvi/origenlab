@@ -292,6 +292,64 @@ def test_summary_includes_canonical_and_archive_counts() -> None:
     assert "8000/dashboard/summary" not in text
 
 
+def test_summary_includes_warm_case_optional_loader() -> None:
+    text = format_summary_text(
+        {
+            "status": "success",
+            "dry_run": True,
+            "elapsed_seconds": 0.5,
+            "counts": {},
+            "warm_case_sync": {
+                "dry_run": True,
+                "inserted_cases": 3,
+                "updated_cases": 1,
+                "linked_emails": 5,
+            },
+        }
+    )
+    assert "optional dashboard loaders:" in text
+    assert "warm_cases:" in text
+    assert "inserted_cases: 3" in text
+    assert "linked_emails: 5" in text
+
+
+def test_summary_includes_equipment_opportunity_optional_loader() -> None:
+    text = format_summary_text(
+        {
+            "status": "success",
+            "dry_run": False,
+            "elapsed_seconds": 1.0,
+            "counts": {},
+            "equipment_opportunity_sync": {
+                "applied": True,
+                "row_count": 9,
+                "source_id": "equipment_first_operator_queue_20260518",
+            },
+        }
+    )
+    assert "equipment_opportunities:" in text
+    assert "row_count: 9" in text
+    assert "source_id: equipment_first_operator_queue_20260518" in text
+
+
+def test_summary_includes_commercial_deals_optional_loader() -> None:
+    text = format_summary_text(
+        {
+            "status": "success",
+            "dry_run": False,
+            "elapsed_seconds": 2.0,
+            "counts": {},
+            "commercial_deals_sync": {
+                "applied": True,
+                "rows_inserted": 1,
+                "skipped": False,
+            },
+        }
+    )
+    assert "commercial_deals:" in text
+    assert "rows_inserted: 1" in text
+
+
 def test_write_sync_watermark_inserts_run_and_kv() -> None:
     cur = MagicMock()
     cur.fetchone.return_value = (99,)

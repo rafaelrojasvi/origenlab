@@ -641,6 +641,28 @@ def run_optional_db2_loaders(
     return equipment_summary, warm_summary
 
 
+_OPTIONAL_LOADER_ROW_KEYS = (
+    "rows_inserted",
+    "row_count",
+    "inserted_cases",
+    "updated_cases",
+    "linked_emails",
+    "source_id",
+    "skipped",
+)
+
+
+def _format_optional_loader_summary(name: str, summary: dict[str, Any]) -> list[str]:
+    lines = [f"    {name}:"]
+    for key in ("dry_run", "applied", "warning", "error"):
+        if key in summary and summary[key] is not None:
+            lines.append(f"      {key}: {summary[key]}")
+    for key in _OPTIONAL_LOADER_ROW_KEYS:
+        if key in summary and summary[key] is not None:
+            lines.append(f"      {key}: {summary[key]}")
+    return lines
+
+
 def format_summary_text(result: dict[str, Any]) -> str:
     c = result.get("counts") or {}
     lines = [
@@ -669,6 +691,20 @@ def format_summary_text(result: dict[str, Any]) -> str:
         lines.append(f"  sync_run_id: {result.get('sync_run_id')}")
     if result.get("errors"):
         lines.append(f"  errors: {result['errors']}")
+    optional_loaders = (
+        ("equipment_opportunities", "equipment_opportunity_sync"),
+        ("warm_cases", "warm_case_sync"),
+        ("commercial_deals", "commercial_deals_sync"),
+    )
+    present_loaders = [
+        (label, result[key])
+        for label, key in optional_loaders
+        if isinstance(result.get(key), dict)
+    ]
+    if present_loaders:
+        lines.append("  optional dashboard loaders:")
+        for label, summary in present_loaders:
+            lines.extend(_format_optional_loader_summary(label, summary))
     lines.extend(
         [
             "",

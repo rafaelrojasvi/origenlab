@@ -26,7 +26,8 @@ Give operators a single, copy-paste workflow for:
 | Layer | Role |
 |-------|------|
 | **`daily-core --apply`** | Refreshes **SQLite** operational truth and safety exports under `reports/out/`. **Never** runs Postgres mirror. |
-| **`mirror-dashboard --apply`** | Copies refreshed SQLite-side state into the **Postgres mirror** for reporting and the React dashboard. |
+| **`mirror-dashboard --apply`** | Copies refreshed SQLite-side state into the **Postgres mirror** for reporting and the React dashboard (core loaders only). |
+| **`mirror-dashboard --live --apply`** | Same as above **plus** warm cases, equipment opportunities, and commercial deals — the dashboard people actually see. |
 | **Dashboard / API (`apps/api` :8001)** | **Read-only visibility** over SQLite (operator routes) and Postgres (`/mirror/*`). |
 | **Postgres mirror** | **Not send approval.** LISTO / READY / mirror success does **not** mean an outbound batch may be sent. |
 
@@ -34,7 +35,7 @@ Give operators a single, copy-paste workflow for:
 Gmail + pipeline scripts
   ↓ daily-core --apply
 SQLite + reports/out  (operational truth)
-  ↓ mirror-dashboard --apply
+  ↓ mirror-dashboard --live --apply
 Postgres mirror  (read-only reporting)
   ↓ apps/api /mirror/*
 React dashboard (read-only)
@@ -103,7 +104,56 @@ test -n "${ORIGENLAB_POSTGRES_URL:-${ALEMBIC_DATABASE_URL:-${ORIGENLAB_CLOUD_POS
 
 ---
 
-## Dry-run
+## Live dashboard refresh (preferred)
+
+For the **live React dashboard** and deployed API counts (warm cases, equipment opportunities, commercial deals), use the **`--live`** preset instead of remembering passthrough flags.
+
+**`--live`** includes:
+
+- warm cases (`--include-warm-cases`)
+- equipment opportunities (`--include-equipment-opportunities`)
+- commercial deals (`--include-commercial-deals`)
+
+**`mirror-dashboard --apply`** without **`--live`** refreshes **core mirror pieces only** (mart, outbound, canonical, purchase events). Use that when you intentionally skip optional dashboard loaders.
+
+**Daily core intentionally never includes mirror.**
+
+### Dry-run
+
+```bash
+cd apps/email-pipeline
+
+set -a
+source .env
+set +a
+
+uv run origenlab mirror-dashboard --live
+```
+
+### Apply
+
+```bash
+cd apps/email-pipeline
+
+set -a
+source .env
+set +a
+
+uv run origenlab mirror-dashboard --live --apply --operator rafael --reason "Daily live dashboard refresh"
+```
+
+`--live --apply` requires **`--operator`** (or **`--updated-by`**) and **`--reason`** for optional-loader audit. Dry-run does not.
+
+With the optional **`ol-mirror`** shell helper (see below):
+
+```bash
+ol-mirror --live
+ol-mirror --live --apply --operator rafael --reason "Daily live dashboard refresh"
+```
+
+---
+
+## Dry-run (core mirror only)
 
 After sourcing `.env`:
 
@@ -113,11 +163,11 @@ cd apps/email-pipeline
 uv run origenlab mirror-dashboard
 ```
 
-This is the **safe default**: plan only, **no Postgres writes**. Review output for missing URL, empty mart, or sync scope errors before applying.
+This is the **safe default** for core mirror: plan only, **no Postgres writes**. For the live dashboard preset, use **`mirror-dashboard --live`** (see above). Review output for missing URL, empty mart, or sync scope errors before applying.
 
 ---
 
-## Apply
+## Apply (core mirror only)
 
 When dry-run looks correct and Postgres target is intentional:
 
@@ -130,6 +180,8 @@ set +a
 
 uv run origenlab mirror-dashboard --apply
 ```
+
+Writes **core** Postgres mirror loaders only. For the live dashboard people actually see, prefer **`mirror-dashboard --live --apply`** (above).
 
 Successful apply typically reports:
 
@@ -184,8 +236,10 @@ ol-mirror() (
 Usage:
 
 ```bash
-ol-mirror              # dry-run
-ol-mirror --apply      # write Postgres mirror
+ol-mirror              # core dry-run
+ol-mirror --apply      # core mirror write
+ol-mirror --live       # live dashboard dry-run
+ol-mirror --live --apply --operator rafael --reason "Daily live dashboard refresh"
 ```
 
 Replace `/path/to/origenlab` with your clone location. Keep `.env` uncommitted.
@@ -240,11 +294,14 @@ set -a
 source .env
 set +a
 
-# 3 — dry-run mirror (default)
-uv run origenlab mirror-dashboard
+# 3 — dry-run live dashboard mirror (preferred)
+uv run origenlab mirror-dashboard --live
 
-# 4 — apply mirror
-uv run origenlab mirror-dashboard --apply
+# 4 — apply live dashboard mirror
+uv run origenlab mirror-dashboard --live --apply --operator rafael --reason "Daily live dashboard refresh"
+
+# (core only, no optional loaders)
+# uv run origenlab mirror-dashboard --apply
 
 # 5 — local smoke (API must be running on :8001)
 curl -sS 'http://127.0.0.1:8001/mirror/meta/dashboard-sync' | uv run python -m json.tool

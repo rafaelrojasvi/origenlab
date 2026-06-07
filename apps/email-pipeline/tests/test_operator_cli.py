@@ -484,6 +484,102 @@ def test_mirror_dashboard_missing_env_via_main(
     assert missing_postgres_env_message() in err
 
 
+def test_mirror_dashboard_live_dry_run_expands_passthrough() -> None:
+    from origenlab_email_pipeline.operator_cli.mirror import parse_mirror_dashboard_wrapper_args
+
+    apply, alembic, passthrough = parse_mirror_dashboard_wrapper_args(["--live"])
+    assert apply is False
+    assert alembic is False
+    for flag in (
+        "--include-equipment-opportunities",
+        "--include-warm-cases",
+        "--include-commercial-deals",
+    ):
+        assert flag in passthrough
+    sync = build_mirror_dashboard_argv_list(passthrough=passthrough)[0]
+    assert "--dry-run" in sync
+
+
+def test_mirror_dashboard_live_apply_passes_loader_flags_and_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from origenlab_email_pipeline.operator_cli.mirror import parse_mirror_dashboard_wrapper_args
+
+    apply, _, passthrough = parse_mirror_dashboard_wrapper_args(
+        [
+            "--live",
+            "--apply",
+            "--operator",
+            "rafael",
+            "--reason",
+            "Daily live dashboard refresh",
+        ]
+    )
+    assert apply is True
+    sync = build_mirror_dashboard_sync_argv(apply=True, passthrough=passthrough)
+    assert "--dry-run" not in sync
+    for flag in (
+        "--include-equipment-opportunities",
+        "--include-warm-cases",
+        "--include-commercial-deals",
+    ):
+        assert flag in sync
+    assert sync[sync.index("--updated-by") + 1] == "rafael"
+    assert sync[sync.index("--reason") + 1] == "Daily live dashboard refresh"
+
+
+def test_mirror_dashboard_live_apply_rejects_missing_reason() -> None:
+    from origenlab_email_pipeline.operator_cli.mirror import parse_mirror_dashboard_wrapper_args
+
+    with pytest.raises(ValueError, match="requires --reason"):
+        parse_mirror_dashboard_wrapper_args(["--live", "--apply", "--operator", "rafael"])
+
+
+def test_mirror_dashboard_live_apply_rejects_missing_operator() -> None:
+    from origenlab_email_pipeline.operator_cli.mirror import parse_mirror_dashboard_wrapper_args
+
+    with pytest.raises(ValueError, match="requires --operator or --updated-by"):
+        parse_mirror_dashboard_wrapper_args(["--live", "--apply", "--reason", "x"])
+
+
+def test_mirror_dashboard_operator_reason_without_live_rejects() -> None:
+    from origenlab_email_pipeline.operator_cli.mirror import parse_mirror_dashboard_wrapper_args
+
+    with pytest.raises(ValueError, match="require --live"):
+        parse_mirror_dashboard_wrapper_args(["--operator", "rafael", "--reason", "x"])
+
+
+def test_mirror_dashboard_help_mentions_live(capsys: pytest.CaptureFixture[str]) -> None:
+    from origenlab_email_pipeline.operator_cli.mirror import print_mirror_dashboard_help
+
+    print_mirror_dashboard_help()
+    out = capsys.readouterr().out
+    assert "--live" in out
+    assert "warm cases" in out.lower()
+
+
+def test_mirror_dashboard_live_main_dry_run_subprocess_argv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        class R:
+            returncode = 0
+
+        return R()
+
+    monkeypatch.setattr("origenlab_email_pipeline.operator_cli.mirror.subprocess.run", fake_run)
+    assert main(["mirror-dashboard", "--live"]) == 0
+    assert len(calls) == 1
+    assert "--dry-run" in calls[0]
+    assert "--include-equipment-opportunities" in calls[0]
+    assert "--include-warm-cases" in calls[0]
+    assert "--include-commercial-deals" in calls[0]
+
+
 def _refresh_opts(**kwargs: object) -> RefreshDashboardOptions:
     return RefreshDashboardOptions(**kwargs)
 

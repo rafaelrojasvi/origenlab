@@ -82,3 +82,15 @@ def test_daily_core_links_postgres_mirror_refresh() -> None:
 def test_runbook_links_postgres_mirror_refresh() -> None:
     text = _RUNBOOK.read_text(encoding="utf-8")
     assert "POSTGRES_MIRROR_REFRESH.md" in text
+
+
+def test_postgres_mirror_refresh_documents_live_dashboard_preset() -> None:
+    text = _MIRROR_REFRESH.read_text(encoding="utf-8")
+    assert "mirror-dashboard --live" in text
+    assert "--operator" in text
+    assert "--reason" in text
+    lower = text.lower()
+    assert "warm cases" in lower or "warm case" in lower
+    assert "equipment opportunit" in lower
+    assert "commercial deal" in lower
+    assert "never includes mirror" in lower or "intentionally never includes mirror" in lower
