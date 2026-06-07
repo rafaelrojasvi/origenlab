@@ -36,7 +36,7 @@ bash scripts/leads/run_leads_operational_stack.sh --skip-fetch
 10. **Contact-hunt sheet (v1.2)** — `advanced/export_contact_hunt_sheet.py --out <path>` (estructura para hunting de contactos en español).
 11. **Merge + import hunt CSV** — `advanced/merge_contact_hunt_enrichment.py` (Deep Research → mismo CSV), luego validar con `advanced/validate_contact_hunt_alignment.py` (misma población de `id_lead` que `leads_contact_hunt_current.csv`), después `advanced/import_contact_hunt_to_sqlite.py` (recomendado: `--require-aligned-with` apuntando al hunt actual).
 12. **Weekly canonical focus (safe mode)** — `run_weekly_focus.py` (genera CSV operativo + resumen ES con clasificación USAR/REFERENCIA/NO OPERATIVO).
-13. **Limpiar `active/` + deepsearch + CSV unificado** — `advanced/prepare_active_workspace.py` (mantiene en `active/` solo foco semanal + resumen + hunt current ± for_deepsearch; archiva otros CSV; opcional `--deepsearch` y `--unified`).
+13. **Limpiar `active/` + deepsearch + CSV unificado** — `advanced/prepare_active_workspace.py` (legacy weekly lead focus; **plan-only by default**; **`--apply`** to archive/move or write `--deepsearch` / `--unified` outputs). Daily outbound `active/current/` prep: `scripts/qa/prepare_outbound_campaign_workspace.py`.
 14. **Paquete cliente (HTML + MD + anexo)** — `uv run python scripts/reports/build_leads_client_pack.py` → `reports/out/client_pack_latest/`. Ver `docs/REPORTING.md`.
 15. **DR50 ready-8 → hunt + top20 informe** — `campaigns/apply_ready8_contact_patch.py` (actualiza `leads_contact_hunt_current.csv` desde `leads_dr50_ready_candidates.csv`, escribe `leads_contact_hunt_current_ready8_patch.csv`, `leads_top20_for_client_report.csv`, `docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md`). Luego import + `advanced/audit_contact_readiness.py`.
 16. **Reconciliación DR 50 filas (solo análisis)** — `campaigns/reconcile_deepresearch_50_with_current_cohort.py` → CSVs `leads_dr50_*` y `docs/generated/DEEP_RESEARCH_RECONCILIATION.md`.
@@ -166,7 +166,7 @@ uv run python scripts/leads/advanced/export_contact_hunt_sheet.py --out reports/
 uv run python scripts/leads/run_weekly_focus.py
 
 # 7) (Opcional) Dejar active/ limpio + slice Deep Search + CSV unificado (ejecutar **después** del paso 6)
-uv run python scripts/leads/advanced/prepare_active_workspace.py --deepsearch --unified
+uv run python scripts/leads/advanced/prepare_active_workspace.py --deepsearch --unified --apply
 ```
 
 Qué esperar:

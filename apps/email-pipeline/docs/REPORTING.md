@@ -108,7 +108,7 @@ uv run python scripts/reports/build_leads_client_pack.py
 # Validar que merged y current comparten los mismos id_lead antes de importar
 uv run python scripts/leads/advanced/validate_contact_hunt_alignment.py
 
-# Limpiar active/ (archivar CSV que no son del núcleo)
+# Limpiar active/ (archivar CSV que no son del núcleo; plan-only by default — add --apply to move/write)
 uv run python scripts/leads/advanced/prepare_active_workspace.py
 ```
 

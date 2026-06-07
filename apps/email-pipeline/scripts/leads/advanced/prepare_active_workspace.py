@@ -14,6 +14,10 @@ con `scripts/reports/build_leads_client_pack.py`.
 - Archiva duplicados / derivados (CSV inglés, con_db, netnew, hunt_es duplicado, etc.).
 - Opcional: regenera `leads_contact_hunt_for_deepsearch.csv`.
 - Opcional: genera `leads_active_unified.csv` (foco + hunt; se archiva en la próxima limpieza si no está en el núcleo).
+
+**Plan-only by default:** pass ``--apply`` to move files or write generated CSVs.
+Legacy weekly lead-focus / contact-hunt prep — not daily outbound ``active/current/`` prep
+(see ``scripts/qa/prepare_outbound_campaign_workspace.py``).
 """
 
 from __future__ import annotations
@@ -140,9 +144,14 @@ def main() -> int:
         help="Carpeta active (default: reports/out/active)",
     )
     ap.add_argument(
+        "--apply",
+        action="store_true",
+        help="Move files to archive/ and write generated CSVs (default is plan-only).",
+    )
+    ap.add_argument(
         "--dry-run",
         action="store_true",
-        help="Solo imprimir qué se haría.",
+        help="Plan only (same as default; kept for compatibility).",
     )
     ap.add_argument(
         "--deepsearch",
@@ -156,6 +165,13 @@ def main() -> int:
         help="Generar leads_active_unified.csv (weekly focus + hunt current por id_lead).",
     )
     args = ap.parse_args()
+    if args.dry_run and args.apply:
+        ap.error("--dry-run and --apply cannot be used together")
+
+    apply = bool(args.apply)
+    dry_run = not apply
+    if not apply:
+        print("Plan only: pass --apply to move files or write generated CSVs.")
 
     active = args.active_dir.resolve()
     if not active.is_dir():
@@ -177,17 +193,17 @@ def main() -> int:
             continue
         name = p.name
         if name in ARCHIVE_ALWAYS:
-            _move_to_archive(p, _dest(), args.dry_run)
+            _move_to_archive(p, _dest(), dry_run)
             moved += 1
         elif name.endswith(".csv") and name not in CANONICAL_KEEP:
             # CSV desconocido en active: archivar para reducir ruido
             print(f"Advertencia: CSV no canónico en active: {name}", file=sys.stderr)
-            _move_to_archive(p, _dest(), args.dry_run)
+            _move_to_archive(p, _dest(), dry_run)
             moved += 1
 
     if moved == 0:
         print("Nada que archivar en active/.")
-    elif args.dry_run:
+    elif dry_run:
         print(f"[dry-run] Se archivarían ~{moved} archivos bajo {_dest() if dest else '(nuevo)'}")
     else:
         print(f"Archivo de limpieza: {dest} ({moved} archivos movidos).")
@@ -212,7 +228,7 @@ def main() -> int:
             "--exclude-has-contacts",
             *db_arg,
         ]
-        if args.dry_run:
+        if dry_run:
             print("[dry-run] ejecutaría:", " ".join(cmd))
         else:
             subprocess.run(cmd, check=True)
@@ -227,7 +243,7 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 3
-        if args.dry_run:
+        if dry_run:
             print("[dry-run] generaría leads_active_unified.csv")
         else:
             _build_unified(active)

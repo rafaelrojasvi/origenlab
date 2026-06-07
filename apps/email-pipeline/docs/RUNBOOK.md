@@ -184,7 +184,7 @@ Read-only or hygiene tools: **`export_contacted_lead_overlap_audit.py`**, **`exp
 
 ### One-time maintenance & alternate lanes (CONSOLIDATE, ARCHIVE_CANDIDATE)
 
-Not part of the two daily workflows: archive batch builders (**`build_archive_send_batch.py`**, **`precheck_archive_shortlist_commercial.py`**), **`export_all_known_marketing_contacts.py`** (overlaps do-not-repeat master partially), **`advanced/prepare_active_workspace.py`** (easy to confuse with **`prepare_outbound_campaign_workspace.py`**), and various **`leads/advanced/*.py`** paths. See [`SCRIPT_MAP.md`](SCRIPT_MAP.md#one-time-maintenance--alternate-lanes).
+Not part of the two daily workflows: archive batch builders (**`build_archive_send_batch.py`**, **`precheck_archive_shortlist_commercial.py`**), **`export_all_known_marketing_contacts.py`** (overlaps do-not-repeat master partially), **`advanced/prepare_active_workspace.py`** (legacy weekly lead-focus / hunt prep — **plan-only by default**, **`--apply`** to move/write; not **`prepare_outbound_campaign_workspace.py`**), and various **`leads/advanced/*.py`** paths. See [`SCRIPT_MAP.md`](SCRIPT_MAP.md#one-time-maintenance--alternate-lanes).
 
 ### Do not remove (safety-critical)
 
