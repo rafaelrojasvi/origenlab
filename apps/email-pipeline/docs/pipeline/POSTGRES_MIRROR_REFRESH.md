@@ -1,0 +1,251 @@
+# Postgres mirror refresh (operator workflow)
+
+Status: canonical (operator contract)  
+Owner: email-pipeline-maintainers  
+Last reviewed: 2026-06-07
+
+Related: [`DAILY_CORE.md`](DAILY_CORE.md) · [`RUNBOOK.md`](../RUNBOOK.md) · [`OPERATOR_COMMAND_SURFACE.md`](../OPERATOR_COMMAND_SURFACE.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md)
+
+This document is the **operator recipe** for refreshing the **Postgres dashboard mirror** after SQLite operational truth has been updated. It is separate from daily core and from outbound send procedures.
+
+---
+
+## Purpose
+
+Give operators a single, copy-paste workflow for:
+
+1. Refreshing **SQLite + reports** (daily core).
+2. Loading **Postgres connection env** from the local `.env` file.
+3. **Dry-running** then **applying** the mirror sync.
+4. **Smoking** the local or live API/dashboard read paths.
+
+---
+
+## Mental model
+
+| Layer | Role |
+|-------|------|
+| **`daily-core --apply`** | Refreshes **SQLite** operational truth and safety exports under `reports/out/`. **Never** runs Postgres mirror. |
+| **`mirror-dashboard --apply`** | Copies refreshed SQLite-side state into the **Postgres mirror** for reporting and the React dashboard. |
+| **Dashboard / API (`apps/api` :8001)** | **Read-only visibility** over SQLite (operator routes) and Postgres (`/mirror/*`). |
+| **Postgres mirror** | **Not send approval.** LISTO / READY / mirror success does **not** mean an outbound batch may be sent. |
+
+```
+Gmail + pipeline scripts
+  ↓ daily-core --apply
+SQLite + reports/out  (operational truth)
+  ↓ mirror-dashboard --apply
+Postgres mirror  (read-only reporting)
+  ↓ apps/api /mirror/*
+React dashboard (read-only)
+```
+
+---
+
+## When to run it
+
+Run mirror refresh when:
+
+- You need the **React dashboard** or **`/mirror/*` API** to reflect a recent **daily-core** (or equivalent SQLite refresh).
+- Operator UI counts (Prospectos, Negocios, Catálogo, sync timestamps) look **stale** compared to SQLite/`operator_status.py`.
+- After a deliberate SQLite refresh on the same machine that holds the Postgres URL in `.env`.
+
+**Do not** run mirror apply as a substitute for daily core, send readiness checks, or post-send safety loops.
+
+---
+
+## Before you mirror
+
+1. **Refresh SQLite truth first** — mirror copies what SQLite and sidecars already contain; it does not ingest Gmail or rebuild marts by itself.
+2. **Confirm Postgres URL is configured** — one of `ORIGENLAB_POSTGRES_URL`, `ALEMBIC_DATABASE_URL`, or `ORIGENLAB_CLOUD_POSTGRES_URL` must be set (typically in `apps/email-pipeline/.env`, **uncommitted**).
+3. **Default mirror is dry-run** — `mirror-dashboard` without `--apply` prints the plan and does **not** write Postgres.
+4. **Schema migrations are separate** — use `mirror-dashboard --alembic --apply` **only** when an explicit schema migration is required (see [Alembic / schema note](#alembic--schema-note)).
+
+Recommended order:
+
+```bash
+cd apps/email-pipeline
+
+# 1 — SQLite + reports (no Postgres)
+uv run origenlab daily-core --apply
+```
+
+Equivalent long form: `uv run origenlab refresh-dashboard --apply --no-mirror`. See [`DAILY_CORE.md`](DAILY_CORE.md).
+
+---
+
+## Local shell / env setup
+
+CLI subprocesses **do not** automatically load `apps/email-pipeline/.env`. If Postgres URL variables live only in that file, the mirror command will fail until the shell exports them.
+
+**Load `.env` in the current shell** (from `apps/email-pipeline/`):
+
+```bash
+cd apps/email-pipeline
+
+set -a
+source .env
+set +a
+```
+
+- **`set -a`** — export every variable assigned while sourcing.
+- **`source .env`** — read local env file (must stay **gitignored**; never commit real URLs or passwords).
+- **`set +a`** — stop auto-export.
+
+Verify (values redacted — only check that the variable is **non-empty**):
+
+```bash
+# Example — do not paste real URLs into tickets or docs
+test -n "${ORIGENLAB_POSTGRES_URL:-${ALEMBIC_DATABASE_URL:-${ORIGENLAB_CLOUD_POSTGRES_URL:-}}}" && echo "Postgres URL present"
+```
+
+**Never paste real database URLs into docs, commits, or chat.**
+
+---
+
+## Dry-run
+
+After sourcing `.env`:
+
+```bash
+cd apps/email-pipeline
+
+uv run origenlab mirror-dashboard
+```
+
+This is the **safe default**: plan only, **no Postgres writes**. Review output for missing URL, empty mart, or sync scope errors before applying.
+
+---
+
+## Apply
+
+When dry-run looks correct and Postgres target is intentional:
+
+```bash
+cd apps/email-pipeline
+
+set -a
+source .env
+set +a
+
+uv run origenlab mirror-dashboard --apply
+```
+
+Successful apply typically reports:
+
+- `status: success`
+- `dry_run: False`
+- a **`sync_run_id`**
+- row counts for canonical / archive / outbound / commercial loads (exact keys depend on sync scope)
+
+**Mirror success is not send approval.**
+
+---
+
+## Smoke checks
+
+### Local API (`apps/api` on :8001)
+
+Start the API with the same Postgres URL the mirror used, then:
+
+```bash
+curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary' | uv run python -m json.tool
+curl -sS 'http://127.0.0.1:8001/mirror/dashboard/summary?scope=archive' | uv run python -m json.tool
+curl -sS 'http://127.0.0.1:8001/mirror/meta/dashboard-sync' | uv run python -m json.tool
+```
+
+Optional: open the React dashboard (`apps/dashboard`, `npm run dev`) and confirm Hoy / Prospectos / Negocios / Catálogo reflect recent mirror data.
+
+### Live operator status (read-only)
+
+```bash
+curl -sS 'https://api.origenlab.cl/operator/status?max_staleness_days=14' | python -m json.tool
+```
+
+This checks deployed operator visibility; it does **not** approve sends.
+
+---
+
+## Optional shell helper (`~/.zshrc` only)
+
+To avoid forgetting `source .env`, you may add a **local-only** zsh function in **`~/.zshrc`** (not in this repo):
+
+```bash
+# Local operator helper — adjust clone path; do NOT commit to the repo
+ol-mirror() (
+  cd /path/to/origenlab/apps/email-pipeline || return
+  set -a
+  source .env
+  set +a
+  uv run origenlab mirror-dashboard "$@"
+)
+```
+
+Usage:
+
+```bash
+ol-mirror              # dry-run
+ol-mirror --apply      # write Postgres mirror
+```
+
+Replace `/path/to/origenlab` with your clone location. Keep `.env` uncommitted.
+
+---
+
+## What it does not do
+
+`mirror-dashboard` (with or without `--apply`):
+
+- **Does not send emails.**
+- **Does not purge data.**
+- **Does not apply NDR suppressions.**
+- **Does not replace daily core** — run `daily-core --apply` first when SQLite truth is stale.
+- **Does not approve outbound sends.**
+
+**Daily core intentionally never includes mirror.** Use this doc for the mirror step after daily core.
+
+---
+
+## Alembic / schema note
+
+- **Normal mirror refresh:** `mirror-dashboard` / `mirror-dashboard --apply` — **no Alembic**.
+- **Schema drift / new migrations:** `mirror-dashboard --alembic --apply` runs `alembic upgrade head` **then** mirror apply. Use **only** when an explicit schema migration is required and ops has approved target Postgres.
+- Do **not** treat Alembic as part of daily core or routine mirror refresh.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | What to do |
+|---------|--------------|------------|
+| Mirror fails: no Postgres URL | `.env` not sourced in shell | `set -a; source .env; set +a` from `apps/email-pipeline/` |
+| `ORIGENLAB_CLOUD_POSTGRES_URL` in `.env` but CLI sees nothing | Ran mirror from another directory / fresh shell | `cd apps/email-pipeline` and source `.env` before `uv run origenlab mirror-dashboard` |
+| Mirror aborts: empty mart | SQLite mart not rebuilt | Run `daily-core --apply` (includes mart rebuild) before mirror |
+| Dashboard stale but SQLite fresh | Skipped mirror apply | Dry-run then `mirror-dashboard --apply` after sourcing env |
+| API mirror routes 503 / empty | API missing Postgres URL or mirror never applied | Align API env with pipeline `.env`; re-run apply smoke curls above |
+| Confused daily vs mirror | Wrong doc section | Daily truth: [`DAILY_CORE.md`](DAILY_CORE.md); mirror: this file |
+
+---
+
+## Quick reference
+
+```bash
+cd apps/email-pipeline
+
+# 1 — SQLite operational truth (no mirror)
+uv run origenlab daily-core --apply
+
+# 2 — load local Postgres URL from gitignored .env
+set -a
+source .env
+set +a
+
+# 3 — dry-run mirror (default)
+uv run origenlab mirror-dashboard
+
+# 4 — apply mirror
+uv run origenlab mirror-dashboard --apply
+
+# 5 — local smoke (API must be running on :8001)
+curl -sS 'http://127.0.0.1:8001/mirror/meta/dashboard-sync' | uv run python -m json.tool
+```
