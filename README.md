@@ -69,7 +69,7 @@ Default local check before PRs that touch the active operator stack (email-pipel
 ./scripts/validate-active-stack.sh
 ```
 
-Runs each app’s validation command in order: email-pipeline `./scripts/validate.sh`, API `./scripts/validate.sh`, dashboard `npm run validate`. Does **not** include the public web app. Does **not** run apply/send/purge/Alembic workflows.
+Runs each app’s validation command in order: email-pipeline `./scripts/validate.sh`, API `./scripts/validate.sh`, dashboard `npm run validate`. Does **not** include the public web app. Does **not** run apply/send/purge/Alembic workflows. Also fails if validation leaves the working tree dirty (inspect `apps/api/uv.lock` drift deliberately — do not silently restore lockfiles).
 
 For a heavier full monorepo check (including web), use [`./scripts/check-all.sh`](scripts/check-all.sh).
 

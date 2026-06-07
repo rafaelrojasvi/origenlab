@@ -68,6 +68,7 @@ apps/email-pipeline/reports/local/
 apps/email-pipeline/.streamlit/secrets.toml
 
 # Tooling caches
+*.tsbuildinfo
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/

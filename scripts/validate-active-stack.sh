@@ -16,5 +16,18 @@ section "api"
 section "dashboard"
 (cd "$ROOT_DIR/apps/dashboard" && npm run validate)
 
+section "working tree check"
+
+if ! git -C "$ROOT_DIR" diff --quiet || ! git -C "$ROOT_DIR" diff --cached --quiet; then
+  echo "Validation completed, but the working tree is dirty:"
+  git -C "$ROOT_DIR" status --short
+  echo
+  echo "If these are generated artifacts, clean them deliberately with:"
+  echo "  git restore <path>"
+  echo
+  echo "If this is lockfile drift, inspect before restoring."
+  exit 1
+fi
+
 section "done"
-echo "Active operator stack validation passed."
+echo "Active operator stack validation passed and working tree is clean."
