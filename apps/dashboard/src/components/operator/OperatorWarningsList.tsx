@@ -31,22 +31,32 @@ export function OperatorWarningsList({
   warnings,
   onContactSelect,
   moreCount = 0,
+  title = "Advertencias",
+  subtitle,
+  showListSafetyNote = true,
 }: {
   warnings: string[];
   onContactSelect: (email: string) => void;
   moreCount?: number;
+  title?: string;
+  subtitle?: string;
+  showListSafetyNote?: boolean;
 }) {
   if (warnings.length === 0) {
     return null;
   }
 
+  const defaultSubtitle =
+    "Los correos abren un perfil de solo lectura (solo GET). Sin enviar ni enlaces mailto desde las advertencias.";
+
   return (
     <section className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-4">
-      <h2 className="text-sm font-semibold text-amber-950">Advertencias</h2>
-      <p className="mt-1 text-xs text-amber-900">
-        Los correos abren un perfil de solo lectura (solo GET). Sin enviar ni enlaces mailto desde
-        las advertencias.
-      </p>
+      <h2 className="text-sm font-semibold text-amber-950">{title}</h2>
+      {subtitle ? (
+        <p className="mt-1 text-xs text-amber-900">{subtitle}</p>
+      ) : showListSafetyNote ? (
+        <p className="mt-1 text-xs text-amber-900">{defaultSubtitle}</p>
+      ) : null}
       <ul className="mt-2 list-disc space-y-1 pl-5">
         {warnings.map((w) => (
           <WarningLine key={w} text={w} onContactSelect={onContactSelect} />

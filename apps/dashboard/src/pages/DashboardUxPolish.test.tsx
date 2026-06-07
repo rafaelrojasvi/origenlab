@@ -224,7 +224,7 @@ describe("Dashboard UX polish (Phase 7B.3 ES)", () => {
     await waitFor(() => screen.getByText("LISTO"));
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Cotizaciones y seguimientos de proveedores:/i }),
+      screen.getByRole("button", { name: /Proveedores pendientes:/i }),
     );
     await waitFor(() => {
       expect(screen.getByRole("heading", { level: 1, name: "Proveedores" })).toBeTruthy();

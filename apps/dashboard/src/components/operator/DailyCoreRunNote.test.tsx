@@ -58,4 +58,10 @@ describe("DailyCoreRunNote", () => {
     expect(screen.queryByText(/\/secret\/active/)).toBeNull();
     expect(screen.queryByText(/daily_core_run_manifest\.json/)).toBeNull();
   });
+
+  it("hides safety note when showSafetyNote is false", () => {
+    render(<DailyCoreRunNote dailyCoreRun={VALID_RUN} showSafetyNote={false} />);
+    expect(screen.queryByText(/No aprueba envíos/)).toBeNull();
+    screen.getByText("success");
+  });
 });

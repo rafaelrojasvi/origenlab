@@ -177,7 +177,8 @@ describe("DashboardApp (legacy TodayPage tests)", () => {
     render(<DashboardApp />);
     await waitFor(() => screen.getByText("Última ejecución daily-core"));
     screen.getByText("Sin ejecución registrada todavía.");
-    screen.getByText(/No aprueba envíos/);
+    screen.getByText(/Solo lectura: este panel no envía correos ni aprueba contactos/);
+    expect(screen.queryByText(/No aprueba envíos/)).toBeNull();
   });
 
   it("shows valid daily-core run summary", async () => {
@@ -208,7 +209,8 @@ describe("DashboardApp (legacy TodayPage tests)", () => {
     within(note).getByText("0");
     within(note).getByText("2026-06-05T12:00:00+00:00");
     within(note).getByText("not included");
-    within(note).getByText(/No aprueba envíos/);
+    within(note).getByText("No");
+    expect(within(note).queryByText(/No aprueba envíos/)).toBeNull();
     expect(screen.queryByText(/\/hidden\/daily_core/)).toBeNull();
   });
 

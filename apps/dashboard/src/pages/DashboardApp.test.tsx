@@ -235,12 +235,12 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
     render(<DashboardApp />);
     await waitFor(() => screen.getByText("LISTO"));
 
-    screen.getByText("Resumen de colas");
-    screen.getByText("Oportunidades de clientes");
-    screen.getByText("Cotizaciones y seguimientos de proveedores");
-    screen.getByText("Evidencia de negocio");
+    expect(screen.getAllByText("Qué revisar hoy").length).toBeGreaterThan(0);
+    screen.getByText("Clientes por responder");
+    screen.getByText("Proveedores pendientes");
+    screen.getByText("Negocios en curso");
     screen.getByLabelText(/Licitaciones \/ equipos:/);
-    screen.getByText("Productos catalogados");
+    screen.getByLabelText(/Catálogo:/);
     expect(screen.queryByText(/Casos tibios \/ Warm cases/)).toBeNull();
   });
 
