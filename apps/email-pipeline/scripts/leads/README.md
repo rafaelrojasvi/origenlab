@@ -38,7 +38,7 @@ bash scripts/leads/run_leads_operational_stack.sh --skip-fetch
 12. **Weekly canonical focus (safe mode)** — `run_weekly_focus.py` (genera CSV operativo + resumen ES con clasificación USAR/REFERENCIA/NO OPERATIVO).
 13. **Limpiar `active/` + deepsearch + CSV unificado** — `advanced/prepare_active_workspace.py` (legacy weekly lead focus; **plan-only by default**; **`--apply`** to archive/move or write `--deepsearch` / `--unified` outputs). Daily outbound `active/current/` prep: `scripts/qa/prepare_outbound_campaign_workspace.py`.
 14. **Paquete cliente (HTML + MD + anexo)** — `uv run python scripts/reports/build_leads_client_pack.py` → `reports/out/client_pack_latest/`. Ver `docs/REPORTING.md`.
-15. **DR50 ready-8 → hunt + top20 informe** — `campaigns/apply_ready8_contact_patch.py` (actualiza `leads_contact_hunt_current.csv` desde `leads_dr50_ready_candidates.csv`, escribe `leads_contact_hunt_current_ready8_patch.csv`, `leads_top20_for_client_report.csv`, `docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md`). Luego import + `advanced/audit_contact_readiness.py`.
+15. **DR50 ready-8 → hunt + top20 informe** — `campaigns/apply_ready8_contact_patch.py` (**plan-only by default**; pass **`--apply`** to update `leads_contact_hunt_current.csv`, write `leads_contact_hunt_current_ready8_patch.csv`, `leads_top20_for_client_report.csv`, `docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md`). Not daily outbound / not send approval. Luego import + `advanced/audit_contact_readiness.py`.
 16. **Reconciliación DR 50 filas (solo análisis)** — `campaigns/reconcile_deepresearch_50_with_current_cohort.py` → CSVs `leads_dr50_*` y `docs/generated/DEEP_RESEARCH_RECONCILIATION.md`.
 
 Or run the full pipeline.

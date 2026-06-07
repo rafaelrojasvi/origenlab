@@ -434,6 +434,7 @@ Shared helpers imported by other `scripts/` CLIs; not daily outbound or mirror o
 | Dataset / cohort exports | `scripts/dataset/*` |
 | ML / embeddings exploration | `scripts/ml/*` |
 | Niche campaign reconciliations | `scripts/leads/campaigns/*` (e.g. DR50 payload flows) |
+| DR50 ready-8 hunt patch | [`scripts/leads/campaigns/apply_ready8_contact_patch.py`](../scripts/leads/campaigns/apply_ready8_contact_patch.py) — **plan-only default**; **`--apply`** to write hunt/top20/plan; not daily outbound / not send approval |
 | ML lab report | `scripts/reports/build_ml_report.py` |
 
 These are **not** the volume or precision daily lanes and are **not send approval**; see [`dataset/TATIANA_PILOT_WORKFLOW.md`](dataset/TATIANA_PILOT_WORKFLOW.md) and [`RUNBOOK.md`](RUNBOOK.md). **Scope / safety:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) — **lab boundary — not daily outbound** (Tatiana vs production outbound, Gmail Sent truth, OpenAI, `reports/out`). **Parked index (Postgres/API + pilots):** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md). **Reduction planning:** [`audits/REDUCTION_SHORTLIST_20260607.md`](audits/REDUCTION_SHORTLIST_20260607.md).
