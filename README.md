@@ -61,6 +61,18 @@ cd apps/dashboard && npm ci && npm run dev
 Open `http://localhost:4321` (web preview) and `http://localhost:5173` (operator dashboard → API on **:8001**).
 Streamlit Python UI in `apps/email-pipeline` was **removed** (2026-06-04). Active operator UI: **`apps/dashboard`** + **`apps/api`** — see [`apps/email-pipeline/docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](apps/email-pipeline/docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
 
+## Validate active operator stack
+
+Default local check before PRs that touch the active operator stack (email-pipeline, API, dashboard):
+
+```bash
+./scripts/validate-active-stack.sh
+```
+
+Runs each app’s validation command in order: email-pipeline `./scripts/validate.sh`, API `./scripts/validate.sh`, dashboard `npm run validate`. Does **not** include the public web app. Does **not** run apply/send/purge/Alembic workflows.
+
+For a heavier full monorepo check (including web), use [`./scripts/check-all.sh`](scripts/check-all.sh).
+
 ## Public release checklist
 
 - Use [`docs/PUBLIC_RELEASE_CHECKLIST.md`](docs/PUBLIC_RELEASE_CHECKLIST.md) before switching repo visibility.
