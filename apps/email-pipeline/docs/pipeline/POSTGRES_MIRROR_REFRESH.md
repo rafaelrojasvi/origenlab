@@ -278,6 +278,26 @@ Replace `/path/to/origenlab` with your clone location. Keep `.env` uncommitted.
 | Dashboard stale but SQLite fresh | Skipped mirror apply | Dry-run then `mirror-dashboard --apply` after sourcing env |
 | API mirror routes 503 / empty | API missing Postgres URL or mirror never applied | Align API env with pipeline `.env`; re-run apply smoke curls above |
 | Confused daily vs mirror | Wrong doc section | Daily truth: [`DAILY_CORE.md`](DAILY_CORE.md); mirror: this file |
+| Live Hoy warm-case counts differ from local SQLite after `mirror-dashboard --live --apply` | Warm-case promotion/classification parity gap between SQLite `/cases/warm` and Postgres mirror `/cases/warm` | Export both API responses and run the read-only parity audit below (diagnostic only; **not send approval**) |
+
+### Warm-case parity audit (SQLite vs Postgres `/cases/warm`)
+
+If mirror apply succeeded but **Hoy** client/supplier/logistics counts still differ between local SQLite and live Postgres dashboards, compare exported warm-case payloads:
+
+```bash
+cd apps/email-pipeline
+
+# Export JSON manually from each backend (do not commit responses):
+# curl -sS 'http://127.0.0.1:8001/cases/warm' > /tmp/warm_sqlite.json
+# curl -sS 'https://api.origenlab.cl/cases/warm' > /tmp/warm_postgres.json
+
+uv run python scripts/qa/audit_warm_case_parity.py \
+  --sqlite-json /tmp/warm_sqlite.json \
+  --postgres-json /tmp/warm_postgres.json \
+  --out-dir reports/out/active/current/warm_case_parity_audit
+```
+
+The audit reports row/category count deltas, category mismatches for the same contact+subject, and SQLite-only vs Postgres-only rows. **Diagnostic only** — it does not mutate data or approve sends.
 
 ---
 
