@@ -103,6 +103,8 @@ def build_live_dashboard_passthrough(
         result.extend(["--warm-days", LIVE_WARM_DAYS])
     if not _passthrough_has_flag(result, "--warm-limit"):
         result.extend(["--warm-limit", LIVE_WARM_LIMIT])
+    if not _passthrough_has_flag(result, "--close-missing-warm-cases"):
+        result.append("--close-missing-warm-cases")
     if updated_by and not (
         _passthrough_has_flag(result, "--updated-by")
         or _passthrough_has_flag(result, "--operator")
@@ -273,7 +275,8 @@ def print_mirror_dashboard_help() -> None:
         "  uv run origenlab mirror-dashboard -- --only mart --json-out path\n\n"
         "--live includes warm cases, equipment opportunities, and commercial deals.\n"
         "--live uses the same default warm-case window as Hoy: 14 days / 100 cases "
-        "(--warm-days 14 --warm-limit 100).\n"
+        "(--warm-days 14 --warm-limit 100) and closes stale warm_queue_promotion rows "
+        "missing from the current snapshot (--close-missing-warm-cases).\n"
         "Override with passthrough after `--`, e.g. "
         "mirror-dashboard --live -- --warm-days 30 --warm-limit 200.\n"
         "Dry-run remains the default. --live --apply requires --operator (or --updated-by) and --reason.\n"
