@@ -5,9 +5,60 @@ import type { DashboardSection } from "../lib/dashboardNav";
 import { isEquipmentFeedUnavailable } from "../lib/equipmentFeedStatus";
 import { computeTodaySummaryCounts } from "../lib/todaySummaryCounts";
 import { verdictTone } from "../lib/verdictStyles";
+import type { DailyCoreRunStatus } from "../api/operatorTypes";
 import { OperatorWarningsList } from "../components/operator/OperatorWarningsList";
 
 const WARNINGS_PREVIEW = 5;
+
+function DailyCoreRunNote({ dailyCoreRun }: { dailyCoreRun: DailyCoreRunStatus }) {
+  return (
+    <div
+      className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3"
+      data-testid="daily-core-run-note"
+    >
+      <h3 className="text-sm font-semibold text-brand-900">Última ejecución daily-core</h3>
+      <p className="mt-1 text-xs text-[var(--color-muted)]">
+        Solo visibilidad operativa. No aprueba envíos.
+      </p>
+      {!dailyCoreRun.exists ? (
+        <p className="mt-2 text-sm text-slate-800">Sin ejecución registrada todavía.</p>
+      ) : dailyCoreRun.parse_error ? (
+        <p className="mt-2 text-sm text-amber-900">
+          Manifest no legible; revisar status en CLI.
+        </p>
+      ) : dailyCoreRun.loaded ? (
+        <ul className="mt-2 space-y-1 text-sm text-slate-800">
+          <li>
+            <span className="text-[var(--color-muted)]">Estado:</span>{" "}
+            <span className="font-medium">{dailyCoreRun.status ?? "n/a"}</span>
+          </li>
+          <li>
+            <span className="text-[var(--color-muted)]">Pasos:</span>{" "}
+            <span className="font-medium">{dailyCoreRun.step_count ?? "n/a"}</span>
+          </li>
+          <li>
+            <span className="text-[var(--color-muted)]">Código:</span>{" "}
+            <span className="font-medium">{dailyCoreRun.returncode ?? "n/a"}</span>
+          </li>
+          <li>
+            <span className="text-[var(--color-muted)]">Generado:</span>{" "}
+            <span className="font-medium">{dailyCoreRun.generated_at_utc ?? "n/a"}</span>
+          </li>
+          <li>
+            <span className="text-[var(--color-muted)]">Espejo Postgres:</span>{" "}
+            <span className="font-medium">{dailyCoreRun.postgres_mirror ?? "n/a"}</span>
+          </li>
+          <li>
+            <span className="text-[var(--color-muted)]">Aprobación de envío:</span>{" "}
+            <span className="font-medium">{dailyCoreRun.send_approval ? "Sí" : "No"}</span>
+          </li>
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-slate-800">Sin ejecución registrada todavía.</p>
+      )}
+    </div>
+  );
+}
 
 function MirrorReadinessNote({
   readiness,
@@ -169,6 +220,7 @@ export function TodaySummaryPage() {
                 mirrorBackend={mirrorBackend}
               />
             </div>
+            <DailyCoreRunNote dailyCoreRun={data.operator.daily_core_run} />
           </section>
 
           {warnings.length > 0 ? (

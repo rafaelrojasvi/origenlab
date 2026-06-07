@@ -10,6 +10,7 @@ import {
   operatorApiUrl,
   parseHealthResponse,
   parseOperatorStatusResponse,
+  parseDailyCoreRunStatus,
 } from "./operatorClient";
 
 describe("operator API client", () => {
@@ -74,6 +75,38 @@ describe("operator API client", () => {
     });
     expect(parsed.verdict).toBe("CAUTION");
     expect(parsed.warnings).toEqual(["sync older than 7d"]);
+    expect(parsed.daily_core_run).toEqual({ exists: false });
+  });
+
+  it("parseOperatorStatusResponse returns exists false when daily_core_run is missing", () => {
+    const parsed = parseOperatorStatusResponse({
+      verdict: "READY",
+      sqlite_path: "",
+      campaign_mode: null,
+      operator_focus: null,
+      outbound_readiness: "ready",
+      warnings: [],
+    });
+    expect(parsed.daily_core_run).toEqual({ exists: false });
+  });
+
+  it("parseDailyCoreRunStatus parses valid summary fields", () => {
+    const parsed = parseDailyCoreRunStatus({
+      path: "/reports/active/current/daily_core_run_manifest.json",
+      exists: true,
+      loaded: true,
+      workflow: "daily-core",
+      status: "success",
+      returncode: 0,
+      step_count: 7,
+      send_approval: false,
+      postgres_mirror: "not included",
+    });
+    expect(parsed.exists).toBe(true);
+    expect(parsed.loaded).toBe(true);
+    expect(parsed.workflow).toBe("daily-core");
+    expect(parsed.step_count).toBe(7);
+    expect(parsed.send_approval).toBe(false);
   });
 
   it("fetchHealth uses GET only", async () => {

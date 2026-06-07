@@ -15,7 +15,12 @@ import type {
   WarmCasesQuery,
   WarmCasesResponse,
 } from "./commercialTypes";
-import type { HealthResponse, OperatorStatusResponse, TodayPanelData } from "./operatorTypes";
+import type {
+  DailyCoreRunStatus,
+  HealthResponse,
+  OperatorStatusResponse,
+  TodayPanelData,
+} from "./operatorTypes";
 
 export const PRODUCTION_API_BASE_URL_REQUIRED =
   "VITE_ORIGENLAB_API_BASE_URL is required for production builds (npm run build). Set it to your public apps/api URL.";
@@ -100,9 +105,9 @@ export function fetchHealth(): Promise<HealthResponse> {
 export function fetchOperatorStatus(
   maxStalenessDays = 14,
 ): Promise<OperatorStatusResponse> {
-  return fetchJsonGet<OperatorStatusResponse>(
+  return fetchJsonGet<unknown>(
     operatorApiUrl("/operator/status", { max_staleness_days: maxStalenessDays }),
-  );
+  ).then(parseOperatorStatusResponse);
 }
 
 export async function fetchTodayPanel(): Promise<TodayPanelData> {
@@ -191,6 +196,54 @@ export function parseHealthResponse(data: unknown): HealthResponse {
   };
 }
 
+/** Parse daily-core run summary (for tests and defensive UI). */
+export function parseDailyCoreRunStatus(raw: unknown): DailyCoreRunStatus {
+  if (!raw || typeof raw !== "object") {
+    return { exists: false };
+  }
+  const row = raw as Record<string, unknown>;
+  const out: DailyCoreRunStatus = {
+    exists: Boolean(row.exists),
+  };
+  if (typeof row.path === "string") {
+    out.path = row.path;
+  }
+  if (row.loaded !== undefined) {
+    out.loaded = Boolean(row.loaded);
+  }
+  if (row.parse_error !== undefined) {
+    out.parse_error = Boolean(row.parse_error);
+  }
+  if (typeof row.schema_version === "number" && Number.isFinite(row.schema_version)) {
+    out.schema_version = row.schema_version;
+  }
+  if (typeof row.workflow === "string") {
+    out.workflow = row.workflow;
+  }
+  if (typeof row.generated_at_utc === "string") {
+    out.generated_at_utc = row.generated_at_utc;
+  }
+  if (typeof row.status === "string") {
+    out.status = row.status;
+  }
+  if (typeof row.returncode === "number" && Number.isFinite(row.returncode)) {
+    out.returncode = row.returncode;
+  }
+  if (typeof row.step_count === "number" && Number.isFinite(row.step_count)) {
+    out.step_count = row.step_count;
+  }
+  if (typeof row.last_step === "string") {
+    out.last_step = row.last_step;
+  }
+  if (row.send_approval !== undefined) {
+    out.send_approval = Boolean(row.send_approval);
+  }
+  if (typeof row.postgres_mirror === "string") {
+    out.postgres_mirror = row.postgres_mirror;
+  }
+  return out;
+}
+
 /** Parse operator status JSON (for tests and defensive UI). */
 export function parseOperatorStatusResponse(data: unknown): OperatorStatusResponse {
   const row = data as OperatorStatusResponse;
@@ -201,5 +254,6 @@ export function parseOperatorStatusResponse(data: unknown): OperatorStatusRespon
     operator_focus: row.operator_focus == null ? null : String(row.operator_focus),
     outbound_readiness: String(row.outbound_readiness ?? "n/a"),
     warnings: Array.isArray(row.warnings) ? row.warnings.map(String) : [],
+    daily_core_run: parseDailyCoreRunStatus(row.daily_core_run),
   };
 }
