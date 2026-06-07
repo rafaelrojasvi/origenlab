@@ -45,3 +45,48 @@ describe("TodaySummaryPage equipment feed warning", () => {
     screen.getByText("Productos catalogados");
   });
 });
+
+describe("TodaySummaryPage daily-core status", () => {
+  it("renders missing daily_core_run as no run registered", () => {
+    render(
+      <DashboardDataContext.Provider
+        value={
+          {
+            data: {
+              health: {
+                ok: true,
+                service: "origenlab-api",
+                mode: "operator-sqlite-readonly",
+                backend: "sqlite",
+                postgres_configured: false,
+              },
+              operator: {
+                verdict: "READY",
+                sqlite_path: "/hidden/emails.sqlite",
+                campaign_mode: null,
+                operator_focus: null,
+                outbound_readiness: "ready",
+                warnings: [],
+              },
+            },
+            panelLoading: false,
+            panelError: null,
+            warm: { items: [], meta: null },
+            equipment: { items: [], meta: null },
+            commercialDeals: null,
+            catalogProducts: null,
+            leadResearchSummary: null,
+            mirrorBackend: false,
+            loadPanel: async () => {},
+            setContactEmail: () => {},
+          } as never
+        }
+      >
+        <TodaySummaryPage />
+      </DashboardDataContext.Provider>,
+    );
+
+    screen.getByText("Última ejecución daily-core");
+    screen.getByText("Sin ejecución registrada todavía.");
+  });
+});
