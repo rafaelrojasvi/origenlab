@@ -928,7 +928,7 @@ Use a deterministic, read-only queue export to target research where high/medium
 
 **Demoted / advanced:**
 
-- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export; not the default archive path (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)). Archive audit-only work uses [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) (default audit-only; `--build-batch` for full CSVs; Phase 5D removed legacy wrapper).
+- [`export_marketing_from_contact_master.py`](../scripts/leads/advanced/export_marketing_from_contact_master.py) — **exploratory** `contact_master` export (**audit-only by default**; **`--export --out`** to write); not the default archive path and **not send approval** (see [`OUTBOUND_SOURCE_OF_TRUTH.md`](OUTBOUND_SOURCE_OF_TRUTH.md)). Archive audit-only work uses [`build_archive_send_batch.py`](../scripts/leads/build_archive_send_batch.py) (default audit-only; `--build-batch` for full CSVs; Phase 5D removed legacy wrapper).
 
 ### Manual HTML outreach batch (packaging only)
 

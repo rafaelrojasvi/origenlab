@@ -49,6 +49,8 @@ Outputs live under `reports/local/reduction-shortlist-20260607/` — **do not co
 | **#117** | Stale reduction references cleanup | Removed live-operator mentions of deleted paths (e.g. `build_buyer_opportunity_queue.py`); guarded by `test_stale_reduction_references.py` |
 | **#118** | `prepare_active_workspace.py` apply gate | Legacy hunt workspace prep is **plan-only by default**; `--apply` required to move/write under `reports/out/active/` |
 | **#119** | `build_archive_send_batch.py` audit-only default | Alternate archive lane writes audit CSV/JSON by default; **`--build-batch`** required for send_ready/review CSVs; `--write-postgres-audit` requires `--build-batch` |
+| **#121** | Tatiana/lab boundary doc pass | [`TATIANA_LAB_BOUNDARY.md`](../TATIANA_LAB_BOUNDARY.md) strengthened for Tatiana/dataset/ml/campaigns lab surfaces |
+| **#122** | `export_marketing_from_contact_master.py` audit-only default | Exploratory `contact_master` export is audit-only by default; **`--export`** + **`--out`** required to write CSVs |
 
 These are **done** — do not re-open unless regressions are found.
 
@@ -88,7 +90,7 @@ Action types used below: `docs_only_cleanup` · `apply_gate` · `audit_only_defa
 
 | Path | Current category | Why it is a candidate | Evidence | Proposed next action | Risk | PR type |
 |------|------------------|----------------------|----------|----------------------|------|---------|
-| `scripts/leads/advanced/export_marketing_from_contact_master.py` | parked_legacy / ARCHIVE_LANE exploratory | Writes marketing CSV + optional pilot CSV **by default**; overlaps archive mental model; not daily lane | SCRIPT_MAP ARCHIVE_LANE; 21 total refs (import planner); docstring says exploratory | **audit_only_default** or explicit `--export` flag (mirror #119 pattern) | medium | behavior + tests |
+| `scripts/leads/advanced/export_marketing_from_contact_master.py` | parked_legacy / ARCHIVE_LANE exploratory | ~~Writes marketing CSV by default~~ | SCRIPT_MAP ARCHIVE_LANE; **#122 done** — audit-only default; `--export` + `--out` to write | **no_action** (#122) | — | — |
 | `scripts/leads/campaigns/apply_ready8_contact_patch.py` | parked_legacy / niche campaign | Mutates `reports/out/active/*.csv` and `docs/generated/` **without** `--apply` | EXPERIMENTAL_PARKED; 2 doc refs; writes on every run | **apply_gate** (plan-only default) | medium | behavior + tests |
 | `scripts/leads/campaigns/reconcile_deepresearch_50_with_current_cohort.py` | parked_legacy | DR50 niche reconciliation; not equipment-first policy | EXPERIMENTAL_PARKED; 4 total refs | **lab_boundary** doc cross-link only; optional **apply_gate** if it writes | low | docs_only_cleanup |
 | `scripts/tatiana/*` (9 entrypoints) | parked_legacy | Tatiana drafting/eval; not volume or precision daily lanes | TATIANA_LAB_BOUNDARY; SCRIPT_MAP parked row; `tatiana_lab` bucket 40 files | **lab_boundary** — strengthen banners in RUNBOOK/SCRIPT_MAP; no moves in next PR | low | docs_only_cleanup |
@@ -112,8 +114,8 @@ Action types used below: `docs_only_cleanup` · `apply_gate` · `audit_only_defa
 
 ## Suggested PR sequence (next 3–5)
 
-1. **Lab boundary doc pass** — Tatiana / dataset / ml / campaigns / `build_ml_report.py` (`lab_boundary`, docs + tests only).
-2. **`export_marketing_from_contact_master.py` safe default** — audit-only or explicit export flag (`audit_only_default`, small behavior change + tests).
+1. ~~**Lab boundary doc pass**~~ — done #121.
+2. ~~**`export_marketing_from_contact_master.py` safe default**~~ — done #122 (`audit_only_default`).
 3. **`apply_ready8_contact_patch.py` apply gate** — plan-only default (`apply_gate`, mirror #118).
 4. **Zero-ref advanced scripts owner review** — `export_leads_spanish_csvs.py`, `run_contact_hunt_web_server.py` (`needs_owner_review` → then wrapper or delete_later).
 5. **`export_all_known_marketing_contacts.py` doc clarification** — vs DNR/volume lane (`docs_only_cleanup`).

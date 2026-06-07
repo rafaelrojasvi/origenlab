@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Export cold-outreach candidates from ``contact_master`` (large pool).
+"""Export cold-outreach candidates from ``contact_master`` (exploratory / advanced lane).
+
+Default: **audit-only** — evaluates candidates and prints counts; pass ``--export`` to write CSVs.
+Not a daily outbound lane and **not send approval**.
 
 Filters:
 - Same Sent / suppression / outreach_contact_state exclusions as lead export
@@ -48,9 +51,27 @@ from origenlab_email_pipeline.tatiana_copilot.marketing_outreach import (
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Export marketing batch from contact_master")
-    ap.add_argument("--out", "-o", type=Path, required=True, help="Summary CSV")
-    ap.add_argument("--pilot-csv", type=Path, default=None, help="Pilot CSV for run_tatiana_pilot_batch.py")
+    ap = argparse.ArgumentParser(
+        description="Audit or export marketing candidates from contact_master (audit-only by default)."
+    )
+    ap.add_argument(
+        "--out",
+        "-o",
+        type=Path,
+        default=None,
+        help="Summary CSV path (required with --export to write).",
+    )
+    ap.add_argument(
+        "--pilot-csv",
+        type=Path,
+        default=None,
+        help="Pilot CSV for run_tatiana_pilot_batch.py (requires --export).",
+    )
+    ap.add_argument(
+        "--export",
+        action="store_true",
+        help="Write --out (and optional --pilot-csv) marketing CSVs. Default is audit-only.",
+    )
     ap.add_argument("--db", type=Path, default=None)
     ap.add_argument("--limit", type=int, default=80)
     ap.add_argument("--fetch-cap", type=int, default=50000)
@@ -69,6 +90,12 @@ def main() -> int:
     )
     ap.add_argument("--variant-type", type=str, default=MARKETING_VARIANT_GENERAL)
     args = ap.parse_args()
+
+    export_requested = bool(args.export)
+    if args.pilot_csv and not export_requested:
+        ap.error("--pilot-csv requires --export")
+    if export_requested and args.out is None:
+        ap.error("--export requires --out")
 
     settings = load_settings()
     db_path = args.db or settings.resolved_sqlite_path()
@@ -143,80 +170,91 @@ def main() -> int:
 
     conn.close()
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    fields = [
-        "case_id",
-        "contact_email",
-        "recipient_name",
-        "institution_name",
-        "total_emails",
-        "last_seen_at",
-        "confidence_score",
-        "variant_type",
-    ]
-    with args.out.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fields)
-        w.writeheader()
-        w.writerows(kept)
-
-    print(
-        f"Wrote {len(kept)} rows to {args.out} (scanned={scanned}, noise_skipped={noise_skipped}, "
-        f"supplier_skipped={supplier_skipped}, supplier_domains_loaded={len(gate_ctx.supplier_domains)}, "
-        f"sent={len(sent)}, suppressed={len(supp)}, outreach_blocked={len(outreach_map)})"
+    stats_line = (
+        f"candidates kept={len(kept)} scanned={scanned} noise_skipped={noise_skipped} "
+        f"supplier_skipped={supplier_skipped} supplier_domains_loaded={len(gate_ctx.supplier_domains)} "
+        f"sent={len(sent)} suppressed={len(supp)} outreach_blocked={len(outreach_map)}"
     )
 
-    if args.pilot_csv:
-        pfields = [
+    if export_requested:
+        assert args.out is not None
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        fields = [
             "case_id",
-            "subject",
-            "body_text",
-            "case_type",
+            "contact_email",
             "recipient_name",
             "institution_name",
-            "sector",
-            "product_focus",
-            "use_case",
+            "total_emails",
+            "last_seen_at",
+            "confidence_score",
             "variant_type",
-            "contact_email",
-            "custom_note",
-            "notes_for_reviewer",
         ]
-        args.pilot_csv.parent.mkdir(parents=True, exist_ok=True)
-        with args.pilot_csv.open("w", encoding="utf-8", newline="") as pf:
-            pw = csv.DictWriter(pf, fieldnames=pfields)
-            pw.writeheader()
-            for r in kept:
-                inst = str(r["institution_name"] or "").strip()
-                subj = f"Presentacion OrigenLab | {inst}" if inst else "Presentacion OrigenLab"
-                vn = str(r.get("variant_type") or variant)
-                if vn not in MARKETING_VARIANT_TYPES:
-                    vn = MARKETING_VARIANT_GENERAL
-                pw.writerow(
-                    {
-                        "case_id": r["case_id"],
-                        "subject": subj,
-                        "body_text": build_marketing_outreach_seed_body(
-                            variant_type=vn,
-                            recipient_name=str(r["recipient_name"] or "") or None,
-                            institution_name=inst or None,
-                            sector=None,
-                            product_focus=None,
-                            use_case=None,
-                            custom_note=None,
-                        ),
-                        "case_type": "marketing_outreach",
-                        "recipient_name": r["recipient_name"],
-                        "institution_name": inst,
-                        "sector": "",
-                        "product_focus": "",
-                        "use_case": "",
-                        "variant_type": vn,
-                        "contact_email": r["contact_email"],
-                        "custom_note": "",
-                        "notes_for_reviewer": "source=contact_master export_marketing_from_contact_master.py",
-                    }
-                )
-        print(f"Pilot CSV: {args.pilot_csv}")
+        with args.out.open("w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fields)
+            w.writeheader()
+            w.writerows(kept)
+
+        print(f"Wrote {len(kept)} rows to {args.out} ({stats_line})")
+
+        if args.pilot_csv:
+            pfields = [
+                "case_id",
+                "subject",
+                "body_text",
+                "case_type",
+                "recipient_name",
+                "institution_name",
+                "sector",
+                "product_focus",
+                "use_case",
+                "variant_type",
+                "contact_email",
+                "custom_note",
+                "notes_for_reviewer",
+            ]
+            args.pilot_csv.parent.mkdir(parents=True, exist_ok=True)
+            with args.pilot_csv.open("w", encoding="utf-8", newline="") as pf:
+                pw = csv.DictWriter(pf, fieldnames=pfields)
+                pw.writeheader()
+                for r in kept:
+                    inst = str(r["institution_name"] or "").strip()
+                    subj = f"Presentacion OrigenLab | {inst}" if inst else "Presentacion OrigenLab"
+                    vn = str(r.get("variant_type") or variant)
+                    if vn not in MARKETING_VARIANT_TYPES:
+                        vn = MARKETING_VARIANT_GENERAL
+                    pw.writerow(
+                        {
+                            "case_id": r["case_id"],
+                            "subject": subj,
+                            "body_text": build_marketing_outreach_seed_body(
+                                variant_type=vn,
+                                recipient_name=str(r["recipient_name"] or "") or None,
+                                institution_name=inst or None,
+                                sector=None,
+                                product_focus=None,
+                                use_case=None,
+                                custom_note=None,
+                            ),
+                            "case_type": "marketing_outreach",
+                            "recipient_name": r["recipient_name"],
+                            "institution_name": inst,
+                            "sector": "",
+                            "product_focus": "",
+                            "use_case": "",
+                            "variant_type": vn,
+                            "contact_email": r["contact_email"],
+                            "custom_note": "",
+                            "notes_for_reviewer": "source=contact_master export_marketing_from_contact_master.py",
+                        }
+                    )
+            print(f"Pilot CSV: {args.pilot_csv}")
+    else:
+        print("Audit only: pass --export to write marketing CSVs.")
+        if args.out is not None:
+            print(f"Planned summary CSV: {args.out}")
+        if args.pilot_csv is not None:
+            print(f"Planned pilot CSV: {args.pilot_csv}")
+        print(stats_line)
 
     if len(kept) < int(args.limit):
         print(
