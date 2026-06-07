@@ -92,6 +92,15 @@ Postgres URL is **not** required.
 
 ## Tests
 
+Default local pre-PR check (frozen sync + full pytest, same shape as CI):
+
+```bash
+cd apps/api
+./scripts/validate.sh
+```
+
+Targeted pytest is fine while developing; run `./scripts/validate.sh` before opening or merging API PRs.
+
 ```bash
 cd apps/api
 uv run pytest tests -q
