@@ -22,6 +22,10 @@ from origenlab_email_pipeline.archive_send_batch_builder import (
     build_archive_send_batch,
     refresh_sent_mailbox,
 )
+from origenlab_email_pipeline.cli_modes import (
+    add_audit_only_build_batch_flags,
+    resolve_audit_only_build_batch_mode,
+)
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.outbound_core import (
@@ -105,19 +109,14 @@ def main() -> int:
             "forced to review_required (never auto-send)."
         ),
     )
-    ap.add_argument(
-        "--audit-only",
-        action="store_true",
-        help=(
+    add_audit_only_build_batch_flags(
+        ap,
+        audit_help=(
             "Same as default: write only archive_outreach_audit.csv and "
             "archive_outreach_audit_summary.json (plus a small build summary). "
             "Kept for compatibility; do not combine with --build-batch."
         ),
-    )
-    ap.add_argument(
-        "--build-batch",
-        action="store_true",
-        help=(
+        build_help=(
             "Generate full archive batch artifacts (shortlist, precheck, send_ready / review CSVs). "
             "Default is audit-only."
         ),
@@ -199,10 +198,9 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    build_batch = bool(args.build_batch)
-    if args.audit_only and build_batch:
-        ap.error("--audit-only and --build-batch cannot be used together")
-    audit_only = not build_batch
+    mode = resolve_audit_only_build_batch_mode(ap, args)
+    audit_only = mode.audit_only
+    build_batch = mode.build_batch
 
     if audit_only and args.write_postgres_audit:
         ap.error("--write-postgres-audit requires --build-batch")
