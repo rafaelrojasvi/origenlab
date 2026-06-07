@@ -181,9 +181,9 @@ Stages below map to your requested numbering. **“Daily-use”** follows `SCRIP
 
 | | |
 |--|--|
-| **Files** | `scripts/leads/match_leads_to_mart.py`, `scripts/leads/leads_score.py`, `scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py`, root wrappers `scripts/match_lead_accounts_to_existing_orgs.py` |
+| **Files** | `scripts/leads/match_leads_to_mart.py`, `scripts/leads/leads_score.py`, `scripts/leads/advanced/match_lead_accounts_to_existing_orgs.py` |
 | **Cadence** | **Occasional / maintenance** |
-| **Overlaps** | **Duplicate entrypoints** by design: root shims delegate to `leads/advanced/` (`test_operator_entrypoint_contracts.py` documents this) |
+| **Note** | Root lead-account shims were **removed Phase 5B**; use `scripts/leads/advanced/…` only. |
 
 ### Stage 6 — Outbound safety memory / do-not-repeat
 
@@ -266,7 +266,7 @@ Stages below map to your requested numbering. **“Daily-use”** follows `SCRIP
 | **KEEP_MAINTENANCE** | Mart/commercial rebuilds, dedupe maintenance | Includes `scripts/maintenance/dedupe_canonical_gmail_messages.py` (also in `test_critical_script_paths.py`) |
 | **KEEP_MIGRATION** | `scripts/migrate/*`, `validate_sqlite_archive_for_postgres.py` | Break-glass Postgres |
 | **KEEP_EXPERIMENTAL** | `scripts/ml/*`, much `tatiana/`, `dataset/`, exploratory `leads/advanced/*`, `campaigns/*` | Per `TATIANA_LAB_BOUNDARY.md` / `SCRIPT_MAP.md` LAB |
-| **ARCHIVE_CANDIDATE** | Duplicative **documented** shims | Root `scripts/build_lead_account_rollup.py` etc. are **explicit compatibility wrappers** — **do not archive** until operators migrate (forbidden by current contract tests) |
+| **ARCHIVE_CANDIDATE** | Duplicative **documented** shims | ~~Root `scripts/build_lead_account_rollup.py` etc.~~ **Removed Phase 5B** — canonical paths under `scripts/leads/advanced/` |
 | **DELETE_CANDIDATE_ONLY_IF_CONFIRMED** | **None recommended** from this audit | Insufficient evidence any script is dead; repo has explicit anti-deletion guidance in `SCRIPT_INVENTORY.md` |
 
 ### 6.2 Per-script deep table

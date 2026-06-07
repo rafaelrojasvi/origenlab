@@ -26,7 +26,7 @@
 
 - **`candidate_export_gate`**, **`outbound_sent_preflight`**, **`outreach_contact_state`**, **`contact_email_suppression`**, and **Gmail Sent ingest** semantics — no consolidation PR should touch these until a dedicated, tested change.
 - **Postgres migrate loaders** (`scripts/migrate/*`) — optional, break-glass; behavior and URL resolution are documented; do not “simplify” by merging into unrelated tools.
-- **Compatibility root wrappers** (`scripts/build_lead_account_rollup.py`, etc.) — **do not remove** until docs, bookmarks, and `test_critical_script_paths` / operator habits are migrated (`SCRIPT_MAP.md` already forbids casual deletion).
+- **Compatibility root wrappers** — **removed Phase 5B (2026-06-02).** Use `scripts/leads/advanced/…` only; `test_lead_compatibility_wrappers.py` locks removal.
 
 ---
 
@@ -58,16 +58,9 @@
 
 **Operator `--help` contract (must stay stable):** the tuple in `tests/test_operator_entrypoint_contracts.py::_HELP_ENTRYPOINTS` (subset of the above + planners + `archive_reports_out_generated.py`).
 
-### Compatibility root wrappers (`KEEP_UNTIL_REPLACED`)
+### Lead-account scripts (**removed Phase 5B root wrappers**)
 
-Thin shims at repo `scripts/` root; implementations under `scripts/leads/advanced/`. **Do not archive** while `test_critical_script_paths`, operator bookmarks, or external runbooks still reference the root path (`SCRIPT_MAP.md`, `plan_script_consolidation.py` output).
-
-| Path |
-|------|
-| `scripts/audit_lead_org_quality.py` |
-| `scripts/build_lead_account_rollup.py` |
-| `scripts/match_lead_accounts_to_existing_orgs.py` |
-| `scripts/validate_lead_account_rollup.py` |
+Canonical implementations only under `scripts/leads/advanced/`. Root-level `scripts/build_lead_account_rollup.py` (+ three siblings) were **removed in Phase 5B** — see [`scripts/README.md`](../../scripts/README.md) and `test_lead_compatibility_wrappers.py`.
 
 ---
 
@@ -157,7 +150,7 @@ Planner bucket **`lab_archive: 20`**; `SCRIPT_MAP` **Lab scripts (LAB)**:
 | Topic | Paths / evidence | Clarification |
 |------|------------------|---------------|
 | **Two workspace prep stories** | `scripts/qa/prepare_outbound_campaign_workspace.py` vs `scripts/leads/advanced/prepare_active_workspace.py` | `SCRIPT_MAP` **Two workspace prep stories**: first = **two daily outbound lanes** + `active/current`; second = **legacy weekly lead focus** / hunt / `REPORTING.md`. |
-| **Root wrappers vs advanced** | `scripts/build_lead_account_rollup.py` → `scripts/leads/advanced/build_lead_account_rollup.py` (+ 3 siblings) | **`KEEP_UNTIL_REPLACED`**: same behavior; root for bookmarks; `test_operator_entrypoint_contracts` + `test_critical_script_paths` guard both. **Note:** [`scripts/README.md`](../../scripts/README.md) quick table links `leads/build_lead_account_rollup.py` paths that **do not exist** on disk (implementations live under `leads/advanced/`). Fix in a **doc-only** PR. |
+| **Root wrappers vs advanced** | ~~`scripts/build_lead_account_rollup.py`~~ → `scripts/leads/advanced/build_lead_account_rollup.py` (+ 3 siblings) | **Removed Phase 5B** — canonical paths only under `leads/advanced/`; [`scripts/README.md`](../../scripts/README.md) documents the family. |
 | **Campaign-specific** | `scripts/leads/campaigns/*` | Lab/cohort tooling; not daily lanes; keep README [`scripts/leads/campaigns/README.md`](../../scripts/leads/campaigns/README.md) as context. |
 | **Overlapping RUNBOOK names** | `export_do_not_repeat_master` vs `export_outreach_volume_rollup` vs `export_outreach_contacted_all` vs `export_all_known_marketing_contacts` | `SCRIPT_MAP` **Overlap note:** DNR **input list** vs **saturation metrics** vs **contacted-all** vs **all-known dedup** — different jobs. |
 | **Sounds like “send prep”** | `scripts/leads/build_manual_html_outreach_batch.py` vs `scripts/qa/send_inline_html_email_via_gmail_api.py` | HTML package **files** vs **break-glass** Gmail API send. |
@@ -170,7 +163,7 @@ Planner bucket **`lab_archive: 20`**; `SCRIPT_MAP` **Lab scripts (LAB)**:
 | # | Script / path | Why it confuses | Dangerous? | Recommended next action |
 |---|----------------|-----------------|------------|-------------------------|
 | 1 | `prepare_outbound_campaign_workspace.py` vs `leads/advanced/prepare_active_workspace.py` | Same word “prepare”, different `reports/out` contract | Low if read doc; wrong folder = **wasted work** | Doc PR: one diagram + link both in `scripts/README` “Quick navigation” |
-| 2 | Root `scripts/match_lead_accounts_to_existing_orgs.py` vs `leads/advanced/…` | Duplicated path | Low | **`KEEP_UNTIL_REPLACED`**; doc fix broken `leads/build_*` links in `scripts/README.md` |
+| 2 | ~~Root `scripts/match_lead_accounts_to_existing_orgs.py`~~ vs `leads/advanced/…` | Was duplicate shim; **removed Phase 5B** | Low | Use `scripts/leads/advanced/…` only |
 | 3 | `export_all_known_marketing_contacts` vs `export_outreach_contacted_all` | Both “big lists” | Low | Table in internal wiki / `SCRIPT_INVENTORY` row already; optional RUNBOOK callout box |
 | 4 | `export_do_not_repeat_master` vs `export_outreach_volume_rollup` | “Export” + outreach words | Low | Already in `SCRIPT_MAP` overlap note — link from `scripts/README` DNR paragraph |
 | 5 | `run_deep_research_prospecting.py` tagged `OPS_DAILY` | Heavy mode is weekly; “daily” overload | Medium if run heavy on laptop | Doc: clarify **cadence** in RUNBOOK research subsection only |
@@ -188,12 +181,7 @@ Planner bucket **`lab_archive: 20`**; `SCRIPT_MAP` **Lab scripts (LAB)**:
 
 | | |
 |--|--|
-| **Files** | `apps/email-pipeline/scripts/README.md` only |
-| **Behavior** | None |
-| **Tests** | `uv run pytest -q tests/test_operator_entrypoint_contracts.py` (sanity); optional `uv run pytest -q tests/test_critical_script_paths.py` |
-| **Rollback** | Revert the doc commit |
-
-**Change:** Replace `leads/build_lead_account_rollup.py` (and siblings) with **`leads/advanced/...`** paths **or** explicit “canonical = advanced; root = wrapper” wording so operators are not sent to non-existent files.
+| **Status** | **Done** (2026-06) — quick navigation table uses `leads/advanced/…` paths. |
 
 ### PR B — Workspace prep “pick one” callout
 
