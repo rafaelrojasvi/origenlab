@@ -63,9 +63,12 @@ Production builds **throw at runtime** if `VITE_ORIGENLAB_API_BASE_URL` is missi
 
 ```bash
 cd apps/dashboard
-npm test        # active src only (excludes src/legacy)
+npm run validate  # full local validation: tests + build
+npm test          # active src only (excludes src/legacy)
 npm run build
 ```
+
+Use **`npm run validate`** before opening or merging dashboard PRs. Targeted Vitest runs (`vitest run path/to/file.test.tsx`) are useful while developing, but full validation should pass before review. This matters especially for Today / operator-status changes because fixtures span multiple test files (`TodaySummaryPage.test.tsx`, `TodayPage.test.tsx`, `DashboardApp.test.tsx`, component tests, etc.).
 
 GitHub Actions workflow [`.github/workflows/dashboard.yml`](../../.github/workflows/dashboard.yml) runs `npm ci`, `npm test`, and `npm run build` for dashboard changes.
 
