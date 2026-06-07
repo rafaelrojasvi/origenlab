@@ -19,10 +19,12 @@ def test_shortlist_mentions_zero_ref_advanced_scripts() -> None:
     assert _WEB_SERVER_SCRIPT in text
 
 
-def test_shortlist_documents_owner_review() -> None:
+def test_shortlist_documents_web_server_safe_defaults() -> None:
     text = _SHORTLIST.read_text(encoding="utf-8").lower()
-    assert "owner review" in text or "needs owner review" in text
-    assert "needs_owner_review" in text or "needs owner review" in text
+    assert "--lan" in text
+    assert "127.0.0.1" in text or "localhost" in text
+    assert "#126" in text
+    assert "no_action" in text or "owner-reviewed" in text or "owner reviewed" in text
 
 
 def test_shortlist_export_flag_is_input_path_not_boolean_write() -> None:

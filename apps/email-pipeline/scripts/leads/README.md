@@ -118,23 +118,27 @@ uv run python scripts/leads/advanced/export_client_review_csv.py --out reports/o
 uv run python scripts/leads/advanced/export_contact_hunt_sheet.py --out reports/out/leads_contact_hunt_es.csv --limit 200
 ```
 
-## Local Web UI (CSV download) — advanced / owner review
+## Local Web UI (CSV download) — advanced / parked
 
-**Parked advanced helper** — not daily outbound, not send approval, not `apps/api`. See [`docs/audits/REDUCTION_SHORTLIST_20260607.md`](../../docs/audits/REDUCTION_SHORTLIST_20260607.md#owner-review-zero-ref-advanced-helpers-pr-124). Confirm with owner before relying on this in production workflows.
+**Parked advanced helper** — not daily outbound, not send approval, not `apps/api`. Binds to **127.0.0.1** by default (localhost only). Pass **`--lan`** intentionally to expose on your WiFi/LAN.
 
-If your client is on the same WiFi/LAN, you can host a simple authenticated page (no SQLite exposed):
-
-1. Start server:
+1. Set a password (required — no default):
 ```bash
 export LEADS_WEB_USER="cliente"
 export LEADS_WEB_PASS="cambia-este-password"
 uv run python scripts/leads/advanced/run_contact_hunt_web_server.py --port 8000
 ```
 
-2. From your client’s browser, open:
-`http://<tu-ip-de-red>:8000/`
+2. Open in your browser: `http://127.0.0.1:8000/` (localhost default).
 
-3. Login with the same username/password.
+3. For LAN demos (other devices on same WiFi), add **`--lan`** and use your machine's IP:
+```bash
+export LEADS_WEB_PASS="cambia-este-password"
+uv run python scripts/leads/advanced/run_contact_hunt_web_server.py --lan --port 8000
+# then http://<tu-ip-de-red>:8000/
+```
+
+4. Login with the same username/password. Never commit or log the password.
 
 
 ## Expected CSV formats
