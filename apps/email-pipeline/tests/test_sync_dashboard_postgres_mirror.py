@@ -304,6 +304,14 @@ def test_summary_includes_warm_case_optional_loader() -> None:
                 "inserted_cases": 3,
                 "updated_cases": 1,
                 "linked_emails": 5,
+                "candidate_count": 55,
+                "queue_row_count": 58,
+                "warm_days": 14,
+                "warm_limit": 100,
+                "categories_summary": {
+                    "waiting_client": 24,
+                    "quote_sent": 4,
+                },
             },
         }
     )
@@ -311,6 +319,11 @@ def test_summary_includes_warm_case_optional_loader() -> None:
     assert "warm_cases:" in text
     assert "inserted_cases: 3" in text
     assert "linked_emails: 5" in text
+    assert "candidate_count: 55" in text
+    assert "queue_row_count: 58" in text
+    assert "warm_days: 14" in text
+    assert "warm_limit: 100" in text
+    assert "categories_summary: quote_sent=4, waiting_client=24" in text
 
 
 def test_summary_includes_equipment_opportunity_optional_loader() -> None:
@@ -704,6 +717,54 @@ def test_include_warm_cases_flag_calls_optional_loader(
     assert result["ok"] is True
     assert result["warm_case_sync"]["inserted_cases"] == 4
     assert result["details"]["warm_case_linked_email_count"] == 4
+
+
+def test_warm_case_promotion_receives_warm_days_and_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+    captured: dict[str, Any] = {}
+
+    def _warm(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {
+            "applied": False,
+            "dry_run": True,
+            "candidate_count": 2,
+            "queue_row_count": 3,
+            "warm_days": kwargs["days_window"],
+            "warm_limit": kwargs["limit"],
+        }
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(
+        "origenlab_email_pipeline.dashboard_postgres_sync.run_warm_case_promotion_sync",
+        side_effect=_warm,
+    ):
+        result = run_dashboard_mirror_sync(
+            [
+                "--sqlite-db",
+                str(db),
+                "--dry-run",
+                "--include-warm-cases",
+                "--warm-days",
+                "14",
+                "--warm-limit",
+                "100",
+            ],
+            repo_root=REPO,
+            loader_runner=lambda _c, _r: 0,
+        )
+
+    assert result["ok"] is True
+    assert captured["days_window"] == 14
+    assert captured["limit"] == 100
+    assert result["warm_case_sync"]["warm_days"] == 14
+    assert result["warm_case_sync"]["warm_limit"] == 100
 
 
 def test_include_commercial_deals_flag_calls_deals_sync(

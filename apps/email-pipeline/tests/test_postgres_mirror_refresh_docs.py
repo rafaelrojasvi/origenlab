@@ -103,3 +103,9 @@ def test_postgres_mirror_refresh_documents_warm_case_parity_audit() -> None:
     lower = text.lower()
     assert "diagnostic" in lower
     assert "not send approval" in lower or "does not approve sends" in lower
+
+
+def test_postgres_mirror_refresh_live_uses_hoy_warm_window() -> None:
+    text = _MIRROR_REFRESH.read_text(encoding="utf-8")
+    assert "--warm-days 14" in text or "14 days / 100" in text
+    assert "--warm-limit 100" in text or "14 days / 100 warm cases" in text
