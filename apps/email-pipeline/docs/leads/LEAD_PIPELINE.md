@@ -253,7 +253,7 @@ Mantener solo estos archivos como “activos” de trabajo diario (el script `pr
 
 ### Derivados y anexos (no son el núcleo en `active/`)
 
-- Shortlist / client review (EN o ES): regenerar con `export_leads_shortlist.py`, `export_client_review_csv.py`; opcionalmente `advanced/export_leads_spanish_csvs.py` (**helper avanzado / owner review** — ver [`REDUCTION_SHORTLIST_20260607.md`](../audits/REDUCTION_SHORTLIST_20260607.md#owner-review-zero-ref-advanced-helpers-pr-124); **`--export` = ruta de entrada**, no bandera booleana). Todos incluyen **`id_lead`** para cruces estables.
+- Shortlist / client review (EN o ES): regenerar con `export_leads_shortlist.py`, `export_client_review_csv.py`; opcionalmente `advanced/export_leads_spanish_csvs.py` (**helper avanzado / parked** — plan-only por defecto; **`--write-outputs`** para escribir `*_es.csv`; **`--export` = ruta de entrada**, no bandera booleana; no es outbound diario ni aprobación de envío). Todos incluyen **`id_lead`** para cruces estables.
 - `leads_contact_hunt_current_merged.csv` — salida de `merge_contact_hunt_enrichment.py`. Antes de importar, validar alineación con la base actual:
 
   ```bash

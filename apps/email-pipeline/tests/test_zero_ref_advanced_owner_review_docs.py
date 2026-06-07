@@ -32,10 +32,11 @@ def test_shortlist_export_flag_is_input_path_not_boolean_write() -> None:
     assert "boolean" in text or "do not" in text
 
 
-def test_shortlist_mentions_future_write_output_flag_names() -> None:
+def test_shortlist_documents_write_outputs_flag() -> None:
     text = _SHORTLIST.read_text(encoding="utf-8").lower()
     assert "--write-outputs" in text or "write-outputs" in text
-    assert "--emit" in text or "emit" in text
+    assert "plan-only" in text or "plan only" in text
+    assert "#125" in text
 
 
 def test_shortlist_wrapper_before_delete() -> None:
