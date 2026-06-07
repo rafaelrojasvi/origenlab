@@ -94,3 +94,12 @@ def test_postgres_mirror_refresh_documents_live_dashboard_preset() -> None:
     assert "equipment opportunit" in lower
     assert "commercial deal" in lower
     assert "never includes mirror" in lower or "intentionally never includes mirror" in lower
+
+
+def test_postgres_mirror_refresh_documents_warm_case_parity_audit() -> None:
+    text = _MIRROR_REFRESH.read_text(encoding="utf-8")
+    assert "audit_warm_case_parity.py" in text
+    assert "/cases/warm" in text
+    lower = text.lower()
+    assert "diagnostic" in lower
+    assert "not send approval" in lower or "does not approve sends" in lower
