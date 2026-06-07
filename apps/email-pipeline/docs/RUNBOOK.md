@@ -22,7 +22,7 @@ Single entrypoint for **how to run** the email pipeline. **Daily core contract (
 | **Which status command?** | [Operator health matrix](#m-eprun-operator-health-matrix) | `make doctor` vs `make audit` vs health report vs API |
 | **`reports/out` cleanup** | [`reports/out` cleanup flow](#m-eprun-reports-out-cleanup) | Plan → archive moves → hygiene check |
 
-**Parked index:** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md). **Dashboard UX design (future CLI modes):** [`dashboard_stack_simplification_design_20260519.md`](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md). **Simplification audit (Phase 1 map):** [`audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md`](audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md).
+**Parked index:** [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md) · **Tatiana/lab boundary:** [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md). **Dashboard UX design (future CLI modes):** [`dashboard_stack_simplification_design_20260519.md`](../reports/out/active/current/dashboard_stack_simplification_design_20260519.md). **Simplification audit (Phase 1 map):** [`audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md`](audits/CODEBASE_SIMPLIFICATION_AUDIT_20260602.md).
 
 <a id="m-eprun-daily-outbound"></a>
 ## Daily outbound — two lanes
