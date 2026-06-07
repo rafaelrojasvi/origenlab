@@ -19,6 +19,11 @@ import csv
 import sys
 from pathlib import Path
 
+from origenlab_email_pipeline.cli_modes import (
+    add_write_outputs_dry_run_flags,
+    resolve_write_outputs_dry_run_mode,
+)
+
 
 def _read_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     with open(path, encoding="utf-8", newline="") as f:
@@ -119,22 +124,15 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("reports/out/leads_export.csv"),
         help="Input path to full English export CSV (not a write flag).",
     )
-    ap.add_argument(
-        "--write-outputs",
-        action="store_true",
-        help="Write leads_shortlist_es.csv, leads_client_review_es.csv, and leads_export_es.csv.",
-    )
-    ap.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Same as default (plan-only). Kept for compatibility.",
+    add_write_outputs_dry_run_flags(
+        ap,
+        write_help="Write leads_shortlist_es.csv, leads_client_review_es.csv, and leads_export_es.csv.",
+        dry_run_help="Same as default (plan-only). Kept for compatibility.",
     )
     args = ap.parse_args(argv)
 
-    if args.write_outputs and args.dry_run:
-        ap.error("--write-outputs and --dry-run cannot be used together")
-
-    write_outputs = bool(args.write_outputs)
+    mode = resolve_write_outputs_dry_run_mode(ap, args)
+    write_outputs = mode.write_outputs
 
     _, shortlist_in = _read_rows(args.shortlist)
     s_rows = [_to_spanish_row(r, mode="shortlist") for r in shortlist_in]
