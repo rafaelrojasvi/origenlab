@@ -12,7 +12,7 @@ import {
   fetchLeadResearchSummaryMirror,
 } from "../api/mirrorLeadIntelClient";
 import { ProspectosDrawer } from "../components/prospectos/ProspectosDrawer";
-import { OperatorApiError } from "../api/operatorClient";
+import { formatMirrorLoadError } from "../lib/humanizeApiError";
 import { leadProspectsQueryFromOrigin } from "../lib/prospectOriginQuery";
 import { formatProspectosTableFooter } from "../lib/clientTablePagination";
 import { useClientTablePagination } from "../lib/useClientTablePagination";
@@ -24,14 +24,8 @@ import {
   prospectTableBadge,
 } from "../lib/prospectLabels";
 
-function formatLoadError(label: string, e: unknown): string {
-  if (e instanceof OperatorApiError) {
-    return `${label} (API ${e.status}): ${e.message}`;
-  }
-  if (e instanceof Error) {
-    return `${label}: ${e.message}`;
-  }
-  return `${label}: error desconocido`;
+function formatLoadError(label: string, e: unknown): { message: string; detail: string | null } {
+  return formatMirrorLoadError(label, e);
 }
 
 function KpiCard({ label, value }: { label: string; value: number }) {
@@ -58,6 +52,7 @@ export function ProspectosPage() {
   const [disclaimer, setDisclaimer] = useState("");
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
+  const [listErrorDetail, setListErrorDetail] = useState<string | null>(null);
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [detail, setDetail] = useState<LeadProspectDetailResponseUi | null>(null);
@@ -80,13 +75,16 @@ export function ProspectosPage() {
   const loadList = useCallback(async (query: LeadProspectsListQuery) => {
     setListLoading(true);
     setListError(null);
+    setListErrorDetail(null);
     try {
       const res = await fetchLeadProspectsMirror(query);
       setItems(res.items);
       setTotal(res.total);
       setDisclaimer(res.disclaimer);
     } catch (e) {
-      setListError(formatLoadError("No se pudieron cargar prospectos", e));
+      const formatted = formatLoadError("No se pudieron cargar prospectos", e);
+      setListError(formatted.message);
+      setListErrorDetail(formatted.detail);
     } finally {
       setListLoading(false);
     }
@@ -111,7 +109,7 @@ export function ProspectosPage() {
     setDetailError(null);
     void fetchLeadProspectDetailMirror(selectedKey)
       .then(setDetail)
-      .catch((e) => setDetailError(formatLoadError("Ficha", e)))
+      .catch((e) => setDetailError(formatLoadError("Ficha", e).message))
       .finally(() => setDetailLoading(false));
   }, [selectedKey]);
 
@@ -268,9 +266,12 @@ export function ProspectosPage() {
       </section>
 
       {listError ? (
-        <p className="text-sm text-red-800" role="alert">
-          {listError}
-        </p>
+        <div className="text-sm text-red-800" role="alert">
+          <p className="font-medium">{listError}</p>
+          {listErrorDetail ? (
+            <p className="mt-1 break-words text-xs text-red-700">{listErrorDetail}</p>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-white shadow-sm">

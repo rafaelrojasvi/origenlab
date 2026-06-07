@@ -23,6 +23,7 @@ import {
   fetchLeadProspectsMirror,
   fetchLeadResearchSummaryMirror,
 } from "../api/mirrorLeadIntelClient";
+import { OperatorApiError } from "../api/operatorClient";
 
 describe("ProspectosPage", () => {
   beforeEach(() => {
@@ -41,6 +42,18 @@ describe("ProspectosPage", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("shows humanized Spanish copy when mirror Postgres is unavailable", async () => {
+    const raw = '{"detail":"Postgres audit requested but no Postgres URL resolved"}';
+    vi.mocked(fetchLeadProspectsMirror).mockRejectedValue(new OperatorApiError(raw, 503));
+    render(<ProspectosPage />);
+    await waitFor(() => {
+      screen.getByText(/El espejo Postgres no está configurado en este entorno/);
+    });
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("API 503");
+    expect(alert.textContent).not.toMatch(/^Prospectos \(API 503\):/);
   });
 
   it("shows footer with loaded vs API total and numbered pagination", async () => {

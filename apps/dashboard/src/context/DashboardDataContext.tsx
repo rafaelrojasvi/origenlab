@@ -12,7 +12,6 @@ import type {
   WarmCasesResponse,
 } from "../api/commercialTypes";
 import {
-  OperatorApiError,
   DASHBOARD_WARM_CASES_QUERY,
   fetchEquipmentOpportunities,
   fetchTodayPanel,
@@ -30,14 +29,10 @@ import {
   logLegacyDevPortWarningIfNeeded,
 } from "../lib/devApiConfig";
 
+import { formatMirrorLoadError } from "../lib/humanizeApiError";
+
 function formatLoadError(label: string, e: unknown): string {
-  if (e instanceof OperatorApiError) {
-    return `${label} (API ${e.status}): ${e.message}`;
-  }
-  if (e instanceof Error) {
-    return `${label}: ${e.message}`;
-  }
-  return `${label}: unknown error`;
+  return formatMirrorLoadError(label, e).message;
 }
 
 export interface DashboardDataState {
@@ -53,6 +48,7 @@ export interface DashboardDataState {
   commercialDeals: CommercialDealsListUi | null;
   commercialDealsLoading: boolean;
   commercialDealsError: string | null;
+  commercialDealsErrorDetail: string | null;
   catalogProducts: CatalogProductsListUi | null;
   catalogProductsLoading: boolean;
   catalogProductsError: string | null;
@@ -93,6 +89,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const [commercialDeals, setCommercialDeals] = useState<CommercialDealsListUi | null>(null);
   const [commercialDealsLoading, setCommercialDealsLoading] = useState(true);
   const [commercialDealsError, setCommercialDealsError] = useState<string | null>(null);
+  const [commercialDealsErrorDetail, setCommercialDealsErrorDetail] = useState<string | null>(null);
 
   const [catalogProducts, setCatalogProducts] = useState<CatalogProductsListUi | null>(null);
   const [catalogProductsLoading, setCatalogProductsLoading] = useState(true);
@@ -146,10 +143,13 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const loadCommercialDeals = useCallback(async () => {
     setCommercialDealsLoading(true);
     setCommercialDealsError(null);
+    setCommercialDealsErrorDetail(null);
     try {
       setCommercialDeals(await fetchCommercialDealsMirror());
     } catch (e) {
-      setCommercialDealsError(formatLoadError("Commercial deals mirror", e));
+      const formatted = formatMirrorLoadError("Negocios comerciales", e);
+      setCommercialDealsError(formatted.message);
+      setCommercialDealsErrorDetail(formatted.detail);
       setCommercialDeals(null);
     } finally {
       setCommercialDealsLoading(false);
@@ -234,6 +234,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       commercialDeals,
       commercialDealsLoading,
       commercialDealsError,
+      commercialDealsErrorDetail,
       catalogProducts,
       catalogProductsLoading,
       catalogProductsError,
@@ -267,6 +268,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       commercialDeals,
       commercialDealsLoading,
       commercialDealsError,
+      commercialDealsErrorDetail,
       catalogProducts,
       catalogProductsLoading,
       catalogProductsError,

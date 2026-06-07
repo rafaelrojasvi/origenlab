@@ -48,6 +48,13 @@ function renderToday(overrides: Record<string, unknown> = {}) {
 }
 
 describe("TodaySummaryPage operator landing layout", () => {
+  it("shows Qué revisar hoy once and Colas prioritarias as queue section title", () => {
+    renderToday();
+    expect(screen.getAllByText("Qué revisar hoy")).toHaveLength(1);
+    screen.getByRole("heading", { level: 2, name: "Colas prioritarias" });
+    screen.getByText(/Colas priorizadas según correos, oportunidades de equipos y señales comerciales cargadas/);
+  });
+
   it("shows Qué revisar hoy before Estado del sistema", () => {
     renderToday();
     const body = document.body.textContent ?? "";

@@ -82,11 +82,13 @@ export function CommercialDealsTable({
   data,
   loading,
   error,
+  errorDetail,
   onRetry,
 }: {
   data: CommercialDealsListUi | null;
   loading: boolean;
   error: string | null;
+  errorDetail?: string | null;
   onRetry: () => void;
 }) {
   const tableAvailable = data?.table_available ?? false;
@@ -115,6 +117,7 @@ export function CommercialDealsTable({
       dataSourceLabel="Espejo Postgres · solo lectura · vista redactada"
       loading={loading}
       error={error}
+      errorDetail={errorDetail}
       onRetry={onRetry}
       empty={showEmpty}
       emptyMessage="El espejo de negocios aún no está sincronizado."
