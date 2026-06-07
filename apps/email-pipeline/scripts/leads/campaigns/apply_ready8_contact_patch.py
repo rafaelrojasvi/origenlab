@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Apply DR50 ready-8 contacts into leads_contact_hunt_current.csv (operational path).
+"""Apply DR50 ready-8 contacts into leads_contact_hunt_current.csv (campaign / lab lane).
 
-Also writes:
+Default: **plan-only** — computes patched rows and top-20 in memory; pass ``--apply`` to write files.
+Not a daily outbound lane and **not send approval**.
+
+Also writes when ``--apply``:
   reports/out/active/leads_contact_hunt_current_ready8_patch.csv — the 8 full hunt rows after patch
   reports/out/active/leads_top20_for_client_report.csv
   docs/generated/READY8_AND_TOP20_REPORTING_PLAN.md
@@ -11,6 +14,7 @@ Does not touch legacy reference/*DEEPRESEARCH* files.
 
 from __future__ import annotations
 
+import argparse
 import csv
 import sys
 from pathlib import Path
@@ -188,6 +192,7 @@ def build_top20(
 
 
 def write_plan_md(
+    plan_path: Path,
     ready_meta: list[tuple[int, str]],
     needs12: list[tuple[int, str, str]],
     audit_cmd: str,
@@ -255,10 +260,31 @@ Con la hoja `leads_contact_hunt_current.csv` ya parcheada y **reimportada** a SQ
 ---
 Generado por `scripts/leads/campaigns/apply_ready8_contact_patch.py`.
 """
-    PLAN_MD.write_text(body, encoding="utf-8")
+    plan_path.parent.mkdir(parents=True, exist_ok=True)
+    plan_path.write_text(body, encoding="utf-8")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(
+        description="Plan or apply DR50 ready-8 hunt patch (plan-only by default)."
+    )
+    ap.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write patched hunt CSV, patch CSV, top20 CSV, and plan markdown.",
+    )
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Same as default (plan-only). Kept for compatibility.",
+    )
+    args = ap.parse_args(argv)
+
+    if args.apply and args.dry_run:
+        ap.error("--apply and --dry-run cannot be used together")
+
+    apply_requested = bool(args.apply)
+
     headers, hunt_rows = _read_csv(HUNT)
     _, ready_rows = _read_csv(READY8)
     _, needs_rows = _read_csv(NEEDS)
@@ -282,30 +308,8 @@ def main() -> int:
         print(f"Expected 8 patched rows, got {len(patched_rows)}", file=sys.stderr)
         return 1
 
-    _write_csv(HUNT, headers, hunt_rows)
-    _write_csv(PATCH_OUT, headers, patched_rows)
-
     hunt_by_id = {int(r["id_lead"]): r for r in hunt_rows}
     top20 = build_top20(hunt_by_id, ready_rows, needs_rows)
-    top_fields = [
-        "id_lead",
-        "org_name",
-        "readiness_status",
-        "fit_bucket",
-        "priority_score",
-        "buyer_kind",
-        "source_url",
-        "evidence_summary",
-        "recommended_contact_route",
-        "contact_name",
-        "contact_role",
-        "contact_email",
-        "contact_phone",
-        "contact_confidence",
-        "report_section_order",
-        "report_reason",
-    ]
-    _write_csv(TOP20_OUT, top_fields, top20)
 
     ready_meta = [
         (
@@ -334,12 +338,43 @@ def main() -> int:
     audit_cmd = "uv run python scripts/leads/advanced/audit_contact_readiness.py"
     pack_cmd = "uv run python scripts/reports/build_leads_client_pack.py"
 
-    write_plan_md(ready_meta, needs12, audit_cmd, import_cmd, pack_cmd)
+    top_fields = [
+        "id_lead",
+        "org_name",
+        "readiness_status",
+        "fit_bucket",
+        "priority_score",
+        "buyer_kind",
+        "source_url",
+        "evidence_summary",
+        "recommended_contact_route",
+        "contact_name",
+        "contact_role",
+        "contact_email",
+        "contact_phone",
+        "contact_confidence",
+        "report_section_order",
+        "report_reason",
+    ]
 
-    print(f"Updated {HUNT}")
-    print(f"Wrote {PATCH_OUT}")
-    print(f"Wrote {TOP20_OUT}")
-    print(f"Wrote {PLAN_MD}")
+    if apply_requested:
+        _write_csv(HUNT, headers, hunt_rows)
+        _write_csv(PATCH_OUT, headers, patched_rows)
+        _write_csv(TOP20_OUT, top_fields, top20)
+        write_plan_md(PLAN_MD, ready_meta, needs12, audit_cmd, import_cmd, pack_cmd)
+        print(f"Updated {HUNT}")
+        print(f"Wrote {PATCH_OUT}")
+        print(f"Wrote {TOP20_OUT}")
+        print(f"Wrote {PLAN_MD}")
+    else:
+        print("Plan only: pass --apply to write patched hunt/top20/report files.")
+        print(f"Planned output: {HUNT}")
+        print(f"Planned output: {PATCH_OUT}")
+        print(f"Planned output: {TOP20_OUT}")
+        print(f"Planned output: {PLAN_MD}")
+        print(f"patched rows: {len(patched_rows)}")
+        print(f"top20 rows: {len(top20)}")
+
     return 0
 
 
