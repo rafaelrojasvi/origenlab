@@ -19,6 +19,8 @@ import csv
 import sys
 from pathlib import Path
 
+from origenlab_email_pipeline.cli_modes import add_apply_dry_run_flags, resolve_apply_dry_run_mode
+
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -268,22 +270,15 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="Plan or apply DR50 ready-8 hunt patch (plan-only by default)."
     )
-    ap.add_argument(
-        "--apply",
-        action="store_true",
-        help="Write patched hunt CSV, patch CSV, top20 CSV, and plan markdown.",
-    )
-    ap.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Same as default (plan-only). Kept for compatibility.",
+    add_apply_dry_run_flags(
+        ap,
+        apply_help="Write patched hunt CSV, patch CSV, top20 CSV, and plan markdown.",
+        dry_run_help="Same as default (plan-only). Kept for compatibility.",
     )
     args = ap.parse_args(argv)
 
-    if args.apply and args.dry_run:
-        ap.error("--apply and --dry-run cannot be used together")
-
-    apply_requested = bool(args.apply)
+    mode = resolve_apply_dry_run_mode(ap, args)
+    apply_requested = mode.apply
 
     headers, hunt_rows = _read_csv(HUNT)
     _, ready_rows = _read_csv(READY8)
