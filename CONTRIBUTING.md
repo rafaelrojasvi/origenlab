@@ -39,7 +39,7 @@ For PRs touching email-pipeline, API, or dashboard:
 ./scripts/validate-active-stack.sh
 ```
 
-This runs each app’s validate script safely (no apply/send/purge/Alembic). It does not include the public web app.
+This runs each app’s validate script safely (no apply/send/purge/Alembic). It does not include the public web app. The script also checks that the working tree stays clean after validation; if `apps/api/uv.lock` drifts, inspect the diff before restoring.
 
 ### Local full check
 
