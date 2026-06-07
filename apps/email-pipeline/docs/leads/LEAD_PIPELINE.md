@@ -13,7 +13,7 @@ The lead pipeline collects and normalizes **external public leads** in Chile (pr
 6. **Contact-hunt (v1.2)** — Export a Spanish “hoja de hunting” (`leads_contact_hunt_es.csv`) for manual/semi-asistido contact hunting on the best leads.
 7. **Merge + import enrichment (optional)** — After Deep Research (or manual edits), merge into the sheet and load into SQLite so contacts are not “lost” in chat/docs only.
 8. **Weekly canonical focus (safe mode)** — Generate one operational CSV + one Spanish summary that classify files by purpose and surface warnings.
-9. **Active workspace cleanup** — `prepare_active_workspace.py` archives duplicate English CSVs and regenerable derivatives; optional `--deepsearch` and `--unified`.
+9. **Active workspace cleanup** — `prepare_active_workspace.py` archives duplicate English CSVs and regenerable derivatives (plan-only by default; **`--apply`** to move/write); optional `--deepsearch` and `--unified`.
 
 See [CHILE_LEAD_SOURCES.md](CHILE_LEAD_SOURCES.md) for source URLs and keyword packs.
 
@@ -180,7 +180,7 @@ uv run python scripts/leads/run_weekly_focus.py
 # - reports/out/active/leads_weekly_focus_summary_es.md
 
 # Optional: tidy reports/out/active (archive EN duplicates + *_con_db / *_netnew_*), regenerate deepsearch slice, build unified CSV
-uv run python scripts/leads/advanced/prepare_active_workspace.py --deepsearch --unified
+uv run python scripts/leads/advanced/prepare_active_workspace.py --deepsearch --unified --apply
 
 # Full pipeline (set LEADS_*_FILE to your CSV/JSON paths, or use samples)
 export LEADS_CHILECOMPRA_FILE=scripts/leads/samples/chilecompra_sample.csv

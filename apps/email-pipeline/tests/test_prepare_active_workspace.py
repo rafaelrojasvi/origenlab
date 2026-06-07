@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import io
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
+
+import pytest
 
 
 def _load_script():
@@ -18,13 +22,7 @@ def _load_script():
     return mod
 
 
-def test_prepare_archives_derivatives_and_builds_unified(tmp_path: Path) -> None:
-    mod = _load_script()
-    active = tmp_path / "reports" / "out" / "active"
-    active.mkdir(parents=True, exist_ok=True)
-    (active / "leads_shortlist.csv").write_text("x\n", encoding="utf-8")
-    (active / "leads_contact_hunt_current_con_db.csv").write_text("x\n", encoding="utf-8")
-
+def _write_focus_and_hunt(active: Path) -> None:
     with (active / "leads_weekly_focus.csv").open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(
             f,
@@ -66,18 +64,37 @@ def test_prepare_archives_derivatives_and_builds_unified(tmp_path: Path) -> None
         w.writeheader()
         w.writerow({"id_lead": "99", "organizacion_compradora": "Org", "email_publico_compras": "a@b.cl"})
 
-    argv = [
-        "prepare_active_workspace.py",
-        "--active-dir",
-        str(active),
-        "--unified",
-    ]
+
+def _run_main(mod, argv: list[str]) -> tuple[int, str]:
     old = sys.argv
+    buf = io.StringIO()
     try:
         sys.argv = argv
-        code = mod.main()
+        with redirect_stdout(buf):
+            code = mod.main()
     finally:
         sys.argv = old
+    return code, buf.getvalue()
+
+
+def test_prepare_archives_derivatives_and_builds_unified_with_apply(tmp_path: Path) -> None:
+    mod = _load_script()
+    active = tmp_path / "reports" / "out" / "active"
+    active.mkdir(parents=True, exist_ok=True)
+    (active / "leads_shortlist.csv").write_text("x\n", encoding="utf-8")
+    (active / "leads_contact_hunt_current_con_db.csv").write_text("x\n", encoding="utf-8")
+    _write_focus_and_hunt(active)
+
+    code, _ = _run_main(
+        mod,
+        [
+            "prepare_active_workspace.py",
+            "--active-dir",
+            str(active),
+            "--unified",
+            "--apply",
+        ],
+    )
     assert code == 0
     assert not (active / "leads_shortlist.csv").exists()
     assert not (active / "leads_contact_hunt_current_con_db.csv").exists()
@@ -88,3 +105,46 @@ def test_prepare_archives_derivatives_and_builds_unified(tmp_path: Path) -> None
     assert len(rows) == 1
     assert rows[0]["id_lead"] == "99"
     assert rows[0]["email_publico_compras"] == "a@b.cl"
+
+
+def test_default_run_is_plan_only(tmp_path: Path) -> None:
+    mod = _load_script()
+    active = tmp_path / "reports" / "out" / "active"
+    active.mkdir(parents=True, exist_ok=True)
+    (active / "leads_shortlist.csv").write_text("x\n", encoding="utf-8")
+    (active / "leads_contact_hunt_current_con_db.csv").write_text("x\n", encoding="utf-8")
+    _write_focus_and_hunt(active)
+
+    code, out = _run_main(
+        mod,
+        [
+            "prepare_active_workspace.py",
+            "--active-dir",
+            str(active),
+            "--unified",
+        ],
+    )
+    assert code == 0
+    assert (active / "leads_shortlist.csv").exists()
+    assert (active / "leads_contact_hunt_current_con_db.csv").exists()
+    assert not (active / "leads_active_unified.csv").exists()
+    assert "plan only" in out.lower() or "--apply" in out.lower()
+
+
+def test_dry_run_and_apply_together_rejected(tmp_path: Path) -> None:
+    mod = _load_script()
+    active = tmp_path / "reports" / "out" / "active"
+    active.mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_main(
+            mod,
+            [
+                "prepare_active_workspace.py",
+                "--active-dir",
+                str(active),
+                "--dry-run",
+                "--apply",
+            ],
+        )
+    assert exc.value.code != 0

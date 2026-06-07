@@ -127,7 +127,7 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | script path | category | entrypoint / importers | reads | writes | risk | recommended command | notes |
 |-------------|----------|------------------------|-------|--------|------|---------------------|-------|
 | `scripts/tatiana/*`, `scripts/dataset/*`, `scripts/ml/*` | parked_legacy | TATIANA_LAB_BOUNDARY | varies | reports/lab | low–medium | See lab docs | Not daily outbound lanes |
-| `scripts/leads/advanced/prepare_active_workspace.py` | parked_legacy | Lead hunt / REPORTING | `reports/out/active/` | archives/moves | medium | Hunt workflows only | **Not** outbound `current/` prep |
+| `scripts/leads/advanced/prepare_active_workspace.py` | parked_legacy | Lead hunt / REPORTING | `reports/out/active/` | archives/moves (**`--apply`**) | medium | Hunt workflows only; plan-only default | **Not** outbound `current/` prep |
 | *(removed)* `scripts/qa/build_legacy_contacts_2016_2019_review.py` | parked_legacy | — | — | — | — | Library `legacy_contacts_2016_2019.py` | Removed Phase 5R |
 | *(removed)* `business_mart_app.py`, `streamlit_*` UI | parked_legacy | — | — | — | — | **`apps/dashboard` + `apps/api`** | Removed 2026-06-04 (#75–#77) |
 | `scripts/_bootstrap.py`, `scripts/_script_warnings.py` | parked_legacy | Imported by scripts | — | — | low | *(internal)* | Not operator entrypoints |
@@ -182,7 +182,7 @@ Use this to separate *what you run daily* from *what can hurt you*:
 | Script | Purpose | When to use |
 |--------|---------|-------------|
 | [`scripts/qa/prepare_outbound_campaign_workspace.py`](../scripts/qa/prepare_outbound_campaign_workspace.py) | Initializes / archives **`reports/out/active/current/`** and campaign manifest for **volume + precision outbound lanes** | **Before** a new campaign round in `active/current/` |
-| [`scripts/leads/advanced/prepare_active_workspace.py`](../scripts/leads/advanced/prepare_active_workspace.py) | Cleans **`reports/out/active/`** for **legacy weekly lead focus** (shortlist, hunt, deepsearch CSV hygiene; archives extras) | **Lead pipeline / REPORTING** workflows — see [`REPORTING.md`](REPORTING.md), [`leads/LEAD_PIPELINE.md`](leads/LEAD_PIPELINE.md) |
+| [`scripts/leads/advanced/prepare_active_workspace.py`](../scripts/leads/advanced/prepare_active_workspace.py) | Cleans **`reports/out/active/`** for **legacy weekly lead focus** (shortlist, hunt, deepsearch CSV hygiene; archives extras) | **Lead pipeline / REPORTING** workflows — **plan-only by default**; pass **`--apply`** to move/write. Daily outbound prep: **`prepare_outbound_campaign_workspace.py`**. |
 
 If you only care about the **two daily outbound lanes**, prefer **`prepare_outbound_campaign_workspace.py`**. If you are maintaining **hunt sheets + unified active CSVs**, you may still need **`prepare_active_workspace.py`** — read both docstrings before picking one.
 
