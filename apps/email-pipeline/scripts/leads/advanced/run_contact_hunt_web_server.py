@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Local web server for viewing/downloading lead CSVs (v1.2).
+"""Local web server for viewing/downloading lead CSVs (advanced / parked helper).
 
 Purpose:
-- Provide a simple "web UI" for clients on the same WiFi.
+- Provide a simple "web UI" for local or LAN CSV download demos.
 - Do NOT expose SQLite; serve only generated CSVs.
 - Use HTTP Basic Auth (username/password) to require a login.
 
-By default it serves files under `reports/out/` that match `leads_*.csv`.
+By default binds to **127.0.0.1** (localhost only). Pass ``--lan`` intentionally to
+expose on the LAN. Set ``LEADS_WEB_PASS`` or pass ``--pass`` — no default password.
+
+Serves files under ``--reports-dir`` that match ``leads_*.csv``.
+Not daily outbound, not send approval, not ``apps/api``.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+DEFAULT_LEGACY_PASSWORD = "leads123"
 
 CSV_RE = re.compile(r"^leads_.*\.csv$", re.IGNORECASE)
 
@@ -150,35 +155,71 @@ def run_server(host: str, port: int, user: str, pw: str, reports_dir: Path) -> N
     handler.expected_pass = pw
 
     with socketserver.TCPServer((host, port), handler) as httpd:
-        sa = httpd.socket.getsockname()
-        print(f"Leads CSV web server running on http://{sa[0]}:{sa[1]}/")
-        print(f"Auth: basic username={user!r} (password from env/args).")
-        print("Serving only CSVs under reports/out (leads_*.csv).")
         httpd.serve_forever()
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Local authenticated server for leads CSVs.")
-    ap.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0 so other devices can access).")
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="Local authenticated server for leads CSVs (localhost by default).")
+    ap.add_argument(
+        "--host",
+        default=None,
+        help="Explicit bind host (cannot combine with --lan). Default without --lan: 127.0.0.1.",
+    )
+    ap.add_argument(
+        "--lan",
+        action="store_true",
+        help="Bind 0.0.0.0 so other devices on the LAN can connect (intentional exposure).",
+    )
     ap.add_argument("--port", type=int, default=8000, help="Port (default: 8000).")
     ap.add_argument("--user", default=os.getenv("LEADS_WEB_USER", "leads"), help="Basic auth username.")
-    ap.add_argument("--pass", dest="password", default=os.getenv("LEADS_WEB_PASS", "leads123"), help="Basic auth password.")
+    ap.add_argument(
+        "--pass",
+        dest="password",
+        default=None,
+        help="Basic auth password (or set LEADS_WEB_PASS). Required.",
+    )
+    ap.add_argument(
+        "--allow-default-password",
+        action="store_true",
+        help="Unsafe: allow the legacy default password leads123 for local demo/dev only.",
+    )
     ap.add_argument(
         "--reports-dir",
         type=Path,
         default=Path(__file__).resolve().parents[2] / "reports" / "out",
         help="Directory with generated CSVs (default: reports/out).",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+
+    if args.lan and args.host is not None:
+        ap.error("--lan and --host cannot be used together")
+
+    host = "0.0.0.0" if args.lan else (args.host if args.host is not None else "127.0.0.1")
+
+    password = args.password if args.password is not None else os.getenv("LEADS_WEB_PASS")
+    if not password:
+        ap.error("Set LEADS_WEB_PASS or pass --pass.")
+    if password == DEFAULT_LEGACY_PASSWORD and not args.allow_default_password:
+        ap.error(
+            f'Default password "{DEFAULT_LEGACY_PASSWORD}" is not allowed; '
+            "set a strong password or pass --allow-default-password."
+        )
 
     reports_dir: Path = args.reports_dir
     if not reports_dir.exists():
-        raise SystemExit(f"reports_dir does not exist: {reports_dir}")
+        ap.error(f"reports_dir does not exist: {reports_dir}")
 
-    run_server(args.host, args.port, args.user, args.password, reports_dir)
+    print(f"Reports dir: {reports_dir}")
+    print(f"Binding: http://{host}:{args.port}/")
+    if args.lan:
+        print("LAN mode: server reachable from other devices on your network.")
+    else:
+        print("Localhost only (127.0.0.1). Pass --lan to expose on the LAN.")
+    print(f"Auth username: {args.user!r}")
+
+    run_server(host, args.port, args.user, password, reports_dir)
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

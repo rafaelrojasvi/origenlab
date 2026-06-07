@@ -130,7 +130,7 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | `scripts/reports/build_ml_report.py` | parked_legacy | [`TATIANA_LAB_BOUNDARY.md`](TATIANA_LAB_BOUNDARY.md) | SQLite / exports | `reports/out` | low | `uv run python scripts/reports/build_ml_report.py` | **Lab boundary — not daily outbound** (also in read-only QA table below) |
 | `scripts/leads/advanced/prepare_active_workspace.py` | parked_legacy | Lead hunt / REPORTING | `reports/out/active/` | archives/moves (**`--apply`**) | medium | Hunt workflows only; plan-only default | **Not** outbound `current/` prep |
 | `scripts/leads/advanced/export_leads_spanish_csvs.py` | parked_legacy | Spanish `_es` CSV helper (plan-only default) | CSV inputs | `reports/out` `*_es.csv` (**`--write-outputs`**) | low | Plan-only default; **`--write-outputs`** to write | **Not** daily outbound; **`--export` = input path**; not send approval |
-| `scripts/leads/advanced/run_contact_hunt_web_server.py` | parked_legacy | Owner review — local LAN CSV HTTP server | `reports/out/leads_*.csv` | — (serve only) | low | Same shortlist § owner review | **Not** daily outbound / not `apps/api`; not send approval |
+| `scripts/leads/advanced/run_contact_hunt_web_server.py` | parked_legacy | Local CSV HTTP server (localhost default) | `reports/out/leads_*.csv` | — (serve only) | low | **`LEADS_WEB_PASS`** or **`--pass`**; **`--lan`** for LAN | **Not** daily outbound / not `apps/api`; not send approval |
 | *(removed)* `scripts/qa/build_legacy_contacts_2016_2019_review.py` | parked_legacy | — | — | — | — | Library `legacy_contacts_2016_2019.py` | Removed Phase 5R |
 | *(removed)* `business_mart_app.py`, `streamlit_*` UI | parked_legacy | — | — | — | — | **`apps/dashboard` + `apps/api`** | Removed 2026-06-04 (#75–#77) |
 | `scripts/_bootstrap.py`, `scripts/_script_warnings.py` | parked_legacy | Imported by scripts | — | — | low | *(internal)* | Not operator entrypoints |
@@ -459,7 +459,7 @@ These are **not** the volume or precision daily lanes and are **not send approva
 | `scripts/leads/advanced/prepare_active_workspace.py` | CONSOLIDATE | **Different** from `prepare_outbound_campaign_workspace.py` — see [Two workspace prep stories](#two-workspace-prep-stories-do-not-confuse) |
 | `scripts/leads/advanced/export_marketing_from_contact_master.py` | ARCHIVE_LANE | Exploratory `contact_master` export — **audit-only default**; **`--export --out`** to write CSVs; not daily outbound / not send approval |
 | `scripts/leads/advanced/export_leads_spanish_csvs.py` | CONSOLIDATE / parked | Spanish `_es` CSV helper — **plan-only default** + **`--write-outputs`** ([#125](audits/REDUCTION_SHORTLIST_20260607.md)); not daily ops / not send approval |
-| `scripts/leads/advanced/run_contact_hunt_web_server.py` | CONSOLIDATE / parked | Local LAN CSV server — **owner review** (same shortlist §); not operator API |
+| `scripts/leads/advanced/run_contact_hunt_web_server.py` | CONSOLIDATE / parked | Local CSV server — **localhost default** + **`--lan`** ([#126](audits/REDUCTION_SHORTLIST_20260607.md)); password required; not operator API |
 | `scripts/qa/sync_outreach_batch_from_ingested_bounces.py` | BREAK_GLASS | Bounce-driven sync — review evidence; **`--apply`** mutates state |
 
 Many other `scripts/leads/*.py` (scoring, ChileCompra fetch, dedupe, mart match) are **OPS_MAINT** — see [`RUNBOOK.md`](RUNBOOK.md) and [`scripts/README.md`](../scripts/README.md).

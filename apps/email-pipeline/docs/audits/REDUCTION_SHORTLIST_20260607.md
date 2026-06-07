@@ -54,6 +54,7 @@ Outputs live under `reports/local/reduction-shortlist-20260607/` — **do not co
 | **#123** | `apply_ready8_contact_patch.py` apply gate | DR50 ready-8 hunt patch is plan-only by default; **`--apply`** required to write hunt/top20/plan files |
 | **#124** | Zero-ref advanced owner review (docs) | Documented decision point for `export_leads_spanish_csvs.py` and `run_contact_hunt_web_server.py` — no runtime change |
 | **#125** | `export_leads_spanish_csvs.py` plan-only default | Spanish `_es` helper is plan-only by default; **`--write-outputs`** required to write CSVs; **`--export`** remains input path |
+| **#126** | `run_contact_hunt_web_server.py` safe defaults | Localhost bind by default (**127.0.0.1**); **`--lan`** for LAN; password required; legacy **`leads123`** blocked unless **`--allow-default-password`** |
 
 These are **done** — do not re-open unless regressions are found.
 
@@ -103,7 +104,7 @@ Action types used below: `docs_only_cleanup` · `apply_gate` · `audit_only_defa
 | `scripts/reports/run_all_reports.py` | read_only_qa_report | Orchestrator writes timestamped folder under `reports/out/` on every run | 4 total refs; subprocess driver | **apply_gate** or require explicit `--out` confirmation — **needs_owner_review** before changing default | medium | needs_owner_review |
 | `scripts/qa/export_all_known_marketing_contacts.py` | active_operator_command (overlap) | Alternate merge of marketing CSVs; overlaps DNR chain partially | RUNBOOK “not daily”; 7 refs; writes `reports/out/active/` by default | **docs_only_cleanup** — clarify vs `export-dnr` / volume lane; optional dry-run flag later | low | docs_only_cleanup |
 | `scripts/leads/precheck_archive_shortlist_commercial.py` | ARCHIVE_LANE helper | Standalone precheck after manual shortlist; already read-only | Docstring: no SQLite writes; 8 refs | **no_action** (already safe); optional doc link from archive RUNBOOK | low | docs_only_cleanup |
-| `scripts/leads/advanced/run_contact_hunt_web_server.py` | parked_legacy / advanced | Local HTTP CSV server for hunt workflows | import planner: **0** doc/test command refs; README + audit mentions only | **needs_owner_review** (#124) — owner confirms before wrapper; not delete-now | low | docs_only_cleanup |
+| `scripts/leads/advanced/run_contact_hunt_web_server.py` | parked_legacy / advanced | Local HTTP CSV server for hunt workflows | import planner: **0** doc/test command refs; README + audit mentions only | **#126 done** — localhost default; **`--lan`** for LAN; password required; not delete-now | low | **no_action** |
 | `scripts/leads/advanced/export_leads_spanish_csvs.py` | parked_legacy / advanced | Spanish `_es` CSV helper | import planner: **0** total refs; LEAD_PIPELINE mentions generically | **#125 done** — plan-only default + **`--write-outputs`**; **`--export` is input path** (not boolean write) | low | **no_action** |
 | `scripts/leads/advanced/compare_archive_vs_lead_outreach.py` | parked_legacy / advanced | Compare archive vs lead lane outputs | 4 python imports; 0 doc refs | **move_later** — keep; document as audit helper | low | docs_only_cleanup |
 | `scripts/leads/build_lead_research_sqlite.py` | unknown | Builds research SQLite artifact | 2 python imports; 0 doc refs | **needs_owner_review** | low | docs_only_cleanup |
@@ -122,7 +123,8 @@ Action types used below: `docs_only_cleanup` · `apply_gate` · `audit_only_defa
 3. ~~**`apply_ready8_contact_patch.py` apply gate**~~ — done #123 (`apply_gate`).
 4. ~~**Zero-ref advanced scripts owner review**~~ — done #124 (docs/tests only; see [Owner review](#owner-review-zero-ref-advanced-helpers-pr-124)).
 5. ~~**`export_leads_spanish_csvs.py` plan-only default**~~ — done #125 (`--write-outputs` for writes; **`--export` = input path**).
-6. **`export_all_known_marketing_contacts.py` doc clarification** — vs DNR/volume lane (`docs_only_cleanup`).
+6. ~~**`run_contact_hunt_web_server.py` safe defaults**~~ — done #126 (localhost bind; **`--lan`**; password required).
+7. **`export_all_known_marketing_contacts.py` doc clarification** — vs DNR/volume lane (`docs_only_cleanup`).
 
 ---
 
@@ -137,7 +139,7 @@ Both scripts live under `scripts/leads/advanced/`. They are **reporting / client
 | Script | Python imports | Doc/test mentions | Writes by default today |
 |--------|------------------|-------------------|-------------------------|
 | [`export_leads_spanish_csvs.py`](../../scripts/leads/advanced/export_leads_spanish_csvs.py) | 0 | [`LEAD_PIPELINE.md`](../leads/LEAD_PIPELINE.md) (generic regenerate list); not in RUNBOOK daily | **#125:** plan-only by default; **`--write-outputs`** writes three `*_es.csv` under `--out-dir` |
-| [`run_contact_hunt_web_server.py`](../../scripts/leads/advanced/run_contact_hunt_web_server.py) | 0 | [`scripts/leads/README.md`](../../scripts/leads/README.md) (local web UI); audit docs | Serves existing CSVs (no SQLite); local LAN only |
+| [`run_contact_hunt_web_server.py`](../../scripts/leads/advanced/run_contact_hunt_web_server.py) | 0 | [`scripts/leads/README.md`](../../scripts/leads/README.md) (local web UI); audit docs | **#126:** localhost default; **`--lan`** for LAN; password required (no SQLite) |
 
 Outputs touched: `leads_shortlist_es.csv`, `leads_client_review_es.csv`, `leads_export_es.csv` (Spanish helper); web server serves `leads_*.csv` from `reports/out/`.
 
@@ -150,8 +152,10 @@ Outputs touched: `leads_shortlist_es.csv`, `leads_client_review_es.csv`, `leads_
 
 ### `run_contact_hunt_web_server.py`
 
-- **Today:** local `http.server` + Basic Auth; serves generated `leads_*.csv` from `reports/out/` — **not** the operator API (`apps/api`) and **not** production infrastructure.
-- **Needs owner confirmation:** Is anyone still using this for client WiFi demos, or can it be parked behind a wrapper?
+- **#126 done:** local `http.server` + Basic Auth; serves generated `leads_*.csv` from `--reports-dir` — **not** the operator API (`apps/api`) and **not** production infrastructure.
+- **Default bind:** **127.0.0.1** (localhost only). Pass **`--lan`** intentionally to bind **0.0.0.0** for WiFi/LAN demos.
+- **Password:** set **`LEADS_WEB_PASS`** or pass **`--pass`** — no default. Legacy **`leads123`** rejected unless **`--allow-default-password`** (unsafe local demo only).
+- **Advanced / parked** — not daily outbound and **not send approval**.
 - **If unused:** **`LEGACY_DO_NOT_USE`** wrapper + stderr banner before any delete consideration.
 - **Do not** reclassify as delete-now based on planner zero-ref alone.
 
@@ -159,7 +163,7 @@ Outputs touched: `leads_shortlist_es.csv`, `leads_client_review_es.csv`, `leads_
 
 | Owner answer | Next PR type |
 |--------------|--------------|
-| Still used occasionally | Spanish helper: **`--write-outputs`** when needed (**#125**); keep web server documented as advanced/parked |
+| Still used occasionally | Spanish helper: **`--write-outputs`** when needed (**#125**); web server: **`--lan`** + strong password when needed (**#126**) |
 | Unused / superseded | **`LEGACY_DO_NOT_USE`** wrapper at old path; update docs/tests; **defer delete** until wrapper period passes |
 | Active weekly workflow | Document canonical command in RUNBOOK; remove from reduction shortlist as **no_action** |
 
