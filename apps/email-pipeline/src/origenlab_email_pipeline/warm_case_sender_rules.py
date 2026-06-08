@@ -642,6 +642,8 @@ def looks_like_supplier_quote_response(
     matched = _matched_supplier_quote_subject_markers(hay)
     if not matched:
         return False
+    if "solicitud de cotiz" in hay:
+        return True
     return looks_like_real_supplier_quote_content(subject, snippet)
 
 

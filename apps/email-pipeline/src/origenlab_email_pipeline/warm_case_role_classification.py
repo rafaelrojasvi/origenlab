@@ -287,14 +287,6 @@ def infer_warm_case_role_category(
     if looks_like_low_intent_client_acknowledgement(subject_s, snippet):
         return "client_response"
 
-    if looks_like_supplier_followup_thread(
-        contact_email,
-        subject_s,
-        snippet=snippet,
-        sender=sender_s,
-    ):
-        return "supplier_followup"
-
     if looks_like_supplier_quote_response(
         contact_email,
         subject_s,
@@ -302,6 +294,14 @@ def infer_warm_case_role_category(
         sender=sender_s,
     ):
         return "supplier_quote_received"
+
+    if looks_like_supplier_followup_thread(
+        contact_email,
+        subject_s,
+        snippet=snippet,
+        sender=sender_s,
+    ):
+        return "supplier_followup"
 
     if looks_like_supplier_marketing_thread(
         contact_email=contact_email,
