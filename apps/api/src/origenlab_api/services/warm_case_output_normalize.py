@@ -7,12 +7,15 @@ import re
 from origenlab_email_pipeline.warm_case_grouping import warm_case_group_key
 from origenlab_email_pipeline.warm_case_role_classification import (
     infer_warm_case_role_category,
+    looks_like_deal_evidence_thread,
     role_category_next_action,
     role_category_status,
 )
 from origenlab_email_pipeline.warm_case_sender_rules import (
     looks_like_auto_reply_text,
     looks_like_cyberday_bulk_campaign_subject,
+    looks_like_internal_admin_thread,
+    looks_like_payment_admin_thread,
     looks_like_real_supplier_quote_content,
 )
 from origenlab_api.schemas.cases import WarmCaseCategory, WarmCaseItem, WarmCaseStatus
@@ -90,7 +93,7 @@ _LEGACY_CATEGORY_ALIASES: dict[str, WarmCaseCategory] = {
     "waiting_client": "waiting_client",
 }
 
-# Role categories only stored in role_category (not legacy CHECK values).
+# Mirror/view categories from COALESCE(role_category, category) — trust without re-inference.
 _MIRROR_STORED_PRECISE_CATEGORIES: frozenset[str] = frozenset(
     {
         "client_opportunity",
@@ -106,6 +109,9 @@ _MIRROR_STORED_PRECISE_CATEGORIES: frozenset[str] = frozenset(
         "campaign_outreach",
         "waiting_campaign_reply",
         "auto_acknowledgement",
+        "waiting_supplier",
+        "waiting_client",
+        "quote_sent",
     }
 )
 
@@ -149,16 +155,39 @@ def _item_to_classifier_row(item: WarmCaseItem) -> dict[str, object]:
 
 def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
     """Role-level category from shared pipeline classifier."""
-    if item.category in _MIRROR_STORED_PRECISE_CATEGORIES:
-        return _canonical_category(item.category)
-
     if looks_like_cyberday_bulk_campaign_subject(item.subject):
         return _canonical_category("campaign_outreach")
     if looks_like_idiem_auto_ack(item):
         return _canonical_category("auto_acknowledgement")
 
+    row = _item_to_classifier_row(item)
+    contact_email = item.contact_email
+    subject = item.subject
+    snippet = item.snippet
+    sender = item.sender_preview or item.contact_email
+
+    if looks_like_internal_admin_thread(
+        contact_email,
+        subject,
+        snippet=snippet,
+        sender=sender,
+    ):
+        return _canonical_category("internal_admin")
+    if looks_like_deal_evidence_thread(contact_email, subject, snippet=snippet):
+        return _canonical_category("deal_evidence_candidate")
+    if looks_like_payment_admin_thread(
+        contact_email,
+        subject,
+        snippet=snippet,
+        account_name=item.account_name,
+    ):
+        return _canonical_category("payment_admin")
+
+    if item.category in _MIRROR_STORED_PRECISE_CATEGORIES:
+        return _canonical_category(item.category)
+
     role = infer_warm_case_role_category(
-        _item_to_classifier_row(item),
+        row,
         enrichment_available=item.category in ("opportunity", "client_opportunity"),
         include_noise=True,
     )
@@ -173,8 +202,6 @@ def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
         "bounce_problem",
     ):
         return _canonical_category(role)
-    if item.category in ("quote_sent", "waiting_supplier", "waiting_client"):
-        return _canonical_category(item.category)
     return _canonical_category(role)
 
 

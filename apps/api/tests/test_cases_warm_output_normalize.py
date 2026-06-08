@@ -575,3 +575,53 @@ def test_category_filter_supplier_quote_received_from_mirror() -> None:
     )
     assert len(filtered) == 1
     assert filtered[0].category == "supplier_quote_received"
+
+
+def test_mirror_waiting_supplier_preserved() -> None:
+    raw = _item(
+        contact_email="info@ultrassay.com",
+        subject="Quotation request",
+        category="waiting_supplier",
+        status="waiting",
+    )
+    out = normalize_warm_case_item(raw, include_noise=False)
+    assert out is not None
+    assert out.category == "waiting_supplier"
+    assert resolve_normalized_category(raw) == "waiting_supplier"
+
+
+def test_mirror_waiting_client_preserved() -> None:
+    raw = _item(
+        contact_email="franciscaecheverria@uc.cl",
+        subject="RE: OrigenLab - Equipos para Laboratorio",
+        category="waiting_client",
+        status="waiting",
+        snippet="Lo revisaré y le comento.",
+    )
+    out = normalize_warm_case_item(raw, include_noise=False)
+    assert out is not None
+    assert out.category == "waiting_client"
+
+
+def test_mirror_quote_sent_preserved() -> None:
+    raw = _item(
+        contact_email="buyer@client.cl",
+        subject="Re: Cotización equipo",
+        category="quote_sent",
+        status="quoted",
+    )
+    out = normalize_warm_case_item(raw, include_noise=False)
+    assert out is not None
+    assert out.category == "quote_sent"
+    assert out.status == "quoted"
+
+
+def test_legacy_supplier_reply_still_re_infers_to_followup() -> None:
+    raw = _item(
+        contact_email="ariel@crtopmachine.com",
+        subject="Re: Thank you very much for your inquiry about our reactor.",
+        category="supplier_reply",
+        status="open",
+        snippet="Please send your address to calculate shipping cost to Chile.",
+    )
+    assert resolve_normalized_category(raw) == "supplier_followup"

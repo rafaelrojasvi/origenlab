@@ -152,6 +152,17 @@ def test_crtop_reactor_followup_is_supplier_followup_not_fresh_quote() -> None:
     assert role != "supplier_quote_received"
 
 
+def test_ortoalresa_solicitud_cotizacion_is_supplier_quote_received() -> None:
+    row = _row(
+        sender="Carmen Llorente <carmen.llorente@ortoalresa.com>",
+        subject="RE: Solicitud de cotización",
+        contact_email="carmen.llorente@ortoalresa.com",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "supplier_quote_received"
+    assert role != "supplier_followup"
+
+
 def test_unach_hielscher_thread_is_waiting_supplier_not_default_warm() -> None:
     row = _row(
         sender="Marcos Acevedo <marcos.a@hielscher.com>",
