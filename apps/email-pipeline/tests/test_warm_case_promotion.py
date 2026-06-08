@@ -166,6 +166,74 @@ def test_duplicate_queue_rows_same_case_key_deduped() -> None:
     assert deduped[rows[0].case_key].last_email_id == 2
 
 
+def test_dedupe_prefers_supplier_quote_received_over_newer_quote_sent() -> None:
+    inbound = promo.queue_row_to_promotion_record(
+        {
+            "email_id": 10,
+            "date_iso": "2026-05-18T10:00:00Z",
+            "subject_preview": "RE: Solicitud de cotización",
+            "sender_preview": "Carmen Llorente <carmen.llorente@ortoalresa.com>",
+            "source_file": "gmail:contacto@origenlab.cl/INBOX",
+        },
+        enrichment_available=False,
+    )
+    sent = promo.queue_row_to_promotion_record(
+        {
+            "email_id": 11,
+            "date_iso": "2026-05-19T10:00:00Z",
+            "subject_preview": "RE: Solicitud de cotización",
+            "sender_preview": "contacto@origenlab.cl",
+            "recipients_preview": "carmen.llorente@ortoalresa.com",
+            "source_file": "gmail:contacto@origenlab.cl/[Gmail]/Enviados",
+        },
+        enrichment_available=False,
+    )
+    assert inbound is not None and sent is not None
+    assert inbound.case_key == sent.case_key
+    assert inbound.role_category == "supplier_quote_received"
+    assert sent.role_category == "quote_sent"
+
+    deduped = promo.dedupe_candidates([inbound, sent])
+    picked = deduped[inbound.case_key]
+    assert picked.role_category == "supplier_quote_received"
+    assert picked.last_email_id == 10
+
+
+def test_dedupe_same_priority_keeps_latest_activity() -> None:
+    from origenlab_email_pipeline.mart_core_postgres_migrate import iso_text_to_datetime
+
+    older = promo.WarmCasePromotionRecord(
+        case_key="warm:test",
+        title="older",
+        account_name="Acme",
+        primary_contact_email="buyer@hospital.cl",
+        primary_domain="hospital.cl",
+        category="client_reply",
+        role_category="client_response",
+        status="open",
+        next_action="reply",
+        equipment_signal=None,
+        last_email_id=1,
+        last_activity_at=iso_text_to_datetime("2026-05-18T10:00:00Z") or datetime.now(timezone.utc),
+    )
+    newer = promo.WarmCasePromotionRecord(
+        case_key="warm:test",
+        title="newer",
+        account_name="Acme",
+        primary_contact_email="buyer@hospital.cl",
+        primary_domain="hospital.cl",
+        category="client_reply",
+        role_category="client_response",
+        status="open",
+        next_action="reply",
+        equipment_signal=None,
+        last_email_id=2,
+        last_activity_at=iso_text_to_datetime("2026-05-19T10:00:00Z") or datetime.now(timezone.utc),
+    )
+    picked = promo.dedupe_candidates([older, newer])["warm:test"]
+    assert picked.last_email_id == 2
+
+
 def test_preview_dry_run_does_not_connect_postgres(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = tmp_path / "warm.sqlite"
     _mk_sqlite(

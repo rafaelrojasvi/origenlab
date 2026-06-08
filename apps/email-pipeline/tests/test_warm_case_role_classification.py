@@ -163,6 +163,18 @@ def test_ortoalresa_solicitud_cotizacion_is_supplier_quote_received() -> None:
     assert role != "supplier_followup"
 
 
+def test_serva_quotation_request_company_310471_is_deal_evidence() -> None:
+    row = _row(
+        sender="Serva_Order <order@serva.de>",
+        subject="AW: Quotation Request / New adress created for your compagny 310471",
+        contact_email="order@serva.de",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "deal_evidence_candidate"
+    assert role != "logistics_admin"
+    assert role != "supplier_followup"
+
+
 def test_unach_hielscher_thread_is_waiting_supplier_not_default_warm() -> None:
     row = _row(
         sender="Marcos Acevedo <marcos.a@hielscher.com>",
