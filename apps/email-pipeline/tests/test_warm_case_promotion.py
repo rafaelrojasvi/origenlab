@@ -195,9 +195,15 @@ def test_no_body_fields_in_promotion_record() -> None:
 
 
 class _PromoCursor:
-    def __init__(self, *, existing: dict[str, tuple[int, str, str, bool]] | None = None) -> None:
-        # case_key -> (id, status, source, closed)
-        self.cases: dict[str, tuple[int, str, str, bool]] = dict(existing or {})
+    def __init__(self, *, existing: dict[str, tuple[Any, ...]] | None = None) -> None:
+        # case_key -> (id, status, source, closed, legacy_category, role_category)
+        self.cases: dict[str, tuple[int, str, str, bool, str, str | None]] = {}
+        for key, value in (existing or {}).items():
+            if len(value) == 4:
+                case_id, status, source, closed = value
+                self.cases[key] = (int(case_id), str(status), str(source), bool(closed), "client_reply", None)
+            else:
+                self.cases[key] = value  # type: ignore[assignment]
         self.next_id = max((v[0] for v in self.cases.values()), default=0) + 1
         self.statements: list[tuple[str, tuple[Any, ...] | None]] = []
         self._fetch: tuple[Any, ...] | None = None
@@ -222,15 +228,17 @@ class _PromoCursor:
         elif "INSERT INTO commercial.warm_case (" in sql and "ON CONFLICT" in sql:
             assert params is not None
             key = str(params[0])
-            status = str(params[6])
-            source = str(params[11])
+            legacy_cat = str(params[5])
+            role_cat = str(params[6])
+            status = str(params[7])
+            source = str(params[12])
             if key in self.cases:
-                case_id, _, _, _ = self.cases[key]
-                self.cases[key] = (case_id, status, source, False)
+                case_id, _, _, _, _, _ = self.cases[key]
+                self.cases[key] = (case_id, status, source, False, legacy_cat, role_cat)
             else:
                 case_id = self.next_id
                 self.next_id += 1
-                self.cases[key] = (case_id, status, source, False)
+                self.cases[key] = (case_id, status, source, False, legacy_cat, role_cat)
             self._fetch = (case_id, status)
         elif (
             "UPDATE commercial.warm_case" in sql
@@ -242,7 +250,7 @@ class _PromoCursor:
             source = str(params[1])
             keys = {str(k) for k in params[2]}
             closed: list[tuple[int, str]] = []
-            for key, (case_id, status, case_source, is_closed) in list(self.cases.items()):
+            for key, (case_id, status, case_source, is_closed, _, _) in list(self.cases.items()):
                 if case_source == source and not is_closed and key not in keys:
                     self.cases[key] = (case_id, status, case_source, True)
                     closed.append((case_id, key))
@@ -500,6 +508,182 @@ def test_classify_bounce_shared_module() -> None:
         "source_file": "gmail:contacto@origenlab.cl/INBOX",
     }
     assert infer_warm_case_category(row, enrichment_available=False, include_noise=False) == "bounce"
+
+
+def test_queue_row_supplier_quote_received_stores_legacy_and_role() -> None:
+    rec = promo.queue_row_to_promotion_record(
+        _queue_row(
+            1,
+            sender='"Bonon Ferreira, Beatriz" <beatriz.bonon@ika.net.br>',
+            subject="RES: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200",
+        ),
+        enrichment_available=False,
+    )
+    assert rec is not None
+    assert rec.category == "supplier_reply"
+    assert rec.role_category == "supplier_quote_received"
+
+
+def test_queue_row_supplier_followup_stores_legacy_and_role() -> None:
+    rec = promo.queue_row_to_promotion_record(
+        {
+            **_queue_row(
+                2,
+                sender="Ariel <ariel@crtopmachine.com>",
+                subject="Re: Thank you very much for your inquiry about our reactor.",
+            ),
+            "snippet": "Please send your address to calculate shipping cost to Chile.",
+        },
+        enrichment_available=False,
+    )
+    assert rec is not None
+    assert rec.category == "supplier_reply"
+    assert rec.role_category == "supplier_followup"
+
+
+def test_queue_row_waiting_supplier_keeps_role_and_legacy() -> None:
+    rec = promo.queue_row_to_promotion_record(
+        {
+            **_queue_row(
+                3,
+                sender="Marcos Acevedo <marcos.a@hielscher.com>",
+                subject="[RCH-Universidad Adventista de Chile] Hielscher Ultrasonics: Su solicitud sobre el UIP2000hdT",
+            ),
+            "snippet": "extracción vegetal asistida por ultrasonido, escalamiento 30-50 L",
+        },
+        enrichment_available=False,
+    )
+    assert rec is not None
+    assert rec.category == "waiting_supplier"
+    assert rec.role_category == "waiting_supplier"
+
+
+def test_queue_row_logistics_admin_stores_legacy_and_role() -> None:
+    rec = promo.queue_row_to_promotion_record(
+        _queue_row(
+            4,
+            sender="Monica Silva <monica.silva@dhl.com>",
+            subject="PROPUESTA COMERCIAL DHL",
+        ),
+        enrichment_available=False,
+    )
+    assert rec is not None
+    assert rec.category == "client_reply"
+    assert rec.role_category == "logistics_admin"
+
+
+def test_apply_writes_role_category_on_insert(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [
+            (
+                50,
+                "2026-05-19T12:00:00Z",
+                "RES: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200",
+                '"Bonon Ferreira, Beatriz" <beatriz.bonon@ika.net.br>',
+                "gmail:contacto@origenlab.cl/inbox",
+            ),
+        ],
+    )
+    cur = _PromoCursor()
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="role category",
+    )
+    stored = next(iter(cur.cases.values()))
+    assert stored[4] == "supplier_reply"
+    assert stored[5] == "supplier_quote_received"
+
+
+def test_apply_on_conflict_updates_role_category(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [
+            (
+                50,
+                "2026-05-19T12:00:00Z",
+                "RES: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200",
+                '"Bonon Ferreira, Beatriz" <beatriz.bonon@ika.net.br>',
+                "gmail:contacto@origenlab.cl/inbox",
+            ),
+        ],
+    )
+    candidates, _ = promo.load_candidates_from_sqlite(db)
+    key = next(iter(candidates.keys()))
+    cur = _PromoCursor(
+        existing={
+            key: (
+                1,
+                "open",
+                promo.PROMOTION_SOURCE,
+                False,
+                "supplier_reply",
+                "supplier_followup",
+            )
+        }
+    )
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    rec = candidates[key]
+    assert rec.role_category == "supplier_quote_received"
+
+    promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="update role",
+    )
+    assert cur.cases[key][5] == "supplier_quote_received"
+
+
+def test_apply_reopened_row_updates_role_category(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "warm.sqlite"
+    _mk_sqlite(
+        db,
+        [
+            (
+                50,
+                "2026-05-19T12:00:00Z",
+                "PROPUESTA COMERCIAL DHL",
+                "Monica Silva <monica.silva@dhl.com>",
+                "gmail:contacto@origenlab.cl/inbox",
+            ),
+        ],
+    )
+    candidates, _ = promo.load_candidates_from_sqlite(db)
+    key = next(iter(candidates.keys()))
+    cur = _PromoCursor(
+        existing={
+            key: (1, "open", promo.PROMOTION_SOURCE, True, "client_reply", None),
+        }
+    )
+    monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: _PromoConn(cur)))
+    monkeypatch.setattr(promo, "Json", lambda obj: obj)
+
+    promo.apply_promotion(
+        "postgresql://u:p@127.0.0.1/db",
+        db,
+        updated_by="op",
+        reason="reopen role",
+        close_missing=True,
+    )
+    assert cur.cases[key][3] is False
+    assert cur.cases[key][4] == "client_reply"
+    assert cur.cases[key][5] == "logistics_admin"
 
 
 @pytest.mark.skipif(

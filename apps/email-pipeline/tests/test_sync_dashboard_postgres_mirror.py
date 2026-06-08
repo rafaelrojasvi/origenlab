@@ -926,7 +926,7 @@ def test_alembic_migration_defines_commercial_deal_mirror() -> None:
 
 
 def test_alembic_head_matches_db1_api_read_model_chain() -> None:
-    assert EXPECTED_ALEMBIC_HEAD == "20260531_0022"
+    assert EXPECTED_ALEMBIC_HEAD == "20260607_0023"
     catalog_path = REPO / "alembic" / "versions" / "20260527_0019_catalog_mirror.py"
     assert catalog_path.is_file()
     assert "catalog.product" in catalog_path.read_text(encoding="utf-8")
@@ -937,3 +937,16 @@ def test_alembic_head_matches_db1_api_read_model_chain() -> None:
     assert "source_type" in origin_text
     assert "gmail_first_contacted_at" in origin_text
     assert "gmail_latest_subject_safe" in origin_text
+    role_path = REPO / "alembic" / "versions" / "20260607_0023_warm_case_role_category.py"
+    assert role_path.is_file()
+    role_text = role_path.read_text(encoding="utf-8")
+    assert "role_category" in role_text
+    assert "COALESCE(c.role_category, c.category)" in role_text
+    assert "supplier_quote_received" in role_text
+
+
+def test_alembic_migration_defines_warm_case_role_category() -> None:
+    path = REPO / "alembic" / "versions" / "20260607_0023_warm_case_role_category.py"
+    text = path.read_text(encoding="utf-8")
+    assert "commercial.warm_case" in text
+    assert "api.v_warm_case" in text

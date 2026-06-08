@@ -117,3 +117,11 @@ def test_postgres_mirror_refresh_live_closes_stale_warm_cases() -> None:
     assert "close-missing-warm-cases" in text or "closed" in lower
     assert "warm_queue_promotion" in text
     assert "not send approval" in lower or "does not approve sends" in lower
+
+
+def test_postgres_mirror_refresh_live_preserves_role_categories() -> None:
+    text = _MIRROR_REFRESH.read_text(encoding="utf-8")
+    lower = text.lower()
+    assert "role_category" in text or "role categor" in lower
+    assert "legacy" in lower
+    assert "supplier_quote_received" in lower or "flattening" in lower

@@ -529,3 +529,49 @@ def test_cesmec_client_opportunity_stays_in_positive_filter() -> None:
     assert out is not None
     assert out.category == "client_opportunity"
     assert out in filter_positive_normalized_items([out])
+
+
+def test_mirror_role_category_supplier_quote_received_preserved() -> None:
+    raw = _item(
+        contact_email="beatriz.bonon@ika.net.br",
+        subject="RES: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200",
+        category="supplier_quote_received",
+        status="open",
+    )
+    out = normalize_warm_case_item(raw, include_noise=False)
+    assert out is not None
+    assert out.category == "supplier_quote_received"
+    assert resolve_normalized_category(raw) == "supplier_quote_received"
+
+
+def test_legacy_supplier_reply_still_re_infers_role() -> None:
+    raw = _item(
+        contact_email="beatriz.bonon@ika.net.br",
+        subject="RES: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200",
+        category="supplier_reply",
+        status="open",
+        snippet="Monto 112,00 — stock disponible para 3 unidades RV10.70",
+    )
+    assert resolve_normalized_category(raw) in ("supplier_followup", "supplier_quote_received")
+
+
+def test_category_filter_supplier_quote_received_from_mirror() -> None:
+    quote = _item(
+        contact_email="beatriz.bonon@ika.net.br",
+        subject="RES: Cotización IKA RV10.70",
+        category="supplier_quote_received",
+        status="open",
+    )
+    followup = _item(
+        contact_email="ariel@crtopmachine.com",
+        subject="Re: reactor shipping",
+        category="supplier_followup",
+        status="open",
+    )
+    filtered = normalize_warm_case_items(
+        [quote, followup],
+        include_noise=False,
+        category_filter="supplier_quote_received",
+    )
+    assert len(filtered) == 1
+    assert filtered[0].category == "supplier_quote_received"

@@ -49,6 +49,16 @@ def test_map_warm_case_row_fixture() -> None:
     assert "2026-05-19" in item.last_seen_at
 
 
+def test_map_warm_case_row_uses_view_role_category() -> None:
+    item = map_warm_case_row(_fixture_row(category="supplier_quote_received"))
+    assert item.category == "supplier_quote_received"
+
+
+def test_map_warm_case_row_legacy_category_without_role_category() -> None:
+    item = map_warm_case_row(_fixture_row(category="supplier_reply"))
+    assert item.category == "supplier_reply"
+
+
 def test_build_warm_cases_meta_empty_has_note() -> None:
     meta = build_warm_cases_meta(items=[])
     assert meta.data_source == "postgres_mirror"

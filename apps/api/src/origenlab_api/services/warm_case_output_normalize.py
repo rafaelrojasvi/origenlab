@@ -90,6 +90,25 @@ _LEGACY_CATEGORY_ALIASES: dict[str, WarmCaseCategory] = {
     "waiting_client": "waiting_client",
 }
 
+# Role categories only stored in role_category (not legacy CHECK values).
+_MIRROR_STORED_PRECISE_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "client_opportunity",
+        "client_response",
+        "supplier_quote_received",
+        "supplier_followup",
+        "payment_admin",
+        "logistics_admin",
+        "internal_admin",
+        "system_noise",
+        "bounce_problem",
+        "deal_evidence_candidate",
+        "campaign_outreach",
+        "waiting_campaign_reply",
+        "auto_acknowledgement",
+    }
+)
+
 _SENSITIVE_PREVIEW_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b\d{1,2}\.\d{3}\.\d{3}-[\dkK]\b"),
     re.compile(r"\b(?:swift|iban|beneficiario|titular|cuenta(?:\s+corriente)?)\b[^.,;]{0,80}", re.I),
@@ -130,6 +149,9 @@ def _item_to_classifier_row(item: WarmCaseItem) -> dict[str, object]:
 
 def resolve_normalized_category(item: WarmCaseItem) -> WarmCaseCategory:
     """Role-level category from shared pipeline classifier."""
+    if item.category in _MIRROR_STORED_PRECISE_CATEGORIES:
+        return _canonical_category(item.category)
+
     if looks_like_cyberday_bulk_campaign_subject(item.subject):
         return _canonical_category("campaign_outreach")
     if looks_like_idiem_auto_ack(item):
