@@ -57,6 +57,26 @@ def format_equivalent_refresh_command(
     return " ".join(parts)
 
 
+def _step_manifest_entries(step_results: list[StepResult]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for result in step_results:
+        entry: dict[str, Any] = {
+            "label": result.label,
+            "returncode": result.returncode,
+        }
+        if result.elapsed_seconds is not None:
+            entry["elapsed_seconds"] = result.elapsed_seconds
+        entries.append(entry)
+    return entries
+
+
+def _elapsed_seconds_total(step_results: list[StepResult]) -> float:
+    return round(
+        sum(result.elapsed_seconds or 0.0 for result in step_results),
+        2,
+    )
+
+
 def build_daily_core_run_manifest_payload(
     *,
     step_results: list[StepResult],
@@ -79,7 +99,8 @@ def build_daily_core_run_manifest_payload(
         "postgres_mirror": POSTGRES_MIRROR,
         "send_approval": False,
         "safety": dict(SAFETY),
-        "steps": [{"label": result.label, "returncode": result.returncode} for result in step_results],
+        "steps": _step_manifest_entries(step_results),
+        "elapsed_seconds_total": _elapsed_seconds_total(step_results),
         "status": "success" if returncode == 0 else "failed",
         "returncode": returncode,
     }

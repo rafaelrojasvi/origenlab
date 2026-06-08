@@ -267,14 +267,16 @@ def run_refresh_dashboard(
         return 0
 
     def _run_step(step: RefreshDashboardStep) -> int:
-        rc = execute(
+        return execute(
             step.command,
             list(step.passthrough) or None,
             mirror_apply=step.mirror_apply,
             mirror_alembic=step.mirror_alembic,
         )
-        if step_results is not None:
-            step_results.append(StepResult(label=step.command, returncode=rc))
-        return rc
 
-    return run_step_sequence(steps, _run_step, prefix=f"[{workflow_label}]")
+    return run_step_sequence(
+        steps,
+        _run_step,
+        prefix=f"[{workflow_label}]",
+        step_results=step_results,
+    )

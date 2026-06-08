@@ -8,16 +8,18 @@ from pathlib import Path
 import pytest
 
 from origenlab_email_pipeline.cli import RefreshDashboardOptions, main
+from origenlab_email_pipeline.core.step_runner import StepResult
 from origenlab_email_pipeline.operator_cli.daily_core_manifest import (
     MANIFEST_FILENAME,
+    build_daily_core_run_manifest_payload,
     daily_core_run_manifest_path,
     write_daily_core_run_manifest,
 )
 from origenlab_email_pipeline.operator_cli.refresh import run_daily_core
 
-_CORE_STEP_COMMANDS = (
+_CORE_STEP_LABELS = (
     "gmail-ingest",
-    "build-mart",
+    "build-mart -- --rebuild",
     "build-commercial-intel",
     "refresh-safety",
     "ndr-review",
@@ -43,6 +45,19 @@ def _read_manifest(active_current: Path) -> dict:
     path = active_current / MANIFEST_FILENAME
     assert path.is_file(), f"expected manifest at {path}"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_daily_core_apply_console_shows_step_timings(
+    reports_active_current: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        return 0
+
+    assert run_daily_core(_refresh_opts(apply=True), runner=fake_runner) == 0
+    out = capsys.readouterr().out
+    assert "[daily-core] 2/7 build-mart -- --rebuild -> OK rc=0 elapsed=" in out
+    assert "[daily-core] 7/7 status -> OK rc=0 elapsed=" in out
 
 
 def test_daily_core_plan_only_does_not_write_manifest(
@@ -121,9 +136,11 @@ def test_manifest_includes_seven_steps_no_mirror(reports_active_current: Path) -
     run_daily_core(_refresh_opts(apply=True), runner=fake_runner)
     manifest = _read_manifest(reports_active_current)
     step_labels = [step["label"] for step in manifest["steps"]]
-    assert step_labels == list(_CORE_STEP_COMMANDS)
+    assert step_labels == list(_CORE_STEP_LABELS)
     assert "mirror-dashboard" not in step_labels
     assert all(step["returncode"] == 0 for step in manifest["steps"])
+    assert all("elapsed_seconds" in step for step in manifest["steps"])
+    assert manifest["elapsed_seconds_total"] >= 0
 
 
 def test_manifest_failure_writes_failed_status_and_stops_at_failing_step(
@@ -138,9 +155,12 @@ def test_manifest_failure_writes_failed_status_and_stops_at_failing_step(
     assert manifest["status"] == "failed"
     assert manifest["returncode"] == 3
     step_labels = [step["label"] for step in manifest["steps"]]
-    assert step_labels == ["gmail-ingest", "build-mart"]
+    assert step_labels == ["gmail-ingest", "build-mart -- --rebuild"]
     assert manifest["steps"][0]["returncode"] == 0
     assert manifest["steps"][1]["returncode"] == 3
+    assert manifest["steps"][0]["elapsed_seconds"] >= 0
+    assert manifest["steps"][1]["elapsed_seconds"] >= 0
+    assert manifest["elapsed_seconds_total"] >= 0
 
 
 def test_write_daily_core_run_manifest_does_not_touch_campaign_manifest(
@@ -157,3 +177,36 @@ def test_write_daily_core_run_manifest_does_not_touch_campaign_manifest(
 
     assert campaign_manifest.read_text(encoding="utf-8") == '{"kind": "active-current"}\n'
     assert (reports_active_current / MANIFEST_FILENAME).is_file()
+
+
+def test_manifest_payload_includes_step_timings_and_total() -> None:
+    payload = build_daily_core_run_manifest_payload(
+        step_results=[
+            StepResult(label="gmail-ingest", returncode=0, elapsed_seconds=12.34),
+            StepResult(label="build-mart -- --rebuild", returncode=0, elapsed_seconds=945.32),
+        ],
+        returncode=0,
+    )
+    assert payload["steps"] == [
+        {"label": "gmail-ingest", "returncode": 0, "elapsed_seconds": 12.34},
+        {"label": "build-mart -- --rebuild", "returncode": 0, "elapsed_seconds": 945.32},
+    ]
+    assert payload["elapsed_seconds_total"] == 957.66
+    assert payload["safety"] == {
+        "sends_email": False,
+        "purges_data": False,
+        "applies_ndr_suppressions": False,
+        "runs_alembic": False,
+        "runs_postgres_mirror": False,
+    }
+    assert payload["send_approval"] is False
+    assert payload["postgres_mirror"] == "not included"
+
+
+def test_manifest_payload_backwards_compatible_without_elapsed() -> None:
+    payload = build_daily_core_run_manifest_payload(
+        step_results=[StepResult(label="status", returncode=0)],
+        returncode=0,
+    )
+    assert payload["steps"] == [{"label": "status", "returncode": 0}]
+    assert payload["elapsed_seconds_total"] == 0.0
