@@ -158,14 +158,30 @@ def looks_like_deal_evidence_thread(
 ) -> bool:
     """CEAF/SERVA commercial-deal threads (link to deal timeline in Phase 7B)."""
     domain = email_domain(contact_email)
-    hay = " ".join([subject or "", snippet or ""]).lower()
+    subject_hay = " ".join([subject or "", snippet or ""]).lower()
+    contact_l = contact_email.strip().lower()
+    if domain == "serva.de" or contact_l.endswith("@serva.de"):
+        serva_hay = " ".join([contact_l, subject_hay]).lower()
+        serva_markers = (
+            "310471",
+            "quotation request",
+            "address created",
+            "adress created",
+            "new adress",
+            "compagny",
+            "company number",
+            "po n",
+            "a2602545",
+        )
+        if any(marker in serva_hay for marker in serva_markers):
+            return True
     if is_real_client_domain(domain) and looks_like_client_oc_post_sale_subject(
         subject,
         snippet=snippet,
     ):
         return True
-    if any(marker in hay for marker in _DEAL_EVIDENCE_MARKERS):
-        if "serva" in hay or is_real_client_domain(domain):
+    if any(marker in subject_hay for marker in _DEAL_EVIDENCE_MARKERS):
+        if "serva" in subject_hay or is_real_client_domain(domain):
             return True
     return False
 
@@ -248,11 +264,11 @@ def infer_warm_case_role_category(
     ):
         return "payment_admin"
 
-    if looks_like_logistics_admin_contact(contact_email, subject_s, snippet=snippet):
-        return "logistics_admin"
-
     if looks_like_deal_evidence_thread(contact_email, subject_s, snippet=snippet):
         return "deal_evidence_candidate"
+
+    if looks_like_logistics_admin_contact(contact_email, subject_s, snippet=snippet):
+        return "logistics_admin"
 
     if looks_like_cesmec_catalogue_client_thread(
         contact_email, subject_s, snippet=snippet, sender=sender_s

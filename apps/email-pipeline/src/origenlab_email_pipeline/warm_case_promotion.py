@@ -188,11 +188,55 @@ def queue_row_to_promotion_record(
 
 
 def dedupe_candidates(records: list[WarmCasePromotionRecord]) -> dict[str, WarmCasePromotionRecord]:
-    """One case per case_key; keep the row with the latest activity."""
+    """One case per case_key; prefer actionable role categories, then latest activity."""
     by_key: dict[str, WarmCasePromotionRecord] = {}
-    for rec in sorted(records, key=lambda r: r.last_activity_at):
-        by_key[rec.case_key] = rec
+    for rec in records:
+        by_key[rec.case_key] = _pick_preferred_promotion_record(by_key.get(rec.case_key), rec)
     return by_key
+
+
+_ROLE_CATEGORY_DEDUPE_PRIORITY: tuple[WarmCaseRoleCategory, ...] = (
+    "supplier_quote_received",
+    "deal_evidence_candidate",
+    "client_opportunity",
+    "client_response",
+    "supplier_followup",
+    "logistics_admin",
+    "payment_admin",
+    "waiting_supplier",
+    "waiting_client",
+    "quote_sent",
+    "campaign_outreach",
+    "waiting_campaign_reply",
+    "auto_acknowledgement",
+    "internal_admin",
+    "system_noise",
+    "bounce_problem",
+)
+
+
+def _role_category_dedupe_priority(role: WarmCaseRoleCategory) -> int:
+    try:
+        return len(_ROLE_CATEGORY_DEDUPE_PRIORITY) - _ROLE_CATEGORY_DEDUPE_PRIORITY.index(role)
+    except ValueError:
+        return 0
+
+
+def _pick_preferred_promotion_record(
+    current: WarmCasePromotionRecord | None,
+    candidate: WarmCasePromotionRecord,
+) -> WarmCasePromotionRecord:
+    if current is None:
+        return candidate
+    cur_rank = _role_category_dedupe_priority(current.role_category)
+    cand_rank = _role_category_dedupe_priority(candidate.role_category)
+    if cand_rank > cur_rank:
+        return candidate
+    if cand_rank < cur_rank:
+        return current
+    if candidate.last_activity_at >= current.last_activity_at:
+        return candidate
+    return current
 
 
 def load_candidates_from_sqlite(
