@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import imaplib
 import sys
+import time
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -35,10 +36,13 @@ if str(_ROOT / "src") not in sys.path:
 from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.db import connect, init_schema
 from origenlab_email_pipeline.ingest.gmail_imap import (
+    GmailIngestPhaseTimings,
     format_error_counts,
     imap_select_folder,
     ingest_gmail_folder,
     list_mailbox_names,
+    log_gmail_ingest_phases,
+    merge_gmail_ingest_phase_timings,
     search_uids,
 )
 
@@ -76,6 +80,9 @@ def main() -> int:
     )
     args = ap.parse_args()
 
+    total_start = time.perf_counter()
+    phase_timings = GmailIngestPhaseTimings()
+
     settings = load_settings()
     client_json = (settings.gmail_oauth_client_json or "").strip() or None
     user = (settings.gmail_workspace_user or "").strip() or None
@@ -96,11 +103,13 @@ def main() -> int:
         print(f"OAuth client file not found: {client_path}", file=sys.stderr)
         return 2
 
+    auth_start = time.perf_counter()
     creds = load_credentials_for_gmail_imap(
         client_secrets_json=client_path,
         token_json=token_path,
         open_browser=settings.gmail_oauth_open_browser,
     )
+    phase_timings.auth_seconds = round(time.perf_counter() - auth_start, 2)
     token = creds.token
     if not token:
         print("No access token after OAuth; try deleting token file and re-authorizing.", file=sys.stderr)
@@ -108,16 +117,19 @@ def main() -> int:
 
     db_path = args.db or settings.resolved_sqlite_path()
 
+    connect_start = time.perf_counter()
     mail = imaplib.IMAP4_SSL("imap.gmail.com", 993)
     try:
         xoauth2_authenticate(mail, user, token)
     except imaplib.IMAP4.error as e:
+        phase_timings.connect_seconds = round(time.perf_counter() - connect_start, 2)
         print(f"IMAP XOAUTH2 failed: {e}", file=sys.stderr)
         try:
             mail.logout()
         except Exception:
             pass
         return 1
+    phase_timings.connect_seconds = round(time.perf_counter() - connect_start, 2)
 
     if args.list_folders:
         try:
@@ -142,16 +154,22 @@ def main() -> int:
     attachment_error_types = None
     uids: list[bytes] = []
 
+    db_open_start = time.perf_counter()
     conn = connect(db_path)
     try:
         init_schema(conn)
+        phase_timings.db_open_seconds = round(time.perf_counter() - db_open_start, 2)
 
         try:
+            select_start = time.perf_counter()
             typ, _ = imap_select_folder(mail, args.folder, readonly=True)
             if typ != "OK":
                 raise imaplib.IMAP4.error(f"select failed: {args.folder!r}")
+            phase_timings.select_seconds = round(time.perf_counter() - select_start, 2)
 
+            search_start = time.perf_counter()
             uids = search_uids(mail, since_days=args.since_days)
+            phase_timings.search_seconds = round(time.perf_counter() - search_start, 2)
             if args.max_messages and args.max_messages > 0 and len(uids) > args.max_messages:
                 uids = uids[-args.max_messages :]
 
@@ -171,6 +189,7 @@ def main() -> int:
                 uid_iter=uid_iter,
                 folder_already_selected=True,
             )
+            phase_timings = merge_gmail_ingest_phase_timings(phase_timings, result.phase_timings)
             inserted = result.inserted
             skipped_dup = result.skipped_dup
             skipped_fetch = result.skipped_fetch
@@ -188,13 +207,17 @@ def main() -> int:
             )
             return 1
         finally:
+            close_start = time.perf_counter()
             try:
                 mail.logout()
             except Exception:
                 pass
+            phase_timings.close_logout_seconds = round(time.perf_counter() - close_start, 2)
     finally:
         conn.close()
 
+    phase_timings.total_seconds = round(time.perf_counter() - total_start, 2)
+    log_gmail_ingest_phases(args.folder, phase_timings)
     print(f"SQLite: {db_path}  inserted={inserted}")
     print(
         f"Gmail IMAP summary: uids={len(uids)} inserted={inserted} skipped_dup_mid={skipped_dup} "

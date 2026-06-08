@@ -120,6 +120,35 @@ def test_replace_source_deletes_only_matching_source_file(tmp_path: Path) -> Non
     assert [r[0] for r in rows] == ["gmail:user@x.cl/[Gmail]/Sent Mail"]
 
 
+def test_log_gmail_ingest_phases_emits_all_lines(capsys) -> None:
+    timings = gmail_imap.GmailIngestPhaseTimings(
+        auth_seconds=1.1,
+        connect_seconds=2.2,
+        uid_loop_seconds=99.9,
+        total_seconds=103.2,
+    )
+    gmail_imap.log_gmail_ingest_phases("INBOX", timings)
+    out = capsys.readouterr().out.splitlines()
+    assert out[0] == "[gmail-imap] INBOX phase auth_seconds=1.10"
+    assert out[-1] == "[gmail-imap] INBOX phase total_seconds=103.20"
+    assert len(out) == len(gmail_imap.GMAIL_INGEST_PHASE_FIELDS)
+
+
+def test_merge_gmail_ingest_phase_timings_sums_disjoint_phases() -> None:
+    script = gmail_imap.GmailIngestPhaseTimings(auth_seconds=1.0, select_seconds=0.5)
+    folder = gmail_imap.GmailIngestPhaseTimings(
+        existing_mids_seconds=3.0,
+        uid_loop_seconds=10.0,
+        commit_seconds=0.1,
+    )
+    merged = gmail_imap.merge_gmail_ingest_phase_timings(script, folder)
+    assert merged.auth_seconds == 1.0
+    assert merged.select_seconds == 0.5
+    assert merged.existing_mids_seconds == 3.0
+    assert merged.uid_loop_seconds == 10.0
+    assert merged.commit_seconds == 0.1
+
+
 def test_parse_message_id_from_header_bytes() -> None:
     raw = b"Message-ID: <preflight@origenlab.test>\r\n"
     assert gmail_imap.parse_message_id_from_header_bytes(raw) == "<preflight@origenlab.test>"
@@ -228,6 +257,9 @@ def test_duplicate_message_id_preflight_skips_full_fetch(tmp_path: Path) -> None
     conn.close()
     assert result.skipped_dup == 1
     assert result.inserted == 0
+    assert result.phase_timings.existing_mids_seconds >= 0
+    assert result.phase_timings.uid_loop_seconds >= 0
+    assert result.phase_timings.commit_seconds >= 0
     assert len(mail.fetch_specs) == 1
     assert "HEADER.FIELDS" in mail.fetch_specs[0]
     assert "BODY.PEEK[]" not in mail.fetch_specs[0]
@@ -364,7 +396,7 @@ def oauth_env(tmp_path: Path) -> dict[str, str]:
 
 
 def test_mocked_ingest_inserts_email_and_skips_duplicate(
-    tmp_path: Path, oauth_env: dict[str, str]
+    tmp_path: Path, oauth_env: dict[str, str], capsys
 ) -> None:
     pytest.importorskip("google.auth")
     raw = (
@@ -414,6 +446,10 @@ def test_mocked_ingest_inserts_email_and_skips_duplicate(
     ):
         rc1 = m.main()
     assert rc1 == 0
+    first_out = capsys.readouterr().out
+    assert "[gmail-imap] INBOX phase auth_seconds=" in first_out
+    assert "[gmail-imap] INBOX phase uid_loop_seconds=" in first_out
+    assert "[gmail-imap] INBOX phase total_seconds=" in first_out
 
     db = Path(oauth_env["ORIGENLAB_SQLITE_PATH"])
     conn = sqlite3.connect(db)
@@ -439,6 +475,8 @@ def test_mocked_ingest_inserts_email_and_skips_duplicate(
     ):
         rc2 = m.main()
     assert rc2 == 0
+    second_out = capsys.readouterr().out
+    assert "[gmail-imap] INBOX phase existing_mids_seconds=" in second_out
     conn = sqlite3.connect(db)
     n2 = conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]
     conn.close()
