@@ -387,6 +387,40 @@ def looks_like_logistics_admin_contact(
     )
 
 
+def looks_like_dhl_logistics_account_access_thread(
+    contact_email: str,
+    subject: str | None,
+    *,
+    snippet: str | None = None,
+) -> bool:
+    """DHL eSecure / account-access admin — not commercial deal evidence."""
+    domain = email_domain(contact_email)
+    hay = " ".join([subject or "", snippet or ""]).lower()
+    is_dhl = domain in _LOGISTICS_VENDOR_DOMAINS or "dhl" in hay or "esecure" in hay
+    if not is_dhl:
+        return False
+    access_cues = (
+        "account",
+        "acceso",
+        "access",
+        "approve",
+        "aprobar",
+        "reject",
+        "rechazar",
+        "solicitud de acceso",
+        "solicitud cuenta",
+        "solicitud de cuenta",
+        "cuenta de dhl",
+        "esecure",
+        "one-time",
+        "one time",
+        "código",
+        "codigo",
+        "code",
+    )
+    return any(cue in hay for cue in access_cues)
+
+
 def looks_like_vendor_logistics_contact(contact_email: str, subject: str | None) -> bool:
     """Alias for legacy callers."""
     return looks_like_logistics_admin_contact(contact_email, subject)

@@ -106,6 +106,31 @@ def test_dhl_account_email_is_logistics_admin() -> None:
     )
 
 
+def test_dhl_esecure_access_request_is_logistics_admin() -> None:
+    row = _row(
+        sender="DHL eSecure <esecure@dhl.com>",
+        subject=(
+            "DHL eSecure: acción requerida: aprobar/rechazar la solicitud de acceso "
+            "a la cuenta de DHL Express"
+        ),
+        contact_email="esecure@dhl.com",
+        snippet="SERVA customer 310471 mentioned in unrelated footer",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "logistics_admin"
+    assert role != "deal_evidence_candidate"
+
+
+def test_dhl_noreply_one_time_code_is_logistics_admin() -> None:
+    row = _row(
+        sender="DHL <noreply@dhl.com>",
+        subject="Your one-time code for DHL Express account access",
+        contact_email="noreply@dhl.com",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "logistics_admin"
+
+
 def test_bancochile_factura_is_payment_admin() -> None:
     row = _row(
         sender="Banco Chile <serviciodetransferencias@bancochile.cl>",

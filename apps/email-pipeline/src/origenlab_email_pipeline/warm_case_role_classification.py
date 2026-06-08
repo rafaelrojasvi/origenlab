@@ -20,6 +20,7 @@ from origenlab_email_pipeline.warm_case_sender_rules import (
     looks_like_client_waiting_review_ack,
     looks_like_contact_routing_notice,
     looks_like_cyberday_bulk_campaign_subject,
+    looks_like_dhl_logistics_account_access_thread,
     looks_like_idiem_auto_acknowledgement,
     looks_like_internal_admin_thread,
     looks_like_internal_forwarded_client_quote_request,
@@ -157,6 +158,12 @@ def looks_like_deal_evidence_thread(
     snippet: str | None = None,
 ) -> bool:
     """CEAF/SERVA commercial-deal threads (link to deal timeline in Phase 7B)."""
+    if looks_like_dhl_logistics_account_access_thread(
+        contact_email,
+        subject,
+        snippet=snippet,
+    ):
+        return False
     domain = email_domain(contact_email)
     subject_hay = " ".join([subject or "", snippet or ""]).lower()
     contact_l = contact_email.strip().lower()
@@ -263,6 +270,13 @@ def infer_warm_case_role_category(
         account_name=account_name,
     ):
         return "payment_admin"
+
+    if looks_like_dhl_logistics_account_access_thread(
+        contact_email,
+        subject_s,
+        snippet=snippet,
+    ):
+        return "logistics_admin"
 
     if looks_like_deal_evidence_thread(contact_email, subject_s, snippet=snippet):
         return "deal_evidence_candidate"
