@@ -124,6 +124,34 @@ def fetch_rfc822(mail: imaplib.IMAP4_SSL, uid: bytes) -> bytes | None:
     return None
 
 
+def fetch_message_id_header(mail: imaplib.IMAP4_SSL, uid: bytes) -> bytes | None:
+    """Lightweight Message-ID preflight (no RFC822 body download)."""
+    typ, data = mail.uid("FETCH", uid, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+    if typ != "OK" or not data:
+        return None
+    for item in data:
+        if isinstance(item, tuple) and len(item) >= 2:
+            payload = item[1]
+            if isinstance(payload, (bytes, bytearray)):
+                return bytes(payload)
+    return None
+
+
+def parse_message_id_from_header_bytes(raw: bytes | None) -> str | None:
+    if not raw:
+        return None
+    text = raw.decode("utf-8", errors="replace")
+    for line in text.splitlines():
+        if line.lower().startswith("message-id:"):
+            value = line.split(":", 1)[1].strip()
+            return value or None
+    return None
+
+
+def normalize_message_id(message_id: str | None) -> str:
+    return (message_id or "").strip().lower()
+
+
 def message_from_bytes(raw: bytes) -> Message:
     return BytesParser(policy=policy.default).parsebytes(raw)
 
@@ -254,6 +282,14 @@ def ingest_gmail_folder(
     result = IngestFolderResult(uids=uids)
     for uid in uids:
         try:
+            if skip_duplicate_message_id:
+                header_raw = fetch_message_id_header(mail, uid)
+                mid_from_header = parse_message_id_from_header_bytes(header_raw)
+                mid_norm = normalize_message_id(mid_from_header)
+                if mid_norm and mid_norm in existing_mids:
+                    result.skipped_dup += 1
+                    continue
+
             raw = fetch_rfc822(mail, uid)
             if not raw:
                 result.skipped_fetch += 1

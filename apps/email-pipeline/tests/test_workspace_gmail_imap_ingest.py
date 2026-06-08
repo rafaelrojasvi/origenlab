@@ -120,6 +120,199 @@ def test_replace_source_deletes_only_matching_source_file(tmp_path: Path) -> Non
     assert [r[0] for r in rows] == ["gmail:user@x.cl/[Gmail]/Sent Mail"]
 
 
+def test_parse_message_id_from_header_bytes() -> None:
+    raw = b"Message-ID: <preflight@origenlab.test>\r\n"
+    assert gmail_imap.parse_message_id_from_header_bytes(raw) == "<preflight@origenlab.test>"
+    assert gmail_imap.parse_message_id_from_header_bytes(b"") is None
+    assert gmail_imap.parse_message_id_from_header_bytes(None) is None
+
+
+def _sample_rfc822(*, message_id: str = "<new@origenlab.test>") -> bytes:
+    return (
+        b"From: Writer <writer@client.test>\r\n"
+        b"To: contacto@origenlab.cl\r\n"
+        b"Subject: Unit ingest\r\n"
+        b"Message-ID: "
+        + message_id.encode()
+        + b"\r\n"
+        b"\r\n"
+        b"Body text.\r\n"
+    )
+
+
+class _TrackingFakeMail:
+    """Records IMAP FETCH specs; no live Gmail."""
+
+    def __init__(
+        self,
+        *,
+        search_uid: bytes,
+        header: bytes | None,
+        body: bytes | None,
+    ) -> None:
+        self.search_uid = search_uid
+        self.header = header
+        self.body = body
+        self.fetch_specs: list[str] = []
+
+    def uid(self, cmd: str, *args: object) -> tuple[str, list[object] | None]:
+        if cmd == "SEARCH":
+            return "OK", [self.search_uid]
+        if cmd == "FETCH":
+            spec = str(args[-1]) if args else ""
+            self.fetch_specs.append(spec)
+            if "HEADER.FIELDS" in spec:
+                return "OK", [(b"meta", self.header or b"")]
+            if "BODY.PEEK[]" in spec:
+                return "OK", [(b"meta", self.body)]
+            return "NO", None
+        return "NO", None
+
+    def select(self, *args: object, **kwargs: object) -> tuple[str, None]:
+        return "OK", None
+
+    def _quote(self, s: str) -> str:
+        return f'"{s}"'
+
+
+def _ingest_conn(tmp_path: Path, *, message_id: str = "<dup@t>") -> sqlite3.Connection:
+    from origenlab_email_pipeline.db import connect, init_schema, insert_email
+
+    conn = connect(tmp_path / "ingest.sqlite")
+    init_schema(conn)
+    insert_email(
+        conn,
+        source_file="gmail:u/f",
+        folder="INBOX",
+        message_id=message_id,
+        subject="s",
+        sender="a@b",
+        recipients="c@d",
+        date_raw=None,
+        date_iso=None,
+        body="",
+        body_html=None,
+        body_text_raw="",
+        body_text_clean="",
+        body_source_type="plain",
+        body_has_plain=1,
+        body_has_html=0,
+        full_body_clean="",
+        top_reply_clean="",
+        attachment_count=0,
+        has_attachments=0,
+    )
+    conn.commit()
+    return conn
+
+
+def test_duplicate_message_id_preflight_skips_full_fetch(tmp_path: Path) -> None:
+    conn = _ingest_conn(tmp_path)
+    mail = _TrackingFakeMail(
+        search_uid=b"9",
+        header=b"Message-ID: <dup@t>\r\n",
+        body=_sample_rfc822(message_id="<dup@t>"),
+    )
+    result = gmail_imap.ingest_gmail_folder(
+        conn,
+        mail,
+        user="u",
+        folder="f",
+        since_days=None,
+        max_messages=0,
+        replace_source=False,
+        skip_duplicate_message_id=True,
+        uid_iter=[b"9"],
+        folder_already_selected=True,
+    )
+    conn.close()
+    assert result.skipped_dup == 1
+    assert result.inserted == 0
+    assert len(mail.fetch_specs) == 1
+    assert "HEADER.FIELDS" in mail.fetch_specs[0]
+    assert "BODY.PEEK[]" not in mail.fetch_specs[0]
+
+
+def test_new_message_id_preflights_then_fetches_full_body(tmp_path: Path) -> None:
+    conn = _ingest_conn(tmp_path)
+    mail = _TrackingFakeMail(
+        search_uid=b"10",
+        header=b"Message-ID: <brand-new@origenlab.test>\r\n",
+        body=_sample_rfc822(message_id="<brand-new@origenlab.test>"),
+    )
+    result = gmail_imap.ingest_gmail_folder(
+        conn,
+        mail,
+        user="u",
+        folder="f",
+        since_days=None,
+        max_messages=0,
+        replace_source=False,
+        skip_duplicate_message_id=True,
+        uid_iter=[b"10"],
+        folder_already_selected=True,
+    )
+    n = conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]
+    conn.close()
+    assert result.inserted == 1
+    assert result.skipped_dup == 0
+    assert len(mail.fetch_specs) == 2
+    assert "HEADER.FIELDS" in mail.fetch_specs[0]
+    assert "BODY.PEEK[]" in mail.fetch_specs[1]
+    assert n == 2
+
+
+def test_missing_header_message_id_falls_back_to_full_fetch(tmp_path: Path) -> None:
+    conn = _ingest_conn(tmp_path)
+    mail = _TrackingFakeMail(
+        search_uid=b"11",
+        header=b"Subject: no mid here\r\n",
+        body=_sample_rfc822(message_id="<fallback@origenlab.test>"),
+    )
+    result = gmail_imap.ingest_gmail_folder(
+        conn,
+        mail,
+        user="u",
+        folder="f",
+        since_days=None,
+        max_messages=0,
+        replace_source=False,
+        skip_duplicate_message_id=True,
+        uid_iter=[b"11"],
+        folder_already_selected=True,
+    )
+    conn.close()
+    assert result.inserted == 1
+    assert "BODY.PEEK[]" in mail.fetch_specs[-1]
+
+
+def test_skip_duplicate_disabled_uses_full_fetch_only(tmp_path: Path) -> None:
+    conn = _ingest_conn(tmp_path)
+    mail = _TrackingFakeMail(
+        search_uid=b"12",
+        header=b"Message-ID: <dup@t>\r\n",
+        body=_sample_rfc822(message_id="<dup@t>"),
+    )
+    result = gmail_imap.ingest_gmail_folder(
+        conn,
+        mail,
+        user="u",
+        folder="f",
+        since_days=None,
+        max_messages=0,
+        replace_source=False,
+        skip_duplicate_message_id=False,
+        uid_iter=[b"12"],
+        folder_already_selected=True,
+    )
+    conn.close()
+    assert result.inserted == 1
+    assert result.skipped_dup == 0
+    assert len(mail.fetch_specs) == 1
+    assert "BODY.PEEK[]" in mail.fetch_specs[0]
+    assert "HEADER.FIELDS" not in mail.fetch_specs[0]
+
+
 def test_skip_duplicate_message_id_logic(tmp_path: Path) -> None:
     from origenlab_email_pipeline.db import connect, init_schema, insert_email
 
@@ -184,11 +377,16 @@ def test_mocked_ingest_inserts_email_and_skips_duplicate(
     )
     uid = b"42"
 
+    header = b"Message-ID: <phase2-ingest@origenlab.test>\r\n"
+
     class FakeMail:
         def uid(self, cmd, *args):
             if cmd == "SEARCH":
                 return "OK", [uid]
             if cmd == "FETCH":
+                spec = str(args[-1]) if args else ""
+                if "HEADER.FIELDS" in spec:
+                    return "OK", [(b"meta", header)]
                 return "OK", [(b"meta", raw)]
             return "NO", None
 
@@ -212,6 +410,7 @@ def test_mocked_ingest_inserts_email_and_skips_duplicate(
         patch(f"{oauth_patch}.load_credentials_for_gmail_imap", return_value=creds),
         patch(f"{oauth_patch}.xoauth2_authenticate"),
         patch("imaplib.IMAP4_SSL", return_value=FakeMail()),
+        patch.object(sys, "argv", ["05_workspace_gmail_imap_to_sqlite.py", "--folder", "INBOX"]),
     ):
         rc1 = m.main()
     assert rc1 == 0
