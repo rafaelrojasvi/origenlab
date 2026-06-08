@@ -23,11 +23,16 @@ def test_run_step_sequence_success(capsys: pytest.CaptureFixture[str]) -> None:
         return 0
 
     steps = [_FakeStep(label="alpha", token="a"), _FakeStep(label="beta", token="b")]
-    assert run_step_sequence(steps, runner, prefix="[test]") == 0
+    step_results: list[StepResult] = []
+    assert run_step_sequence(steps, runner, prefix="[test]", step_results=step_results) == 0
     assert calls == ["a", "b"]
     out = capsys.readouterr().out
-    assert "[test] 1/2 alpha" in out
-    assert "[test] 2/2 beta" in out
+    assert "[test] 1/2 alpha -> OK rc=0 elapsed=" in out
+    assert "[test] 2/2 beta -> OK rc=0 elapsed=" in out
+    assert len(step_results) == 2
+    assert step_results[0].label == "alpha"
+    assert step_results[0].returncode == 0
+    assert step_results[0].elapsed_seconds is not None
 
 
 def test_run_step_sequence_stops_on_first_failure(capsys: pytest.CaptureFixture[str]) -> None:
@@ -64,3 +69,25 @@ def test_step_result_dataclass() -> None:
     result = StepResult(label="status", returncode=0)
     assert result.label == "status"
     assert result.returncode == 0
+    assert result.elapsed_seconds is None
+
+    timed = StepResult(label="build-mart -- --rebuild", returncode=0, elapsed_seconds=945.32)
+    assert timed.elapsed_seconds == 945.32
+
+
+def test_run_step_sequence_records_elapsed_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+    times = iter([100.0, 100.5, 200.0, 201.25])
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.core.step_runner.time.perf_counter",
+        lambda: next(times),
+    )
+
+    def runner(_step: _FakeStep) -> int:
+        return 0
+
+    step_results: list[StepResult] = []
+    steps = [_FakeStep(label="build-mart -- --rebuild", token="mart")]
+    assert run_step_sequence(steps, runner, prefix="[daily-core]", step_results=step_results) == 0
+    assert step_results == [
+        StepResult(label="build-mart -- --rebuild", returncode=0, elapsed_seconds=0.5),
+    ]

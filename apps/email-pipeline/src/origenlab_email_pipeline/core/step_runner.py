@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -16,6 +17,7 @@ class StepResult:
 
     label: str
     returncode: int
+    elapsed_seconds: float | None = None
 
 
 def _step_label(step: Any) -> str:
@@ -30,13 +32,21 @@ def run_step_sequence(
     runner: StepRunner,
     *,
     prefix: str = "[step]",
+    step_results: list[StepResult] | None = None,
 ) -> int:
     """Run steps in order via ``runner(step)``; stop on first non-zero exit."""
     total = len(steps)
     for i, step in enumerate(steps, 1):
         label = _step_label(step)
-        print(f"{prefix} {i}/{total} {label}")
+        t0 = time.perf_counter()
         rc = int(runner(step))
+        elapsed = round(time.perf_counter() - t0, 2)
+        status = "OK" if rc == 0 else "FAIL"
+        print(f"{prefix} {i}/{total} {label} -> {status} rc={rc} elapsed={elapsed:.2f}s")
+        if step_results is not None:
+            step_results.append(
+                StepResult(label=label, returncode=rc, elapsed_seconds=elapsed)
+            )
         if rc != 0:
             print(
                 f"{prefix} failed at step {i}/{total}: {label} (exit {rc})",
