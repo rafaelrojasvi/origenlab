@@ -5,6 +5,7 @@ from __future__ import annotations
 import imaplib
 import re
 import sqlite3
+import time
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -29,6 +30,58 @@ _IMAP_SIMPLE_MAILBOX = re.compile(r"[A-Za-z0-9._+-]+")
 
 IngestMessageOutcome = Literal["inserted", "skipped_dup", "skipped_fetch"]
 
+GMAIL_INGEST_PHASE_FIELDS: tuple[str, ...] = (
+    "auth_seconds",
+    "connect_seconds",
+    "db_open_seconds",
+    "select_seconds",
+    "search_seconds",
+    "existing_mids_seconds",
+    "replace_source_seconds",
+    "uid_loop_seconds",
+    "commit_seconds",
+    "close_logout_seconds",
+    "total_seconds",
+)
+
+
+@dataclass
+class GmailIngestPhaseTimings:
+    """Observability-only phase durations for one folder ingest (seconds)."""
+
+    auth_seconds: float = 0.0
+    connect_seconds: float = 0.0
+    db_open_seconds: float = 0.0
+    select_seconds: float = 0.0
+    search_seconds: float = 0.0
+    existing_mids_seconds: float = 0.0
+    replace_source_seconds: float = 0.0
+    uid_loop_seconds: float = 0.0
+    commit_seconds: float = 0.0
+    close_logout_seconds: float = 0.0
+    total_seconds: float = 0.0
+
+
+def _phase_elapsed(start: float) -> float:
+    return round(time.perf_counter() - start, 2)
+
+
+def merge_gmail_ingest_phase_timings(
+    base: GmailIngestPhaseTimings,
+    extra: GmailIngestPhaseTimings,
+) -> GmailIngestPhaseTimings:
+    merged = GmailIngestPhaseTimings()
+    for name in GMAIL_INGEST_PHASE_FIELDS:
+        setattr(merged, name, round(getattr(base, name) + getattr(extra, name), 2))
+    return merged
+
+
+def log_gmail_ingest_phases(folder: str, timings: GmailIngestPhaseTimings) -> None:
+    prefix = f"[gmail-imap] {folder} phase"
+    for name in GMAIL_INGEST_PHASE_FIELDS:
+        value = getattr(timings, name)
+        print(f"{prefix} {name}={value:.2f}")
+
 
 @dataclass
 class IngestFolderResult:
@@ -42,6 +95,7 @@ class IngestFolderResult:
     attachment_errors: int = 0
     message_error_types: Counter[str] = field(default_factory=Counter)
     attachment_error_types: Counter[str] = field(default_factory=Counter)
+    phase_timings: GmailIngestPhaseTimings = field(default_factory=GmailIngestPhaseTimings)
 
 
 def source_label(user: str, folder: str) -> str:
@@ -258,28 +312,40 @@ def ingest_gmail_folder(
     When ``uid_iter`` is provided (e.g. tqdm-wrapped), the caller must already have
     selected the folder and trimmed UID lists; ``since_days`` / ``max_messages`` are ignored.
     """
+    phase_timings = GmailIngestPhaseTimings()
     source_file = source_label(user, folder)
     existing_mids: set[str] = set()
     if skip_duplicate_message_id:
+        t0 = time.perf_counter()
         existing_mids = load_existing_message_ids(conn)
+        phase_timings.existing_mids_seconds = _phase_elapsed(t0)
     if replace_source:
+        t0 = time.perf_counter()
         delete_emails_for_source_file(conn, source_file)
+        phase_timings.replace_source_seconds = _phase_elapsed(t0)
 
     if uid_iter is None:
+        t0 = time.perf_counter()
         typ, _ = imap_select_folder(mail, folder, readonly=True)
         if typ != "OK":
             raise imaplib.IMAP4.error(f"Could not select folder {folder!r}")
+        phase_timings.select_seconds = _phase_elapsed(t0)
+        t0 = time.perf_counter()
         uids = search_uids(mail, since_days=since_days)
+        phase_timings.search_seconds = _phase_elapsed(t0)
         if max_messages and max_messages > 0 and len(uids) > max_messages:
             uids = uids[-max_messages:]
     else:
         if not folder_already_selected:
+            t0 = time.perf_counter()
             typ, _ = imap_select_folder(mail, folder, readonly=True)
             if typ != "OK":
                 raise imaplib.IMAP4.error(f"Could not select folder {folder!r}")
+            phase_timings.select_seconds = _phase_elapsed(t0)
         uids = list(uid_iter)
 
-    result = IngestFolderResult(uids=uids)
+    result = IngestFolderResult(uids=uids, phase_timings=phase_timings)
+    t0 = time.perf_counter()
     for uid in uids:
         try:
             if skip_duplicate_message_id:
@@ -315,5 +381,8 @@ def ingest_gmail_folder(
             result.message_error_types[type(exc).__name__] += 1
             continue
 
+    result.phase_timings.uid_loop_seconds = _phase_elapsed(t0)
+    t0 = time.perf_counter()
     conn.commit()
+    result.phase_timings.commit_seconds = _phase_elapsed(t0)
     return result
