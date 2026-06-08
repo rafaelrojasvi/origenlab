@@ -112,6 +112,7 @@ For the **live React dashboard** and deployed API counts (warm cases, equipment 
 
 - warm cases (`--include-warm-cases`) with the same default window as **Hoy**: **14 days / 100 warm cases** (`--warm-days 14 --warm-limit 100`)
 - stale generated **`warm_queue_promotion`** cases missing from the current snapshot are **closed** in Postgres (`--close-missing-warm-cases`) so `api.v_warm_case` matches the live dashboard; this does **not** delete emails and does **not** approve sends
+- precise warm-case **role categories** are stored in `commercial.warm_case.role_category` and exposed via `api.v_warm_case` (legacy `category` remains for CHECK compatibility)
 - equipment opportunities (`--include-equipment-opportunities`)
 - commercial deals (`--include-commercial-deals`)
 
@@ -125,7 +126,7 @@ uv run origenlab mirror-dashboard --live -- --warm-days 30 --warm-limit 200
 
 **Daily core intentionally never includes mirror.**
 
-If local SQLite and live Postgres **Hoy** warm-case counts still differ after `mirror-dashboard --live --apply`, export both `/cases/warm` responses and run the [warm-case parity audit](#warm-case-parity-audit-sqlite-vs-postgres-caseswarm) (diagnostic only). Remaining gaps usually mean classification parity work, not stale promoted rows left open.
+If local SQLite and live Postgres **Hoy** warm-case counts still differ after `mirror-dashboard --live --apply`, export both `/cases/warm` responses and run the [warm-case parity audit](#warm-case-parity-audit-sqlite-vs-postgres-caseswarm) (diagnostic only). Remaining gaps after role-category promotion usually mean real row differences or classification edge cases, not legacy category flattening (`supplier_reply` vs `supplier_quote_received`).
 
 ### Dry-run
 

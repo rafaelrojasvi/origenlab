@@ -22,9 +22,13 @@ from origenlab_email_pipeline.warm_case_classification import (
     account_name_from_sender,
     contact_email_from_sender,
     equipment_signal_text,
-    infer_next_action,
-    infer_warm_case_category,
-    infer_warm_case_status,
+)
+from origenlab_email_pipeline.warm_case_role_classification import (
+    WarmCaseRoleCategory,
+    infer_warm_case_role_category,
+    role_category_next_action,
+    role_category_status,
+    role_category_to_legacy_storage,
 )
 from origenlab_email_pipeline.warm_case_role_classification import _is_sent_folder
 from origenlab_email_pipeline.warm_case_sender_rules import contact_email_from_recipients
@@ -53,6 +57,7 @@ class WarmCasePromotionRecord:
     primary_contact_email: str
     primary_domain: str | None
     category: WarmCaseCategory
+    role_category: WarmCaseRoleCategory
     status: str
     next_action: str
     equipment_signal: str | None
@@ -154,12 +159,13 @@ def queue_row_to_promotion_record(
 
     subject = str(row.get("subject_preview") or "").strip() or "(sin asunto)"
     sender = str(row.get("sender_preview") or "")
-    category = infer_warm_case_category(
+    role_category = infer_warm_case_role_category(
         row,
         enrichment_available=enrichment_available,
         include_noise=include_noise,
     )
-    status = infer_warm_case_status(category, row)
+    category = role_category_to_legacy_storage(role_category)
+    status = role_category_status(role_category, row)
     domain = _primary_domain(contact_email)
     equip = equipment_signal_text(subject, row, enrichment_available=enrichment_available) or None
 
@@ -172,8 +178,9 @@ def queue_row_to_promotion_record(
         primary_contact_email=contact_email,
         primary_domain=domain,
         category=category,
+        role_category=role_category,
         status=status,
-        next_action=infer_next_action(category, row=row),
+        next_action=role_category_next_action(role_category),
         equipment_signal=equip,
         last_email_id=int(row["email_id"]),
         last_activity_at=_activity_at_from_row(row),
@@ -224,7 +231,7 @@ def load_candidates_from_sqlite(
 
 
 def _categories_summary(candidates: dict[str, WarmCasePromotionRecord]) -> dict[str, int]:
-    return dict(Counter(rec.category for rec in candidates.values()))
+    return dict(Counter(rec.role_category for rec in candidates.values()))
 
 
 def preview_promotion(
@@ -396,10 +403,10 @@ def apply_promotion(
                     """
                     INSERT INTO commercial.warm_case (
                       case_key, title, account_name, primary_contact_email, primary_domain,
-                      category, status, next_action, equipment_signal,
+                      category, role_category, status, next_action, equipment_signal,
                       last_activity_at, last_email_id, source, updated_by
                     ) VALUES (
-                      %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                      %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     ON CONFLICT (case_key) DO UPDATE SET
                       title = EXCLUDED.title,
@@ -407,6 +414,7 @@ def apply_promotion(
                       primary_contact_email = EXCLUDED.primary_contact_email,
                       primary_domain = EXCLUDED.primary_domain,
                       category = EXCLUDED.category,
+                      role_category = EXCLUDED.role_category,
                       status = EXCLUDED.status,
                       next_action = EXCLUDED.next_action,
                       equipment_signal = EXCLUDED.equipment_signal,
@@ -426,6 +434,7 @@ def apply_promotion(
                         rec.primary_contact_email,
                         rec.primary_domain,
                         rec.category,
+                        rec.role_category,
                         rec.status,
                         rec.next_action,
                         rec.equipment_signal,
