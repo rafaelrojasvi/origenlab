@@ -27,6 +27,9 @@ from origenlab_email_pipeline.parse_mbox import (
 
 # imaplib passes mailbox names to the wire unquoted; `[Gmail]/Sent Mail` then parses as BAD.
 _IMAP_SIMPLE_MAILBOX = re.compile(r"[A-Za-z0-9._+-]+")
+_UID_FROM_FETCH_META = re.compile(rb"UID (\d+)")
+_MESSAGE_ID_HEADER_FETCH = "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])"
+_DEFAULT_MESSAGE_ID_PREFLIGHT_CHUNK_SIZE = 100
 
 IngestMessageOutcome = Literal["inserted", "skipped_dup", "skipped_fetch"]
 
@@ -179,8 +182,8 @@ def fetch_rfc822(mail: imaplib.IMAP4_SSL, uid: bytes) -> bytes | None:
 
 
 def fetch_message_id_header(mail: imaplib.IMAP4_SSL, uid: bytes) -> bytes | None:
-    """Lightweight Message-ID preflight (no RFC822 body download)."""
-    typ, data = mail.uid("FETCH", uid, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+    """Lightweight Message-ID preflight for one UID (no RFC822 body download)."""
+    typ, data = mail.uid("FETCH", uid, _MESSAGE_ID_HEADER_FETCH)
     if typ != "OK" or not data:
         return None
     for item in data:
@@ -189,6 +192,43 @@ def fetch_message_id_header(mail: imaplib.IMAP4_SSL, uid: bytes) -> bytes | None
             if isinstance(payload, (bytes, bytearray)):
                 return bytes(payload)
     return None
+
+
+def _parse_uid_from_fetch_metadata(meta: bytes | str) -> bytes | None:
+    if isinstance(meta, str):
+        meta = meta.encode("utf-8", errors="replace")
+    match = _UID_FROM_FETCH_META.search(meta)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def fetch_message_id_headers_for_uids(
+    mail: imaplib.IMAP4_SSL,
+    uids: list[bytes],
+    *,
+    chunk_size: int = _DEFAULT_MESSAGE_ID_PREFLIGHT_CHUNK_SIZE,
+) -> dict[bytes, str | None]:
+    """Batch Message-ID preflight via comma-separated UID FETCH (fewer IMAP round-trips)."""
+    if not uids or chunk_size <= 0:
+        return {}
+    result: dict[bytes, str | None] = {}
+    for offset in range(0, len(uids), chunk_size):
+        chunk = uids[offset : offset + chunk_size]
+        uid_set = b",".join(chunk)
+        typ, data = mail.uid("FETCH", uid_set, _MESSAGE_ID_HEADER_FETCH)
+        if typ != "OK" or not data:
+            continue
+        for item in data:
+            if not isinstance(item, tuple) or len(item) < 2:
+                continue
+            uid = _parse_uid_from_fetch_metadata(item[0])
+            if uid is None:
+                continue
+            payload = item[1]
+            if isinstance(payload, (bytes, bytearray)):
+                result[uid] = parse_message_id_from_header_bytes(bytes(payload))
+    return result
 
 
 def parse_message_id_from_header_bytes(raw: bytes | None) -> str | None:
@@ -345,16 +385,20 @@ def ingest_gmail_folder(
         uids = list(uid_iter)
 
     result = IngestFolderResult(uids=uids, phase_timings=phase_timings)
+    duplicate_uids: set[bytes] = set()
+    if skip_duplicate_message_id and uids:
+        preflight_mids = fetch_message_id_headers_for_uids(mail, uids)
+        for uid in uids:
+            mid_norm = normalize_message_id(preflight_mids.get(uid))
+            if mid_norm and mid_norm in existing_mids:
+                duplicate_uids.add(uid)
+
     t0 = time.perf_counter()
     for uid in uids:
         try:
-            if skip_duplicate_message_id:
-                header_raw = fetch_message_id_header(mail, uid)
-                mid_from_header = parse_message_id_from_header_bytes(header_raw)
-                mid_norm = normalize_message_id(mid_from_header)
-                if mid_norm and mid_norm in existing_mids:
-                    result.skipped_dup += 1
-                    continue
+            if uid in duplicate_uids:
+                result.skipped_dup += 1
+                continue
 
             raw = fetch_rfc822(mail, uid)
             if not raw:

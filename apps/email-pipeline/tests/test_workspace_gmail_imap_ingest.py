@@ -169,6 +169,20 @@ def _sample_rfc822(*, message_id: str = "<new@origenlab.test>") -> bytes:
     )
 
 
+def _header_fetch_responses(uid_arg: bytes | str, header: bytes | None) -> list[tuple[bytes, bytes]]:
+    if isinstance(uid_arg, str):
+        uid_arg = uid_arg.encode()
+    responses: list[tuple[bytes, bytes]] = []
+    for uid in uid_arg.split(b","):
+        uid = uid.strip()
+        if not uid:
+            continue
+        uid_s = uid.decode()
+        meta = f"{uid_s} (UID {uid_s}) BODY[HEADER.FIELDS (MESSAGE-ID)]".encode()
+        responses.append((meta, header or b""))
+    return responses
+
+
 class _TrackingFakeMail:
     """Records IMAP FETCH specs; no live Gmail."""
 
@@ -183,15 +197,20 @@ class _TrackingFakeMail:
         self.header = header
         self.body = body
         self.fetch_specs: list[str] = []
+        self.header_fetch_uid_sets: list[bytes] = []
 
     def uid(self, cmd: str, *args: object) -> tuple[str, list[object] | None]:
         if cmd == "SEARCH":
             return "OK", [self.search_uid]
         if cmd == "FETCH":
             spec = str(args[-1]) if args else ""
+            uid_arg = args[0] if args else b""
             self.fetch_specs.append(spec)
             if "HEADER.FIELDS" in spec:
-                return "OK", [(b"meta", self.header or b"")]
+                if isinstance(uid_arg, str):
+                    uid_arg = uid_arg.encode()
+                self.header_fetch_uid_sets.append(uid_arg)
+                return "OK", _header_fetch_responses(uid_arg, self.header)
             if "BODY.PEEK[]" in spec:
                 return "OK", [(b"meta", self.body)]
             return "NO", None
@@ -202,6 +221,46 @@ class _TrackingFakeMail:
 
     def _quote(self, s: str) -> str:
         return f'"{s}"'
+
+
+class _BatchFakeMail:
+    """Per-UID headers/bodies for batch preflight tests; no live Gmail."""
+
+    def __init__(
+        self,
+        *,
+        headers: dict[bytes, bytes | None],
+        bodies: dict[bytes, bytes | None],
+    ) -> None:
+        self.headers = headers
+        self.bodies = bodies
+        self.header_fetch_uid_sets: list[bytes] = []
+
+    def uid(self, cmd: str, *args: object) -> tuple[str, list[object] | None]:
+        if cmd == "FETCH":
+            spec = str(args[-1]) if args else ""
+            uid_arg = args[0] if args else b""
+            if isinstance(uid_arg, str):
+                uid_arg = uid_arg.encode()
+            if "HEADER.FIELDS" in spec:
+                self.header_fetch_uid_sets.append(uid_arg)
+                responses: list[tuple[bytes, bytes]] = []
+                for uid in uid_arg.split(b","):
+                    uid = uid.strip()
+                    if not uid:
+                        continue
+                    uid_s = uid.decode()
+                    meta = f"{uid_s} (UID {uid_s}) BODY[HEADER.FIELDS (MESSAGE-ID)]".encode()
+                    responses.append((meta, self.headers.get(uid) or b""))
+                return "OK", responses
+            if "BODY.PEEK[]" in spec:
+                uid = uid_arg.split(b",")[0].strip()
+                return "OK", [(b"meta", self.bodies.get(uid))]
+            return "NO", None
+        return "NO", None
+
+    def select(self, *args: object, **kwargs: object) -> tuple[str, None]:
+        return "OK", None
 
 
 def _ingest_conn(tmp_path: Path, *, message_id: str = "<dup@t>") -> sqlite3.Connection:
@@ -233,6 +292,87 @@ def _ingest_conn(tmp_path: Path, *, message_id: str = "<dup@t>") -> sqlite3.Conn
     )
     conn.commit()
     return conn
+
+
+def test_fetch_message_id_headers_for_uids_batches_and_parses() -> None:
+    mail = MagicMock()
+    uids = [str(i).encode() for i in range(1, 251)]
+
+    def fake_uid(cmd: str, uid_set: bytes, spec: str) -> tuple[str, list[tuple[bytes, bytes]]]:
+        assert cmd == "FETCH"
+        assert "HEADER.FIELDS" in spec
+        responses: list[tuple[bytes, bytes]] = []
+        for uid in uid_set.split(b","):
+            uid = uid.strip()
+            meta = f"X (UID {uid.decode()}) BODY".encode()
+            responses.append((meta, b"Message-ID: <mid@t>\r\n"))
+        return "OK", responses
+
+    mail.uid.side_effect = fake_uid
+    result = gmail_imap.fetch_message_id_headers_for_uids(mail, uids, chunk_size=100)
+    assert len(result) == 250
+    assert all(result[uid] == "<mid@t>" for uid in uids)
+    assert mail.uid.call_count == 3
+
+
+def test_batch_preflight_uses_fewer_header_fetches_than_uid_count(tmp_path: Path) -> None:
+    conn = _ingest_conn(tmp_path)
+    uid_list = [str(i).encode() for i in range(1, 6)]
+    mail = _BatchFakeMail(
+        headers={uid: b"Message-ID: <dup@t>\r\n" for uid in uid_list},
+        bodies={},
+    )
+    result = gmail_imap.ingest_gmail_folder(
+        conn,
+        mail,
+        user="u",
+        folder="f",
+        since_days=None,
+        max_messages=0,
+        replace_source=False,
+        skip_duplicate_message_id=True,
+        uid_iter=uid_list,
+        folder_already_selected=True,
+    )
+    conn.close()
+    assert result.skipped_dup == 5
+    assert result.inserted == 0
+    assert len(mail.header_fetch_uid_sets) == 1
+    assert mail.header_fetch_uid_sets[0] == b"1,2,3,4,5"
+    assert mail.bodies == {}
+
+
+def test_batch_preflight_mixed_dup_new_and_missing_header(tmp_path: Path) -> None:
+    conn = _ingest_conn(tmp_path)
+    mail = _BatchFakeMail(
+        headers={
+            b"1": b"Message-ID: <dup@t>\r\n",
+            b"2": b"Message-ID: <brand-new@origenlab.test>\r\n",
+            b"3": b"Subject: no mid\r\n",
+        },
+        bodies={
+            b"2": _sample_rfc822(message_id="<brand-new@origenlab.test>"),
+            b"3": _sample_rfc822(message_id="<fallback@origenlab.test>"),
+        },
+    )
+    result = gmail_imap.ingest_gmail_folder(
+        conn,
+        mail,
+        user="u",
+        folder="f",
+        since_days=None,
+        max_messages=0,
+        replace_source=False,
+        skip_duplicate_message_id=True,
+        uid_iter=[b"1", b"2", b"3"],
+        folder_already_selected=True,
+    )
+    n = conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]
+    conn.close()
+    assert result.skipped_dup == 1
+    assert result.inserted == 2
+    assert n == 3
+    assert len(mail.header_fetch_uid_sets) == 1
 
 
 def test_duplicate_message_id_preflight_skips_full_fetch(tmp_path: Path) -> None:
@@ -417,8 +557,9 @@ def test_mocked_ingest_inserts_email_and_skips_duplicate(
                 return "OK", [uid]
             if cmd == "FETCH":
                 spec = str(args[-1]) if args else ""
+                uid_arg = args[0] if args else uid
                 if "HEADER.FIELDS" in spec:
-                    return "OK", [(b"meta", header)]
+                    return "OK", _header_fetch_responses(uid_arg, header)
                 return "OK", [(b"meta", raw)]
             return "NO", None
 
