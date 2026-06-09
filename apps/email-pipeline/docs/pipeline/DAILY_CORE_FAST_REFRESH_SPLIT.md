@@ -4,7 +4,7 @@ Status: design / runbook (not implemented)
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-09
 
-Related: [`DAILY_CORE.md`](DAILY_CORE.md) · [`POSTGRES_MIRROR_REFRESH.md`](POSTGRES_MIRROR_REFRESH.md) · [`RUNBOOK.md`](../RUNBOOK.md) · [`OPERATOR_COMMAND_SURFACE.md`](../OPERATOR_COMMAND_SURFACE.md)
+Related: [`DAILY_CORE.md`](DAILY_CORE.md) · [`POSTGRES_MIRROR_REFRESH.md`](POSTGRES_MIRROR_REFRESH.md) · [`RUNBOOK.md`](../RUNBOOK.md) · [`OPERATOR_COMMAND_SURFACE.md`](../OPERATOR_COMMAND_SURFACE.md) · mart features: [`EMAIL_MART_FEATURES_DESIGN.md`](EMAIL_MART_FEATURES_DESIGN.md)
 
 This document records **timing evidence** from the Gmail ingest optimization series and defines how operator workflows should split once we add a lighter **fast refresh** path for per-email / near-real-time automation.
 
@@ -114,6 +114,7 @@ See [`DAILY_CORE.md`](DAILY_CORE.md) for the operator contract.
 
 **Open engineering questions (for a future PR series):**
 
+- Precomputed per-email features (`email_mart_features`) — see [`EMAIL_MART_FEATURES_DESIGN.md`](EMAIL_MART_FEATURES_DESIGN.md)
 - Incremental mart updates vs partial table refresh vs “recent window” materialized views in SQLite
 - How to detect “changed” Gmail UIDs (since cursor, `SINCE`, or Message-ID delta)
 - When to **escalate** from fast refresh back to `daily-core --apply` (drift, missed UIDs, mart checksum failure)

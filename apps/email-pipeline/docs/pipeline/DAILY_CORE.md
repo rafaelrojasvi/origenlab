@@ -4,7 +4,7 @@ Status: canonical (operator contract)
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-05
 
-Related: [`OPERATOR_COMMAND_SURFACE.md`](../OPERATOR_COMMAND_SURFACE.md) · [`RUNBOOK.md`](../RUNBOOK.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · post-send: [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md) · future split: [`DAILY_CORE_FAST_REFRESH_SPLIT.md`](DAILY_CORE_FAST_REFRESH_SPLIT.md)
+Related: [`OPERATOR_COMMAND_SURFACE.md`](../OPERATOR_COMMAND_SURFACE.md) · [`RUNBOOK.md`](../RUNBOOK.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · post-send: [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md) · future split: [`DAILY_CORE_FAST_REFRESH_SPLIT.md`](DAILY_CORE_FAST_REFRESH_SPLIT.md) · mart optimization: [`EMAIL_MART_FEATURES_DESIGN.md`](EMAIL_MART_FEATURES_DESIGN.md)
 
 This document defines the **daily operating layer** for `apps/email-pipeline`: what operators run to refresh SQLite operational truth and safety exports **without** sending mail, purging data, or requiring Postgres.
 
@@ -122,6 +122,8 @@ Gmail ingest is now fast (~18s); **mart rebuild** (~396s, ~217k email scan) is t
 A separate **operator-fast-refresh** / **email-event-refresh** workflow is planned (not implemented). It would ingest recent Gmail changes and refresh recent operator views **without** `build-mart -- --rebuild`. `daily-core` remains the canonical full SQLite truth job.
 
 See [`DAILY_CORE_FAST_REFRESH_SPLIT.md`](DAILY_CORE_FAST_REFRESH_SPLIT.md) for timing evidence, the three-lane model (`daily-core` / fast refresh / `mirror-dashboard`), and why `--since-days` today only narrows Gmail ingest.
+
+Mart rebuild profiling (#154–#159) showed SQLite body materialization dominates scan time. A planned **precomputed `email_mart_features` table** (design only) is documented in [`EMAIL_MART_FEATURES_DESIGN.md`](EMAIL_MART_FEATURES_DESIGN.md).
 
 ---
 
