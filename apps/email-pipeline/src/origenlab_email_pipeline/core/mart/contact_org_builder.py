@@ -89,12 +89,28 @@ def scan_email_contacts(
     full_body_fallback_total_chars = 0
     full_body_lazy_fetches = 0
     full_body_lazy_fetch_seconds = 0.0
+    mart_scan_body_seconds = 0.0
+    mart_scan_noise_seconds = 0.0
+    mart_scan_address_parse_seconds = 0.0
+    mart_scan_intent_seconds = 0.0
+    mart_scan_equipment_seconds = 0.0
+    mart_scan_doc_lookup_seconds = 0.0
+    mart_scan_target_build_seconds = 0.0
+    mart_scan_contact_update_seconds = 0.0
+    mart_scan_date_seconds = 0.0
+    body_total_chars = 0
+    body_max_chars = 0
+    body_rows_gt_2k = 0
+    body_rows_gt_5k = 0
+    body_rows_gt_10k = 0
+    body_rows_gt_50k = 0
     batch = cur.fetchmany(5000)
     internal_domains = set(options.internal_domains)
     mart_slack = options.mart_date_slack_days
     while batch:
         for email_id, sender, recipients, subject, top, date_iso in batch:
             n += 1
+            body_t0 = time.monotonic()
             if top:
                 top_reply_nonempty_rows += 1
                 top_reply_total_chars += len(top)
@@ -109,26 +125,56 @@ def scan_email_contacts(
                     full_body_fallback_used_rows += 1
                     full_body_fallback_total_chars += len(full)
                 body = full
+            mart_scan_body_seconds += time.monotonic() - body_t0
+
+            body_len = len(body)
+            body_total_chars += body_len
+            if body_len > body_max_chars:
+                body_max_chars = body_len
+            if body_len > 2000:
+                body_rows_gt_2k += 1
+            if body_len > 5000:
+                body_rows_gt_5k += 1
+            if body_len > 10000:
+                body_rows_gt_10k += 1
+            if body_len > 50000:
+                body_rows_gt_50k += 1
+
             if options.limit_emails and n > options.limit_emails:
                 batch = []
                 break
             sender_s = sender or ""
             subj = subject or ""
-            if is_noise_sender(sender_s, subj, body):
-                continue
 
+            noise_t0 = time.monotonic()
+            if is_noise_sender(sender_s, subj, body):
+                mart_scan_noise_seconds += time.monotonic() - noise_t0
+                continue
+            mart_scan_noise_seconds += time.monotonic() - noise_t0
+
+            addr_t0 = time.monotonic()
             sender_email = primary_sender_email(sender_s)
             sender_dom = domain_of(sender_email) or ""
             recip_emails = emails_in(recipients or "")
+            mart_scan_address_parse_seconds += time.monotonic() - addr_t0
 
+            intent_t0 = time.monotonic()
             intents = classify_email_intents(subj, body)
+            mart_scan_intent_seconds += time.monotonic() - intent_t0
+
+            equip_t0 = time.monotonic()
             equip = equipment_tags_from_text(subj + "\n" + body)
+            mart_scan_equipment_seconds += time.monotonic() - equip_t0
+
+            doc_t0 = time.monotonic()
             has_business_doc = int(email_id) in doc_aggs.business_doc_email_ids
             dt_counts = doc_aggs.doc_counts_by_email.get(int(email_id), Counter())
+            mart_scan_doc_lookup_seconds += time.monotonic() - doc_t0
 
             outbound = sender_dom in internal_domains
             inbound = bool(sender_dom) and not outbound
 
+            target_t0 = time.monotonic()
             targets: list[str] = []
             if outbound:
                 for e in recip_emails:
@@ -138,12 +184,15 @@ def scan_email_contacts(
             elif inbound and sender_email:
                 if sender_dom and sender_dom not in internal_domains:
                     targets.append(sender_email)
+            mart_scan_target_build_seconds += time.monotonic() - target_t0
 
             for e in targets:
                 d = domain_of(e) or ""
                 if not d:
                     continue
                 row = contact[e]
+
+                update_t0 = time.monotonic()
                 row["domain"] = d
                 row["org_name"] = guess_org_name_from_domain(d)
                 row["org_type"] = guess_org_type_from_domain(d)
@@ -158,13 +207,16 @@ def scan_email_contacts(
                 row["invoice_doc"] += int(dt_counts.get("invoice", 0))
                 for tag in equip:
                     row["equip"][tag] += 1
+                mart_scan_contact_update_seconds += time.monotonic() - update_t0
 
+                date_t0 = time.monotonic()
                 d_iso = email_date_iso_for_mart_timeline(date_iso, slack_days=mart_slack)
                 if d_iso:
                     if row["first_seen_at"] is None or d_iso < row["first_seen_at"]:
                         row["first_seen_at"] = d_iso
                     if row["last_seen_at"] is None or d_iso > row["last_seen_at"]:
                         row["last_seen_at"] = d_iso
+                mart_scan_date_seconds += time.monotonic() - date_t0
 
         batch = cur.fetchmany(5000)
 
@@ -177,6 +229,21 @@ def scan_email_contacts(
     print(f"[mart-profile] full_body_fallback_total_chars={full_body_fallback_total_chars}")
     print(f"[mart-profile] full_body_lazy_fetches={full_body_lazy_fetches}")
     print(f"[timing] full_body_lazy_fetch_seconds={full_body_lazy_fetch_seconds:.2f}")
+    print(f"[timing] mart_scan_body_seconds={mart_scan_body_seconds:.2f}")
+    print(f"[timing] mart_scan_noise_seconds={mart_scan_noise_seconds:.2f}")
+    print(f"[timing] mart_scan_address_parse_seconds={mart_scan_address_parse_seconds:.2f}")
+    print(f"[timing] mart_scan_intent_seconds={mart_scan_intent_seconds:.2f}")
+    print(f"[timing] mart_scan_equipment_seconds={mart_scan_equipment_seconds:.2f}")
+    print(f"[timing] mart_scan_doc_lookup_seconds={mart_scan_doc_lookup_seconds:.2f}")
+    print(f"[timing] mart_scan_target_build_seconds={mart_scan_target_build_seconds:.2f}")
+    print(f"[timing] mart_scan_contact_update_seconds={mart_scan_contact_update_seconds:.2f}")
+    print(f"[timing] mart_scan_date_seconds={mart_scan_date_seconds:.2f}")
+    print(f"[mart-profile] body_total_chars={body_total_chars}")
+    print(f"[mart-profile] body_max_chars={body_max_chars}")
+    print(f"[mart-profile] body_rows_gt_2k={body_rows_gt_2k}")
+    print(f"[mart-profile] body_rows_gt_5k={body_rows_gt_5k}")
+    print(f"[mart-profile] body_rows_gt_10k={body_rows_gt_10k}")
+    print(f"[mart-profile] body_rows_gt_50k={body_rows_gt_50k}")
     return dict(contact), n
 
 
