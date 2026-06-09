@@ -45,6 +45,17 @@ _MART_SCAN_FETCH_PROFILE_LINES = (
     "[mart-profile] mart_scan_batch_size=5000",
 )
 
+_MART_TARGET_GATED_PROFILE_LINES = (
+    "[mart-profile] mart_target_candidate_rows=",
+    "[mart-profile] mart_no_target_rows=",
+    "[mart-profile] mart_target_candidate_body_chars=",
+    "[mart-profile] mart_no_target_body_chars=",
+    "[mart-profile] mart_target_candidate_rows_gt_2k=",
+    "[mart-profile] mart_no_target_rows_gt_2k=",
+    "[mart-profile] mart_target_candidate_rows_gt_10k=",
+    "[mart-profile] mart_no_target_rows_gt_10k=",
+)
+
 
 def _default_options() -> MartBuildOptions:
     return MartBuildOptions(
@@ -122,9 +133,13 @@ def test_scan_email_contacts_prints_mart_body_profile(capsys) -> None:
         assert line in out
     for line in _MART_SCAN_FETCH_PROFILE_LINES:
         assert line in out
+    for line in _MART_TARGET_GATED_PROFILE_LINES:
+        assert line in out
     assert "[mart-profile] body_total_chars=21" in out
     assert "[mart-profile] body_max_chars=13" in out
     assert "[mart-profile] mart_scan_batches=2" in out
+    assert "[mart-profile] mart_target_candidate_rows=3" in out
+    assert "[mart-profile] mart_no_target_rows=0" in out
 
 
 def test_top_reply_present_skips_lazy_full_body_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -203,6 +218,47 @@ def test_quote_intent_from_top_reply_clean() -> None:
     row = contact["buyer@lab.cl"]
     assert row["quote_email"] == 1
     assert row["total"] == 1
+
+
+def test_target_gated_body_opportunity_counters(capsys) -> None:
+    conn = sqlite3.connect(":memory:")
+    init_schema(conn)
+    _insert_email(
+        conn,
+        message_id="inbound-external",
+        top_reply_clean="inbound body",
+        full_body_clean="",
+        sender="Buyer <buyer@lab.cl>",
+        recipients="contacto@origenlab.cl",
+    )
+    _insert_email(
+        conn,
+        message_id="outbound-external",
+        top_reply_clean="outbound body",
+        full_body_clean="",
+        sender="OrigenLab <contacto@origenlab.cl>",
+        recipients="Buyer <buyer@external.cl>",
+    )
+    _insert_email(
+        conn,
+        message_id="internal-only",
+        top_reply_clean="internal only",
+        full_body_clean="",
+        sender="OrigenLab <contacto@origenlab.cl>",
+        recipients="Ops <ops@origenlab.cl>",
+    )
+    conn.commit()
+
+    scan_email_contacts(conn, options=_default_options(), doc_aggs=DocAgg(set(), {}))
+    conn.close()
+
+    out = capsys.readouterr().out
+    for line in _MART_TARGET_GATED_PROFILE_LINES:
+        assert line in out
+    assert "[mart-profile] mart_target_candidate_rows=2" in out
+    assert "[mart-profile] mart_no_target_rows=1" in out
+    assert "[mart-profile] mart_target_candidate_body_chars=25" in out
+    assert "[mart-profile] mart_no_target_body_chars=13" in out
 
 
 def test_quote_intent_from_lazy_full_body_when_top_empty() -> None:
