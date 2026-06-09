@@ -104,11 +104,19 @@ def scan_email_contacts(
     body_rows_gt_5k = 0
     body_rows_gt_10k = 0
     body_rows_gt_50k = 0
-    batch = cur.fetchmany(5000)
+    mart_scan_fetchmany_seconds = 0.0
+    mart_scan_loop_total_seconds = 0.0
+    mart_scan_batches = 0
+    batch_size = 5000
+    fetch_t0 = time.monotonic()
+    batch = cur.fetchmany(batch_size)
+    mart_scan_fetchmany_seconds += time.monotonic() - fetch_t0
+    mart_scan_batches += 1
     internal_domains = set(options.internal_domains)
     mart_slack = options.mart_date_slack_days
     while batch:
         for email_id, sender, recipients, subject, top, date_iso in batch:
+            row_t0 = time.monotonic()
             n += 1
             body_t0 = time.monotonic()
             if top:
@@ -141,6 +149,7 @@ def scan_email_contacts(
                 body_rows_gt_50k += 1
 
             if options.limit_emails and n > options.limit_emails:
+                mart_scan_loop_total_seconds += time.monotonic() - row_t0
                 batch = []
                 break
             sender_s = sender or ""
@@ -149,6 +158,7 @@ def scan_email_contacts(
             noise_t0 = time.monotonic()
             if is_noise_sender(sender_s, subj, body):
                 mart_scan_noise_seconds += time.monotonic() - noise_t0
+                mart_scan_loop_total_seconds += time.monotonic() - row_t0
                 continue
             mart_scan_noise_seconds += time.monotonic() - noise_t0
 
@@ -218,10 +228,33 @@ def scan_email_contacts(
                         row["last_seen_at"] = d_iso
                 mart_scan_date_seconds += time.monotonic() - date_t0
 
-        batch = cur.fetchmany(5000)
+            mart_scan_loop_total_seconds += time.monotonic() - row_t0
+
+        fetch_t0 = time.monotonic()
+        batch = cur.fetchmany(batch_size)
+        mart_scan_fetchmany_seconds += time.monotonic() - fetch_t0
+        mart_scan_batches += 1
+
+    email_scan_seconds = time.monotonic() - stage_t0
+    mart_scan_measured_stage_seconds = (
+        mart_scan_body_seconds
+        + mart_scan_noise_seconds
+        + mart_scan_address_parse_seconds
+        + mart_scan_intent_seconds
+        + mart_scan_equipment_seconds
+        + mart_scan_doc_lookup_seconds
+        + mart_scan_target_build_seconds
+        + mart_scan_contact_update_seconds
+        + mart_scan_date_seconds
+    )
+    mart_scan_unattributed_seconds = (
+        email_scan_seconds
+        - mart_scan_fetchmany_seconds
+        - mart_scan_measured_stage_seconds
+    )
 
     print(f"Scanned emails (for mart): {n:,}")
-    print(f"[timing] email_scan_seconds={time.monotonic() - stage_t0:.2f}")
+    print(f"[timing] email_scan_seconds={email_scan_seconds:.2f}")
     print(f"[mart-profile] top_reply_nonempty_rows={top_reply_nonempty_rows}")
     print(f"[mart-profile] top_reply_empty_rows={top_reply_empty_rows}")
     print(f"[mart-profile] full_body_fallback_used_rows={full_body_fallback_used_rows}")
@@ -244,6 +277,11 @@ def scan_email_contacts(
     print(f"[mart-profile] body_rows_gt_5k={body_rows_gt_5k}")
     print(f"[mart-profile] body_rows_gt_10k={body_rows_gt_10k}")
     print(f"[mart-profile] body_rows_gt_50k={body_rows_gt_50k}")
+    print(f"[timing] mart_scan_fetchmany_seconds={mart_scan_fetchmany_seconds:.2f}")
+    print(f"[timing] mart_scan_measured_stage_seconds={mart_scan_measured_stage_seconds:.2f}")
+    print(f"[timing] mart_scan_unattributed_seconds={mart_scan_unattributed_seconds:.2f}")
+    print(f"[mart-profile] mart_scan_batches={mart_scan_batches}")
+    print(f"[mart-profile] mart_scan_batch_size={batch_size}")
     return dict(contact), n
 
 

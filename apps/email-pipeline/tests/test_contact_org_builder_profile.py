@@ -37,6 +37,14 @@ _MART_SCAN_BODY_PROFILE_LINES = (
     "[mart-profile] body_rows_gt_50k=",
 )
 
+_MART_SCAN_FETCH_PROFILE_LINES = (
+    "[timing] mart_scan_fetchmany_seconds=",
+    "[timing] mart_scan_measured_stage_seconds=",
+    "[timing] mart_scan_unattributed_seconds=",
+    "[mart-profile] mart_scan_batches=",
+    "[mart-profile] mart_scan_batch_size=5000",
+)
+
 
 def _default_options() -> MartBuildOptions:
     return MartBuildOptions(
@@ -112,8 +120,11 @@ def test_scan_email_contacts_prints_mart_body_profile(capsys) -> None:
         assert line in out
     for line in _MART_SCAN_BODY_PROFILE_LINES:
         assert line in out
+    for line in _MART_SCAN_FETCH_PROFILE_LINES:
+        assert line in out
     assert "[mart-profile] body_total_chars=21" in out
     assert "[mart-profile] body_max_chars=13" in out
+    assert "[mart-profile] mart_scan_batches=2" in out
 
 
 def test_top_reply_present_skips_lazy_full_body_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
