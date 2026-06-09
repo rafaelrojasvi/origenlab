@@ -107,6 +107,14 @@ def scan_email_contacts(
     mart_scan_fetchmany_seconds = 0.0
     mart_scan_loop_total_seconds = 0.0
     mart_scan_batches = 0
+    mart_target_candidate_rows = 0
+    mart_no_target_rows = 0
+    mart_target_candidate_body_chars = 0
+    mart_no_target_body_chars = 0
+    mart_target_candidate_rows_gt_2k = 0
+    mart_no_target_rows_gt_2k = 0
+    mart_target_candidate_rows_gt_10k = 0
+    mart_no_target_rows_gt_10k = 0
     batch_size = 5000
     fetch_t0 = time.monotonic()
     batch = cur.fetchmany(batch_size)
@@ -196,6 +204,21 @@ def scan_email_contacts(
                     targets.append(sender_email)
             mart_scan_target_build_seconds += time.monotonic() - target_t0
 
+            if targets:
+                mart_target_candidate_rows += 1
+                mart_target_candidate_body_chars += body_len
+                if body_len > 2000:
+                    mart_target_candidate_rows_gt_2k += 1
+                if body_len > 10000:
+                    mart_target_candidate_rows_gt_10k += 1
+            else:
+                mart_no_target_rows += 1
+                mart_no_target_body_chars += body_len
+                if body_len > 2000:
+                    mart_no_target_rows_gt_2k += 1
+                if body_len > 10000:
+                    mart_no_target_rows_gt_10k += 1
+
             for e in targets:
                 d = domain_of(e) or ""
                 if not d:
@@ -282,6 +305,14 @@ def scan_email_contacts(
     print(f"[timing] mart_scan_unattributed_seconds={mart_scan_unattributed_seconds:.2f}")
     print(f"[mart-profile] mart_scan_batches={mart_scan_batches}")
     print(f"[mart-profile] mart_scan_batch_size={batch_size}")
+    print(f"[mart-profile] mart_target_candidate_rows={mart_target_candidate_rows}")
+    print(f"[mart-profile] mart_no_target_rows={mart_no_target_rows}")
+    print(f"[mart-profile] mart_target_candidate_body_chars={mart_target_candidate_body_chars}")
+    print(f"[mart-profile] mart_no_target_body_chars={mart_no_target_body_chars}")
+    print(f"[mart-profile] mart_target_candidate_rows_gt_2k={mart_target_candidate_rows_gt_2k}")
+    print(f"[mart-profile] mart_no_target_rows_gt_2k={mart_no_target_rows_gt_2k}")
+    print(f"[mart-profile] mart_target_candidate_rows_gt_10k={mart_target_candidate_rows_gt_10k}")
+    print(f"[mart-profile] mart_no_target_rows_gt_10k={mart_no_target_rows_gt_10k}")
     return dict(contact), n
 
 
