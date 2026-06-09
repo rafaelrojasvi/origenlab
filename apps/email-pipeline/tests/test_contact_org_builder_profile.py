@@ -16,6 +16,27 @@ from origenlab_email_pipeline.db import init_schema
 
 _PIPELINE_ROOT = Path(__file__).resolve().parents[1]
 
+_MART_SCAN_TIMING_LINES = (
+    "[timing] mart_scan_body_seconds=",
+    "[timing] mart_scan_noise_seconds=",
+    "[timing] mart_scan_address_parse_seconds=",
+    "[timing] mart_scan_intent_seconds=",
+    "[timing] mart_scan_equipment_seconds=",
+    "[timing] mart_scan_doc_lookup_seconds=",
+    "[timing] mart_scan_target_build_seconds=",
+    "[timing] mart_scan_contact_update_seconds=",
+    "[timing] mart_scan_date_seconds=",
+)
+
+_MART_SCAN_BODY_PROFILE_LINES = (
+    "[mart-profile] body_total_chars=",
+    "[mart-profile] body_max_chars=",
+    "[mart-profile] body_rows_gt_2k=",
+    "[mart-profile] body_rows_gt_5k=",
+    "[mart-profile] body_rows_gt_10k=",
+    "[mart-profile] body_rows_gt_50k=",
+)
+
 
 def _default_options() -> MartBuildOptions:
     return MartBuildOptions(
@@ -87,6 +108,12 @@ def test_scan_email_contacts_prints_mart_body_profile(capsys) -> None:
     assert "[mart-profile] full_body_fallback_total_chars=13" in out
     assert "[mart-profile] full_body_lazy_fetches=2" in out
     assert "[timing] full_body_lazy_fetch_seconds=" in out
+    for line in _MART_SCAN_TIMING_LINES:
+        assert line in out
+    for line in _MART_SCAN_BODY_PROFILE_LINES:
+        assert line in out
+    assert "[mart-profile] body_total_chars=21" in out
+    assert "[mart-profile] body_max_chars=13" in out
 
 
 def test_top_reply_present_skips_lazy_full_body_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
