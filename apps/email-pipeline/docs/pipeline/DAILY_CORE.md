@@ -4,7 +4,7 @@ Status: canonical (operator contract)
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-05
 
-Related: [`OPERATOR_COMMAND_SURFACE.md`](../OPERATOR_COMMAND_SURFACE.md) · [`RUNBOOK.md`](../RUNBOOK.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · post-send: [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md)
+Related: [`OPERATOR_COMMAND_SURFACE.md`](../OPERATOR_COMMAND_SURFACE.md) · [`RUNBOOK.md`](../RUNBOOK.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · post-send: [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md) · future split: [`DAILY_CORE_FAST_REFRESH_SPLIT.md`](DAILY_CORE_FAST_REFRESH_SPLIT.md)
 
 This document defines the **daily operating layer** for `apps/email-pipeline`: what operators run to refresh SQLite operational truth and safety exports **without** sending mail, purging data, or requiring Postgres.
 
@@ -115,8 +115,19 @@ Requires `ORIGENLAB_POSTGRES_URL`, `ALEMBIC_DATABASE_URL`, or `ORIGENLAB_CLOUD_P
 
 ---
 
+## Future: fast refresh vs daily core
+
+Gmail ingest is now fast (~18s); **mart rebuild** (~396s, ~217k email scan) is the daily-core bottleneck. Per-email or near-real-time automation should **not** call full `daily-core --apply` on every message.
+
+A separate **operator-fast-refresh** / **email-event-refresh** workflow is planned (not implemented). It would ingest recent Gmail changes and refresh recent operator views **without** `build-mart -- --rebuild`. `daily-core` remains the canonical full SQLite truth job.
+
+See [`DAILY_CORE_FAST_REFRESH_SPLIT.md`](DAILY_CORE_FAST_REFRESH_SPLIT.md) for timing evidence, the three-lane model (`daily-core` / fast refresh / `mirror-dashboard`), and why `--since-days` today only narrows Gmail ingest.
+
+---
+
 ## What daily core is not
 
+- **Not** per-email automation — see [`DAILY_CORE_FAST_REFRESH_SPLIT.md`](DAILY_CORE_FAST_REFRESH_SPLIT.md).
 - **Not** the full post-send loop — see [`POST_SEND_SAFE_LOOP.md`](POST_SEND_SAFE_LOOP.md) after sends.
 - **Not** outbound campaign export or send — see [`RUNBOOK.md`](../RUNBOOK.md) daily outbound sections.
 - **Not** a substitute for `check-readiness` before building send batches.
