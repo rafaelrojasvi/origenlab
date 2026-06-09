@@ -28,6 +28,14 @@ ContactMap = dict[str, ContactAggRow]
 OrgMap = dict[str, dict[str, Any]]
 
 
+def fetch_full_body_clean_for_email(conn: sqlite3.Connection, email_id: int) -> str:
+    row = conn.execute(
+        "SELECT COALESCE(full_body_clean,'') FROM emails WHERE id = ?",
+        (int(email_id),),
+    ).fetchone()
+    return str(row[0]) if row else ""
+
+
 def _new_contact_row() -> ContactAggRow:
     return {
         "contact_name_best": None,
@@ -60,8 +68,7 @@ def scan_email_contacts(
 
     stage_t0 = time.monotonic()
     sql = (
-        "SELECT id, sender, recipients, subject, COALESCE(top_reply_clean,''), "
-        "COALESCE(full_body_clean,''), date_iso FROM emails"
+        "SELECT id, sender, recipients, subject, COALESCE(top_reply_clean,''), date_iso FROM emails"
     )
     where_clauses: list[str] = []
     params: list[object] = []
@@ -80,26 +87,33 @@ def scan_email_contacts(
     full_body_fallback_used_rows = 0
     top_reply_total_chars = 0
     full_body_fallback_total_chars = 0
+    full_body_lazy_fetches = 0
+    full_body_lazy_fetch_seconds = 0.0
     batch = cur.fetchmany(5000)
     internal_domains = set(options.internal_domains)
     mart_slack = options.mart_date_slack_days
     while batch:
-        for email_id, sender, recipients, subject, top, full, date_iso in batch:
+        for email_id, sender, recipients, subject, top, date_iso in batch:
             n += 1
             if top:
                 top_reply_nonempty_rows += 1
                 top_reply_total_chars += len(top)
+                body = top
             else:
                 top_reply_empty_rows += 1
+                fetch_t0 = time.monotonic()
+                full = fetch_full_body_clean_for_email(conn, int(email_id))
+                full_body_lazy_fetch_seconds += time.monotonic() - fetch_t0
+                full_body_lazy_fetches += 1
                 if full:
                     full_body_fallback_used_rows += 1
                     full_body_fallback_total_chars += len(full)
+                body = full
             if options.limit_emails and n > options.limit_emails:
                 batch = []
                 break
             sender_s = sender or ""
             subj = subject or ""
-            body = top or full or ""
             if is_noise_sender(sender_s, subj, body):
                 continue
 
@@ -161,6 +175,8 @@ def scan_email_contacts(
     print(f"[mart-profile] full_body_fallback_used_rows={full_body_fallback_used_rows}")
     print(f"[mart-profile] top_reply_total_chars={top_reply_total_chars}")
     print(f"[mart-profile] full_body_fallback_total_chars={full_body_fallback_total_chars}")
+    print(f"[mart-profile] full_body_lazy_fetches={full_body_lazy_fetches}")
+    print(f"[timing] full_body_lazy_fetch_seconds={full_body_lazy_fetch_seconds:.2f}")
     return dict(contact), n
 
 

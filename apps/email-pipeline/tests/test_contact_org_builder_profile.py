@@ -1,11 +1,15 @@
-"""Mart email body scan profiling (observability only)."""
+"""Mart email body scan profiling and lazy full-body fallback."""
 
 from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
 
 from origenlab_email_pipeline.business_mart import DocAgg
+from origenlab_email_pipeline.core.mart import contact_org_builder
 from origenlab_email_pipeline.core.mart.build_options import MartBuildOptions
 from origenlab_email_pipeline.core.mart.contact_org_builder import scan_email_contacts
 from origenlab_email_pipeline.db import init_schema
@@ -31,6 +35,9 @@ def _insert_email(
     message_id: str,
     top_reply_clean: str,
     full_body_clean: str,
+    subject: str = "Subject",
+    sender: str = "Buyer <buyer@lab.cl>",
+    recipients: str = "contacto@origenlab.cl",
 ) -> None:
     conn.execute(
         """
@@ -44,9 +51,9 @@ def _insert_email(
             message_id,
             "2026-06-01T10:00:00",
             "INBOX",
-            "Buyer <buyer@lab.cl>",
-            "contacto@origenlab.cl",
-            "Subject",
+            sender,
+            recipients,
+            subject,
             top_reply_clean or full_body_clean or "",
             full_body_clean,
             top_reply_clean,
@@ -78,3 +85,103 @@ def test_scan_email_contacts_prints_mart_body_profile(capsys) -> None:
     assert "[mart-profile] full_body_fallback_used_rows=1" in out
     assert "[mart-profile] top_reply_total_chars=8" in out
     assert "[mart-profile] full_body_fallback_total_chars=13" in out
+    assert "[mart-profile] full_body_lazy_fetches=2" in out
+    assert "[timing] full_body_lazy_fetch_seconds=" in out
+
+
+def test_top_reply_present_skips_lazy_full_body_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = sqlite3.connect(":memory:")
+    init_schema(conn)
+    _insert_email(conn, message_id="top-only", top_reply_clean="top text", full_body_clean="never read")
+    conn.commit()
+
+    fetch_mock = MagicMock(side_effect=AssertionError("lazy fetch should not run"))
+    monkeypatch.setattr(contact_org_builder, "fetch_full_body_clean_for_email", fetch_mock)
+
+    contact, scanned = scan_email_contacts(
+        conn,
+        options=_default_options(),
+        doc_aggs=DocAgg(set(), {}),
+    )
+    conn.close()
+
+    assert scanned == 1
+    fetch_mock.assert_not_called()
+    assert contact["buyer@lab.cl"]["total"] >= 0
+
+
+def test_lazy_fallback_increments_profile_counters(capsys) -> None:
+    conn = sqlite3.connect(":memory:")
+    init_schema(conn)
+    _insert_email(conn, message_id="fallback", top_reply_clean="", full_body_clean="fallback body")
+    conn.commit()
+
+    scan_email_contacts(conn, options=_default_options(), doc_aggs=DocAgg(set(), {}))
+    conn.close()
+
+    out = capsys.readouterr().out
+    assert "[mart-profile] top_reply_empty_rows=1" in out
+    assert "[mart-profile] full_body_fallback_used_rows=1" in out
+    assert "[mart-profile] full_body_lazy_fetches=1" in out
+
+
+def test_empty_top_and_full_keeps_body_empty(capsys) -> None:
+    conn = sqlite3.connect(":memory:")
+    init_schema(conn)
+    _insert_email(conn, message_id="empty", top_reply_clean="", full_body_clean="")
+    conn.commit()
+
+    contact, scanned = scan_email_contacts(
+        conn,
+        options=_default_options(),
+        doc_aggs=DocAgg(set(), {}),
+    )
+    conn.close()
+
+    out = capsys.readouterr().out
+    assert scanned == 1
+    assert "[mart-profile] top_reply_empty_rows=1" in out
+    assert "[mart-profile] full_body_fallback_used_rows=0" in out
+    assert "[mart-profile] full_body_lazy_fetches=1" in out
+    assert contact["buyer@lab.cl"]["quote_email"] == 0
+    assert contact["buyer@lab.cl"]["total"] == 1
+
+
+def test_quote_intent_from_top_reply_clean() -> None:
+    conn = sqlite3.connect(":memory:")
+    init_schema(conn)
+    _insert_email(
+        conn,
+        message_id="top-quote",
+        top_reply_clean="necesitamos cotización de equipos",
+        full_body_clean="ignored",
+        subject="Cotización",
+    )
+    conn.commit()
+
+    contact, _ = scan_email_contacts(conn, options=_default_options(), doc_aggs=DocAgg(set(), {}))
+    conn.close()
+
+    row = contact["buyer@lab.cl"]
+    assert row["quote_email"] == 1
+    assert row["total"] == 1
+
+
+def test_quote_intent_from_lazy_full_body_when_top_empty() -> None:
+    conn = sqlite3.connect(":memory:")
+    init_schema(conn)
+    _insert_email(
+        conn,
+        message_id="full-quote",
+        top_reply_clean="",
+        full_body_clean="necesitamos cotización de equipos",
+        subject="Cotización",
+    )
+    conn.commit()
+
+    contact, _ = scan_email_contacts(conn, options=_default_options(), doc_aggs=DocAgg(set(), {}))
+    conn.close()
+
+    row = contact["buyer@lab.cl"]
+    assert row["quote_email"] == 1
+    assert row["total"] == 1
