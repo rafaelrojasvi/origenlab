@@ -56,6 +56,18 @@ _MART_TARGET_GATED_PROFILE_LINES = (
     "[mart-profile] mart_no_target_rows_gt_10k=",
 )
 
+_MART_PRE_NOISE_TARGET_PROFILE_LINES = (
+    "[mart-profile] mart_pre_noise_target_candidate_rows=",
+    "[mart-profile] mart_pre_noise_no_target_rows=",
+    "[mart-profile] mart_pre_noise_target_candidate_body_chars=",
+    "[mart-profile] mart_pre_noise_no_target_body_chars=",
+    "[mart-profile] mart_pre_noise_target_candidate_rows_gt_2k=",
+    "[mart-profile] mart_pre_noise_no_target_rows_gt_2k=",
+    "[mart-profile] mart_pre_noise_target_candidate_rows_gt_10k=",
+    "[mart-profile] mart_pre_noise_no_target_rows_gt_10k=",
+    "[timing] mart_pre_noise_target_preview_seconds=",
+)
+
 
 def _default_options() -> MartBuildOptions:
     return MartBuildOptions(
@@ -135,11 +147,15 @@ def test_scan_email_contacts_prints_mart_body_profile(capsys) -> None:
         assert line in out
     for line in _MART_TARGET_GATED_PROFILE_LINES:
         assert line in out
+    for line in _MART_PRE_NOISE_TARGET_PROFILE_LINES:
+        assert line in out
     assert "[mart-profile] body_total_chars=21" in out
     assert "[mart-profile] body_max_chars=13" in out
     assert "[mart-profile] mart_scan_batches=2" in out
     assert "[mart-profile] mart_target_candidate_rows=3" in out
     assert "[mart-profile] mart_no_target_rows=0" in out
+    assert "[mart-profile] mart_pre_noise_target_candidate_rows=3" in out
+    assert "[mart-profile] mart_pre_noise_no_target_rows=0" in out
 
 
 def test_top_reply_present_skips_lazy_full_body_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -255,10 +271,16 @@ def test_target_gated_body_opportunity_counters(capsys) -> None:
     out = capsys.readouterr().out
     for line in _MART_TARGET_GATED_PROFILE_LINES:
         assert line in out
+    for line in _MART_PRE_NOISE_TARGET_PROFILE_LINES:
+        assert line in out
     assert "[mart-profile] mart_target_candidate_rows=2" in out
     assert "[mart-profile] mart_no_target_rows=1" in out
     assert "[mart-profile] mart_target_candidate_body_chars=25" in out
     assert "[mart-profile] mart_no_target_body_chars=13" in out
+    assert "[mart-profile] mart_pre_noise_target_candidate_rows=2" in out
+    assert "[mart-profile] mart_pre_noise_no_target_rows=1" in out
+    assert "[mart-profile] mart_pre_noise_target_candidate_body_chars=25" in out
+    assert "[mart-profile] mart_pre_noise_no_target_body_chars=13" in out
 
 
 def test_quote_intent_from_lazy_full_body_when_top_empty() -> None:
