@@ -21,7 +21,7 @@ _PYTEST_FILES = (
 def test_validate_script_exists_and_runs_safe_checks() -> None:
     assert _VALIDATE_SCRIPT.is_file()
     text = _VALIDATE_SCRIPT.read_text(encoding="utf-8")
-    assert "uv sync --group dev --frozen" in text
+    assert "uv sync --group dev --group gmail --frozen" in text
     for path in _PYTEST_FILES:
         assert path in text
     assert "uv run origenlab status" in text
