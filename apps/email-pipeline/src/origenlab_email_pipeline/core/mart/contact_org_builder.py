@@ -75,12 +75,25 @@ def scan_email_contacts(
         sql += " WHERE " + " AND ".join(where_clauses)
     cur = conn.execute(sql, params)
     n = 0
+    top_reply_nonempty_rows = 0
+    top_reply_empty_rows = 0
+    full_body_fallback_used_rows = 0
+    top_reply_total_chars = 0
+    full_body_fallback_total_chars = 0
     batch = cur.fetchmany(5000)
     internal_domains = set(options.internal_domains)
     mart_slack = options.mart_date_slack_days
     while batch:
         for email_id, sender, recipients, subject, top, full, date_iso in batch:
             n += 1
+            if top:
+                top_reply_nonempty_rows += 1
+                top_reply_total_chars += len(top)
+            else:
+                top_reply_empty_rows += 1
+                if full:
+                    full_body_fallback_used_rows += 1
+                    full_body_fallback_total_chars += len(full)
             if options.limit_emails and n > options.limit_emails:
                 batch = []
                 break
@@ -143,6 +156,11 @@ def scan_email_contacts(
 
     print(f"Scanned emails (for mart): {n:,}")
     print(f"[timing] email_scan_seconds={time.monotonic() - stage_t0:.2f}")
+    print(f"[mart-profile] top_reply_nonempty_rows={top_reply_nonempty_rows}")
+    print(f"[mart-profile] top_reply_empty_rows={top_reply_empty_rows}")
+    print(f"[mart-profile] full_body_fallback_used_rows={full_body_fallback_used_rows}")
+    print(f"[mart-profile] top_reply_total_chars={top_reply_total_chars}")
+    print(f"[mart-profile] full_body_fallback_total_chars={full_body_fallback_total_chars}")
     return dict(contact), n
 
 
