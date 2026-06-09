@@ -7,6 +7,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -373,6 +374,37 @@ def test_batch_preflight_mixed_dup_new_and_missing_header(tmp_path: Path) -> Non
     assert result.inserted == 2
     assert n == 3
     assert len(mail.header_fetch_uid_sets) == 1
+
+
+def test_uid_loop_seconds_includes_batch_preflight(monkeypatch, tmp_path: Path) -> None:
+    conn = _ingest_conn(tmp_path)
+    mail = _TrackingFakeMail(
+        search_uid=b"9",
+        header=b"Message-ID: <dup@t>\r\n",
+        body=_sample_rfc822(message_id="<dup@t>"),
+    )
+    orig_preflight = gmail_imap.fetch_message_id_headers_for_uids
+
+    def slow_preflight(mail_obj, uids, **kwargs):
+        time.sleep(0.05)
+        return orig_preflight(mail_obj, uids, **kwargs)
+
+    monkeypatch.setattr(gmail_imap, "fetch_message_id_headers_for_uids", slow_preflight)
+    result = gmail_imap.ingest_gmail_folder(
+        conn,
+        mail,
+        user="u",
+        folder="f",
+        since_days=None,
+        max_messages=0,
+        replace_source=False,
+        skip_duplicate_message_id=True,
+        uid_iter=[b"9"],
+        folder_already_selected=True,
+    )
+    conn.close()
+    assert result.skipped_dup == 1
+    assert result.phase_timings.uid_loop_seconds >= 0.04
 
 
 def test_duplicate_message_id_preflight_skips_full_fetch(tmp_path: Path) -> None:

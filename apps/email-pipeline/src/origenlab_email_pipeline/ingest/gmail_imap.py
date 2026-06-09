@@ -385,6 +385,7 @@ def ingest_gmail_folder(
         uids = list(uid_iter)
 
     result = IngestFolderResult(uids=uids, phase_timings=phase_timings)
+    t0 = time.perf_counter()
     duplicate_uids: set[bytes] = set()
     if skip_duplicate_message_id and uids:
         preflight_mids = fetch_message_id_headers_for_uids(mail, uids)
@@ -392,8 +393,6 @@ def ingest_gmail_folder(
             mid_norm = normalize_message_id(preflight_mids.get(uid))
             if mid_norm and mid_norm in existing_mids:
                 duplicate_uids.add(uid)
-
-    t0 = time.perf_counter()
     for uid in uids:
         try:
             if uid in duplicate_uids:
