@@ -115,6 +115,15 @@ def scan_email_contacts(
     mart_no_target_rows_gt_2k = 0
     mart_target_candidate_rows_gt_10k = 0
     mart_no_target_rows_gt_10k = 0
+    mart_pre_noise_target_preview_seconds = 0.0
+    mart_pre_noise_target_candidate_rows = 0
+    mart_pre_noise_no_target_rows = 0
+    mart_pre_noise_target_candidate_body_chars = 0
+    mart_pre_noise_no_target_body_chars = 0
+    mart_pre_noise_target_candidate_rows_gt_2k = 0
+    mart_pre_noise_no_target_rows_gt_2k = 0
+    mart_pre_noise_target_candidate_rows_gt_10k = 0
+    mart_pre_noise_no_target_rows_gt_10k = 0
     batch_size = 5000
     fetch_t0 = time.monotonic()
     batch = cur.fetchmany(batch_size)
@@ -162,6 +171,38 @@ def scan_email_contacts(
                 break
             sender_s = sender or ""
             subj = subject or ""
+
+            preview_t0 = time.monotonic()
+            preview_sender_email = primary_sender_email(sender_s)
+            preview_sender_dom = domain_of(preview_sender_email) or ""
+            preview_recip_emails = emails_in(recipients or "")
+            preview_outbound = preview_sender_dom in internal_domains
+            preview_inbound = bool(preview_sender_dom) and not preview_outbound
+            preview_targets: list[str] = []
+            if preview_outbound:
+                for e in preview_recip_emails:
+                    d = domain_of(e) or ""
+                    if d and d not in internal_domains:
+                        preview_targets.append(e)
+            elif preview_inbound and preview_sender_email:
+                if preview_sender_dom and preview_sender_dom not in internal_domains:
+                    preview_targets.append(preview_sender_email)
+            mart_pre_noise_target_preview_seconds += time.monotonic() - preview_t0
+
+            if preview_targets:
+                mart_pre_noise_target_candidate_rows += 1
+                mart_pre_noise_target_candidate_body_chars += body_len
+                if body_len > 2000:
+                    mart_pre_noise_target_candidate_rows_gt_2k += 1
+                if body_len > 10000:
+                    mart_pre_noise_target_candidate_rows_gt_10k += 1
+            else:
+                mart_pre_noise_no_target_rows += 1
+                mart_pre_noise_no_target_body_chars += body_len
+                if body_len > 2000:
+                    mart_pre_noise_no_target_rows_gt_2k += 1
+                if body_len > 10000:
+                    mart_pre_noise_no_target_rows_gt_10k += 1
 
             noise_t0 = time.monotonic()
             if is_noise_sender(sender_s, subj, body):
@@ -313,6 +354,24 @@ def scan_email_contacts(
     print(f"[mart-profile] mart_no_target_rows_gt_2k={mart_no_target_rows_gt_2k}")
     print(f"[mart-profile] mart_target_candidate_rows_gt_10k={mart_target_candidate_rows_gt_10k}")
     print(f"[mart-profile] mart_no_target_rows_gt_10k={mart_no_target_rows_gt_10k}")
+    print(f"[mart-profile] mart_pre_noise_target_candidate_rows={mart_pre_noise_target_candidate_rows}")
+    print(f"[mart-profile] mart_pre_noise_no_target_rows={mart_pre_noise_no_target_rows}")
+    print(
+        f"[mart-profile] mart_pre_noise_target_candidate_body_chars="
+        f"{mart_pre_noise_target_candidate_body_chars}"
+    )
+    print(f"[mart-profile] mart_pre_noise_no_target_body_chars={mart_pre_noise_no_target_body_chars}")
+    print(
+        f"[mart-profile] mart_pre_noise_target_candidate_rows_gt_2k="
+        f"{mart_pre_noise_target_candidate_rows_gt_2k}"
+    )
+    print(f"[mart-profile] mart_pre_noise_no_target_rows_gt_2k={mart_pre_noise_no_target_rows_gt_2k}")
+    print(
+        f"[mart-profile] mart_pre_noise_target_candidate_rows_gt_10k="
+        f"{mart_pre_noise_target_candidate_rows_gt_10k}"
+    )
+    print(f"[mart-profile] mart_pre_noise_no_target_rows_gt_10k={mart_pre_noise_no_target_rows_gt_10k}")
+    print(f"[timing] mart_pre_noise_target_preview_seconds={mart_pre_noise_target_preview_seconds:.2f}")
     return dict(contact), n
 
 
