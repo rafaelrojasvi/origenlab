@@ -75,7 +75,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "gmail-ingest-help: ingest --help only. "
             "mirror-dashboard: Postgres mirror sync (dry-run default; requires Postgres URL env). "
             "refresh-dashboard: orchestrated stack refresh (plan-only default). "
-            "daily-core: daily operating alias (plan-only default; --apply = refresh-dashboard --apply --no-mirror)."
+            "daily-core: daily operating alias (plan-only default; --apply uses feature-backed mart rebuild)."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True, metavar="command")

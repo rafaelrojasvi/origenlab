@@ -18,13 +18,9 @@ From `apps/email-pipeline/`:
 uv run origenlab daily-core --apply
 ```
 
-This is the **daily core CLI alias**. It runs the seven steps below against **SQLite** and writes **reports** under `reports/out/`. It **never** runs Postgres mirror sync.
+This is the **daily core CLI alias**. It runs the eight steps below against **SQLite** and writes **reports** under `reports/out/`. It **never** runs Postgres mirror sync.
 
-Equivalent long form:
-
-```bash
-uv run origenlab refresh-dashboard --apply --no-mirror
-```
+`refresh-dashboard --apply --no-mirror` is similar but still uses the legacy email-body mart scan; **daily-core** uses the faster feature-backed mart path (see step 2–3 below).
 
 ---
 
@@ -36,23 +32,26 @@ Inspect the workflow before any writes:
 uv run origenlab daily-core
 ```
 
-Plan-only mode prints the seven-step list and exits **without** Gmail ingest, mart rebuild, commercial intel refresh, or other mutating steps. Equivalent to `uv run origenlab refresh-dashboard` (plan-only), but the plan shows **seven steps** (no mirror).
+Plan-only mode prints the eight-step list and exits **without** Gmail ingest, feature refresh, mart rebuild, commercial intel refresh, or other mutating steps. The plan shows **eight steps** (no mirror).
 
 ---
 
 ## Daily core steps (in order)
 
-When `daily-core --apply` (or `refresh-dashboard --apply --no-mirror`) is used, the orchestrator runs:
+When `daily-core --apply` is used, the orchestrator runs:
 
 | # | Step | CLI subcommand | Notes |
 |---|------|----------------|-------|
 | 1 | Gmail ingest | `gmail-ingest` | INBOX + Sent (`[Gmail]/Enviados`); updates SQLite `emails` |
-| 2 | Business mart rebuild | `build-mart -- --rebuild` | Break-glass: deletes and rebuilds mart tables |
-| 3 | Commercial intel | `build-commercial-intel` | Incremental refresh of SQLite `commercial_*` |
-| 4 | Outbound safety exports | `refresh-safety` | Anti-repeat / DNR export chain to `reports/out` |
-| 5 | NDR review batches | `ndr-review` | **Read-only** NDR review queue — **does not apply suppressions** |
-| 6 | Post-send digest | `post-send-digest` | Report artifacts after contacted-universe audit inputs |
-| 7 | Operator status | `status` | READY / CAUTION / BLOCKED snapshot |
+| 2 | Email mart features | `build-email-mart-features --missing-only --apply` | Inserts feature rows for newly ingested emails only |
+| 3 | Business mart rebuild | `build-mart -- --rebuild --use-email-mart-features` | Break-glass: deletes and rebuilds mart tables from precomputed features |
+| 4 | Commercial intel | `build-commercial-intel` | Incremental refresh of SQLite `commercial_*` |
+| 5 | Outbound safety exports | `refresh-safety` | Anti-repeat / DNR export chain to `reports/out` |
+| 6 | NDR review batches | `ndr-review` | **Read-only** NDR review queue — **does not apply suppressions** |
+| 7 | Post-send digest | `post-send-digest` | Report artifacts after contacted-universe audit inputs |
+| 8 | Operator status | `status` | READY / CAUTION / BLOCKED snapshot |
+
+With `--skip-ingest`, steps 2–3 still run (missing-only feature refresh is cheap when current).
 
 Optional flags (same contract, different shape): `--skip-ingest`, `--since-days N` — see `uv run origenlab daily-core --help`.
 
@@ -72,7 +71,7 @@ Optional flags (same contract, different shape): `--skip-ingest`, `--since-days 
 
 ## Daily core safety boundaries
 
-The daily core workflow (`daily-core --apply` / `refresh-dashboard --apply --no-mirror`):
+The daily core workflow (`daily-core --apply`):
 
 - **Does not send emails.**
 - **Does not purge data.**
@@ -81,7 +80,7 @@ The daily core workflow (`daily-core --apply` / `refresh-dashboard --apply --no-
 - **Does not require Postgres** (mirror is never part of `daily-core`).
 - **Does not approve outbound sends** — use separate campaign / export / send procedures after readiness checks.
 
-Mart rebuild (`build-mart --rebuild`) **does** mutate SQLite mart tables. That is expected for daily core; it is not Gmail send and not Postgres mirror.
+Mart rebuild (`build-mart --rebuild --use-email-mart-features`) **does** mutate SQLite mart tables. That is expected for daily core; it is not Gmail send and not Postgres mirror.
 
 ---
 
@@ -117,13 +116,11 @@ Requires `ORIGENLAB_POSTGRES_URL`, `ALEMBIC_DATABASE_URL`, or `ORIGENLAB_CLOUD_P
 
 ## Future: fast refresh vs daily core
 
-Gmail ingest is now fast (~18s); **mart rebuild** (~396s, ~217k email scan) is the daily-core bottleneck. Per-email or near-real-time automation should **not** call full `daily-core --apply` on every message.
+Gmail ingest is fast (~18s). **Mart rebuild** now uses precomputed `email_mart_features` (~3s feature scan vs ~368s legacy body scan after full backfill). Per-email automation should still **not** call full `daily-core --apply` on every message.
 
-A separate **operator-fast-refresh** / **email-event-refresh** workflow is planned (not implemented). It would ingest recent Gmail changes and refresh recent operator views **without** `build-mart -- --rebuild`. `daily-core` remains the canonical full SQLite truth job.
+A separate **operator-fast-refresh** / **email-event-refresh** workflow is planned (not implemented). It would ingest recent Gmail changes and refresh recent operator views **without** full mart rebuild. `daily-core` remains the canonical full SQLite truth job.
 
-See [`DAILY_CORE_FAST_REFRESH_SPLIT.md`](DAILY_CORE_FAST_REFRESH_SPLIT.md) for timing evidence, the three-lane model (`daily-core` / fast refresh / `mirror-dashboard`), and why `--since-days` today only narrows Gmail ingest.
-
-Mart rebuild profiling (#154–#159) showed SQLite body materialization dominates scan time. A planned **precomputed `email_mart_features` table** (design only) is documented in [`EMAIL_MART_FEATURES_DESIGN.md`](EMAIL_MART_FEATURES_DESIGN.md).
+See [`DAILY_CORE_FAST_REFRESH_SPLIT.md`](DAILY_CORE_FAST_REFRESH_SPLIT.md) for timing evidence and the three-lane model. Feature design and parity proof: [`EMAIL_MART_FEATURES_DESIGN.md`](EMAIL_MART_FEATURES_DESIGN.md).
 
 ---
 
@@ -142,14 +139,11 @@ Mart rebuild profiling (#154–#159) showed SQLite body materialization dominate
 ```bash
 cd apps/email-pipeline
 
-# Plan only — no mutations (seven steps, no mirror)
+# Plan only — no mutations (eight steps, no mirror)
 uv run origenlab daily-core
 
 # Daily core — SQLite + reports, no Postgres mirror
 uv run origenlab daily-core --apply
-
-# Equivalent long form
-uv run origenlab refresh-dashboard --apply --no-mirror
 
 # Optional mirror (separate; Postgres required)
 uv run origenlab mirror-dashboard --apply

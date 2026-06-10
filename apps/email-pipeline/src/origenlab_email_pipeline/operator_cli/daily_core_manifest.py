@@ -49,6 +49,7 @@ def format_equivalent_refresh_command(
     skip_ingest: bool = False,
     since_days: int | None = None,
 ) -> str:
+    """Legacy refresh-dashboard --no-mirror (mart scan differs from daily-core)."""
     parts = [REFRESH_DASHBOARD_USAGE, "--apply", "--no-mirror"]
     if skip_ingest:
         parts.append("--skip-ingest")

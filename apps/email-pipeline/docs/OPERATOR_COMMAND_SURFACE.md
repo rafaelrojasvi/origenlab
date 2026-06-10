@@ -37,7 +37,7 @@ uv run origenlab daily-core
 uv run origenlab daily-core --apply
 ```
 
-**`daily-core`** is the daily operating alias: plan-only by default; **`daily-core --apply`** runs the same seven SQLite/report steps as **`refresh-dashboard --apply --no-mirror`** (never includes mirror). See [`pipeline/DAILY_CORE.md`](pipeline/DAILY_CORE.md).
+**`daily-core`** is the daily operating alias: plan-only by default; **`daily-core --apply`** runs missing-only feature refresh + feature-backed mart rebuild (never includes mirror). **`refresh-dashboard --apply --no-mirror`** still uses the legacy mart scan. See [`pipeline/DAILY_CORE.md`](pipeline/DAILY_CORE.md).
 
 Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. Pass script flags after ``--`` where supported. **`gmail-ingest`** runs INBOX then `[Gmail]/Enviados` with `--skip-duplicate-message-id`; **rejects `--replace-source`**. **`mirror-dashboard`** defaults to sync `--dry-run`; **`--apply`** writes Postgres; **`--alembic --apply`** runs `alembic upgrade head` first. Requires **`ORIGENLAB_POSTGRES_URL`**, **`ALEMBIC_DATABASE_URL`**, or **`ORIGENLAB_CLOUD_POSTGRES_URL`**. **Advanced fallback** = `scripts/…` paths in the table below.
 
@@ -65,8 +65,8 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `refresh-dashboard --apply` | ingest → `build-mart --rebuild` → `build-commercial-intel` (incremental) → safety → digest → status → `mirror-dashboard --apply` | SQLite + reports + Postgres |
 | `refresh-dashboard --apply --no-mirror` | same without mirror | SQLite + reports |
 | `refresh-dashboard --apply --mirror-dry-run` | SQLite/report steps + `mirror-dashboard` dry-run | Mixed |
-| `daily-core` | same plan as `refresh-dashboard` but seven steps (no mirror in plan) | Plan only (default) |
-| `daily-core --apply` | same as `refresh-dashboard --apply --no-mirror` | SQLite + reports |
+| `daily-core` | eight steps: ingest → feature refresh → feature-backed mart → commercial → safety → … | Plan only (default) |
+| `daily-core --apply` | `build-email-mart-features --missing-only --apply` then `build-mart -- --rebuild --use-email-mart-features` | SQLite + reports |
 
 **Truth:** SQLite + Gmail Sent in `emails`. Postgres / dashboard LISTO ≠ send approval.
 

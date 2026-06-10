@@ -36,6 +36,7 @@ from origenlab_email_pipeline.cli import (
     validate_gmail_ingest_passthrough,
 )
 from origenlab_email_pipeline.operator_cli.refresh import (
+    build_daily_core_steps,
     parse_daily_core_wrapper_args,
     run_daily_core,
 )
@@ -767,12 +768,15 @@ def test_daily_core_default_plan_no_runner(
     out = capsys.readouterr().out
     assert "daily-core" in out
     assert "plan only" in out
-    assert "Planned steps (7)" in out
-    assert "7/7 status" in out
-    step_lines = [ln for ln in out.splitlines() if ln.strip().startswith(("1/", "2/", "3/", "4/", "5/", "6/", "7/"))]
-    assert len(step_lines) == 7
+    assert "Planned steps (8)" in out
+    assert "8/8 status" in out
+    assert "build-email-mart-features --missing-only --apply" in out
+    assert "build-mart -- --rebuild --use-email-mart-features" in out
+    step_lines = [ln for ln in out.splitlines() if ln.strip().startswith(("1/", "2/", "3/", "4/", "5/", "6/", "7/", "8/"))]
+    assert len(step_lines) == 8
     assert all("mirror-dashboard" not in ln for ln in step_lines)
-    assert "refresh-dashboard --apply --no-mirror" in out
+    assert "--use-email-mart-features" in out
+    assert "legacy body scan" in out
 
 
 def test_daily_core_main_default_no_subprocess(
@@ -787,9 +791,9 @@ def test_daily_core_main_default_no_subprocess(
     out = capsys.readouterr().out
     assert "daily-core" in out
     assert "plan only" in out
-    assert "Planned steps (7)" in out
-    step_lines = [ln for ln in out.splitlines() if ln.strip().startswith(("1/", "2/", "3/", "4/", "5/", "6/", "7/"))]
-    assert len(step_lines) == 7
+    assert "Planned steps (8)" in out
+    step_lines = [ln for ln in out.splitlines() if ln.strip().startswith(("1/", "2/", "3/", "4/", "5/", "6/", "7/", "8/"))]
+    assert len(step_lines) == 8
     assert all("mirror-dashboard" not in ln for ln in step_lines)
 
 
@@ -804,29 +808,88 @@ def test_daily_core_help_no_subprocess(
     assert main(["daily-core", "--help"]) == 0
     out = capsys.readouterr().out
     assert "daily-core" in out
-    assert "refresh-dashboard --apply --no-mirror" in out
+    assert "feature-backed mart" in out
 
 
-def test_daily_core_apply_same_steps_as_refresh_no_mirror(
+def test_daily_core_apply_uses_feature_backed_mart_steps(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("ORIGENLAB_REPORTS_DIR", str(tmp_path))
-    daily_calls: list[str] = []
-    refresh_calls: list[str] = []
+    daily_calls: list[tuple[str, list[str] | None]] = []
 
     def daily_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
-        daily_calls.append(cmd)
+        daily_calls.append((cmd, passthrough))
         return 0
+
+    assert run_daily_core(_refresh_opts(apply=True), runner=daily_runner) == 0
+    assert [cmd for cmd, _ in daily_calls] == [
+        "gmail-ingest",
+        "build-email-mart-features",
+        "build-mart",
+        "build-commercial-intel",
+        "refresh-safety",
+        "ndr-review",
+        "post-send-digest",
+        "status",
+    ]
+    assert daily_calls[1][1] == ["--", "--missing-only", "--apply"]
+    assert daily_calls[2][1] == ["--", "--rebuild", "--use-email-mart-features"]
+
+
+def test_refresh_dashboard_no_mirror_unchanged_without_feature_steps(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REPORTS_DIR", str(tmp_path))
+    refresh_calls: list[str] = []
 
     def refresh_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
         refresh_calls.append(cmd)
         return 0
 
-    assert run_daily_core(_refresh_opts(apply=True), runner=daily_runner) == 0
     assert run_refresh_dashboard(_refresh_opts(apply=True, no_mirror=True), runner=refresh_runner) == 0
-    assert daily_calls == refresh_calls
-    assert "mirror-dashboard" not in daily_calls
+    assert refresh_calls == [
+        "gmail-ingest",
+        "build-mart",
+        "build-commercial-intel",
+        "refresh-safety",
+        "ndr-review",
+        "post-send-digest",
+        "status",
+    ]
+    assert "build-email-mart-features" not in refresh_calls
+
+
+def test_daily_core_skip_ingest_still_runs_feature_refresh_before_mart(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REPORTS_DIR", str(tmp_path))
+    calls: list[str] = []
+
+    def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
+        calls.append(cmd)
+        return 0
+
+    run_daily_core(_refresh_opts(apply=True, skip_ingest=True), runner=fake_runner)
+    assert calls[0] == "build-email-mart-features"
+    assert calls[1] == "build-mart"
+    assert "gmail-ingest" not in calls
+
+
+def test_build_daily_core_steps_includes_feature_refresh() -> None:
+    steps = build_daily_core_steps(_refresh_opts())
+    labels = [step.label for step in steps]
+    assert labels[0] == "gmail-ingest"
+    assert "build-email-mart-features --missing-only --apply" in labels
+    assert "build-mart -- --rebuild --use-email-mart-features" in labels
+    assert labels[-1] == "status"
+    assert len(steps) == 8
+
+
+def test_build_daily_core_steps_skip_ingest_has_seven_steps() -> None:
+    assert len(build_daily_core_steps(_refresh_opts(skip_ingest=True))) == 7
 
 
 def test_daily_core_apply_no_mirror_flag_accepted(

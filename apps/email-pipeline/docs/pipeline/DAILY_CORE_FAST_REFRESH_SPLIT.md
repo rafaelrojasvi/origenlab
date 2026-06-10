@@ -30,7 +30,7 @@ Measured on the production SQLite mailbox (~217k `emails` rows) after PRs #148�
 | `[timing] email_scan_seconds` (mart email scan stage) | 373.38s |
 | Emails scanned | 217,100 |
 
-**Conclusion:** daily-core is now **mart-bound**, not Gmail-bound. A future per-email automation path must **not** call full `build-mart -- --rebuild` on every new message.
+**Conclusion:** daily-core was **mart-bound** on the legacy body scan (~368s). After feature-backed mart rebuild (~3s scan), ingest + missing-only feature refresh dominate typical runs. A future per-email automation path must still **not** call full `daily-core --apply` on every new message.
 
 ---
 
@@ -55,22 +55,24 @@ Measured on the production SQLite mailbox (~217k `emails` rows) after PRs #148�
 
 \* **Not implemented yet.** Names are provisional (`operator-fast-refresh`, `email-event-refresh`).
 
-### 1. `daily-core` (canonical — unchanged)
+### 1. `daily-core` (canonical)
 
-**Command today:** `uv run origenlab daily-core --apply`  
-**Equivalent:** `uv run origenlab refresh-dashboard --apply --no-mirror`
+**Command today:** `uv run origenlab daily-core --apply`
 
 **Purpose:** full **SQLite operational truth** reconciliation for scheduled operator runs (daily / post-send batch review).
 
-**Includes (seven steps):**
+**Includes (eight steps):**
 
 1. `gmail-ingest` — INBOX + Sent
-2. `build-mart -- --rebuild` — break-glass full mart rebuild
-3. `build-commercial-intel` — incremental SQLite commercial tables
-4. `refresh-safety` — anti-repeat / DNR export chain
-5. `ndr-review` — read-only NDR batches (no apply)
-6. `post-send-digest` — contacted-universe audit artifacts
-7. `status` — READY / CAUTION / BLOCKED
+2. `build-email-mart-features --missing-only --apply` — insert feature rows for new emails only
+3. `build-mart -- --rebuild --use-email-mart-features` — break-glass full mart rebuild from precomputed features
+4. `build-commercial-intel` — incremental SQLite commercial tables
+5. `refresh-safety` — anti-repeat / DNR export chain
+6. `ndr-review` — read-only NDR batches (no apply)
+7. `post-send-digest` — contacted-universe audit artifacts
+8. `status` — READY / CAUTION / BLOCKED
+
+`refresh-dashboard --apply --no-mirror` still uses the legacy email-body mart scan (step 2 = `build-mart -- --rebuild` only).
 
 **Semantics (must remain):**
 

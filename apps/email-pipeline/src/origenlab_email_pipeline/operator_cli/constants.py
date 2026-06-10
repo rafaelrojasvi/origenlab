@@ -98,7 +98,7 @@ SUBCOMMAND_HELP: dict[str, str] = {
         "Orchestrated Gmail→mart→commercial→safety→digest→status→mirror workflow (plan-only default)"
     ),
     "daily-core": (
-        "Daily operating alias: plan-only like refresh-dashboard; --apply runs refresh-dashboard "
-        "--apply --no-mirror (never includes mirror)"
+        "Daily operating alias: --apply runs feature refresh + feature-backed mart rebuild "
+        "(never includes mirror); plan-only by default"
     ),
 }

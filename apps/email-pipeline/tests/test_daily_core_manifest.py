@@ -19,7 +19,8 @@ from origenlab_email_pipeline.operator_cli.refresh import run_daily_core
 
 _CORE_STEP_LABELS = (
     "gmail-ingest",
-    "build-mart -- --rebuild",
+    "build-email-mart-features --missing-only --apply",
+    "build-mart -- --rebuild --use-email-mart-features",
     "build-commercial-intel",
     "refresh-safety",
     "ndr-review",
@@ -56,8 +57,8 @@ def test_daily_core_apply_console_shows_step_timings(
 
     assert run_daily_core(_refresh_opts(apply=True), runner=fake_runner) == 0
     out = capsys.readouterr().out
-    assert "[daily-core] 2/7 build-mart -- --rebuild -> OK rc=0 elapsed=" in out
-    assert "[daily-core] 7/7 status -> OK rc=0 elapsed=" in out
+    assert "[daily-core] 3/8 build-mart -- --rebuild --use-email-mart-features -> OK rc=0 elapsed=" in out
+    assert "[daily-core] 8/8 status -> OK rc=0 elapsed=" in out
 
 
 def test_daily_core_plan_only_does_not_write_manifest(
@@ -100,7 +101,7 @@ def test_manifest_path_under_active_current(reports_active_current: Path) -> Non
     assert path == reports_active_current / MANIFEST_FILENAME
 
 
-def test_manifest_contains_equivalent_refresh_command(reports_active_current: Path) -> None:
+def test_manifest_records_legacy_refresh_command_reference(reports_active_current: Path) -> None:
     def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
         return 0
 
@@ -129,7 +130,7 @@ def test_manifest_send_approval_false(reports_active_current: Path) -> None:
     assert manifest["send_approval"] is False
 
 
-def test_manifest_includes_seven_steps_no_mirror(reports_active_current: Path) -> None:
+def test_manifest_includes_eight_steps_no_mirror(reports_active_current: Path) -> None:
     def fake_runner(cmd, passthrough=None, *, mirror_apply=False, mirror_alembic=False):
         return 0
 
@@ -155,11 +156,16 @@ def test_manifest_failure_writes_failed_status_and_stops_at_failing_step(
     assert manifest["status"] == "failed"
     assert manifest["returncode"] == 3
     step_labels = [step["label"] for step in manifest["steps"]]
-    assert step_labels == ["gmail-ingest", "build-mart -- --rebuild"]
+    assert step_labels == [
+        "gmail-ingest",
+        "build-email-mart-features --missing-only --apply",
+        "build-mart -- --rebuild --use-email-mart-features",
+    ]
     assert manifest["steps"][0]["returncode"] == 0
-    assert manifest["steps"][1]["returncode"] == 3
+    assert manifest["steps"][1]["returncode"] == 0
+    assert manifest["steps"][2]["returncode"] == 3
     assert manifest["steps"][0]["elapsed_seconds"] >= 0
-    assert manifest["steps"][1]["elapsed_seconds"] >= 0
+    assert manifest["steps"][2]["elapsed_seconds"] >= 0
     assert manifest["elapsed_seconds_total"] >= 0
 
 

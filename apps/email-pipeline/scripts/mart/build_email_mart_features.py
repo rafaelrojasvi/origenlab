@@ -2,7 +2,7 @@
 """Backfill or profile precomputed email_mart_features from SQLite emails.
 
 Dry-run by default. Pass ``--apply`` to write missing/stale feature rows.
-Not wired into build-mart or daily-core.
+Not wired into standalone build-mart default path; daily-core --apply runs missing-only --apply before feature-backed mart rebuild.
 """
 
 from __future__ import annotations
