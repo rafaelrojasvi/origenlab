@@ -11,11 +11,13 @@ _RUNBOOK = _REPO / "docs" / "RUNBOOK.md"
 
 _CANONICAL_CMD = "uv run origenlab daily-core --apply"
 _PLAN_CMD = "uv run origenlab daily-core"
-_EQUIVALENT_APPLY = "uv run origenlab refresh-dashboard --apply --no-mirror"
-_EQUIVALENT_PLAN = "uv run origenlab refresh-dashboard"
+_FEATURE_MART_FLAG = "--use-email-mart-features"
+_MISSING_ONLY_FEATURE = "build-email-mart-features --missing-only --apply"
 _CORE_STEPS = (
     "gmail-ingest",
+    "build-email-mart-features",
     "build-mart",
+    "--use-email-mart-features",
     "build-commercial-intel",
     "refresh-safety",
     "ndr-review",
@@ -28,20 +30,21 @@ def test_daily_core_md_exists() -> None:
     assert _DAILY_CORE.is_file(), f"missing canonical doc: {_DAILY_CORE}"
 
 
-def test_daily_core_documents_canonical_apply_no_mirror_command() -> None:
+def test_daily_core_documents_canonical_apply_command() -> None:
     text = _DAILY_CORE.read_text(encoding="utf-8")
     assert _CANONICAL_CMD in text
-    assert _EQUIVALENT_APPLY in text
+    assert _MISSING_ONLY_FEATURE in text
+    assert _FEATURE_MART_FLAG in text
 
 
 def test_daily_core_documents_plan_only_command() -> None:
     text = _DAILY_CORE.read_text(encoding="utf-8")
     assert _PLAN_CMD in text
-    assert _EQUIVALENT_PLAN in text or "refresh-dashboard" in text
+    assert "refresh-dashboard" in text
     assert "plan-only" in text.lower() or "plan only" in text.lower()
 
 
-def test_daily_core_lists_all_seven_steps() -> None:
+def test_daily_core_lists_all_core_steps() -> None:
     text = _DAILY_CORE.read_text(encoding="utf-8")
     for step in _CORE_STEPS:
         assert step in text, f"DAILY_CORE.md must mention step {step!r}"

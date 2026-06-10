@@ -85,32 +85,53 @@ def parse_refresh_dashboard_wrapper_args(argv: list[str]) -> RefreshDashboardOpt
     )
 
 
+def _gmail_ingest_step(options: RefreshDashboardOptions) -> RefreshDashboardStep:
+    ingest_pt: tuple[str, ...] = ()
+    ingest_label = "gmail-ingest"
+    if options.since_days is not None:
+        ingest_pt = ("--", "--since-days", str(options.since_days))
+        ingest_label = f"gmail-ingest -- --since-days {options.since_days}"
+    return RefreshDashboardStep(label=ingest_label, command="gmail-ingest", passthrough=ingest_pt)
+
+
+def _refresh_dashboard_post_mart_steps() -> list[RefreshDashboardStep]:
+    return [
+        RefreshDashboardStep(label="build-commercial-intel", command="build-commercial-intel"),
+        RefreshDashboardStep(label="refresh-safety", command="refresh-safety"),
+        RefreshDashboardStep(label="ndr-review", command="ndr-review"),
+        RefreshDashboardStep(label="post-send-digest", command="post-send-digest"),
+        RefreshDashboardStep(label="status", command="status"),
+    ]
+
+
+def _daily_core_mart_steps() -> list[RefreshDashboardStep]:
+    return [
+        RefreshDashboardStep(
+            label="build-email-mart-features --missing-only --apply",
+            command="build-email-mart-features",
+            passthrough=("--", "--missing-only", "--apply"),
+        ),
+        RefreshDashboardStep(
+            label="build-mart -- --rebuild --use-email-mart-features",
+            command="build-mart",
+            passthrough=("--", "--rebuild", "--use-email-mart-features"),
+        ),
+    ]
+
+
 def build_refresh_dashboard_steps(options: RefreshDashboardOptions) -> list[RefreshDashboardStep]:
     """Build ordered workflow steps from options (used for plan and apply)."""
     steps: list[RefreshDashboardStep] = []
     if not options.skip_ingest:
-        ingest_pt: tuple[str, ...] = ()
-        ingest_label = "gmail-ingest"
-        if options.since_days is not None:
-            ingest_pt = ("--", "--since-days", str(options.since_days))
-            ingest_label = f"gmail-ingest -- --since-days {options.since_days}"
-        steps.append(
-            RefreshDashboardStep(label=ingest_label, command="gmail-ingest", passthrough=ingest_pt)
+        steps.append(_gmail_ingest_step(options))
+    steps.append(
+        RefreshDashboardStep(
+            label="build-mart -- --rebuild",
+            command="build-mart",
+            passthrough=("--", "--rebuild"),
         )
-    steps.extend(
-        [
-            RefreshDashboardStep(
-                label="build-mart -- --rebuild",
-                command="build-mart",
-                passthrough=("--", "--rebuild"),
-            ),
-            RefreshDashboardStep(label="build-commercial-intel", command="build-commercial-intel"),
-            RefreshDashboardStep(label="refresh-safety", command="refresh-safety"),
-            RefreshDashboardStep(label="ndr-review", command="ndr-review"),
-            RefreshDashboardStep(label="post-send-digest", command="post-send-digest"),
-            RefreshDashboardStep(label="status", command="status"),
-        ]
     )
+    steps.extend(_refresh_dashboard_post_mart_steps())
     if not options.no_mirror:
         if options.mirror_dry_run:
             steps.append(RefreshDashboardStep(label="mirror-dashboard", command="mirror-dashboard"))
@@ -122,6 +143,16 @@ def build_refresh_dashboard_steps(options: RefreshDashboardOptions) -> list[Refr
                     mirror_apply=True,
                 )
             )
+    return steps
+
+
+def build_daily_core_steps(options: RefreshDashboardOptions) -> list[RefreshDashboardStep]:
+    """Build daily-core workflow steps (feature refresh + feature-backed mart rebuild)."""
+    steps: list[RefreshDashboardStep] = []
+    if not options.skip_ingest:
+        steps.append(_gmail_ingest_step(options))
+    steps.extend(_daily_core_mart_steps())
+    steps.extend(_refresh_dashboard_post_mart_steps())
     return steps
 
 
@@ -166,10 +197,14 @@ def print_refresh_dashboard_plan(
         note = ""
         if step.command == "build-mart":
             note = "  # break-glass: deletes mart tables"
+        elif step.command == "build-email-mart-features":
+            note = "  # inserts missing email_mart_features rows only"
         print(f"  {i}/{total} {step.label}{note}")
     if workflow_label == "daily-core":
-        print("\nApply mode is equivalent to:")
-        print(refresh_dashboard_usage_line("--apply", "--no-mirror"))
+        print(
+            "\nMart path: feature refresh + --use-email-mart-features "
+            "(refresh-dashboard --apply --no-mirror still uses legacy body scan)."
+        )
         print("\nVariants:")
         print(daily_core_usage_line("--apply"))
         print(daily_core_usage_line("--apply", "--skip-ingest"))
@@ -192,10 +227,10 @@ def print_daily_core_help() -> None:
     print(
         "daily-core — canonical daily operating alias (SQLite + reports, no Postgres mirror)\n\n"
         f"{daily_core_usage_line()}                              # plan only (safe default)\n"
-        f"{daily_core_usage_line('--apply')}                      # same as refresh-dashboard --apply --no-mirror\n"
+        f"{daily_core_usage_line('--apply')}                      # feature-backed mart rebuild\n"
         f"{daily_core_usage_line('--apply', '--skip-ingest')}\n"
         f"{daily_core_usage_line('--apply', '--since-days', '14')}\n\n"
-        "Runs the seven daily core steps only (no mirror-dashboard). "
+        "Runs the daily core steps only (no mirror-dashboard). "
         "See docs/pipeline/DAILY_CORE.md.\n"
     )
 
@@ -261,7 +296,10 @@ def run_refresh_dashboard(
     from origenlab_email_pipeline.operator_cli.runner import run_subcommand
 
     execute = runner or run_subcommand
-    steps = build_refresh_dashboard_steps(options)
+    if workflow_label == "daily-core":
+        steps = build_daily_core_steps(options)
+    else:
+        steps = build_refresh_dashboard_steps(options)
     if not options.apply:
         print_refresh_dashboard_plan(steps, options, workflow_label=workflow_label)
         return 0
