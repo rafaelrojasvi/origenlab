@@ -43,6 +43,8 @@ AUTO_REFRESH_MAIL_COMMAND = "auto-refresh-mail"
 AUTO_REFRESH_MAIL_USAGE = "uv run origenlab auto-refresh-mail"
 AUTO_MIRROR_DASHBOARD_COMMAND = "auto-mirror-dashboard"
 AUTO_MIRROR_DASHBOARD_USAGE = "uv run origenlab auto-mirror-dashboard"
+OPERATOR_AUTOMATION_STATUS_COMMAND = "operator-automation-status"
+OPERATOR_AUTOMATION_STATUS_USAGE = "uv run origenlab operator-automation-status"
 REFRESH_DASHBOARD_COMMAND = "refresh-dashboard"
 REFRESH_DASHBOARD_USAGE = "uv run origenlab refresh-dashboard"
 SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset(
@@ -52,6 +54,7 @@ SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset(
         DAILY_CORE_COMMAND,
         AUTO_REFRESH_MAIL_COMMAND,
         AUTO_MIRROR_DASHBOARD_COMMAND,
+        OPERATOR_AUTOMATION_STATUS_COMMAND,
     }
 )
 
@@ -118,5 +121,9 @@ SUBCOMMAND_HELP: dict[str, str] = {
     "auto-mirror-dashboard": (
         "Debounced dashboard mirror: --once publishes to Postgres after successful daily-core and clean "
         "mail state (dry-run default; --apply requires --allow-non-scratch-postgres)"
+    ),
+    "operator-automation-status": (
+        "Read-only automation health: daily-core manifest, mail auto-refresh, dashboard auto-mirror "
+        "(local state files only; optional --json)"
     ),
 }
