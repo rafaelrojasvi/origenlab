@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from collections import Counter, defaultdict
@@ -28,12 +29,69 @@ ContactMap = dict[str, ContactAggRow]
 OrgMap = dict[str, dict[str, Any]]
 
 
+class EmailMartFeaturesEmptyError(RuntimeError):
+    """Feature scan requested but ``email_mart_features`` has no rows."""
+
+
 def fetch_full_body_clean_for_email(conn: sqlite3.Connection, email_id: int) -> str:
     row = conn.execute(
         "SELECT COALESCE(full_body_clean,'') FROM emails WHERE id = ?",
         (int(email_id),),
     ).fetchone()
     return str(row[0]) if row else ""
+
+
+def _parse_feature_json_array(raw: str | None) -> tuple[list[str], bool]:
+    """Parse a JSON string list from feature columns; invalid JSON → empty + invalid flag."""
+    if not raw:
+        return [], False
+    try:
+        val = json.loads(raw)
+    except json.JSONDecodeError:
+        return [], True
+    if not isinstance(val, list):
+        return [], True
+    return [str(x) for x in val], False
+
+
+def _rollup_contact_target(
+    contact: ContactMap,
+    *,
+    target_email: str,
+    inbound: bool,
+    outbound: bool,
+    is_quote_email: bool,
+    is_invoice_email: bool,
+    is_purchase_email: bool,
+    has_business_doc: bool,
+    quote_doc: int,
+    invoice_doc: int,
+    equipment_tags: list[str],
+    mart_date_iso: str | None,
+) -> None:
+    d = domain_of(target_email) or ""
+    if not d:
+        return
+    row = contact[target_email]
+    row["domain"] = d
+    row["org_name"] = guess_org_name_from_domain(d)
+    row["org_type"] = guess_org_type_from_domain(d)
+    row["total"] += 1
+    row["inbound"] += 1 if inbound else 0
+    row["outbound"] += 1 if outbound else 0
+    row["quote_email"] += 1 if is_quote_email else 0
+    row["invoice_email"] += 1 if is_invoice_email else 0
+    row["purchase_email"] += 1 if is_purchase_email else 0
+    row["business_doc_email"] += 1 if has_business_doc else 0
+    row["quote_doc"] += quote_doc
+    row["invoice_doc"] += invoice_doc
+    for tag in equipment_tags:
+        row["equip"][tag] += 1
+    if mart_date_iso:
+        if row["first_seen_at"] is None or mart_date_iso < row["first_seen_at"]:
+            row["first_seen_at"] = mart_date_iso
+        if row["last_seen_at"] is None or mart_date_iso > row["last_seen_at"]:
+            row["last_seen_at"] = mart_date_iso
 
 
 def _new_contact_row() -> ContactAggRow:
@@ -372,6 +430,123 @@ def scan_email_contacts(
     )
     print(f"[mart-profile] mart_pre_noise_no_target_rows_gt_10k={mart_pre_noise_no_target_rows_gt_10k}")
     print(f"[timing] mart_pre_noise_target_preview_seconds={mart_pre_noise_target_preview_seconds:.2f}")
+    return dict(contact), n
+
+
+def scan_email_contacts_from_features(
+    conn: sqlite3.Connection,
+    *,
+    options: MartBuildOptions,
+    doc_aggs: DocAgg,
+) -> tuple[ContactMap, int]:
+    """Scan ``email_mart_features`` and aggregate external contact rollups (in-memory)."""
+    feature_count = int(conn.execute("SELECT COUNT(*) FROM email_mart_features").fetchone()[0])
+    if feature_count == 0:
+        raise EmailMartFeaturesEmptyError(
+            "email_mart_features is empty; run build-email-mart-features --apply first"
+        )
+
+    contact: ContactMap = defaultdict(_new_contact_row)
+    stage_t0 = time.monotonic()
+
+    use_email_join = options.since_days is not None
+    join_sql = " JOIN emails e ON e.id = f.email_id" if use_email_join else ""
+    sql = (
+        "SELECT f.email_id, f.external_targets_json, f.direction, f.is_noise, "
+        "f.is_quote_email, f.is_invoice_email, f.is_purchase_email, "
+        "f.equipment_tags_json, f.mart_date_iso, f.body_len "
+        f"FROM email_mart_features f{join_sql}"
+    )
+    where_clauses: list[str] = []
+    params: list[object] = []
+    if options.canonical_only or options.dashboard_fast:
+        where_clauses.append(
+            sql_predicate_contacto_gmail_source(table_alias="f", coalesce_null=False)
+        )
+    if options.since_days is not None:
+        days = max(1, min(int(options.since_days), 3650))
+        where_clauses.append("substr(COALESCE(e.date_iso,''),1,10) >= date('now', ?)")
+        params.append(f"-{days} day")
+    if where_clauses:
+        sql += " WHERE " + " AND ".join(where_clauses)
+    sql += " ORDER BY f.email_id"
+
+    cur = conn.execute(sql, params)
+    batch_size = 5000
+    n = 0
+    feature_noise_rows = 0
+    feature_invalid_json_rows = 0
+    feature_total_targets = 0
+    feature_rows_with_targets = 0
+    body_total_chars = 0
+
+    while True:
+        batch = cur.fetchmany(batch_size)
+        if not batch:
+            break
+        for (
+            email_id,
+            external_targets_json,
+            direction,
+            is_noise,
+            is_quote_email,
+            is_invoice_email,
+            is_purchase_email,
+            equipment_tags_json,
+            mart_date_iso,
+            body_len,
+        ) in batch:
+            n += 1
+            body_total_chars += int(body_len or 0)
+
+            if options.limit_emails and n > options.limit_emails:
+                batch = []
+                break
+
+            if int(is_noise or 0):
+                feature_noise_rows += 1
+                continue
+
+            targets, targets_invalid = _parse_feature_json_array(external_targets_json)
+            equip_tags, equip_invalid = _parse_feature_json_array(equipment_tags_json)
+            if targets_invalid or equip_invalid:
+                feature_invalid_json_rows += 1
+
+            inbound = direction == "inbound"
+            outbound = direction == "outbound"
+            has_business_doc = int(email_id) in doc_aggs.business_doc_email_ids
+            dt_counts = doc_aggs.doc_counts_by_email.get(int(email_id), Counter())
+            quote_doc = int(dt_counts.get("quote", 0))
+            invoice_doc = int(dt_counts.get("invoice", 0))
+
+            if targets:
+                feature_rows_with_targets += 1
+            feature_total_targets += len(targets)
+
+            for target_email in targets:
+                _rollup_contact_target(
+                    contact,
+                    target_email=target_email,
+                    inbound=inbound,
+                    outbound=outbound,
+                    is_quote_email=bool(int(is_quote_email or 0)),
+                    is_invoice_email=bool(int(is_invoice_email or 0)),
+                    is_purchase_email=bool(int(is_purchase_email or 0)),
+                    has_business_doc=has_business_doc,
+                    quote_doc=quote_doc,
+                    invoice_doc=invoice_doc,
+                    equipment_tags=equip_tags,
+                    mart_date_iso=mart_date_iso,
+                )
+
+    email_feature_scan_seconds = time.monotonic() - stage_t0
+    print(f"Scanned email mart features: {n:,}")
+    print(f"[timing] email_feature_scan_seconds={email_feature_scan_seconds:.2f}")
+    print(f"[mart-profile] feature_noise_rows={feature_noise_rows}")
+    print(f"[mart-profile] feature_invalid_json_rows={feature_invalid_json_rows}")
+    print(f"[mart-profile] feature_total_targets={feature_total_targets}")
+    print(f"[mart-profile] feature_rows_with_targets={feature_rows_with_targets}")
+    print(f"[mart-profile] body_total_chars={body_total_chars}")
     return dict(contact), n
 
 

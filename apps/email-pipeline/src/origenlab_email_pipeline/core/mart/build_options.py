@@ -14,3 +14,4 @@ class MartBuildOptions:
     since_days: int | None
     skip_document_master_if_unchanged: bool
     mart_date_slack_days: int
+    use_email_mart_features: bool = False
