@@ -124,7 +124,9 @@ def test_first_change_marks_dirty_and_debounces(
     assert daily_calls == []
     state = load_state(state_file)
     assert state.dirty is True
-    assert state.last_change_seen_at is not None
+    assert state.last_change_seen_at == _T0.isoformat()
+    assert state.pending_inbox_total == 101
+    assert state.pending_sent_total == 50
 
 
 def test_quiet_window_passed_with_apply_runs_daily_core(
@@ -135,6 +137,10 @@ def test_quiet_window_passed_with_apply_runs_daily_core(
     dirty = _baseline_state()
     dirty.dirty = True
     dirty.last_change_seen_at = (_T0 - timedelta(seconds=DEFAULT_QUIET_SECONDS + 5)).isoformat()
+    dirty.pending_inbox_total = 101
+    dirty.pending_sent_total = 50
+    dirty.pending_inbox_max_uid = 1000
+    dirty.pending_sent_max_uid = 500
     state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text(json.dumps(dirty.to_dict()), encoding="utf-8")
     daily_calls: list[str] = []
@@ -155,6 +161,8 @@ def test_quiet_window_passed_with_apply_runs_daily_core(
     state = load_state(state_file)
     assert state.dirty is False
     assert state.last_successful_refresh_at is not None
+    assert state.pending_inbox_total is None
+    assert state.pending_sent_total is None
 
 
 def test_cooldown_prevents_repeated_run(
@@ -165,6 +173,8 @@ def test_cooldown_prevents_repeated_run(
     dirty = _baseline_state()
     dirty.dirty = True
     dirty.last_change_seen_at = (_T0 - timedelta(seconds=DEFAULT_QUIET_SECONDS + 5)).isoformat()
+    dirty.pending_inbox_total = 101
+    dirty.pending_sent_total = 50
     dirty.last_successful_refresh_at = (_T0 - timedelta(seconds=30)).isoformat()
     state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text(json.dumps(dirty.to_dict()), encoding="utf-8")
@@ -186,6 +196,8 @@ def test_large_sent_delta_uses_longer_quiet_window(reports_dir: Path) -> None:
     state = _baseline_state(sent=50)
     state.dirty = True
     state.last_change_seen_at = (_T0 - timedelta(seconds=800)).isoformat()
+    state.pending_sent_total = 120
+    state.pending_inbox_total = 100
     options = _opts(
         large_sent_delta=50,
         large_sent_quiet_seconds=DEFAULT_LARGE_SENT_QUIET_SECONDS,
@@ -200,6 +212,124 @@ def test_large_sent_delta_uses_longer_quiet_window(reports_dir: Path) -> None:
     assert result.quiet_seconds == DEFAULT_LARGE_SENT_QUIET_SECONDS
     assert result.should_run is False
     assert result.reason == "debouncing"
+
+
+def test_second_change_while_dirty_refreshes_last_change_seen_at() -> None:
+    t_first = _T0
+    t_second = _T0 + timedelta(seconds=60)
+    state = _baseline_state()
+    state.dirty = True
+    state.last_change_seen_at = t_first.isoformat()
+    state.pending_inbox_total = 101
+    state.pending_sent_total = 50
+    state.pending_inbox_max_uid = 1000
+    state.pending_sent_max_uid = 500
+
+    state, result = evaluate_mail_auto_refresh(
+        snapshot=_snapshot(inbox=102),
+        state=state,
+        options=_opts(),
+        now=t_second,
+    )
+    assert result.changed is True
+    assert result.dirty is True
+    assert result.reason == "debouncing"
+    assert state.last_change_seen_at == t_second.isoformat()
+    assert state.pending_inbox_total == 102
+
+
+def test_quiet_window_waits_for_most_recent_change() -> None:
+    t_first = _T0
+    t_second = _T0 + timedelta(seconds=DEFAULT_QUIET_SECONDS + 5)
+    state = _baseline_state()
+    state.dirty = True
+    state.last_change_seen_at = t_first.isoformat()
+    state.pending_inbox_total = 101
+    state.pending_sent_total = 50
+
+    _, ready_too_early = evaluate_mail_auto_refresh(
+        snapshot=_snapshot(inbox=102),
+        state=state,
+        options=_opts(apply=True),
+        now=t_second,
+    )
+    assert ready_too_early.should_run is False
+    assert ready_too_early.reason == "debouncing"
+
+    t_third = t_second + timedelta(seconds=DEFAULT_QUIET_SECONDS + 5)
+    state.pending_inbox_total = 102
+    _, ready_after_quiet = evaluate_mail_auto_refresh(
+        snapshot=_snapshot(inbox=102),
+        state=state,
+        options=_opts(apply=True),
+        now=t_third,
+    )
+    assert ready_after_quiet.should_run is True
+
+
+def test_large_sent_batch_multiple_probes_extend_quiet_window() -> None:
+    options = _opts(
+        large_sent_delta=50,
+        large_sent_quiet_seconds=DEFAULT_LARGE_SENT_QUIET_SECONDS,
+    )
+    state = _baseline_state(sent=50)
+    t0 = _T0
+
+    state, _ = evaluate_mail_auto_refresh(
+        snapshot=_snapshot(sent=60),
+        state=state,
+        options=options,
+        now=t0,
+    )
+    assert state.dirty is True
+    assert state.last_change_seen_at == t0.isoformat()
+
+    t1 = t0 + timedelta(seconds=800)
+    state, almost_ready = evaluate_mail_auto_refresh(
+        snapshot=_snapshot(sent=120),
+        state=state,
+        options=options,
+        now=t1,
+    )
+    assert almost_ready.quiet_seconds == DEFAULT_LARGE_SENT_QUIET_SECONDS
+    assert almost_ready.should_run is False
+    assert state.last_change_seen_at == t1.isoformat()
+
+    t2 = t1 + timedelta(seconds=DEFAULT_LARGE_SENT_QUIET_SECONDS + 1)
+    _, ready = evaluate_mail_auto_refresh(
+        snapshot=_snapshot(sent=120),
+        state=state,
+        options=_opts(
+            apply=True,
+            large_sent_delta=50,
+            large_sent_quiet_seconds=DEFAULT_LARGE_SENT_QUIET_SECONDS,
+        ),
+        now=t2,
+    )
+    assert ready.should_run is True
+
+
+def test_legacy_state_without_pending_fields_loads_and_preserves_debounce() -> None:
+    legacy = {
+        "schema_version": 1,
+        "last_seen_inbox_total": 100,
+        "last_seen_sent_total": 50,
+        "last_seen_inbox_max_uid": 1000,
+        "last_seen_sent_max_uid": 500,
+        "dirty": True,
+        "last_change_seen_at": (_T0 - timedelta(seconds=DEFAULT_QUIET_SECONDS + 5)).isoformat(),
+    }
+    state = MailAutoRefreshState.from_dict(legacy)
+    assert state.pending_inbox_total is None
+
+    state, result = evaluate_mail_auto_refresh(
+        snapshot=_snapshot(inbox=101),
+        state=state,
+        options=_opts(apply=True),
+        now=_T0,
+    )
+    assert result.should_run is True
+    assert state.pending_inbox_total == 101
 
 
 def test_lock_prevents_concurrent_run(

@@ -48,6 +48,10 @@ class MailAutoRefreshState:
     last_seen_sent_total: int | None = None
     last_seen_inbox_max_uid: int | None = None
     last_seen_sent_max_uid: int | None = None
+    pending_inbox_total: int | None = None
+    pending_sent_total: int | None = None
+    pending_inbox_max_uid: int | None = None
+    pending_sent_max_uid: int | None = None
     last_change_seen_at: str | None = None
     last_successful_refresh_at: str | None = None
     last_run_started_at: str | None = None
@@ -196,16 +200,76 @@ def release_lock(lock_file: Path) -> None:
         lock_file.unlink(missing_ok=True)
 
 
-def _mailbox_changed(state: MailAutoRefreshState, snapshot: MailboxSnapshot) -> bool:
-    if state.last_seen_inbox_total is None and state.last_seen_sent_total is None:
+def _snapshot_differs(
+    snapshot: MailboxSnapshot,
+    *,
+    inbox_total: int | None,
+    sent_total: int | None,
+    inbox_max_uid: int | None,
+    sent_max_uid: int | None,
+) -> bool:
+    if inbox_total is None and sent_total is None:
         return False
-    if snapshot.inbox_total != state.last_seen_inbox_total:
+    if snapshot.inbox_total != inbox_total:
         return True
-    if snapshot.sent_total != state.last_seen_sent_total:
+    if snapshot.sent_total != sent_total:
         return True
-    if state.last_seen_inbox_max_uid is not None and snapshot.inbox.max_uid != state.last_seen_inbox_max_uid:
+    if inbox_max_uid is not None and snapshot.inbox.max_uid != inbox_max_uid:
         return True
-    if state.last_seen_sent_max_uid is not None and snapshot.sent.max_uid != state.last_seen_sent_max_uid:
+    if sent_max_uid is not None and snapshot.sent.max_uid != sent_max_uid:
+        return True
+    return False
+
+
+def _mailbox_changed(state: MailAutoRefreshState, snapshot: MailboxSnapshot) -> bool:
+    return _snapshot_differs(
+        snapshot,
+        inbox_total=state.last_seen_inbox_total,
+        sent_total=state.last_seen_sent_total,
+        inbox_max_uid=state.last_seen_inbox_max_uid,
+        sent_max_uid=state.last_seen_sent_max_uid,
+    )
+
+
+def _pending_fields_unset(state: MailAutoRefreshState) -> bool:
+    return (
+        state.pending_inbox_total is None
+        and state.pending_sent_total is None
+        and state.pending_inbox_max_uid is None
+        and state.pending_sent_max_uid is None
+    )
+
+
+def _set_pending_from_snapshot(state: MailAutoRefreshState, snapshot: MailboxSnapshot) -> None:
+    state.pending_inbox_total = snapshot.inbox_total
+    state.pending_sent_total = snapshot.sent_total
+    state.pending_inbox_max_uid = snapshot.inbox.max_uid
+    state.pending_sent_max_uid = snapshot.sent.max_uid
+
+
+def _clear_pending(state: MailAutoRefreshState) -> None:
+    state.pending_inbox_total = None
+    state.pending_sent_total = None
+    state.pending_inbox_max_uid = None
+    state.pending_sent_max_uid = None
+
+
+def _pending_changed(state: MailAutoRefreshState, snapshot: MailboxSnapshot) -> bool:
+    if _pending_fields_unset(state):
+        return _mailbox_changed(state, snapshot)
+    return _snapshot_differs(
+        snapshot,
+        inbox_total=state.pending_inbox_total,
+        sent_total=state.pending_sent_total,
+        inbox_max_uid=state.pending_inbox_max_uid,
+        sent_max_uid=state.pending_sent_max_uid,
+    )
+
+
+def _seed_pending_if_dirty_legacy(state: MailAutoRefreshState, snapshot: MailboxSnapshot) -> bool:
+    """Back-compat: dirty state from before pending_* fields without resetting debounce."""
+    if state.dirty and _pending_fields_unset(state):
+        _set_pending_from_snapshot(state, snapshot)
         return True
     return False
 
@@ -237,6 +301,7 @@ def evaluate_mail_auto_refresh(
         state.last_seen_inbox_max_uid = snapshot.inbox.max_uid
         state.last_seen_sent_max_uid = snapshot.sent.max_uid
         state.dirty = False
+        _clear_pending(state)
         quiet = options.quiet_seconds
         return state, MailAutoRefreshResult(
             apply=options.apply,
@@ -258,10 +323,13 @@ def evaluate_mail_auto_refresh(
     changed = _mailbox_changed(state, snapshot)
     quiet_seconds = _effective_quiet_seconds(sent_delta=sent_delta, options=options)
 
-    if changed:
-        if not state.dirty or state.last_change_seen_at is None:
-            state.dirty = True
-            state.last_change_seen_at = _iso_now(now)
+    seeded_legacy = _seed_pending_if_dirty_legacy(state, snapshot)
+    pending_changed = False if seeded_legacy else _pending_changed(state, snapshot)
+
+    if pending_changed:
+        state.dirty = True
+        state.last_change_seen_at = _iso_now(now)
+        _set_pending_from_snapshot(state, snapshot)
         reason = "change_detected"
     elif state.dirty:
         reason = "debouncing"
@@ -390,6 +458,7 @@ def run_mail_auto_refresh(
                 state.last_seen_sent_max_uid = snapshot.sent.max_uid
                 state.dirty = False
                 state.last_change_seen_at = None
+                _clear_pending(state)
                 state.consecutive_failures = 0
                 state.last_result = "success"
                 result.dirty = False
