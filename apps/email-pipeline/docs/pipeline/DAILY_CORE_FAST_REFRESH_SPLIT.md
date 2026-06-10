@@ -116,6 +116,8 @@ See [`DAILY_CORE.md`](DAILY_CORE.md) for the operator contract.
 
 **Implemented (debounced auto-refresh):** `uv run origenlab auto-refresh-mail --once [--apply]` — see [`MAIL_AUTO_REFRESH.md`](MAIL_AUTO_REFRESH.md). Coalesces INBOX/Sent UID-count changes before running full `daily-core --apply`. Not a per-email fast path; use external cron/systemd with `--once` every few minutes.
 
+**Implemented (debounced dashboard publish):** `uv run origenlab auto-mirror-dashboard --once [--apply --allow-non-scratch-postgres]` — see [`DASHBOARD_AUTO_MIRROR.md`](DASHBOARD_AUTO_MIRROR.md). Separate ~15-minute publishing loop; never part of the 3-minute mail watcher.
+
 **Open engineering questions (for a future PR series):**
 
 - Precomputed per-email features (`email_mart_features`) — see [`EMAIL_MART_FEATURES_DESIGN.md`](EMAIL_MART_FEATURES_DESIGN.md) (implemented; daily-core uses feature-backed mart since PR #166)

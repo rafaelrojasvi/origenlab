@@ -69,8 +69,10 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `daily-core --apply` | `build-email-mart-features --missing-only --apply` then `build-mart -- --rebuild --use-email-mart-features` | SQLite + reports |
 | `auto-refresh-mail --once` | debounced INBOX/Sent UID probe; dry-run default | Read-only IMAP + state file |
 | `auto-refresh-mail --once --apply` | runs `daily-core --apply` when quiet/cooldown gates pass | SQLite + reports |
+| `auto-mirror-dashboard --once` | debounced mirror gate check; dry-run default | Read-only state + manifest |
+| `auto-mirror-dashboard --once --apply --allow-non-scratch-postgres` | `mirror-dashboard --live --apply` after successful daily-core | Postgres mirror |
 
-See [`pipeline/MAIL_AUTO_REFRESH.md`](pipeline/MAIL_AUTO_REFRESH.md).
+See [`pipeline/MAIL_AUTO_REFRESH.md`](pipeline/MAIL_AUTO_REFRESH.md) and [`pipeline/DASHBOARD_AUTO_MIRROR.md`](pipeline/DASHBOARD_AUTO_MIRROR.md).
 
 **Truth:** SQLite + Gmail Sent in `emails`. Postgres / dashboard LISTO ≠ send approval.
 
