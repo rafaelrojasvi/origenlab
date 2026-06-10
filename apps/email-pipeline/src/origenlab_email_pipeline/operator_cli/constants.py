@@ -28,6 +28,7 @@ SUBCOMMAND_SCRIPTS: dict[str, str] = {
     "audit-facades": "scripts/qa/audit_module_facades.py",
     "audit-institution-grouping": "scripts/qa/audit_institution_grouping.py",
     "build-mart": "scripts/mart/build_business_mart.py",
+    "build-email-mart-features": "scripts/mart/build_email_mart_features.py",
     "build-commercial-intel": "scripts/commercial/build_commercial_intel_v1.py",
     "gmail-ingest-help": GMAIL_INGEST_SCRIPT,
 }
@@ -65,6 +66,10 @@ SUBCOMMAND_HELP: dict[str, str] = {
     ),
     "build-mart": (
         "Business mart rebuild (build_business_mart.py) — break-glass: optional --rebuild deletes mart tables"
+    ),
+    "build-email-mart-features": (
+        "Precompute email_mart_features from emails (build_email_mart_features.py) — dry-run default; "
+        "--apply writes missing/stale rows"
     ),
     "build-commercial-intel": (
         "Commercial intel incremental builder (build_commercial_intel_v1.py) — writes SQLite commercial_* "
