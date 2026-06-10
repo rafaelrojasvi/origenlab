@@ -946,3 +946,21 @@ def test_auto_refresh_mail_help_no_subprocess(
     out = capsys.readouterr().out
     assert "auto-refresh-mail" in out
     assert "--once" in out
+
+
+def test_auto_mirror_dashboard_in_cli_command_names() -> None:
+    assert "auto-mirror-dashboard" in CLI_COMMAND_NAMES
+
+
+def test_auto_mirror_dashboard_help_no_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.operator_cli.dashboard_auto_mirror.run_mirror_dashboard",
+        lambda **k: pytest.fail("mirror must not run for --help"),
+    )
+    assert main(["auto-mirror-dashboard", "--help"]) == 0
+    out = capsys.readouterr().out
+    assert "auto-mirror-dashboard" in out
+    assert "--allow-non-scratch-postgres" in out

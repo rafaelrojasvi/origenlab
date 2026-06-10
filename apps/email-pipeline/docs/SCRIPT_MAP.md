@@ -64,6 +64,7 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | `scripts/sync/sync_dashboard_postgres_mirror.py` | superseded_by_origenlab | `origenlab mirror-dashboard` | SQLite | Postgres mirror (**`--apply`**) | **high** | `uv run origenlab mirror-dashboard` (dry-run default) | Parked mirror path; not send truth |
 | *(orchestrator)* | active_operator_command | `origenlab refresh-dashboard` | Multi-step | SQLite + reports + optional PG | **high** | `uv run origenlab refresh-dashboard` (plan default) | `--apply` runs ingest→mart→commercial→safety→mirror |
 | *(orchestrator)* | active_operator_command | `origenlab auto-refresh-mail` | Gmail IMAP probe + optional daily-core | state file + optional SQLite | medium | `uv run origenlab auto-refresh-mail --once` | Debounced; `--apply` runs `daily-core --apply` — see [`pipeline/MAIL_AUTO_REFRESH.md`](pipeline/MAIL_AUTO_REFRESH.md) |
+| *(orchestrator)* | active_operator_command | `origenlab auto-mirror-dashboard` | manifest + mail state gates + optional mirror | state file + optional Postgres | **high** | `uv run origenlab auto-mirror-dashboard --once` | Separate ~15m loop; `--apply` requires `--allow-non-scratch-postgres` — [`pipeline/DASHBOARD_AUTO_MIRROR.md`](pipeline/DASHBOARD_AUTO_MIRROR.md) |
 
 ### Daily outbound lanes (scripts — no `origenlab` wrapper yet)
 

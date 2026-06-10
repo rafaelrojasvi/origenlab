@@ -6,6 +6,7 @@ import argparse
 import sys
 
 from origenlab_email_pipeline.operator_cli.constants import (
+    AUTO_MIRROR_DASHBOARD_COMMAND,
     AUTO_REFRESH_MAIL_COMMAND,
     CLI_COMMAND_NAMES,
     DAILY_CORE_COMMAND,
@@ -16,6 +17,11 @@ from origenlab_email_pipeline.operator_cli.constants import (
     SPECIAL_COMMANDS,
     SUBCOMMAND_HELP,
     SUBCOMMAND_SCRIPTS,
+)
+from origenlab_email_pipeline.operator_cli.dashboard_auto_mirror import (
+    parse_dashboard_auto_mirror_args,
+    print_dashboard_auto_mirror_help,
+    run_dashboard_auto_mirror,
 )
 from origenlab_email_pipeline.operator_cli.mail_auto_refresh import (
     parse_mail_auto_refresh_args,
@@ -82,12 +88,38 @@ def _build_parser() -> argparse.ArgumentParser:
             "mirror-dashboard: Postgres mirror sync (dry-run default; requires Postgres URL env). "
             "refresh-dashboard: orchestrated stack refresh (plan-only default). "
             "daily-core: daily operating alias (plan-only default; --apply uses feature-backed mart rebuild). "
-            "auto-refresh-mail: debounced mailbox probe (--once; --apply runs daily-core when gates pass)."
+            "auto-refresh-mail: debounced mailbox probe (--once; --apply runs daily-core when gates pass). "
+            "auto-mirror-dashboard: debounced Postgres publish (--once; separate from mail watcher)."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True, metavar="command")
     for name in CLI_COMMAND_NAMES:
         script_rel = SUBCOMMAND_SCRIPTS.get(name, GMAIL_INGEST_SCRIPT)
+        if name == AUTO_MIRROR_DASHBOARD_COMMAND:
+            p = sub.add_parser(
+                name,
+                help=SUBCOMMAND_HELP[name],
+                description=SUBCOMMAND_HELP[name],
+            )
+            p.add_argument("--apply", action="store_true", help="Run mirror-dashboard when gates pass")
+            p.add_argument("--once", action="store_true", help="Single evaluation (required)")
+            p.add_argument(
+                "--daemon",
+                action="store_true",
+                help="Loop mode (not implemented — use external scheduler with --once)",
+            )
+            p.add_argument("--cooldown-seconds", type=int, default=900)
+            p.add_argument("--operator", default="rafael")
+            p.add_argument(
+                "--reason",
+                default="Automated dashboard mirror after successful daily-core",
+            )
+            p.add_argument(
+                "--allow-non-scratch-postgres",
+                action="store_true",
+                help="Required with --apply before writing to non-scratch Postgres",
+            )
+            continue
         if name == AUTO_REFRESH_MAIL_COMMAND:
             p = sub.add_parser(
                 name,
@@ -224,6 +256,21 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
         try:
             return run_mail_auto_refresh(auto_opts)
+        except ValueError as exc:
+            parser.error(str(exc))
+
+    if command == AUTO_MIRROR_DASHBOARD_COMMAND:
+        if _wrapper_help_requested(argv[1:]):
+            print_dashboard_auto_mirror_help()
+            return 0
+        try:
+            mirror_opts = parse_dashboard_auto_mirror_args(argv[1:])
+        except SystemExit as exc:
+            raise exc
+        except ValueError as exc:
+            parser.error(str(exc))
+        try:
+            return run_dashboard_auto_mirror(mirror_opts)
         except ValueError as exc:
             parser.error(str(exc))
 
