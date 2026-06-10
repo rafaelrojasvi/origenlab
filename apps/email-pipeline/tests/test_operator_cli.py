@@ -928,3 +928,21 @@ def test_daily_core_apply_since_days_only_on_ingest(
     run_daily_core(_refresh_opts(apply=True, since_days=14), runner=fake_runner)
     assert calls[0] == ("gmail-ingest", ["--", "--since-days", "14"])
     assert all(c[1] != ["--", "--since-days", "14"] for c in calls[1:])
+
+
+def test_auto_refresh_mail_in_cli_command_names() -> None:
+    assert "auto-refresh-mail" in CLI_COMMAND_NAMES
+
+
+def test_auto_refresh_mail_help_no_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.operator_cli.mail_auto_refresh.probe_mailbox_snapshot",
+        lambda: pytest.fail("probe must not run for --help"),
+    )
+    assert main(["auto-refresh-mail", "--help"]) == 0
+    out = capsys.readouterr().out
+    assert "auto-refresh-mail" in out
+    assert "--once" in out

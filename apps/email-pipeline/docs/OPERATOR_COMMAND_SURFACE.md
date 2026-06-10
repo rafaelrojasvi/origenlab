@@ -67,6 +67,10 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `refresh-dashboard --apply --mirror-dry-run` | SQLite/report steps + `mirror-dashboard` dry-run | Mixed |
 | `daily-core` | eight steps: ingest → feature refresh → feature-backed mart → commercial → safety → … | Plan only (default) |
 | `daily-core --apply` | `build-email-mart-features --missing-only --apply` then `build-mart -- --rebuild --use-email-mart-features` | SQLite + reports |
+| `auto-refresh-mail --once` | debounced INBOX/Sent UID probe; dry-run default | Read-only IMAP + state file |
+| `auto-refresh-mail --once --apply` | runs `daily-core --apply` when quiet/cooldown gates pass | SQLite + reports |
+
+See [`pipeline/MAIL_AUTO_REFRESH.md`](pipeline/MAIL_AUTO_REFRESH.md).
 
 **Truth:** SQLite + Gmail Sent in `emails`. Postgres / dashboard LISTO ≠ send approval.
 

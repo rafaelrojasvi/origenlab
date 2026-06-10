@@ -6,6 +6,7 @@ import argparse
 import sys
 
 from origenlab_email_pipeline.operator_cli.constants import (
+    AUTO_REFRESH_MAIL_COMMAND,
     CLI_COMMAND_NAMES,
     DAILY_CORE_COMMAND,
     GMAIL_INGEST_SCRIPT,
@@ -15,6 +16,11 @@ from origenlab_email_pipeline.operator_cli.constants import (
     SPECIAL_COMMANDS,
     SUBCOMMAND_HELP,
     SUBCOMMAND_SCRIPTS,
+)
+from origenlab_email_pipeline.operator_cli.mail_auto_refresh import (
+    parse_mail_auto_refresh_args,
+    print_mail_auto_refresh_help,
+    run_mail_auto_refresh,
 )
 from origenlab_email_pipeline.operator_cli.gmail import (
     print_gmail_ingest_folders_help,
@@ -75,12 +81,32 @@ def _build_parser() -> argparse.ArgumentParser:
             "gmail-ingest-help: ingest --help only. "
             "mirror-dashboard: Postgres mirror sync (dry-run default; requires Postgres URL env). "
             "refresh-dashboard: orchestrated stack refresh (plan-only default). "
-            "daily-core: daily operating alias (plan-only default; --apply uses feature-backed mart rebuild)."
+            "daily-core: daily operating alias (plan-only default; --apply uses feature-backed mart rebuild). "
+            "auto-refresh-mail: debounced mailbox probe (--once; --apply runs daily-core when gates pass)."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True, metavar="command")
     for name in CLI_COMMAND_NAMES:
         script_rel = SUBCOMMAND_SCRIPTS.get(name, GMAIL_INGEST_SCRIPT)
+        if name == AUTO_REFRESH_MAIL_COMMAND:
+            p = sub.add_parser(
+                name,
+                help=SUBCOMMAND_HELP[name],
+                description=SUBCOMMAND_HELP[name],
+            )
+            p.add_argument("--apply", action="store_true", help="Run daily-core --apply when gates pass")
+            p.add_argument("--once", action="store_true", help="Single evaluation (required)")
+            p.add_argument(
+                "--daemon",
+                action="store_true",
+                help="Loop mode (not implemented — use external scheduler with --once)",
+            )
+            p.add_argument("--interval-seconds", type=int, default=120)
+            p.add_argument("--quiet-seconds", type=int, default=180)
+            p.add_argument("--cooldown-seconds", type=int, default=600)
+            p.add_argument("--large-sent-delta", type=int, default=50)
+            p.add_argument("--large-sent-quiet-seconds", type=int, default=900)
+            continue
         if name in (REFRESH_DASHBOARD_COMMAND, DAILY_CORE_COMMAND):
             p = sub.add_parser(name, help=SUBCOMMAND_HELP[name], description=SUBCOMMAND_HELP[name])
             _add_refresh_wrapper_flags(
@@ -185,6 +211,21 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             parser.error(str(exc))
         return run_daily_core(daily_opts)
+
+    if command == AUTO_REFRESH_MAIL_COMMAND:
+        if _wrapper_help_requested(argv[1:]):
+            print_mail_auto_refresh_help()
+            return 0
+        try:
+            auto_opts = parse_mail_auto_refresh_args(argv[1:])
+        except SystemExit as exc:
+            raise exc
+        except ValueError as exc:
+            parser.error(str(exc))
+        try:
+            return run_mail_auto_refresh(auto_opts)
+        except ValueError as exc:
+            parser.error(str(exc))
 
     mirror_apply = False
     mirror_alembic = False

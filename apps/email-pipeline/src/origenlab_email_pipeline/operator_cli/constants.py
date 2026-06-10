@@ -39,10 +39,17 @@ GMAIL_INGEST_COMMANDS: frozenset[str] = frozenset({"gmail-ingest", "gmail-ingest
 MIRROR_DASHBOARD_COMMAND = "mirror-dashboard"
 DAILY_CORE_COMMAND = "daily-core"
 DAILY_CORE_USAGE = "uv run origenlab daily-core"
+AUTO_REFRESH_MAIL_COMMAND = "auto-refresh-mail"
+AUTO_REFRESH_MAIL_USAGE = "uv run origenlab auto-refresh-mail"
 REFRESH_DASHBOARD_COMMAND = "refresh-dashboard"
 REFRESH_DASHBOARD_USAGE = "uv run origenlab refresh-dashboard"
 SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset(
-    {MIRROR_DASHBOARD_COMMAND, REFRESH_DASHBOARD_COMMAND, DAILY_CORE_COMMAND}
+    {
+        MIRROR_DASHBOARD_COMMAND,
+        REFRESH_DASHBOARD_COMMAND,
+        DAILY_CORE_COMMAND,
+        AUTO_REFRESH_MAIL_COMMAND,
+    }
 )
 
 CLI_COMMAND_NAMES: tuple[str, ...] = tuple(SUBCOMMAND_SCRIPTS.keys()) + tuple(sorted(SPECIAL_COMMANDS))
@@ -100,5 +107,9 @@ SUBCOMMAND_HELP: dict[str, str] = {
     "daily-core": (
         "Daily operating alias: --apply runs feature refresh + feature-backed mart rebuild "
         "(never includes mirror); plan-only by default"
+    ),
+    "auto-refresh-mail": (
+        "Debounced mailbox auto-refresh: --once probes INBOX/Sent UID counts and may run daily-core "
+        "--apply after quiet/cooldown gates (dry-run default)"
     ),
 }

@@ -63,6 +63,7 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | `scripts/ingest/05_workspace_gmail_imap_to_sqlite.py` | superseded_by_origenlab | `origenlab gmail-ingest` / `gmail-ingest-folders` | Gmail IMAP | SQLite `emails` | **medium** | `uv run origenlab gmail-ingest` | Rejects `--replace-source`; Sent required for gate |
 | `scripts/sync/sync_dashboard_postgres_mirror.py` | superseded_by_origenlab | `origenlab mirror-dashboard` | SQLite | Postgres mirror (**`--apply`**) | **high** | `uv run origenlab mirror-dashboard` (dry-run default) | Parked mirror path; not send truth |
 | *(orchestrator)* | active_operator_command | `origenlab refresh-dashboard` | Multi-step | SQLite + reports + optional PG | **high** | `uv run origenlab refresh-dashboard` (plan default) | `--apply` runs ingest→mart→commercial→safety→mirror |
+| *(orchestrator)* | active_operator_command | `origenlab auto-refresh-mail` | Gmail IMAP probe + optional daily-core | state file + optional SQLite | medium | `uv run origenlab auto-refresh-mail --once` | Debounced; `--apply` runs `daily-core --apply` — see [`pipeline/MAIL_AUTO_REFRESH.md`](pipeline/MAIL_AUTO_REFRESH.md) |
 
 ### Daily outbound lanes (scripts — no `origenlab` wrapper yet)
 
