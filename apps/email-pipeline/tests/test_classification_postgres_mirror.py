@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 from origenlab_email_pipeline.classification_postgres_mirror import build_classification_rows
@@ -16,16 +17,19 @@ def _insert_email(
     subject: str,
     sender: str,
     folder: str = "INBOX",
+    date_iso: str | None = None,
 ) -> None:
+    effective_date_iso = date_iso or datetime.now(timezone.utc).date().isoformat()
     conn.execute(
         """
         INSERT INTO emails (
           id, source_file, date_iso, folder, sender, recipients, subject, body
-        ) VALUES (?, ?, '2026-05-10', ?, ?, 'contacto@origenlab.cl', ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 'contacto@origenlab.cl', ?, ?)
         """,
         (
             email_id,
             f"{CONTACTO_GMAIL_SOURCE_PREFIX}{folder}/msg",
+            effective_date_iso,
             folder,
             sender,
             subject,
