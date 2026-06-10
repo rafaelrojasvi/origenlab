@@ -5,6 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from origenlab_api.schemas.operator import OperatorStatusResponse
+from origenlab_api.schemas.operator_automation import OperatorAutomationStatusResponse
+from origenlab_api.services.operator_automation_status_service import (
+    build_operator_automation_status_response,
+)
 from origenlab_api.services.operator_status_service import build_operator_status_response
 from origenlab_api.settings import Settings, get_settings
 
@@ -19,4 +23,15 @@ def operator_status(
     return build_operator_status_response(
         settings,
         max_staleness_days=max_staleness_days,
+    )
+
+
+@router.get("/automation-status", response_model=OperatorAutomationStatusResponse)
+def operator_automation_status(
+    settings: Settings = Depends(get_settings),
+    cooldown_seconds: int = Query(900, ge=60, le=86400, alias="cooldown-seconds"),
+) -> OperatorAutomationStatusResponse:
+    return build_operator_automation_status_response(
+        settings,
+        mirror_cooldown_seconds=cooldown_seconds,
     )

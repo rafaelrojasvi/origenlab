@@ -58,6 +58,7 @@ const viteConfigSource = import.meta.glob("../../vite.config.ts", {
 const DASHBOARD_V1_API_PATHS = [
   "/health",
   "/operator/status",
+  "/operator/automation-status",
   "/cases/warm",
   "/opportunities/equipment",
 ];

@@ -10,6 +10,7 @@ from origenlab_email_pipeline.outbound_core import (
     resolve_outbound_sent_folders,
 )
 
+from origenlab_api.repositories.automation_status_fs import get_automation_status_from_active_current
 from origenlab_api.settings import Settings
 
 
@@ -54,3 +55,9 @@ class SqliteOperatorStatusRepository:
             "warnings": list(report.warnings),
             "daily_core_run": dict(report.daily_core_run or {}),
         }
+
+    def get_automation_status(self, *, mirror_cooldown_seconds: int = 900) -> dict[str, Any]:
+        return get_automation_status_from_active_current(
+            self._settings,
+            mirror_cooldown_seconds=mirror_cooldown_seconds,
+        )

@@ -29,6 +29,8 @@ Four applications share this monorepo:
 
 Send/outreach truth stays in **SQLite + email-pipeline scripts**, not in Postgres mirror or dashboard reads.
 
+Automation health (`auto-refresh-mail` + `auto-mirror-dashboard`) is inspectable via `operator-automation-status` and the dashboard **Automatización operador** card on Today.
+
 ## Scope and limitations
 
 - Drafting/copilot flows generate suggestions only; there is no autonomous send path.

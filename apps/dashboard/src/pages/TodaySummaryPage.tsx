@@ -6,6 +6,7 @@ import { isEquipmentFeedUnavailable } from "../lib/equipmentFeedStatus";
 import { humanizeOperatorWarning } from "../lib/humanizeOperatorWarning";
 import { computeTodaySummaryCounts } from "../lib/todaySummaryCounts";
 import { verdictTone } from "../lib/verdictStyles";
+import { AutomationHealthCard } from "../components/operator/AutomationHealthCard";
 import { DailyCoreRunNote } from "../components/operator/DailyCoreRunNote";
 import { OperatorWarningsList } from "../components/operator/OperatorWarningsList";
 
@@ -323,6 +324,8 @@ export function TodaySummaryPage() {
             </div>
             <DailyCoreRunNote dailyCoreRun={data.operator.daily_core_run} showSafetyNote={false} />
           </section>
+
+          <AutomationHealthCard />
 
           {data.health.backend === "sqlite" ? (
             <p className="text-sm text-[var(--color-muted)]" role="status">
