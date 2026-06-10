@@ -114,9 +114,11 @@ See [`DAILY_CORE.md`](DAILY_CORE.md) for the operator contract.
 - Postgres schema migrations (Alembic)
 - Full historical mart parity on every event
 
+**Implemented (debounced auto-refresh):** `uv run origenlab auto-refresh-mail --once [--apply]` — see [`MAIL_AUTO_REFRESH.md`](MAIL_AUTO_REFRESH.md). Coalesces INBOX/Sent UID-count changes before running full `daily-core --apply`. Not a per-email fast path; use external cron/systemd with `--once` every few minutes.
+
 **Open engineering questions (for a future PR series):**
 
-- Precomputed per-email features (`email_mart_features`) — see [`EMAIL_MART_FEATURES_DESIGN.md`](EMAIL_MART_FEATURES_DESIGN.md)
+- Precomputed per-email features (`email_mart_features`) — see [`EMAIL_MART_FEATURES_DESIGN.md`](EMAIL_MART_FEATURES_DESIGN.md) (implemented; daily-core uses feature-backed mart since PR #166)
 - Incremental mart updates vs partial table refresh vs “recent window” materialized views in SQLite
 - How to detect “changed” Gmail UIDs (since cursor, `SINCE`, or Message-ID delta)
 - When to **escalate** from fast refresh back to `daily-core --apply` (drift, missed UIDs, mart checksum failure)
