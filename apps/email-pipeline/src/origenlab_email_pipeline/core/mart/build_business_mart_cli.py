@@ -64,6 +64,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
             f"{MART_DATE_SLACK_DAYS_DEFAULT}). Raw emails table is never modified."
         ),
     )
+    ap.add_argument(
+        "--use-email-mart-features",
+        action="store_true",
+        help=(
+            "Scan precomputed email_mart_features instead of emails bodies "
+            "(requires build-email-mart-features --apply first)"
+        ),
+    )
     return ap
 
 
@@ -95,6 +103,8 @@ def run_build_business_mart_from_argv(argv: list[str] | None = None) -> int:
         print("[mode] canonical-only enabled")
     if args.since_days is not None:
         print(f"[mode] since-days={args.since_days}")
+    if args.use_email_mart_features:
+        print("[mode] use-email-mart-features enabled")
     mart_slack = normalize_mart_date_slack_days(int(args.mart_date_slack_days))
     print(f"Mart date slack days (plausible timeline): {mart_slack}")
 
@@ -117,6 +127,7 @@ def run_build_business_mart_from_argv(argv: list[str] | None = None) -> int:
         since_days=args.since_days,
         skip_document_master_if_unchanged=bool(args.skip_document_master_if_unchanged),
         mart_date_slack_days=mart_slack,
+        use_email_mart_features=bool(args.use_email_mart_features),
     )
     built_at = run_business_mart_build(conn, run_id, options)
     conn.close()

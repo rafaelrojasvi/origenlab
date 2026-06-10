@@ -8,6 +8,7 @@ from origenlab_email_pipeline.core.mart.contact_org_builder import (
     rebuild_contact_master,
     rebuild_organization_master,
     scan_email_contacts,
+    scan_email_contacts_from_features,
 )
 from origenlab_email_pipeline.core.mart.document_master_builder import rebuild_document_master
 from origenlab_email_pipeline.core.mart.opportunity_signal_builder import rebuild_opportunity_signals
@@ -45,11 +46,18 @@ def run_business_mart_build(
             mart_slack=options.mart_date_slack_days,
             skip_if_unchanged=options.skip_document_master_if_unchanged,
         )
-        contact, n_scanned = scan_email_contacts(
-            conn,
-            options=options,
-            doc_aggs=doc_aggs,
-        )
+        if options.use_email_mart_features:
+            contact, n_scanned = scan_email_contacts_from_features(
+                conn,
+                options=options,
+                doc_aggs=doc_aggs,
+            )
+        else:
+            contact, n_scanned = scan_email_contacts(
+                conn,
+                options=options,
+                doc_aggs=doc_aggs,
+            )
         rebuild_contact_master(conn, contact)
         org = rebuild_organization_master(conn, contact)
         rebuild_opportunity_signals(conn, contact, org)
