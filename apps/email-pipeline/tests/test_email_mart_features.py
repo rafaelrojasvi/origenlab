@@ -41,6 +41,29 @@ def _feature_kwargs(**overrides: object) -> dict[str, object]:
     return base
 
 
+def _hash_kwargs(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "message_id": "msg-1",
+        "sender": "Buyer <buyer@lab.cl>",
+        "recipients": "contacto@origenlab.cl",
+        "subject": "Subject",
+        "top_reply_clean": "top body",
+        "full_body_clean": "full body",
+        "date_iso": "2026-06-01T10:00:00",
+        "internal_domains": _INTERNAL,
+        "mart_date_slack_days": _SLACK_DAYS,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_db_import_smoke() -> None:
+    from origenlab_email_pipeline.db import connect, init_schema
+
+    assert connect is not None
+    assert init_schema is not None
+
+
 def test_init_schema_creates_email_mart_features_table() -> None:
     conn = sqlite3.connect(":memory:")
     init_schema(conn)
@@ -163,42 +186,38 @@ def test_full_body_clean_fallback_when_top_empty() -> None:
 
 
 def test_feature_source_hash_changes_when_subject_or_body_changes() -> None:
-    base = compute_feature_source_hash(
-        message_id="msg-1",
-        sender="Buyer <buyer@lab.cl>",
-        recipients="contacto@origenlab.cl",
-        subject="Subject",
-        top_reply_clean="top body",
-        full_body_clean="full body",
-        date_iso="2026-06-01T10:00:00",
-        internal_domains=_INTERNAL,
-        mart_date_slack_days=_SLACK_DAYS,
-    )
-    changed_subject = compute_feature_source_hash(
-        message_id="msg-1",
-        sender="Buyer <buyer@lab.cl>",
-        recipients="contacto@origenlab.cl",
-        subject="Changed",
-        top_reply_clean="top body",
-        full_body_clean="full body",
-        date_iso="2026-06-01T10:00:00",
-        internal_domains=_INTERNAL,
-        mart_date_slack_days=_SLACK_DAYS,
-    )
-    changed_body = compute_feature_source_hash(
-        message_id="msg-1",
-        sender="Buyer <buyer@lab.cl>",
-        recipients="contacto@origenlab.cl",
-        subject="Subject",
-        top_reply_clean="different",
-        full_body_clean="full body",
-        date_iso="2026-06-01T10:00:00",
-        internal_domains=_INTERNAL,
-        mart_date_slack_days=_SLACK_DAYS,
-    )
+    base = compute_feature_source_hash(**_hash_kwargs())
+    changed_subject = compute_feature_source_hash(**_hash_kwargs(subject="Changed"))
+    changed_body = compute_feature_source_hash(**_hash_kwargs(top_reply_clean="different"))
     assert base != changed_subject
     assert base != changed_body
     assert changed_subject != changed_body
+
+
+def test_feature_source_hash_unchanged_when_full_body_changes_but_top_nonempty() -> None:
+    first = compute_feature_source_hash(
+        **_hash_kwargs(top_reply_clean="top body", full_body_clean="full body")
+    )
+    second = compute_feature_source_hash(
+        **_hash_kwargs(top_reply_clean="top body", full_body_clean="different full body")
+    )
+    assert first == second
+
+
+def test_feature_source_hash_changes_when_top_empty_and_full_body_changes() -> None:
+    first = compute_feature_source_hash(
+        **_hash_kwargs(top_reply_clean="", full_body_clean="fallback body")
+    )
+    second = compute_feature_source_hash(
+        **_hash_kwargs(top_reply_clean="", full_body_clean="different fallback body")
+    )
+    assert first != second
+
+
+def test_feature_source_hash_changes_when_selected_top_reply_changes() -> None:
+    first = compute_feature_source_hash(**_hash_kwargs(top_reply_clean="top body"))
+    second = compute_feature_source_hash(**_hash_kwargs(top_reply_clean="other top body"))
+    assert first != second
 
 
 def test_json_fields_are_valid_deterministic_arrays() -> None:

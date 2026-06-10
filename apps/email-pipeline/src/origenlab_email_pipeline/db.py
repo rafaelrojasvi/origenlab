@@ -11,9 +11,6 @@ import sqlite3
 from pathlib import Path
 
 from origenlab_email_pipeline.business_mart_schema import BUSINESS_MART_SCHEMA_SQL
-from origenlab_email_pipeline.core.mart.email_mart_features_schema import (
-    ensure_email_mart_features_table,
-)
 from origenlab_email_pipeline.pipeline_meta_schema import ensure_pipeline_meta_tables
 
 
@@ -96,6 +93,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
     ensure_pipeline_meta_tables(conn)
     conn.executescript(SCHEMA_SQL)
     conn.executescript(BUSINESS_MART_SCHEMA_SQL)
+
+    from origenlab_email_pipeline.core.mart.email_mart_features_schema import (
+        ensure_email_mart_features_table,
+    )
+
     ensure_email_mart_features_table(conn)
     # Additive migrations for business mart tables (safe on older DBs)
     for col in (

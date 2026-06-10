@@ -49,6 +49,19 @@ def select_mart_body_text(top_reply_clean: str | None, full_body_clean: str | No
     return full_body_clean or ""
 
 
+def selected_body_for_hash(
+    top_reply_clean: str | None,
+    full_body_clean: str | None,
+) -> tuple[str, str]:
+    top = top_reply_clean or ""
+    full = full_body_clean or ""
+    if top:
+        return "top_reply_clean", top
+    if full:
+        return "full_body_clean", full
+    return "empty", ""
+
+
 def compute_feature_source_hash(
     *,
     message_id: str | None,
@@ -61,14 +74,16 @@ def compute_feature_source_hash(
     internal_domains: frozenset[str] | set[str],
     mart_date_slack_days: int,
 ) -> str:
+    body_source, selected_body = selected_body_for_hash(top_reply_clean, full_body_clean)
     payload = {
         "v": FEATURE_VERSION,
         "message_id": message_id or "",
         "sender": sender or "",
         "recipients": recipients or "",
         "subject": subject or "",
-        "top_reply_clean": top_reply_clean or "",
-        "full_body_clean": full_body_clean or "",
+        "body_source": body_source,
+        "selected_body_len": len(selected_body),
+        "selected_body_sha256": hashlib.sha256(selected_body.encode("utf-8")).hexdigest(),
         "date_iso": date_iso or "",
         "internal_domains": sorted(internal_domains),
         "mart_date_slack_days": int(mart_date_slack_days),
