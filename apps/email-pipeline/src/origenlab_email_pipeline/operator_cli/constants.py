@@ -27,6 +27,7 @@ SUBCOMMAND_SCRIPTS: dict[str, str] = {
     "audit-overlap": "scripts/qa/export_contacted_lead_overlap_audit.py",
     "audit-facades": "scripts/qa/audit_module_facades.py",
     "audit-institution-grouping": "scripts/qa/audit_institution_grouping.py",
+    "audit-email-mart-feature-scan": "scripts/qa/audit_email_mart_feature_scan.py",
     "build-mart": "scripts/mart/build_business_mart.py",
     "build-email-mart-features": "scripts/mart/build_email_mart_features.py",
     "build-commercial-intel": "scripts/commercial/build_commercial_intel_v1.py",
@@ -63,6 +64,10 @@ SUBCOMMAND_HELP: dict[str, str] = {
     "audit-institution-grouping": (
         "Read-only institution/domain grouping audit from business mart (audit_institution_grouping.py) — "
         "reports only; not send safety"
+    ),
+    "audit-email-mart-feature-scan": (
+        "Read-only parity audit: email body scan vs email_mart_features scan "
+        "(audit_email_mart_feature_scan.py) — no mart table writes"
     ),
     "build-mart": (
         "Business mart rebuild (build_business_mart.py) — break-glass: optional --rebuild deletes mart tables"

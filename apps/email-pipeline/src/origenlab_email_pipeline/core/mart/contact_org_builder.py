@@ -594,8 +594,8 @@ def rebuild_contact_master(conn: sqlite3.Connection, contact: ContactMap) -> Non
     print(f"[timing] contact_master_seconds={time.monotonic() - stage_t0:.2f}")
 
 
-def rebuild_organization_master(conn: sqlite3.Connection, contact: ContactMap) -> OrgMap:
-    stage_t0 = time.monotonic()
+def build_organization_map(contact: ContactMap) -> OrgMap:
+    """Aggregate organization rollups from a contact map (in-memory only)."""
     org: OrgMap = defaultdict(
         lambda: {
             "org_name": None,
@@ -639,6 +639,12 @@ def rebuild_organization_master(conn: sqlite3.Connection, contact: ContactMap) -
         if row["last_seen_at"]:
             if o["last"] is None or row["last_seen_at"] > o["last"]:
                 o["last"] = row["last_seen_at"]
+    return dict(org)
+
+
+def rebuild_organization_master(conn: sqlite3.Connection, contact: ContactMap) -> OrgMap:
+    stage_t0 = time.monotonic()
+    org = build_organization_map(contact)
 
     conn.execute("DELETE FROM organization_master")
     for d, o in iter_with_progress(org.items(), desc="organization_master"):

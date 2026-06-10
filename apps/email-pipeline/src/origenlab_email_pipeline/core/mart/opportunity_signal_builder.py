@@ -9,15 +9,9 @@ from origenlab_email_pipeline.business_mart import signal_row
 from origenlab_email_pipeline.core.mart.contact_org_builder import ContactMap, OrgMap
 
 
-def rebuild_opportunity_signals(
-    conn: sqlite3.Connection,
-    contact: ContactMap,
-    org: OrgMap,
-) -> None:
-    stage_t0 = time.monotonic()
-    conn.execute("DELETE FROM opportunity_signals")
-
-    sig_rows = []
+def compute_opportunity_signal_rows(contact: ContactMap, org: OrgMap) -> list[tuple]:
+    """Build opportunity signal rows in memory (no SQLite writes)."""
+    sig_rows: list[tuple] = []
     for email, row in contact.items():
         if row["quote_email"] >= 2 and row["quote_doc"] >= 1:
             sig_rows.append(
@@ -68,6 +62,17 @@ def rebuild_opportunity_signals(
                 )
             )
 
+    return sig_rows
+
+
+def rebuild_opportunity_signals(
+    conn: sqlite3.Connection,
+    contact: ContactMap,
+    org: OrgMap,
+) -> None:
+    stage_t0 = time.monotonic()
+    conn.execute("DELETE FROM opportunity_signals")
+    sig_rows = compute_opportunity_signal_rows(contact, org)
     conn.executemany(
         """
         INSERT INTO opportunity_signals
