@@ -73,6 +73,7 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `auto-mirror-dashboard --once --apply --allow-non-scratch-postgres` | `mirror-dashboard --live --apply` after successful daily-core | Postgres mirror |
 
 | `operator-automation-status` | read-only automation health (manifest + mail + mirror state) | No |
+| `operator-automation-status` | read-only automation health (manifest + mail + mirror state) | No |
 | `operator-automation-status --json` | same as structured JSON | No |
 
 See [`pipeline/MAIL_AUTO_REFRESH.md`](pipeline/MAIL_AUTO_REFRESH.md) and [`pipeline/DASHBOARD_AUTO_MIRROR.md`](pipeline/DASHBOARD_AUTO_MIRROR.md).

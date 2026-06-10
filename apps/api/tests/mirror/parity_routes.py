@@ -39,6 +39,7 @@ LEGACY_HEALTH_NO_MIRROR_ALIAS = "/health"
 OPERATOR_TODAY_PATHS: tuple[str, ...] = (
     "/health",
     "/operator/status",
+    "/operator/automation-status",
     "/cases/warm",
     "/opportunities/equipment",
     "/contacts/{email}",

@@ -25,7 +25,7 @@ uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8001
 |-------|------|
 | **SQLite** (`ORIGENLAB_SQLITE_PATH`) | Authoritative for outbound safety, Sent memory, outreach sidecars |
 | **This API** | GET-only HTTP for **Dashboard Today** (`apps/dashboard`) and operator tooling |
-| **Postgres mirror** | **Parked / optional** — not required to run this app |
+| **Postgres mirror** | **Read-only reporting target** when `auto-mirror-dashboard` publishes; not send/outreach truth |
 | **email-pipeline** | **Write path** — ingest, `refresh_outbound_safety_memory`, `mark_outreach_state`, mart rebuilds |
 
 ## What this API must **not** run
@@ -65,6 +65,7 @@ CORS middleware allows **GET, HEAD, OPTIONS** only. See [`../email-pipeline/docs
 |--------|------|-------|-------------|
 | GET | `/health` | API-0 | Liveness + `operator-sqlite-readonly` mode |
 | GET | `/operator/status` | API-0 | Operator verdict (delegates to `operator_status_report`) |
+| GET | `/operator/automation-status` | API-0 | Read-only automation health (mail auto-refresh + dashboard auto-mirror local state) |
 | GET | `/emails/recent` | API-1 | Recent canonical Gmail rows (previews only; no body) |
 | GET | `/cases/warm` | API-1.1 | Warm commercial case queue (previews; heuristic categories) |
 | GET | `/opportunities/equipment` | API-1.2 | Canonical `equipment_first_operator_queue_*.csv` (manifest; no regenerate) |

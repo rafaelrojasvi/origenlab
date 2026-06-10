@@ -17,7 +17,11 @@ import type {
 } from "./commercialTypes";
 import type {
   DailyCoreRunStatus,
+  DashboardAutoMirrorStatus,
+  DailyCoreAutomationStatus,
   HealthResponse,
+  MailAutoRefreshStatus,
+  OperatorAutomationStatus,
   OperatorStatusResponse,
   TodayPanelData,
 } from "./operatorTypes";
@@ -113,6 +117,106 @@ export function fetchOperatorStatus(
 export async function fetchTodayPanel(): Promise<TodayPanelData> {
   const [health, operator] = await Promise.all([fetchHealth(), fetchOperatorStatus()]);
   return { health, operator };
+}
+
+export function fetchOperatorAutomationStatus(
+  cooldownSeconds = 900,
+): Promise<OperatorAutomationStatus> {
+  return fetchJsonGet<unknown>(
+    operatorApiUrl("/operator/automation-status", { "cooldown-seconds": cooldownSeconds }),
+  ).then(parseOperatorAutomationStatus);
+}
+
+function optionalString(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return value as null | undefined;
+  return typeof value === "string" ? value : String(value);
+}
+
+function optionalNumber(value: unknown): number | null | undefined {
+  if (value === null || value === undefined) return value as null | undefined;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function optionalBool(value: unknown, defaultValue = false): boolean {
+  if (value === undefined || value === null) return defaultValue;
+  return Boolean(value);
+}
+
+/** Parse automation status JSON (for tests and defensive UI). */
+export function parseOperatorAutomationStatus(data: unknown): OperatorAutomationStatus {
+  const row = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const daily = (row.daily_core && typeof row.daily_core === "object"
+    ? row.daily_core
+    : {}) as Record<string, unknown>;
+  const mail = (row.mail_auto_refresh && typeof row.mail_auto_refresh === "object"
+    ? row.mail_auto_refresh
+    : {}) as Record<string, unknown>;
+  const mirror = (row.dashboard_auto_mirror && typeof row.dashboard_auto_mirror === "object"
+    ? row.dashboard_auto_mirror
+    : {}) as Record<string, unknown>;
+
+  const dailyCore: DailyCoreAutomationStatus = {
+    exists: optionalBool(daily.exists),
+    status: optionalString(daily.status) ?? null,
+    returncode: optionalNumber(daily.returncode) ?? null,
+    generated_at_utc: optionalString(daily.generated_at_utc) ?? null,
+    age_seconds: optionalNumber(daily.age_seconds) ?? null,
+    steps: optionalNumber(daily.steps) ?? undefined,
+    parse_error: optionalString(daily.parse_error) ?? null,
+  };
+
+  const mailRefresh: MailAutoRefreshStatus = {
+    state_exists: optionalBool(mail.state_exists),
+    paused: optionalBool(mail.paused),
+    lock_live: optionalBool(mail.lock_live),
+    dirty: optionalBool(mail.dirty),
+    pending: optionalBool(mail.pending),
+    last_result: optionalString(mail.last_result) ?? null,
+    last_change_seen_at: optionalString(mail.last_change_seen_at) ?? null,
+    last_successful_refresh_at: optionalString(mail.last_successful_refresh_at) ?? null,
+    last_run_started_at: optionalString(mail.last_run_started_at) ?? null,
+    last_run_finished_at: optionalString(mail.last_run_finished_at) ?? null,
+    last_seen_inbox_total: optionalNumber(mail.last_seen_inbox_total) ?? null,
+    last_seen_sent_total: optionalNumber(mail.last_seen_sent_total) ?? null,
+    pending_inbox_total: optionalNumber(mail.pending_inbox_total) ?? null,
+    pending_sent_total: optionalNumber(mail.pending_sent_total) ?? null,
+    consecutive_failures: optionalNumber(mail.consecutive_failures) ?? 0,
+  };
+
+  const mirrorStatus: DashboardAutoMirrorStatus = {
+    state_exists: optionalBool(mirror.state_exists),
+    paused: optionalBool(mirror.paused),
+    lock_live: optionalBool(mirror.lock_live),
+    last_result: optionalString(mirror.last_result) ?? null,
+    last_successful_mirror_at: optionalString(mirror.last_successful_mirror_at) ?? null,
+    last_mirrored_daily_core_generated_at:
+      optionalString(mirror.last_mirrored_daily_core_generated_at) ?? null,
+    mirror_matches_daily_core:
+      mirror.mirror_matches_daily_core === null || mirror.mirror_matches_daily_core === undefined
+        ? null
+        : Boolean(mirror.mirror_matches_daily_core),
+    cooldown_seconds: optionalNumber(mirror.cooldown_seconds) ?? 900,
+    cooldown_remaining_seconds: optionalNumber(mirror.cooldown_remaining_seconds) ?? 0,
+    consecutive_failures: optionalNumber(mirror.consecutive_failures) ?? 0,
+  };
+
+  return {
+    generated_at_utc: String(row.generated_at_utc ?? ""),
+    active_current_dir: String(row.active_current_dir ?? ""),
+    verdict: String(row.verdict ?? "unknown"),
+    daily_core: dailyCore,
+    mail_auto_refresh: mailRefresh,
+    dashboard_auto_mirror: mirrorStatus,
+    cron: {
+      note: String(
+        (row.cron && typeof row.cron === "object"
+          ? (row.cron as Record<string, unknown>).note
+          : "") ?? "",
+      ),
+    },
+    recommended_action: String(row.recommended_action ?? "inspect_logs"),
+    warnings: Array.isArray(row.warnings) ? row.warnings.map(String) : [],
+  };
 }
 
 /** Dashboard warm queue: load full normalized set for client-side presets (Pagos/admin, Logística). */

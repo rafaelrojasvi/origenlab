@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from origenlab_api.repositories.automation_status_fs import get_automation_status_from_active_current
 from origenlab_api.repositories.postgres.common import postgres_connection, require_psycopg
 from origenlab_api.settings import Settings
 
@@ -93,3 +94,9 @@ class PostgresOperatorStatusRepository:
                 "warnings": ["Postgres mirror: api.v_operator_status returned no row"],
             }
         return map_operator_status_row(dict(row))
+
+    def get_automation_status(self, *, mirror_cooldown_seconds: int = 900) -> dict[str, Any]:
+        return get_automation_status_from_active_current(
+            self._settings,
+            mirror_cooldown_seconds=mirror_cooldown_seconds,
+        )
