@@ -74,7 +74,7 @@ SUBCOMMAND_HELP: dict[str, str] = {
     ),
     "build-email-mart-features": (
         "Precompute email_mart_features from emails (build_email_mart_features.py) — dry-run default; "
-        "--apply writes missing/stale rows"
+        "--apply writes missing/stale rows; --missing-only inserts new rows only"
     ),
     "build-commercial-intel": (
         "Commercial intel incremental builder (build_commercial_intel_v1.py) — writes SQLite commercial_* "

@@ -61,10 +61,44 @@ ON CONFLICT(email_id) DO UPDATE SET
   computed_at=excluded.computed_at
 """
 
+_INSERT_SQL = """
+INSERT INTO email_mart_features (
+  email_id,
+  message_id,
+  source_file,
+  folder,
+  sender_email,
+  sender_domain,
+  recipient_emails_json,
+  external_targets_json,
+  direction,
+  is_noise,
+  is_quote_email,
+  is_invoice_email,
+  is_purchase_email,
+  equipment_tags_json,
+  mart_date_iso,
+  body_len,
+  feature_source_hash,
+  computed_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+_EMAIL_SELECT_COLS = (
+    "id, message_id, source_file, folder, sender, recipients, subject, "
+    "COALESCE(top_reply_clean,''), COALESCE(full_body_clean,''), date_iso"
+)
+
+_EMAIL_SELECT_COLS_E = (
+    "e.id, e.message_id, e.source_file, e.folder, e.sender, e.recipients, e.subject, "
+    "COALESCE(e.top_reply_clean,''), COALESCE(e.full_body_clean,''), e.date_iso"
+)
+
 
 @dataclass(frozen=True)
 class EmailMartFeaturesBackfillReport:
     dry_run: bool
+    mode: str
     scanned_emails: int
     existing_features: int
     missing_features: int
@@ -102,6 +136,7 @@ def email_mart_feature_row_values(feature: EmailMartFeature) -> tuple[object, ..
 def print_email_mart_features_backfill_report(report: EmailMartFeaturesBackfillReport) -> None:
     dry = "true" if report.dry_run else "false"
     print(f"email_mart_features dry_run={dry}")
+    print(f"mode={report.mode}")
     print(f"scanned_emails={report.scanned_emails}")
     print(f"existing_features={report.existing_features}")
     print(f"missing_features={report.missing_features}")
@@ -113,16 +148,122 @@ def print_email_mart_features_backfill_report(report: EmailMartFeaturesBackfillR
     print(f"body_total_chars={report.body_total_chars}")
 
 
+def _missing_only_email_sql(limit: int | None) -> tuple[str, list[object]]:
+    sql = (
+        f"SELECT {_EMAIL_SELECT_COLS_E} "
+        "FROM emails e "
+        "LEFT JOIN email_mart_features f ON f.email_id = e.id "
+        "WHERE f.email_id IS NULL "
+        "ORDER BY e.id"
+    )
+    params: list[object] = []
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(max(1, int(limit)))
+    return sql, params
+
+
+def _full_email_sql(limit: int | None) -> tuple[str, list[object]]:
+    sql = f"SELECT {_EMAIL_SELECT_COLS} FROM emails ORDER BY id"
+    params: list[object] = []
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(max(1, int(limit)))
+    return sql, params
+
+
+def _compute_feature_from_row(
+    row: tuple[object, ...],
+    *,
+    internal_domains: frozenset[str],
+    mart_date_slack_days: int,
+    computed_at: str | None,
+) -> EmailMartFeature:
+    (
+        email_id,
+        message_id,
+        source_file,
+        folder,
+        sender,
+        recipients,
+        subject,
+        top_reply_clean,
+        full_body_clean,
+        date_iso,
+    ) = row
+    return compute_email_mart_feature(
+        email_id=int(email_id),
+        message_id=message_id,
+        source_file=source_file,
+        folder=folder,
+        sender=sender,
+        recipients=recipients,
+        subject=subject,
+        top_reply_clean=top_reply_clean,
+        full_body_clean=full_body_clean,
+        date_iso=date_iso,
+        internal_domains=internal_domains,
+        mart_date_slack_days=mart_date_slack_days,
+        computed_at=computed_at,
+    )
+
+
 def run_email_mart_features_backfill(
     conn: sqlite3.Connection,
     *,
     dry_run: bool,
+    missing_only: bool = False,
     limit: int | None = None,
     batch_size: int = 5000,
     internal_domains: frozenset[str],
     mart_date_slack_days: int,
     computed_at: str | None = None,
 ) -> EmailMartFeaturesBackfillReport:
+    mode = "missing_only" if missing_only else "full"
+
+    if missing_only:
+        sql, params = _missing_only_email_sql(limit)
+        cur = conn.execute(sql, params)
+        scanned = 0
+        inserted = 0
+        body_total_chars = 0
+        to_write: list[EmailMartFeature] = []
+
+        while True:
+            batch = cur.fetchmany(max(1, int(batch_size)))
+            if not batch:
+                break
+            for row in batch:
+                scanned += 1
+                feature = _compute_feature_from_row(
+                    row,
+                    internal_domains=internal_domains,
+                    mart_date_slack_days=mart_date_slack_days,
+                    computed_at=computed_at,
+                )
+                body_total_chars += feature.body_len
+                if not dry_run:
+                    to_write.append(feature)
+                    inserted += 1
+
+        if not dry_run and to_write:
+            conn.executemany(_INSERT_SQL, [email_mart_feature_row_values(f) for f in to_write])
+            conn.commit()
+
+        return EmailMartFeaturesBackfillReport(
+            dry_run=dry_run,
+            mode=mode,
+            scanned_emails=scanned,
+            existing_features=0,
+            missing_features=scanned,
+            stale_features=0,
+            current_features=0,
+            inserted_features=inserted,
+            updated_features=0,
+            elapsed_seconds=0.0,
+            body_total_chars=body_total_chars,
+        )
+
     existing_hashes = {
         int(row[0]): str(row[1])
         for row in conn.execute(
@@ -130,16 +271,7 @@ def run_email_mart_features_backfill(
         ).fetchall()
     }
 
-    sql = (
-        "SELECT id, message_id, source_file, folder, sender, recipients, subject, "
-        "COALESCE(top_reply_clean,''), COALESCE(full_body_clean,''), date_iso "
-        "FROM emails ORDER BY id"
-    )
-    params: list[object] = []
-    if limit is not None:
-        sql += " LIMIT ?"
-        params.append(max(1, int(limit)))
-
+    sql, params = _full_email_sql(limit)
     cur = conn.execute(sql, params)
 
     scanned = 0
@@ -155,37 +287,17 @@ def run_email_mart_features_backfill(
         batch = cur.fetchmany(max(1, int(batch_size)))
         if not batch:
             break
-        for (
-            email_id,
-            message_id,
-            source_file,
-            folder,
-            sender,
-            recipients,
-            subject,
-            top_reply_clean,
-            full_body_clean,
-            date_iso,
-        ) in batch:
+        for row in batch:
             scanned += 1
-            feature = compute_email_mart_feature(
-                email_id=int(email_id),
-                message_id=message_id,
-                source_file=source_file,
-                folder=folder,
-                sender=sender,
-                recipients=recipients,
-                subject=subject,
-                top_reply_clean=top_reply_clean,
-                full_body_clean=full_body_clean,
-                date_iso=date_iso,
+            feature = _compute_feature_from_row(
+                row,
                 internal_domains=internal_domains,
                 mart_date_slack_days=mart_date_slack_days,
                 computed_at=computed_at,
             )
             body_total_chars += feature.body_len
 
-            prior_hash = existing_hashes.get(int(email_id))
+            prior_hash = existing_hashes.get(feature.email_id)
             if prior_hash is None:
                 missing += 1
                 if not dry_run:
@@ -206,6 +318,7 @@ def run_email_mart_features_backfill(
     existing_features = stale + current
     return EmailMartFeaturesBackfillReport(
         dry_run=dry_run,
+        mode=mode,
         scanned_emails=scanned,
         existing_features=existing_features,
         missing_features=missing,
@@ -245,6 +358,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=MART_DATE_SLACK_DAYS_DEFAULT,
         help="Mart timeline slack days passed to feature extraction",
     )
+    ap.add_argument(
+        "--missing-only",
+        action="store_true",
+        help="scan/insert only emails without email_mart_features rows (no stale updates)",
+    )
     return ap
 
 
@@ -267,11 +385,14 @@ def run_build_email_mart_features_from_argv(argv: list[str] | None = None) -> in
     print(f"DB: {db_path}")
     print(f"Internal domains (guess): {sorted(internal_domains)[:10]}")
     print(f"Mart date slack days: {mart_slack}")
+    if args.missing_only:
+        print("[mode] missing-only enabled")
 
     t0 = time.monotonic()
     report = run_email_mart_features_backfill(
         conn,
         dry_run=dry_run,
+        missing_only=bool(args.missing_only),
         limit=args.limit,
         batch_size=batch_size,
         internal_domains=frozenset(internal_domains),
@@ -282,6 +403,7 @@ def run_build_email_mart_features_from_argv(argv: list[str] | None = None) -> in
 
     final_report = EmailMartFeaturesBackfillReport(
         dry_run=report.dry_run,
+        mode=report.mode,
         scanned_emails=report.scanned_emails,
         existing_features=report.existing_features,
         missing_features=report.missing_features,
