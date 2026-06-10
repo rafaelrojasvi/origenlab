@@ -223,6 +223,7 @@ def test_backfill_report_output_includes_expected_counters(
     print_email_mart_features_backfill_report(
         EmailMartFeaturesBackfillReport(
             dry_run=True,
+            mode="full",
             scanned_emails=2,
             existing_features=0,
             missing_features=2,
@@ -236,6 +237,7 @@ def test_backfill_report_output_includes_expected_counters(
     )
     out = capsys.readouterr().out
     assert "email_mart_features dry_run=true" in out
+    assert "mode=full" in out
     assert "scanned_emails=2" in out
     assert "missing_features=2" in out
     assert "elapsed_seconds=0.12" in out
@@ -263,6 +265,172 @@ def test_script_apply_writes_rows(tmp_path: Path) -> None:
     assert "email_mart_features dry_run=false" in cp.stdout
     assert "inserted_features=2" in cp.stdout
     assert _feature_count(db) == 2
+
+
+def test_missing_only_dry_run_scans_only_missing_rows(tmp_path: Path) -> None:
+    db = tmp_path / "emails.sqlite"
+    _seed_db(db, email_count=3)
+
+    conn = sqlite3.connect(db)
+    run_email_mart_features_backfill(
+        conn,
+        dry_run=False,
+        limit=2,
+        internal_domains=_INTERNAL,
+        mart_date_slack_days=_SLACK_DAYS,
+        computed_at=_COMPUTED_AT,
+    )
+    report = run_email_mart_features_backfill(
+        conn,
+        dry_run=True,
+        missing_only=True,
+        internal_domains=_INTERNAL,
+        mart_date_slack_days=_SLACK_DAYS,
+        computed_at=_COMPUTED_AT,
+    )
+    conn.close()
+
+    assert report.mode == "missing_only"
+    assert report.scanned_emails == 1
+    assert report.missing_features == 1
+    assert report.stale_features == 0
+    assert report.inserted_features == 0
+    assert _feature_count(db) == 2
+
+
+def test_missing_only_apply_inserts_only_missing_rows(tmp_path: Path) -> None:
+    db = tmp_path / "emails.sqlite"
+    _seed_db(db, email_count=3)
+
+    conn = sqlite3.connect(db)
+    run_email_mart_features_backfill(
+        conn,
+        dry_run=False,
+        limit=1,
+        internal_domains=_INTERNAL,
+        mart_date_slack_days=_SLACK_DAYS,
+        computed_at=_COMPUTED_AT,
+    )
+    report = run_email_mart_features_backfill(
+        conn,
+        dry_run=False,
+        missing_only=True,
+        internal_domains=_INTERNAL,
+        mart_date_slack_days=_SLACK_DAYS,
+        computed_at=_COMPUTED_AT,
+    )
+    conn.close()
+
+    assert report.mode == "missing_only"
+    assert report.scanned_emails == 2
+    assert report.inserted_features == 2
+    assert report.updated_features == 0
+    assert _feature_count(db) == 3
+
+
+def test_second_missing_only_apply_scans_zero_rows(tmp_path: Path) -> None:
+    db = tmp_path / "emails.sqlite"
+    _seed_db(db, email_count=2)
+
+    conn = sqlite3.connect(db)
+    run_email_mart_features_backfill(
+        conn,
+        dry_run=False,
+        missing_only=True,
+        internal_domains=_INTERNAL,
+        mart_date_slack_days=_SLACK_DAYS,
+        computed_at=_COMPUTED_AT,
+    )
+    second = run_email_mart_features_backfill(
+        conn,
+        dry_run=False,
+        missing_only=True,
+        internal_domains=_INTERNAL,
+        mart_date_slack_days=_SLACK_DAYS,
+        computed_at=_COMPUTED_AT,
+    )
+    conn.close()
+
+    assert second.scanned_emails == 0
+    assert second.missing_features == 0
+    assert second.inserted_features == 0
+    assert _feature_count(db) == 2
+
+
+def test_missing_only_does_not_update_stale_existing_rows(tmp_path: Path) -> None:
+    db = tmp_path / "emails.sqlite"
+    _seed_db(db, email_count=1)
+
+    conn = sqlite3.connect(db)
+    run_email_mart_features_backfill(
+        conn,
+        dry_run=False,
+        internal_domains=_INTERNAL,
+        mart_date_slack_days=_SLACK_DAYS,
+        computed_at=_COMPUTED_AT,
+    )
+    before_hash = conn.execute(
+        "SELECT feature_source_hash, computed_at FROM email_mart_features WHERE email_id = 1"
+    ).fetchone()
+    conn.execute("UPDATE emails SET subject = 'Changed subject' WHERE message_id = 'msg-0'")
+    conn.commit()
+    report = run_email_mart_features_backfill(
+        conn,
+        dry_run=False,
+        missing_only=True,
+        internal_domains=_INTERNAL,
+        mart_date_slack_days=_SLACK_DAYS,
+        computed_at="2026-06-10T13:00:00+00:00",
+    )
+    after = conn.execute(
+        "SELECT feature_source_hash, computed_at FROM email_mart_features WHERE email_id = 1"
+    ).fetchone()
+    conn.close()
+
+    assert report.scanned_emails == 0
+    assert report.inserted_features == 0
+    assert report.updated_features == 0
+    assert after == before_hash
+
+
+def test_missing_only_limit_limits_scanned_rows(tmp_path: Path) -> None:
+    db = tmp_path / "emails.sqlite"
+    _seed_db(db, email_count=4)
+
+    conn = sqlite3.connect(db)
+    report = run_email_mart_features_backfill(
+        conn,
+        dry_run=True,
+        missing_only=True,
+        limit=2,
+        internal_domains=_INTERNAL,
+        mart_date_slack_days=_SLACK_DAYS,
+        computed_at=_COMPUTED_AT,
+    )
+    conn.close()
+
+    assert report.scanned_emails == 2
+    assert report.missing_features == 2
+
+
+def test_script_missing_only_report_includes_mode(tmp_path: Path) -> None:
+    db = tmp_path / "emails.sqlite"
+    _seed_db(db)
+
+    cp = _run_script(db, "--missing-only", "--internal-domain", "origenlab.cl")
+    assert cp.returncode == 0, cp.stderr
+    assert "mode=missing_only" in cp.stdout
+    assert "missing_features=2" in cp.stdout
+    assert _feature_count(db) == 0
+
+
+def test_full_mode_report_includes_mode_full(tmp_path: Path) -> None:
+    db = tmp_path / "emails.sqlite"
+    _seed_db(db)
+
+    cp = _run_script(db, "--internal-domain", "origenlab.cl")
+    assert cp.returncode == 0, cp.stderr
+    assert "mode=full" in cp.stdout
 
 
 def test_origenlab_subcommand_maps_to_script() -> None:
