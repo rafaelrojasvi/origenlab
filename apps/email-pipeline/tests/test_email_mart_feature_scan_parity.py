@@ -18,6 +18,7 @@ from origenlab_email_pipeline.core.mart.contact_org_builder import EmailMartFeat
 from origenlab_email_pipeline.core.mart.email_mart_feature_scan_parity import (
     compare_contact_maps,
     print_email_mart_feature_scan_parity_report,
+    require_email_mart_features_table,
     run_audit_email_mart_feature_scan_from_argv,
     run_email_mart_feature_scan_parity,
 )
@@ -369,6 +370,93 @@ def test_empty_features_raises_in_helper() -> None:
 
     with pytest.raises(EmailMartFeaturesEmptyError, match="email_mart_features is empty"):
         run_email_mart_feature_scan_parity(conn, options=_default_options())
+
+
+def test_missing_email_mart_features_table_fails_clearly(tmp_path: Path) -> None:
+    db = tmp_path / "emails.sqlite"
+    conn = sqlite3.connect(db)
+    init_schema(conn)
+    conn.execute("DROP TABLE IF EXISTS email_mart_features")
+    _insert_email(conn, message_id="only-email", top_reply_clean="hello")
+    conn.commit()
+    conn.close()
+
+    conn2 = sqlite3.connect(db)
+    with pytest.raises(
+        EmailMartFeaturesEmptyError,
+        match="email_mart_features table is missing",
+    ):
+        require_email_mart_features_table(conn2)
+    conn2.close()
+
+
+def test_missing_table_cli_fails_clearly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = tmp_path / "emails.sqlite"
+    conn = sqlite3.connect(db)
+    init_schema(conn)
+    conn.execute("DROP TABLE IF EXISTS email_mart_features")
+    _insert_email(conn, message_id="only-email", top_reply_clean="hello")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(db))
+    cp = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--internal-domain",
+            "origenlab.cl",
+        ],
+        cwd=str(REPO),
+        env={**os.environ, "PYTHONPATH": str(_SRC)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    combined = cp.stdout + cp.stderr
+    assert cp.returncode != 0
+    assert "email_mart_features table is missing" in combined
+
+
+def test_audit_does_not_create_email_mart_features_table(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    conn = sqlite3.connect(db)
+    init_schema(conn)
+    conn.execute("DROP TABLE IF EXISTS email_mart_features")
+    _insert_email(conn, message_id="only-email", top_reply_clean="hello")
+    conn.commit()
+    before = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='email_mart_features'"
+    ).fetchone()
+    conn.close()
+    assert before is None
+
+    monkeypatch.setenv("ORIGENLAB_SQLITE_PATH", str(db))
+    subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--internal-domain",
+            "origenlab.cl",
+        ],
+        cwd=str(REPO),
+        env={**os.environ, "PYTHONPATH": str(_SRC)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    conn2 = sqlite3.connect(db)
+    after = conn2.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='email_mart_features'"
+    ).fetchone()
+    conn2.close()
+    assert after is None
 
 
 def test_origenlab_subcommand_maps_to_script() -> None:

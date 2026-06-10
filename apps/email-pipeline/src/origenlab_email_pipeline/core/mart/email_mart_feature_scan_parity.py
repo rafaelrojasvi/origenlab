@@ -22,7 +22,6 @@ from origenlab_email_pipeline.core.mart.contact_org_builder import (
 from origenlab_email_pipeline.core.mart.opportunity_signal_builder import compute_opportunity_signal_rows
 from origenlab_email_pipeline.db import connect
 from origenlab_email_pipeline.freshness_dates import MART_DATE_SLACK_DAYS_DEFAULT
-from origenlab_email_pipeline.sqlite_migrate import SchemaLayer, migrate_sqlite_schema
 
 SCRIPT_NAME = "scripts/qa/audit_email_mart_feature_scan.py"
 
@@ -72,6 +71,16 @@ class EmailMartFeatureScanParityReport:
             or self.extra_in_feature != 0
             or self.organization_count_delta != 0
             or self.opportunity_signal_count_delta != 0
+        )
+
+
+def require_email_mart_features_table(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='email_mart_features'"
+    ).fetchone()
+    if row is None:
+        raise EmailMartFeaturesEmptyError(
+            "email_mart_features table is missing; run build-email-mart-features --apply first"
         )
 
 
@@ -128,6 +137,7 @@ def run_email_mart_feature_scan_parity(
     *,
     options: MartBuildOptions,
 ) -> EmailMartFeatureScanParityReport:
+    require_email_mart_features_table(conn)
     feature_count = int(conn.execute("SELECT COUNT(*) FROM email_mart_features").fetchone()[0])
     if feature_count == 0:
         raise EmailMartFeaturesEmptyError(
@@ -246,7 +256,6 @@ def run_audit_email_mart_feature_scan_from_argv(argv: list[str] | None = None) -
     settings = load_settings()
     db_path = settings.resolved_sqlite_path()
     conn = connect(db_path)
-    migrate_sqlite_schema(conn, layers={SchemaLayer.ARCHIVE_AND_MART})
 
     internal_domains = {d.lower().strip() for d in (args.internal_domain or []) if d.strip()}
     if not internal_domains:
