@@ -6,6 +6,8 @@ Last reviewed: 2026-06-10
 
 Related: [`MAIL_AUTO_REFRESH.md`](MAIL_AUTO_REFRESH.md) · [`DAILY_CORE.md`](DAILY_CORE.md) · [`POSTGRES_MIRROR_REFRESH.md`](POSTGRES_MIRROR_REFRESH.md) · [`DAILY_CORE_FAST_REFRESH_SPLIT.md`](DAILY_CORE_FAST_REFRESH_SPLIT.md)
 
+**See also:** `uv run origenlab operator-automation-status` — read-only health for both automation loops (mail + mirror).
+
 Separate **publishing loop** that mirrors SQLite operational truth to Postgres/dashboard **after** a successful `daily-core` run and **clean** mail auto-refresh state. This is **not** part of the 3-minute mail watcher.
 
 ---

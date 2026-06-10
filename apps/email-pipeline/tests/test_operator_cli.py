@@ -964,3 +964,14 @@ def test_auto_mirror_dashboard_help_no_subprocess(
     out = capsys.readouterr().out
     assert "auto-mirror-dashboard" in out
     assert "--allow-non-scratch-postgres" in out
+
+
+def test_operator_automation_status_in_cli_command_names() -> None:
+    assert "operator-automation-status" in CLI_COMMAND_NAMES
+
+
+def test_operator_automation_status_help_no_subprocess(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["operator-automation-status", "--help"]) == 0
+    out = capsys.readouterr().out
+    assert "operator-automation-status" in out
+    assert "--json" in out

@@ -9,6 +9,7 @@ from origenlab_email_pipeline.operator_cli.constants import (
     AUTO_MIRROR_DASHBOARD_COMMAND,
     AUTO_REFRESH_MAIL_COMMAND,
     CLI_COMMAND_NAMES,
+    OPERATOR_AUTOMATION_STATUS_COMMAND,
     DAILY_CORE_COMMAND,
     GMAIL_INGEST_SCRIPT,
     HELP_ONLY_SUBCOMMANDS,
@@ -22,6 +23,11 @@ from origenlab_email_pipeline.operator_cli.dashboard_auto_mirror import (
     parse_dashboard_auto_mirror_args,
     print_dashboard_auto_mirror_help,
     run_dashboard_auto_mirror,
+)
+from origenlab_email_pipeline.operator_cli.operator_automation_status import (
+    parse_operator_automation_status_args,
+    print_operator_automation_status_help,
+    run_operator_automation_status,
 )
 from origenlab_email_pipeline.operator_cli.mail_auto_refresh import (
     parse_mail_auto_refresh_args,
@@ -89,12 +95,27 @@ def _build_parser() -> argparse.ArgumentParser:
             "refresh-dashboard: orchestrated stack refresh (plan-only default). "
             "daily-core: daily operating alias (plan-only default; --apply uses feature-backed mart rebuild). "
             "auto-refresh-mail: debounced mailbox probe (--once; --apply runs daily-core when gates pass). "
-            "auto-mirror-dashboard: debounced Postgres publish (--once; separate from mail watcher)."
+            "auto-mirror-dashboard: debounced Postgres publish (--once; separate from mail watcher). "
+            "operator-automation-status: read-only automation health (--json optional)."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True, metavar="command")
     for name in CLI_COMMAND_NAMES:
         script_rel = SUBCOMMAND_SCRIPTS.get(name, GMAIL_INGEST_SCRIPT)
+        if name == OPERATOR_AUTOMATION_STATUS_COMMAND:
+            p = sub.add_parser(
+                name,
+                help=SUBCOMMAND_HELP[name],
+                description=SUBCOMMAND_HELP[name],
+            )
+            p.add_argument("--json", action="store_true", help="Emit structured JSON")
+            p.add_argument(
+                "--cooldown-seconds",
+                type=int,
+                default=900,
+                help="Dashboard mirror cooldown for remaining-seconds calculation",
+            )
+            continue
         if name == AUTO_MIRROR_DASHBOARD_COMMAND:
             p = sub.add_parser(
                 name,
@@ -273,6 +294,16 @@ def main(argv: list[str] | None = None) -> int:
             return run_dashboard_auto_mirror(mirror_opts)
         except ValueError as exc:
             parser.error(str(exc))
+
+    if command == OPERATOR_AUTOMATION_STATUS_COMMAND:
+        if _wrapper_help_requested(argv[1:]):
+            print_operator_automation_status_help()
+            return 0
+        try:
+            status_opts = parse_operator_automation_status_args(argv[1:])
+        except SystemExit as exc:
+            raise exc
+        return run_operator_automation_status(status_opts)
 
     mirror_apply = False
     mirror_alembic = False
