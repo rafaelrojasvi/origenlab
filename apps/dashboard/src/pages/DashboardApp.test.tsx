@@ -252,18 +252,34 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
     );
   });
 
-  it("can collapse and expand sidebar", async () => {
+  it("can collapse and expand sidebar from top toggle", async () => {
     render(<DashboardApp />);
     await waitFor(() => screen.getByText("LISTO"));
 
     const sidebar = screen.getByTestId("dashboard-sidebar");
+    const toggle = screen.getByTestId("sidebar-collapse-toggle");
     expect(sidebar.getAttribute("data-collapsed")).toBe("false");
+    expect(toggle.closest("aside")).toBeTruthy();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
 
-    fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+    fireEvent.click(toggle);
     expect(sidebar.getAttribute("data-collapsed")).toBe("true");
+    expect(screen.getByTestId("sidebar-collapse-toggle").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
 
     fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
     expect(sidebar.getAttribute("data-collapsed")).toBe("false");
+  });
+
+  it("does not render duplicate OrigenLab branding in header and sidebar", async () => {
+    render(<DashboardApp />);
+    await waitFor(() => screen.getByText("LISTO"));
+
+    expect(screen.queryByTestId("origenlab-logo-animated")).toBeNull();
+    expect(screen.getAllByTestId("origenlab-logo-static")).toHaveLength(1);
+    expect(screen.getByTestId("origenlab-logo-static").closest("aside")).toBeTruthy();
+    expect(screen.getByTestId("operator-center-chip")).toBeTruthy();
   });
 
   it("does not introduce send or write action buttons in shell", async () => {

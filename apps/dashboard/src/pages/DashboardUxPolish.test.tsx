@@ -194,18 +194,17 @@ describe("Dashboard UX polish (Phase 7B.3 ES)", () => {
     vi.clearAllMocks();
   });
 
-  it("logo estático en sidebar y animado en header", async () => {
+  it("mantiene marca solo en sidebar sin logo duplicado en header", async () => {
     render(<DashboardApp />);
     await waitFor(() => screen.getByText("LISTO"));
 
     const staticLogo = screen.getByTestId("origenlab-logo-static");
-    const animatedLogo = screen.getByTestId("origenlab-logo-animated");
     expect(staticLogo.closest("aside")).toBeTruthy();
-    expect(animatedLogo.closest("header")).toBeTruthy();
+    expect(screen.queryByTestId("origenlab-logo-animated")).toBeNull();
     expect(staticLogo.querySelector("canvas")).toBeNull();
-    expect(animatedLogo.querySelector("canvas")).toBeTruthy();
-    expect(screen.getAllByText("OrigenLab").length).toBeGreaterThan(0);
     expect(screen.getByText("Panel operador")).toBeTruthy();
+    expect(screen.getByTestId("operator-center-chip").textContent).toMatch(/Centro operador/i);
+    expect(screen.getByTestId("sidebar-collapse-toggle").closest("aside")).toBeTruthy();
   });
 
   it("navegación en español", async () => {

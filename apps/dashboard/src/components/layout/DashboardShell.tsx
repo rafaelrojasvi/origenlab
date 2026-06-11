@@ -10,7 +10,6 @@ import { backendChipClass, backendLabel, verdictTone } from "../../lib/verdictSt
 import { DevLegacyPortWarning } from "../operator/DevLegacyPortWarning";
 import { ReadOnlyBanner } from "../operator/ReadOnlyBanner";
 import { ContactProfilePanel } from "../commercial/ContactProfilePanel";
-import { OrigenLabAnimatedLogo } from "../brand/OrigenLabAnimatedLogo";
 import { DashboardSidebar } from "./DashboardSidebar";
 
 export function DashboardShell({
@@ -51,19 +50,23 @@ export function DashboardShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-[var(--color-border)] bg-[var(--color-card)]/95 shadow-sm backdrop-blur-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <OrigenLabAnimatedLogo />
-              <div className="hidden h-7 w-px bg-[var(--color-border)] sm:block" aria-hidden />
-              <div className="min-w-0">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
                 {groupLabel ? (
                   <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-muted)]">
                     {groupLabel}
                   </p>
                 ) : null}
-                <h1 className="truncate text-lg font-semibold text-brand-950 sm:text-xl">
-                  {pageTitle}
-                </h1>
+                <span
+                  className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200"
+                  data-testid="operator-center-chip"
+                >
+                  Centro operador
+                </span>
               </div>
+              <h1 className="truncate text-lg font-semibold text-brand-950 sm:text-xl">
+                {pageTitle}
+              </h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span
