@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchOperatorAutomationStatus } from "../../api/operatorClient";
 import type { OperatorAutomationStatus } from "../../api/operatorTypes";
 import {
@@ -35,9 +35,20 @@ export function AutomationHealthCard({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const loadStatus = useCallback(
     async (isRefresh: boolean) => {
+      if (!mountedRef.current) {
+        return;
+      }
       if (isRefresh) {
         setRefreshing(true);
       } else {
@@ -46,16 +57,25 @@ export function AutomationHealthCard({
       setError(null);
       try {
         const data = await fetchOperatorAutomationStatus();
+        if (!mountedRef.current) {
+          return;
+        }
         setStatus(data);
         if (isRefresh) {
           onRefresh?.();
         }
       } catch (e: unknown) {
+        if (!mountedRef.current) {
+          return;
+        }
         setError(e instanceof Error ? e.message : "Error desconocido");
         if (!isRefresh) {
           setStatus(null);
         }
       } finally {
+        if (!mountedRef.current) {
+          return;
+        }
         setLoading(false);
         setRefreshing(false);
       }

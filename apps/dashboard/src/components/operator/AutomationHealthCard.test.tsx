@@ -164,6 +164,29 @@ describe("AutomationHealthCard", () => {
     expect(screen.getAllByText("Ejecutar dry-run para crear estado").length).toBeGreaterThan(0);
   });
 
+  it("does not update state after unmount when fetch resolves late", async () => {
+    let resolveFetch: ((value: OperatorAutomationStatus) => void) | undefined;
+    mockFetch.mockImplementation(
+      () =>
+        new Promise<OperatorAutomationStatus>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { unmount } = render(<AutomationHealthCard />);
+    screen.getByTestId("automation-health-card");
+    unmount();
+
+    resolveFetch?.(BASE_STATUS);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it("refetches when Actualizar estado is clicked", async () => {
     mockFetch.mockResolvedValue(BASE_STATUS);
     const onRefresh = vi.fn();

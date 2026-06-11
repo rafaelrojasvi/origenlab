@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardDataContext } from "../context/DashboardDataContext";
 import { SystemPage } from "./SystemPage";
 
@@ -92,9 +92,15 @@ afterEach(() => {
 });
 
 describe("SystemPage", () => {
-  it("explains full archive vs canonical Gmail subset", () => {
+  beforeEach(() => {
     mockFetchAutomation.mockResolvedValue(BASE_AUTOMATION_STATUS as never);
+  });
+
+  it("explains full archive vs canonical Gmail subset", async () => {
     render(wrap(<SystemPage />));
+    await waitFor(() => {
+      screen.getByText("Estado de automatización");
+    });
     screen.getByText(/216\s*000/);
     screen.getByText(/1\s*100/);
     screen.getByText(/contacto@origenlab\.cl/);
@@ -103,7 +109,6 @@ describe("SystemPage", () => {
   });
 
   it("renders operator automation section with safety note", async () => {
-    mockFetchAutomation.mockResolvedValue(BASE_AUTOMATION_STATUS as never);
     render(wrap(<SystemPage />));
     screen.getByTestId("system-automation-section");
     screen.getByRole("heading", { name: "Automatización operador" });
