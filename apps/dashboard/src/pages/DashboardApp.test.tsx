@@ -210,15 +210,23 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
     window.location.hash = "";
   });
 
-  it("sidebar renders all sections", async () => {
+  it("sidebar renders grouped navigation and all sections", async () => {
     render(<DashboardApp />);
     await waitFor(() => screen.getByText("LISTO"));
 
     const nav = screen.getByRole("navigation", { name: "Navegación del panel" });
+    for (const groupId of ["inicio", "comercial", "operacion", "sistema"]) {
+      expect(screen.getByTestId(`nav-group-${groupId}`)).toBeTruthy();
+    }
+    expect(screen.getByTestId("nav-group-inicio").textContent).toMatch(/Inicio/);
+    expect(screen.getByTestId("nav-group-comercial").textContent).toMatch(/Comercial/);
+    expect(screen.getByTestId("nav-group-operacion").textContent).toMatch(/Operación/);
+
     for (const label of [
       "Hoy",
       "Bandeja de revisión",
       "Negocios",
+      "Prospectos",
       "Catálogo",
       "Proveedores",
       "Licitaciones / equipos",
@@ -229,6 +237,42 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
       expect(within(nav).getByRole("link", { name: label })).toBeTruthy();
     }
     expect(within(nav).queryByRole("link", { name: "Oportunidades" })).toBeNull();
+  });
+
+  it("marks active nav item with aria-current", async () => {
+    render(<DashboardApp />);
+    await waitFor(() => screen.getByText("LISTO"));
+
+    const nav = screen.getByRole("navigation", { name: "Navegación del panel" });
+    expect(within(nav).getByRole("link", { name: "Hoy" }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+    expect(within(nav).getByRole("link", { name: "Sistema" }).getAttribute("aria-current")).toBe(
+      null,
+    );
+  });
+
+  it("can collapse and expand sidebar", async () => {
+    render(<DashboardApp />);
+    await waitFor(() => screen.getByText("LISTO"));
+
+    const sidebar = screen.getByTestId("dashboard-sidebar");
+    expect(sidebar.getAttribute("data-collapsed")).toBe("false");
+
+    fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+    expect(sidebar.getAttribute("data-collapsed")).toBe("true");
+
+    fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+    expect(sidebar.getAttribute("data-collapsed")).toBe("false");
+  });
+
+  it("does not introduce send or write action buttons in shell", async () => {
+    render(<DashboardApp />);
+    await waitFor(() => screen.getByText("LISTO"));
+
+    expect(screen.queryByRole("button", { name: /Enviar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Aplicar/i })).toBeNull();
+    screen.getByTestId("read-only-chip");
   });
 
   it("Today summary renders queue count cards", async () => {
