@@ -1,11 +1,31 @@
 # NDR safe auto-apply — design plan
 
-Status: **design only** — no behavior enabled yet  
+Status: **implemented (Stages 1–2 Batch A)** — design + operator runbook  
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-11  
 Area: `apps/email-pipeline`
 
-**Purpose:** Define a staged, guarded path toward automating **only the safest** NDR suppression applies. Broad `--apply` remains forbidden. This document does **not** change runtime behavior.
+**Purpose:** Define and track a staged, guarded path toward automating **only the safest** NDR suppression applies. Broad `--apply` remains forbidden.
+
+## Implementation status (merged PRs)
+
+| PR | Title | Status |
+|----|-------|--------|
+| **#206** | `docs(email-pipeline): plan safe NDR auto-apply stages` | Merged — this design doc |
+| **#207** | `feat(email-pipeline): surface pending NDR review status` | Merged — `operator-automation-status` `ndr_pending_review` fields |
+| **#208** | `feat(email-pipeline): add dry-run NDR safe auto-apply command` | Merged — `ndr-safe-auto-apply --batch A --dry-run` |
+| **#209** | `feat(email-pipeline): audit NDR safe auto-apply dry runs` | Merged — `ndr_safe_auto_apply_audit.jsonl` |
+| **#210** | `feat(email-pipeline): add guarded Batch A NDR safe apply` | Merged — `--apply --operator --confirm-reviewed` |
+
+### Current policy (2026-06-11)
+
+- **Batch A guarded apply** — available via `uv run origenlab ndr-safe-auto-apply --batch A --apply --operator <name> --confirm-reviewed`
+- **Batch B** — deferred; remains **manual** targeted fallback (`flag_ndr_bounces_from_contacto.py` + `apply_allowlist_batch_b.txt`)
+- **Batches C / D / E** — **never** auto-apply (hold/review only)
+- **Cron auto-apply** — **not** enabled; operator-invoked only
+- **Broad `--apply`** — break-glass / high risk (unchanged)
+
+Operator procedures: [`OPERATOR_COMMAND_SURFACE.md`](../OPERATOR_COMMAND_SURFACE.md) · [`pipeline/POST_SEND_SAFE_LOOP.md`](../pipeline/POST_SEND_SAFE_LOOP.md)
 
 **Related (canonical today):**
 
@@ -39,8 +59,8 @@ After outbound mail or new INBOX NDRs, operators follow the post-send safe loop.
 
 | Batch | Meaning | `--only-code` for targeted apply | Auto-apply candidate? |
 |-------|---------|----------------------------------|------------------------|
-| **A** | Clear no-such-user / mailbox unavailable with strong body evidence | `bounce_no_such_user` | **Stage 2** (future) |
-| **B** | Clear NXDOMAIN / domain-not-found | `bounce_other` | **Stage 3** (future, gated) |
+| **A** | Clear no-such-user / mailbox unavailable with strong body evidence | `bounce_no_such_user` | **Implemented** (`ndr-safe-auto-apply --apply`) |
+| **B** | Clear NXDOMAIN / domain-not-found | `bounce_other` | **Deferred** (manual targeted fallback) |
 | **C** | Quota / mailbox-full | — | **Never** |
 | **D** | Policy / access / spam blocks | — | **Never** |
 | **E** | Parser uncertainty, delay DSN, multi-recipient, unmapped codes | — | **Never** |
@@ -335,4 +355,4 @@ Each PR is small, reviewable, and **does not enable unattended cron apply** unti
 
 NDR suppression affects **send gates** (`contact_email_suppression`). A wrong apply blocks future outreach to a live buyer. This plan intentionally limits automation to Batch A (clear hard bounces) and defers Batch B until repeated manual validation proves the pipeline.
 
-**Until Stage 2 is explicitly approved and merged, operators must continue the manual loop in [`POST_SEND_SAFE_LOOP.md`](../pipeline/POST_SEND_SAFE_LOOP.md).**
+**Batch A** may use the guarded CLI in [`POST_SEND_SAFE_LOOP.md`](../pipeline/POST_SEND_SAFE_LOOP.md). **Batch B** and all non-A paths remain manual. **Never** schedule `ndr-safe-auto-apply --apply` in cron without a separate operator decision.
