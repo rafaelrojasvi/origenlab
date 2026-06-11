@@ -241,7 +241,20 @@ export function SupplierEntityGroups({
                 </p>
                 <p className="mt-1 text-xs text-slate-600">{selectedGroup.latestSubject}</p>
                 <p
-                  className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950"
+                  className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+                  data-testid="supplier-mirror-scope-note"
+                >
+                  Este panel muestra casos tibios del espejo, no todo el historial Gmail.
+                </p>
+                <p
+                  className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950"
+                  data-testid="supplier-gmail-hint"
+                >
+                  Para historial completo, abrir Gmail desde el hilo o revisar el buzón; esta vista
+                  prioriza el último caso tibio.
+                </p>
+                <p
+                  className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800"
                   data-testid="supplier-readonly-note"
                 >
                   Solo lectura: revisar historial antes de contactar.

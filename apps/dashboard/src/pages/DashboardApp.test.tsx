@@ -334,7 +334,7 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
       expect(screen.getByTestId("suppliers-workspace")).toBeTruthy();
       expect(screen.getByTestId("supplier-detail-title").textContent).toBe("IKA");
     });
-    fireEvent.click(screen.getByRole("button", { name: /IKA, 1 cotización/i }));
+    fireEvent.click(screen.getByRole("button", { name: /IKA, 1 caso activo/i }));
     await waitFor(() => {
       screen.getByText("beatriz.bonon@ika.net.br");
     });

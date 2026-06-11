@@ -13,6 +13,7 @@ import {
   type CustomerInstitutionGroup,
   type InstitutionViewPreset,
 } from "../lib/customerInstitutionGroups";
+import { formatDashboardDateTime } from "../lib/dashboardDateFormat";
 import { formatMirrorLoadError } from "../lib/humanizeApiError";
 import { useClientTablePagination } from "../lib/useClientTablePagination";
 
@@ -28,8 +29,8 @@ function KpiCard({ label, value }: { label: string; value: number }) {
 }
 
 function gmailHistoryCell(group: CustomerInstitutionGroup): string {
-  if (!group.hasGmailHistory) return "Sin historial";
-  const last = group.latestGmailLastContactedAt ?? "—";
+  if (!group.hasGmailHistory) return "Sin historial en espejo";
+  const last = formatDashboardDateTime(group.latestGmailLastContactedAt);
   return `${group.totalGmailSent} env. / ${group.totalGmailReceived} rec. · ${last}`;
 }
 
@@ -110,12 +111,16 @@ export function ContactsPage() {
         <p className="mt-1 text-xs text-[var(--color-muted)]" data-testid="institution-mirror-limit-note">
           Muestra hasta {CUSTOMER_INSTITUTION_LIMIT} prospectos desde el espejo actual.
         </p>
+        <p className="mt-1 text-xs text-[var(--color-muted)]" data-testid="institution-gmail-mirror-note">
+          El historial Gmail depende de coincidencias publicadas al espejo; puede no incluir todo el
+          buzón histórico.
+        </p>
         {disclaimer ? <p className="mt-2 text-xs text-sky-900">{disclaimer}</p> : null}
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="institution-kpis">
         <KpiCard label="Instituciones" value={kpis.institutions} />
-        <KpiCard label="Con historial Gmail" value={kpis.withGmailHistory} />
+        <KpiCard label="Con historial Gmail en espejo" value={kpis.withGmailHistory} />
         <KpiCard label="Sin email / investigar" value={kpis.missingEmail} />
         <KpiCard label="Seguras para revisar" value={kpis.safeToReview} />
         <KpiCard label="Bloqueadas / revisar" value={kpis.blockedOrRisk} />

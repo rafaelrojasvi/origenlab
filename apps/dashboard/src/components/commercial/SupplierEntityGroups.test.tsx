@@ -122,7 +122,7 @@ describe("SupplierEntityGroups", () => {
         onContactSelect={() => {}}
       />,
     );
-    const servaCard = screen.getByRole("button", { name: /SERVA, 1 seguimiento/i });
+    const servaCard = screen.getByRole("button", { name: /SERVA, 1 caso activo/i });
     expect(servaCard.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByTestId("supplier-detail-title").textContent).toBe("SERVA");
     screen.getByText("sales@serva.de");
@@ -142,7 +142,7 @@ describe("SupplierEntityGroups", () => {
         onContactSelect={() => {}}
       />,
     );
-    const ikaCard = screen.getByRole("button", { name: /IKA, 1 cotización/i });
+    const ikaCard = screen.getByRole("button", { name: /IKA, 1 caso activo/i });
     fireEvent.click(ikaCard);
     expect(ikaCard.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByTestId("supplier-detail-title").textContent).toBe("IKA");
@@ -167,6 +167,24 @@ describe("SupplierEntityGroups", () => {
     expect(within(cards).queryByRole("button", { name: /SERVA/i })).toBeNull();
     expect(within(cards).getByRole("button", { name: /IKA/i })).toBeTruthy();
     expect(screen.getByTestId("supplier-detail-title").textContent).toBe("IKA");
+  });
+
+  it("shows mirror scope and Gmail history hints in detail panel", () => {
+    render(
+      <SupplierEntityGroups
+        backend="sqlite"
+        allItems={items}
+        meta={meta}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("supplier-mirror-scope-note").textContent).toMatch(
+      /casos tibios del espejo/i,
+    );
+    expect(screen.getByTestId("supplier-gmail-hint").textContent).toMatch(/historial completo/i);
   });
 
   it("does not introduce send, export, or write buttons", () => {

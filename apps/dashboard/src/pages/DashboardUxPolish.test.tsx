@@ -235,7 +235,7 @@ describe("Dashboard UX polish (Phase 7B.3 ES)", () => {
     await waitFor(() => screen.getByText("LISTO"));
     await navigateTo("Proveedores");
 
-    fireEvent.click(screen.getByRole("button", { name: /SERVA, 1 seguimiento/i }));
+    fireEvent.click(screen.getByRole("button", { name: /SERVA, 1 caso activo/i }));
     await waitFor(() => {
       screen.getByText("sales@serva.de");
     });

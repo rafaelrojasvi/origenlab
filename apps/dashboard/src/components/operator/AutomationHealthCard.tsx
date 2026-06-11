@@ -3,6 +3,7 @@ import { fetchOperatorAutomationStatus } from "../../api/operatorClient";
 import type { OperatorAutomationStatus } from "../../api/operatorTypes";
 import {
   AUTOMATION_MISSING_STATE_HELP,
+  AUTOMATION_MISSING_STATE_PRIMARY,
   automationRecommendedActionLabel,
   automationVerdictLabel,
   automationVerdictTone,
@@ -175,12 +176,15 @@ export function AutomationHealthCard({
       </div>
 
       {missingState ? (
-        <p
-          className="mt-3 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-950"
+        <div
+          className="mt-3 space-y-2 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-950"
           data-testid="automation-missing-state-help"
         >
-          {AUTOMATION_MISSING_STATE_HELP}
-        </p>
+          <p className="text-sm font-semibold text-amber-950" data-testid="automation-missing-state-primary">
+            {AUTOMATION_MISSING_STATE_PRIMARY}
+          </p>
+          <p>{AUTOMATION_MISSING_STATE_HELP}</p>
+        </div>
       ) : null}
 
       {variant === "summary" ? (
@@ -221,7 +225,7 @@ export function AutomationHealthCard({
           <li>
             <span className="text-[var(--color-muted)]">Daily-core:</span>{" "}
             <span className="font-medium">
-              {status.daily_core.generated_at_utc ?? "—"}
+              {formatAutomationTimestamp(status.daily_core.generated_at_utc)}
               {status.daily_core.age_seconds != null
                 ? ` (${status.daily_core.age_seconds}s)`
                 : ""}
@@ -239,7 +243,10 @@ export function AutomationHealthCard({
       ) : (
         <div className="mt-4 space-y-4 text-sm">
           <dl className="grid gap-2 sm:grid-cols-2">
-            <DetailRow label="Generado (UTC)" value={status.generated_at_utc || "—"} />
+            <DetailRow
+              label="Generado"
+              value={formatAutomationTimestamp(status.generated_at_utc)}
+            />
             <DetailRow label="Veredicto" value={automationVerdictLabel(status.verdict)} />
             <DetailRow
               label="Acción recomendada"
