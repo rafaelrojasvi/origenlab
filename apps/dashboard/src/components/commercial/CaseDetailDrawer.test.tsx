@@ -87,6 +87,29 @@ describe("CaseDetailDrawer (español)", () => {
     expect(text).not.toMatch(/12345678901234/);
   });
 
+  it("formats last_seen_at without raw ISO timestamp", () => {
+    render(
+      <CaseDetailDrawer item={supplierRow} open onClose={() => {}} onContactSelect={() => {}} />,
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).not.toContain("2026-05-19T10:00:00-04:00");
+    expect(dialog.textContent).toMatch(/Última actividad:/);
+    expect(dialog.textContent).toMatch(/2026/);
+  });
+
+  it("shows human-readable next action sentence in drawer", () => {
+    const row: WarmCaseItem = {
+      ...supplierRow,
+      next_action: "Cotización enviada; monitorear respuesta del cliente.",
+    };
+    render(<CaseDetailDrawer item={row} open onClose={() => {}} onContactSelect={() => {}} />);
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Cotización enviada; monitorear respuesta del cliente."),
+    ).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/Sin clasificar/);
+  });
+
   it("cierra al pulsar Cerrar", () => {
     const onClose = vi.fn();
     render(

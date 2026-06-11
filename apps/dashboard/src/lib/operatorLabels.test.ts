@@ -31,4 +31,30 @@ describe("operatorLabels", () => {
     expect(out.label).toBe("Sin clasificar");
     expect(out.title).toMatch(/no mapeada/i);
   });
+
+  it("shows human-readable warm next-action sentences directly", () => {
+    expect(
+      formatOperatorToken(
+        "Cotización enviada; monitorear respuesta del cliente.",
+        "warm_next_action",
+      ).label,
+    ).toBe("Cotización enviada; monitorear respuesta del cliente.");
+  });
+
+  it("shows human-readable equipment next-action sentences directly", () => {
+    expect(
+      formatOperatorToken("Revisar ficha técnica antes de cotizar.", "equipment_next_action").label,
+    ).toBe("Revisar ficha técnica antes de cotizar.");
+  });
+
+  it("keeps mapped warm next-action tokens", () => {
+    expect(formatOperatorToken("follow", "warm_next_action").label).toBe("Dar seguimiento");
+    expect(formatOperatorToken("supplier_reply", "warm_next_action").label).toBe(
+      "Revisar propuesta del proveedor",
+    );
+  });
+
+  it("falls back to Sin clasificar for unknown non-action tokens", () => {
+    expect(formatOperatorToken("custom_token", "warm_category").label).toBe("Sin clasificar");
+  });
 });
