@@ -10,6 +10,39 @@ function navHref(section: DashboardSection): string {
   return section === "today" ? "#/" : `#/${section}`;
 }
 
+function SidebarCollapseToggle({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="shrink-0 rounded-lg p-1.5 text-teal-200/80 transition-colors hover:bg-brand-900/80 hover:text-white motion-reduce:transition-none"
+      aria-expanded={!collapsed}
+      aria-controls="dashboard-sidebar"
+      aria-label={collapsed ? "Expandir navegación" : "Contraer navegación"}
+      data-testid="sidebar-collapse-toggle"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        className={`h-4 w-4 transition-transform duration-200 motion-reduce:transition-none ${
+          collapsed ? "rotate-180" : ""
+        }`}
+        aria-hidden
+      >
+        <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
 function NavLink({
   item,
   isActive,
@@ -68,27 +101,33 @@ export function DashboardSidebar({
       data-testid="dashboard-sidebar"
       data-collapsed={collapsed ? "true" : "false"}
     >
-      <div
-        className={`border-b border-brand-900/40 ${collapsed ? "px-2 py-3" : "px-4 py-4"}`}
-      >
+      <div className="border-b border-brand-900/40 px-2.5 py-2.5">
         {collapsed ? (
-          <div className="flex justify-center" data-testid="origenlab-logo-static">
-            <img
-              src="/logo/origenlab-mark-static.svg"
-              alt="OrigenLab"
-              className="h-9 w-9 rounded-lg ring-1 ring-brand-700/40"
-              width={36}
-              height={36}
-            />
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex w-full items-center justify-between gap-1">
+              <div className="flex min-w-0 flex-1 justify-center" data-testid="origenlab-logo-static">
+                <img
+                  src="/logo/origenlab-mark-static.svg"
+                  alt="OrigenLab"
+                  className="h-8 w-8 rounded-lg ring-1 ring-brand-700/40"
+                  width={32}
+                  height={32}
+                />
+              </div>
+              <SidebarCollapseToggle collapsed={collapsed} onToggle={onToggleCollapsed} />
+            </div>
           </div>
         ) : (
-          <OrigenLabStaticLogo />
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <OrigenLabStaticLogo compact />
+              <p className="mt-1 text-[10px] uppercase tracking-wide text-teal-200/60">
+                Solo lectura
+              </p>
+            </div>
+            <SidebarCollapseToggle collapsed={collapsed} onToggle={onToggleCollapsed} />
+          </div>
         )}
-        {!collapsed ? (
-          <p className="mt-2 text-[10px] uppercase tracking-wide text-teal-200/60">
-            Solo lectura
-          </p>
-        ) : null}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Navegación del panel">
@@ -123,39 +162,6 @@ export function DashboardSidebar({
           </div>
         ))}
       </nav>
-
-      <div className="border-t border-brand-900/40 p-2">
-        <button
-          type="button"
-          onClick={onToggleCollapsed}
-          className={`flex w-full items-center rounded-lg text-xs font-medium text-teal-200/80 transition-colors hover:bg-brand-900/80 hover:text-white motion-reduce:transition-none ${
-            collapsed ? "justify-center px-2 py-2" : "gap-2 px-3 py-2"
-          }`}
-          aria-expanded={!collapsed}
-          aria-controls="dashboard-sidebar"
-          aria-label={collapsed ? "Expandir navegación" : "Contraer navegación"}
-          data-testid="sidebar-collapse-toggle"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            className={`h-4 w-4 shrink-0 transition-transform duration-200 motion-reduce:transition-none ${
-              collapsed ? "rotate-180" : ""
-            }`}
-            aria-hidden
-          >
-            <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          {!collapsed ? <span>Contraer navegación</span> : null}
-        </button>
-        {!collapsed ? (
-          <p className="mt-2 px-1 text-center text-[10px] text-teal-200/45">
-            OrigenLab · Chile
-          </p>
-        ) : null}
-      </div>
     </aside>
   );
 }
