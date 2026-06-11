@@ -141,6 +141,15 @@ describe("ContactsPage", () => {
     );
   });
 
+  it("uses mirror-scoped Gmail history labels", async () => {
+    render(wrap(<ContactsPage />));
+    await waitFor(() => expect(screen.getByTestId("institution-kpis")).toBeTruthy());
+    expect(screen.getByText("Con historial Gmail en espejo")).toBeTruthy();
+    expect(screen.getByTestId("institution-gmail-mirror-note").textContent).toMatch(
+      /coincidencias publicadas al espejo/i,
+    );
+  });
+
   it("shows friendly card error state when mirror load fails", async () => {
     vi.mocked(fetchLeadProspectsMirror).mockRejectedValue(
       new OperatorApiError('{"detail":"Input should be less than or equal to 100"}', 503),

@@ -37,8 +37,8 @@ describe("supplierEntityGrouping", () => {
       row("c@ortoalresa.com", "supplier_quote_received"),
     ]);
     expect(groups.map((g) => g.label)).toEqual(["SERVA", "IKA", "Ortoalresa"]);
-    expect(groups[0].summaryLabel).toBe("1 seguimiento");
-    expect(groups[1].summaryLabel).toBe("1 cotización");
+    expect(groups[0].summaryLabel).toBe("1 caso activo");
+    expect(groups[1].summaryLabel).toBe("1 caso activo");
     expect(groups[0].latestSubject).toBe("SERVA thread");
     expect(groups[1].roleBadge).toBe("Cotización recibida");
     expect(groups[0].roleBadge).toBe("Seguimiento");
@@ -46,6 +46,16 @@ describe("supplierEntityGrouping", () => {
 
   it("resolveSupplierGroupId maps ika domain", () => {
     expect(resolveSupplierGroupId(row("x@ika.net.br", "supplier_quote_received"))).toBe("ika");
+  });
+
+  it("includes grouped email count in summary when present", () => {
+    const groups = groupSupplierWarmCases([
+      {
+        ...row("b@ika.net.br", "supplier_quote_received", "IKA", "IKA quote"),
+        grouped_email_count: 13,
+      },
+    ]);
+    expect(groups[0]?.summaryLabel).toBe("1 caso · 13 correos agrupados");
   });
 
   it("roleBadgeForCategory maps quote and follow-up", () => {

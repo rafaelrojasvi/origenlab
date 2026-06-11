@@ -1,4 +1,5 @@
 import type { CustomerInstitutionGroup } from "../../lib/customerInstitutionGroups";
+import { formatDashboardDateTime } from "../../lib/dashboardDateFormat";
 import {
   hasProspectEmail,
   parseRiskFlagChips,
@@ -137,7 +138,7 @@ export function InstitutionDrawer({
                 </div>
                 <div>
                   <dt className="text-[var(--color-muted)]">Último contacto</dt>
-                  <dd>{group.latestGmailLastContactedAt ?? "—"}</dd>
+                  <dd>{formatDashboardDateTime(group.latestGmailLastContactedAt)}</dd>
                 </div>
                 <div>
                   <dt className="text-[var(--color-muted)]">Último asunto (redactado)</dt>

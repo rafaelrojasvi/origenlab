@@ -1,5 +1,6 @@
 import type { WarmCaseCategory, WarmCaseItem } from "../api/commercialTypes";
 import { emailDomain, parseSortableTimestamp } from "./clientTableView";
+import { formatDashboardDateTime } from "./dashboardDateFormat";
 import { truncate } from "./safeText";
 
 export interface SupplierGroupDefinition {
@@ -66,21 +67,14 @@ export function roleBadgeForCategory(category: WarmCaseCategory | undefined): Su
   return "Hilo activo";
 }
 
-function buildCountSummary(items: WarmCaseItem[]): string {
-  const quotes = items.filter((row) => QUOTE_CATEGORIES.has(row.category)).length;
-  const followups = items.filter((row) => FOLLOWUP_CATEGORIES.has(row.category)).length;
-  const parts: string[] = [];
-  if (quotes > 0) {
-    parts.push(`${quotes} ${quotes === 1 ? "cotización" : "cotizaciones"}`);
-  }
-  if (followups > 0) {
-    parts.push(`${followups} ${followups === 1 ? "seguimiento" : "seguimientos"}`);
-  }
-  if (parts.length > 0) {
-    return parts.join(" · ");
-  }
+export function buildSupplierCaseSummary(items: WarmCaseItem[]): string {
   const n = items.length;
-  return `${n} ${n === 1 ? "hilo" : "hilos"}`;
+  const casoLabel = `${n} ${n === 1 ? "caso" : "casos"}`;
+  const groupedTotal = items.reduce((sum, row) => sum + (row.grouped_email_count ?? 1), 0);
+  if (groupedTotal > n) {
+    return `${casoLabel} · ${groupedTotal} correos agrupados`;
+  }
+  return n === 1 ? "1 caso activo" : `${n} casos activos`;
 }
 
 function previewSubject(row: WarmCaseItem | null): string {
@@ -95,18 +89,8 @@ function formatActivityDate(iso: string | null): string | null {
   if (!iso?.trim()) {
     return null;
   }
-  const ts = parseSortableTimestamp(iso);
-  if (ts <= 0) {
-    return iso;
-  }
-  try {
-    return new Intl.DateTimeFormat("es-CL", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(ts));
-  } catch {
-    return iso;
-  }
+  const formatted = formatDashboardDateTime(iso);
+  return formatted === "—" ? null : formatted;
 }
 
 function buildGroup(id: string, label: string, items: WarmCaseItem[]): SupplierEntityGroup {
@@ -115,7 +99,7 @@ function buildGroup(id: string, label: string, items: WarmCaseItem[]): SupplierE
     id,
     label,
     count: items.length,
-    summaryLabel: buildCountSummary(items),
+    summaryLabel: buildSupplierCaseSummary(items),
     quoteCount: items.filter((row) => QUOTE_CATEGORIES.has(row.category)).length,
     followupCount: items.filter((row) => FOLLOWUP_CATEGORIES.has(row.category)).length,
     latestSeenAt: latest?.last_seen_at ?? null,

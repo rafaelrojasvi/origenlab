@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OperatorAutomationStatus } from "../../api/operatorTypes";
-import { AUTOMATION_MISSING_STATE_HELP } from "../../lib/automationHealthLabels";
+import {
+  AUTOMATION_MISSING_STATE_HELP,
+  AUTOMATION_MISSING_STATE_PRIMARY,
+} from "../../lib/automationHealthLabels";
 import { AutomationHealthCard } from "./AutomationHealthCard";
 
 const BASE_STATUS: OperatorAutomationStatus = {
@@ -160,8 +163,10 @@ describe("AutomationHealthCard", () => {
     await waitFor(() => {
       screen.getByTestId("automation-missing-state-help");
     });
+    screen.getByText(AUTOMATION_MISSING_STATE_PRIMARY);
     screen.getByText(AUTOMATION_MISSING_STATE_HELP);
-    expect(screen.getAllByText("Ejecutar dry-run para crear estado").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Publicar snapshot o revisar localmente").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Ejecutar dry-run para crear estado")).toBeNull();
   });
 
   it("does not update state after unmount when fetch resolves late", async () => {

@@ -17,6 +17,7 @@ import {
   type WarmCaseTableFilters,
 } from "../../lib/warmCaseTableView";
 import { formatOperatorToken } from "../../lib/operatorLabels";
+import { formatDashboardDateTime } from "../../lib/dashboardDateFormat";
 import { truncate } from "../../lib/safeText";
 import {
   formatWarmCaseSubjectLine,
@@ -303,7 +304,7 @@ export function WarmCasesTable({
                   />
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap text-xs text-slate-600">
-                  {row.last_seen_at ?? "—"}
+                  {formatDashboardDateTime(row.last_seen_at)}
                 </td>
                 <td className="px-3 py-2 text-xs text-slate-700">
                   {row.equipment_signal || "—"}
@@ -314,10 +315,11 @@ export function WarmCasesTable({
                     {(row.grouped_email_count ?? 1) > 1 &&
                     !warmCaseSubjectShowsInlineGroupCount(row) ? (
                       <span
-                        className="ml-2 inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-600"
-                        title="Correos en el mismo hilo (no es cantidad pedida)"
+                        className="ml-2 inline-flex rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-900"
+                        title="Correos agrupados en este caso tibio (no es todo el historial Gmail)"
+                        data-testid="warm-case-grouped-email-count"
                       >
-                        {row.grouped_email_count} correos
+                        {row.grouped_email_count} correos agrupados
                       </span>
                     ) : null}
                   </div>

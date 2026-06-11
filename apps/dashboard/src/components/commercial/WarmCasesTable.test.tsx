@@ -502,6 +502,45 @@ describe("WarmCasesTable", () => {
     expect(screen.queryByText("contacto@origenlab.cl")).toBeNull();
   });
 
+  it("formats last_seen_at without raw ISO", () => {
+    render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 1 }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.queryByText("2026-05-19T10:00:00-04:00")).toBeNull();
+    expect(screen.getByText(/2026/)).toBeTruthy();
+  });
+
+  it("shows grouped email badge when count is above one", () => {
+    render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={[
+          {
+            ...row,
+            subject: "IKA long thread",
+            grouped_email_count: 13,
+          },
+        ]}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 1 }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("warm-case-grouped-email-count").textContent).toMatch(
+      /13 correos agrupados/,
+    );
+  });
+
   it("shows grouped CRTOP subject with inline email count", () => {
     render(
       <WarmCasesTable

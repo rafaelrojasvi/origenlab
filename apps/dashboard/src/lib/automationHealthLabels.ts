@@ -1,4 +1,5 @@
 import type { OperatorAutomationStatus } from "../api/operatorTypes";
+import { formatDashboardDateTime } from "./dashboardDateFormat";
 
 export function automationVerdictLabel(verdict: string): string {
   switch (verdict) {
@@ -34,7 +35,7 @@ export function automationRecommendedActionLabel(action: string): string {
     case "inspect_logs":
       return "Revisar logs";
     case "create_missing_state_by_running_dry_run":
-      return "Ejecutar dry-run para crear estado";
+      return "Publicar snapshot o revisar localmente";
     case "clear_stale_lock_after_manual_review":
       return "Revisar lock obsoleto manualmente";
     default:
@@ -71,9 +72,11 @@ export function automationVerdictTone(verdict: string): {
 }
 
 export function formatAutomationTimestamp(ts: string | null | undefined): string {
-  if (!ts) return "—";
-  return ts;
+  return formatDashboardDateTime(ts);
 }
+
+export const AUTOMATION_MISSING_STATE_PRIMARY =
+  "Snapshot local no publicado";
 
 export function mailLoopStatusLabel(status: OperatorAutomationStatus): string {
   if (status.mail_auto_refresh.dirty || status.mail_auto_refresh.pending) {
@@ -87,7 +90,7 @@ export function mirrorLoopStatusLabel(status: OperatorAutomationStatus): boolean
 }
 
 export const AUTOMATION_MISSING_STATE_HELP =
-  "El API no ve todos los archivos de estado del operador. En local, revisar ORIGENLAB_ACTIVE_CURRENT o ejecutar los comandos dry-run. En producción, esto puede requerir publicar un snapshot de estado al espejo.";
+  "El API en producción no ve los archivos de estado locales del operador. La validación local puede estar LISTO aunque este panel muestre atención. Publique un snapshot al espejo o revise el estado en el servidor.";
 
 export function operatorAutomationStatePartiallyMissing(
   status: OperatorAutomationStatus,
