@@ -81,6 +81,12 @@ def _healthy_fixture(active_current: Path) -> Path:
     return active_current.parent.parent
 
 
+def _write_ndr_review_queue(active_current: Path, *, date_label: str, summary: dict[str, object]) -> None:
+    queue_dir = active_current / f"ndr_review_queue_{date_label}"
+    queue_dir.mkdir(parents=True)
+    (queue_dir / "ndr_review_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+
 def _healthy_tracked_crontab() -> dict[str, Any]:
     return _inspect_crontab_content(
         "\n".join(
@@ -126,12 +132,46 @@ def test_json_output_keys(active_current: Path, capsys: pytest.CaptureFixture[st
         "daily_core",
         "mail_auto_refresh",
         "dashboard_auto_mirror",
+        "ndr_pending_review",
         "cron",
         "recommended_action",
         "warnings",
     ):
         assert key in data
     assert data["cron"]["inspected"] is True
+    assert data["ndr_pending_review"]["queue_exists"] is False
+
+
+def test_healthy_with_pending_ndr_sets_review_recommended_action(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_ndr_review_queue(
+        active_current,
+        date_label="2026_06_11",
+        summary={
+            "generated_at": "2026-06-11T21:43:08+00:00",
+            "since_days": 1,
+            "date_label": "2026_06_11",
+            "candidates_total": 129,
+            "candidates_already_suppressed": 53,
+            "candidates_unsuppressed": 76,
+            "batch_counts": {"A": 53, "B": 28, "C": 1, "D": 42, "E": 5},
+            "allowlist_batch_a_count": 18,
+            "allowlist_batch_b_count": 14,
+        },
+    )
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    assert report["verdict"] == "healthy"
+    assert report["recommended_action"] == "review_ndr_allowlists"
+    ndr = report["ndr_pending_review"]
+    assert ndr["pending_review"] is True
+    assert ndr["allowlist_batch_a_count"] == 18
+    assert ndr["allowlist_batch_b_count"] == 14
+    assert ndr["batch_counts"]["D"] == 42
+    assert ndr["batch_cde_count"] == 48
 
 
 def test_missing_daily_core_manifest(active_current: Path) -> None:
