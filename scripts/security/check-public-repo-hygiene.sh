@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# Read-only guardrail: fail if tracked git content matches public-repo risk patterns.
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "FAIL: not inside a git repository" >&2
+  exit 1
+fi
+
+FAILURES=0
+
+fail() {
+  echo "FAIL: $1" >&2
+  FAILURES=$((FAILURES + 1))
+}
+
+pass() {
+  echo "OK: $1"
+}
+
+is_allowed_reports_out_file() {
+  case "$1" in
+    apps/email-pipeline/reports/out/README.md | apps/email-pipeline/reports/out/.gitkeep)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+section() {
+  printf "\n== %s ==\n" "$1"
+}
+
+section "tracked secret / credential patterns"
+while IFS= read -r path; do
+  [[ -z "$path" ]] && continue
+  base="${path##*/}"
+
+  case "$base" in
+    .env)
+      fail "tracked env file: $path"
+      ;;
+    .env.example)
+      ;;
+    .env.*)
+      fail "tracked env variant: $path"
+      ;;
+  esac
+
+  case "$path" in
+    */id_rsa | id_rsa)
+      fail "tracked private key path: $path"
+      ;;
+  esac
+
+  case "$path" in
+    *.sqlite | *.sqlite3 | *.db | *.mbox | *.pst | *.jsonl | *.pem | *.p12)
+      fail "tracked sensitive artifact: $path"
+      ;;
+  esac
+done < <(git ls-files)
+
+section "tracked operational report paths"
+while IFS= read -r path; do
+  [[ -z "$path" ]] && continue
+
+  case "$path" in
+    apps/email-pipeline/reports/out/*)
+      if is_allowed_reports_out_file "$path"; then
+        continue
+      fi
+      fail "tracked email-pipeline reports/out artifact: $path"
+      ;;
+    apps/email-pipeline/reports/in/*)
+      fail "tracked email-pipeline reports/in input: $path"
+      ;;
+    reports/in/*)
+      fail "tracked monorepo reports/in input: $path"
+      ;;
+    reports/out/*)
+      fail "tracked monorepo reports/out artifact: $path"
+      ;;
+  esac
+done < <(git ls-files)
+
+section "tracked client collateral"
+while IFS= read -r path; do
+  [[ -z "$path" ]] && continue
+  case "$path" in
+    docs/client/*)
+      fail "tracked client collateral: $path"
+      ;;
+  esac
+done < <(git ls-files)
+
+section "workflow permissions (contents: read)"
+WORKFLOW_FILES=(
+  .github/workflows/email-pipeline.yml
+  .github/workflows/api.yml
+  .github/workflows/dashboard.yml
+  .github/workflows/secret-scan.yml
+)
+for workflow in "${WORKFLOW_FILES[@]}"; do
+  if [[ ! -f "$workflow" ]]; then
+    fail "missing workflow file: $workflow"
+    continue
+  fi
+  if ! grep -q '^permissions:' "$workflow"; then
+    fail "workflow missing permissions block: $workflow"
+    continue
+  fi
+  if ! grep -q 'contents:[[:space:]]*read' "$workflow"; then
+    fail "workflow missing 'contents: read': $workflow"
+    continue
+  fi
+  pass "workflow permissions: $workflow"
+done
+
+section "summary"
+if [[ "$FAILURES" -gt 0 ]]; then
+  echo
+  echo "Public repo hygiene check failed with $FAILURES issue(s)." >&2
+  echo "See docs/SECURITY_PUBLIC_REPO.md" >&2
+  exit 1
+fi
+
+echo "Public repo hygiene check passed."

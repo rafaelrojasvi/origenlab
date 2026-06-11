@@ -40,6 +40,7 @@ Use this checklist before changing repository visibility from private to public.
 Run from repository root:
 
 ```bash
+./scripts/security/check-public-repo-hygiene.sh
 git ls-files | rg "\.env$|\.sqlite$|\.jsonl$|\.pst$|\.mbox$"
 git ls-files | rg "reports/out"
 git status --short

@@ -1,22 +1,27 @@
 # Security policy
 
+## Public repository notice
+
+OrigenLab is a **public** monorepo. It documents operator workflows but must not contain live credentials, mailbox exports, SQLite files, generated reports, or client operational data.
+
 ## Reporting a vulnerability
 
-If you believe you have found a security vulnerability, **do not** open a public issue with exploit details, stack traces that include secrets, or live customer data.
+**Do not** open a public issue with exploit details, secrets, stack traces containing tokens, or live customer/mailbox data.
 
-1. Contact the maintainers through a **private** channel (for example: direct message or email to the project owner).
-2. Include: affected component (`apps/web` vs `apps/email-pipeline`), reproduction steps, and suspected impact.
+1. Contact the maintainers through a **private** channel (direct message or email to the project owner).
+2. Include: affected component (`apps/web`, `apps/api`, `apps/dashboard`, `apps/email-pipeline`), reproduction steps, and suspected impact.
 3. Allow reasonable time for triage before any public disclosure.
 
-## Sensitive data in this repository
+## If a secret was exposed
 
-This monorepo is designed so that **operational and sensitive artifacts stay out of Git**:
+1. **Revoke and rotate immediately** (OAuth tokens, app passwords, API keys, database passwords).
+2. Remove the secret from tracked files and Git history if applicable.
+3. Notify maintainers privately with what was exposed and what was rotated.
 
-- Email archives (for example PST/mbox), database files, JSONL exports, generated client reports, and environment files with credentials must **not** be committed.
-- The email pipeline may process real mailbox content locally. Treat any copy/paste from logs, reports, or databases as potentially sensitive.
+Operational data (CSVs, JSONL, SQLite, PST/mbox) never belongs in Git. If committed, treat as a data exposure: stop publishing, remove from tracking, and assess PII impact.
 
-For additional handling notes specific to the email pipeline, see [`apps/email-pipeline/docs/SECURITY.md`](apps/email-pipeline/docs/SECURITY.md).
+## Sensitive data handling
 
-## Secrets
-
-Never commit API keys, passwords, OAuth tokens, or private paths to customer data. If a secret was ever exposed in Git history, rotate it immediately and follow your provider’s guidance.
+- Email archives, database files, JSONL exports, generated client reports, and `.env` files with credentials must **not** be committed.
+- The email pipeline may process real mailbox content locally. Treat logs, reports, and database copies as sensitive.
+- See [`docs/SECURITY_PUBLIC_REPO.md`](docs/SECURITY_PUBLIC_REPO.md) for the public-repo checklist and [`apps/email-pipeline/docs/SECURITY.md`](apps/email-pipeline/docs/SECURITY.md) for pipeline-specific notes.
