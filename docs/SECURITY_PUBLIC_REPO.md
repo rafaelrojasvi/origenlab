@@ -50,13 +50,23 @@ Enable or verify on the repository:
 - [ ] Secret scanning (GitHub Advanced Security if available)
 - [ ] Push protection for detected secrets
 - [ ] Dependabot alerts
-- [ ] Dependabot security updates (optional; see `.github/dependabot.yml`)
+- [ ] Dependabot security updates (enabled; separate from routine version PRs)
 
 CI includes `.github/workflows/secret-scan.yml` (gitleaks on push/PR).
 
+## Dependabot version updates
+
+Routine Dependabot **version** updates are grouped and limited in [`.github/dependabot.yml`](../.github/dependabot.yml) to avoid PR noise:
+
+- GitHub Actions: one grouped weekly PR (max 2 open)
+- `apps/dashboard` / `apps/web` npm: minor/patch grouped per app; major bumps ignored for now
+- `apps/email-pipeline` / `apps/api` pip: routine version PRs disabled (`open-pull-requests-limit: 0`)
+
+**Dependabot security alerts and security updates remain enabled** — they are not suppressed by these limits.
+
 ## Python / uv dependencies
 
-Dependabot is configured for `pip` on `apps/email-pipeline` and `apps/api`. After merging dependency PRs, run `uv lock` locally in each app and commit lockfile updates when needed.
+When a security-driven pip PR merges, run `uv lock` locally in the affected app and commit lockfile updates.
 
 ## If sensitivity grows
 
