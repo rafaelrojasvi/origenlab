@@ -1,3 +1,4 @@
+import { AutomationHealthCard } from "../components/operator/AutomationHealthCard";
 import { useDashboardData } from "../context/DashboardDataContext";
 import { backendLabel } from "../lib/verdictStyles";
 
@@ -5,14 +6,31 @@ export function SystemPage() {
   const { data, warm, equipment, commercialDeals, leadResearchSummary } = useDashboardData();
 
   return (
-    <section className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-5 py-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-brand-900">Sistema</h2>
-      <p className="text-sm text-[var(--color-muted)]">
-        Panel de solo lectura. No envía correos ni modifica contactos, envíos ni SQLite desde esta
-        interfaz.
-      </p>
+    <div className="space-y-6">
+      <section
+        className="space-y-3"
+        aria-labelledby="system-automation-heading"
+        data-testid="system-automation-section"
+      >
+        <div>
+          <h2 id="system-automation-heading" className="text-lg font-semibold text-brand-900">
+            Automatización operador
+          </h2>
+          <p className="mt-1 text-sm text-[var(--color-muted)]">
+            Este panel observa la automatización; no ejecuta refresh, mirror ni envíos.
+          </p>
+        </div>
+        <AutomationHealthCard variant="detailed" />
+      </section>
 
-      <div className="rounded-lg border border-sky-100 bg-sky-50/80 px-4 py-4 text-sm text-sky-950">
+      <section className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-5 py-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-brand-900">Sistema</h2>
+        <p className="text-sm text-[var(--color-muted)]">
+          Panel de solo lectura. No envía correos ni modifica contactos, envíos ni SQLite desde esta
+          interfaz.
+        </p>
+
+        <div className="rounded-lg border border-sky-100 bg-sky-50/80 px-4 py-4 text-sm text-sky-950">
         <h3 className="font-semibold text-sky-900">Alcance del correo en el panel</h3>
         <ul className="mt-2 list-disc space-y-2 pl-5">
           <li>
@@ -29,9 +47,9 @@ export function SystemPage() {
             ese subconjunto canónico — <strong>no</strong> todo el archivo histórico.
           </li>
         </ul>
-      </div>
+        </div>
 
-      <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-[var(--color-muted)]">Servicio API</dt>
           <dd className="font-medium">{data?.health.service ?? "—"}</dd>
@@ -62,8 +80,8 @@ export function SystemPage() {
               : "aún no sincronizado"}
           </dd>
         </div>
-      </dl>
-      <div className="rounded-lg border border-[var(--color-border)] bg-slate-50/80 px-4 py-4 text-sm">
+        </dl>
+        <div className="rounded-lg border border-[var(--color-border)] bg-slate-50/80 px-4 py-4 text-sm">
         <h3 className="font-semibold text-brand-900">Lead intelligence</h3>
         <dl className="mt-2 grid gap-2 sm:grid-cols-2">
           <div>
@@ -91,12 +109,13 @@ export function SystemPage() {
             </dd>
           </div>
         </dl>
-      </div>
+        </div>
 
-      <footer className="border-t border-[var(--color-border)] pt-4 text-xs text-[var(--color-muted)]">
-        Rutas de solo lectura: estado del operador, casos tibios, oportunidades de equipos,
-        negocios comerciales y contactos.
-      </footer>
-    </section>
+        <footer className="border-t border-[var(--color-border)] pt-4 text-xs text-[var(--color-muted)]">
+          Rutas de solo lectura: estado del operador, casos tibios, oportunidades de equipos,
+          negocios comerciales y contactos.
+        </footer>
+      </section>
+    </div>
   );
 }

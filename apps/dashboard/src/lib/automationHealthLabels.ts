@@ -85,3 +85,22 @@ export function mailLoopStatusLabel(status: OperatorAutomationStatus): string {
 export function mirrorLoopStatusLabel(status: OperatorAutomationStatus): boolean | null {
   return status.dashboard_auto_mirror.mirror_matches_daily_core;
 }
+
+export const AUTOMATION_MISSING_STATE_HELP =
+  "El API no ve todos los archivos de estado del operador. En local, revisar ORIGENLAB_ACTIVE_CURRENT o ejecutar los comandos dry-run. En producción, esto puede requerir publicar un snapshot de estado al espejo.";
+
+export function operatorAutomationStatePartiallyMissing(
+  status: OperatorAutomationStatus,
+): boolean {
+  return (
+    status.daily_core.exists === false ||
+    !status.mail_auto_refresh.state_exists ||
+    !status.dashboard_auto_mirror.state_exists
+  );
+}
+
+export function formatAutomationBool(value: boolean | null | undefined): string {
+  if (value === true) return "sí";
+  if (value === false) return "no";
+  return "—";
+}

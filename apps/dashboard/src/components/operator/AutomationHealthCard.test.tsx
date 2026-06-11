@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OperatorAutomationStatus } from "../../api/operatorTypes";
+import { AUTOMATION_MISSING_STATE_HELP } from "../../lib/automationHealthLabels";
 import { AutomationHealthCard } from "./AutomationHealthCard";
 
 const BASE_STATUS: OperatorAutomationStatus = {
@@ -8,6 +9,7 @@ const BASE_STATUS: OperatorAutomationStatus = {
   active_current_dir: "/hidden/active/current",
   verdict: "healthy",
   daily_core: {
+    exists: true,
     status: "success",
     returncode: 0,
     generated_at_utc: "2026-06-10T18:12:48+00:00",
@@ -20,6 +22,7 @@ const BASE_STATUS: OperatorAutomationStatus = {
     lock_live: false,
     dirty: false,
     pending: false,
+    last_result: "no_change",
     last_successful_refresh_at: "2026-06-10T18:12:48+00:00",
     last_seen_inbox_total: 403,
     last_seen_sent_total: 971,
@@ -29,6 +32,7 @@ const BASE_STATUS: OperatorAutomationStatus = {
     state_exists: true,
     paused: false,
     lock_live: false,
+    last_result: "success",
     last_successful_mirror_at: "2026-06-10T18:18:33+00:00",
     last_mirrored_daily_core_generated_at: "2026-06-10T18:12:48+00:00",
     mirror_matches_daily_core: true,
@@ -36,7 +40,7 @@ const BASE_STATUS: OperatorAutomationStatus = {
     cooldown_remaining_seconds: 0,
     consecutive_failures: 0,
   },
-  cron: { note: "not inspected by this command" },
+  cron: { note: "not inspected by API" },
   recommended_action: "none",
   warnings: [],
 };
@@ -54,7 +58,7 @@ afterEach(() => {
 });
 
 describe("AutomationHealthCard", () => {
-  it("renders healthy state", async () => {
+  it("renders healthy state in summary mode", async () => {
     mockFetch.mockResolvedValue(BASE_STATUS);
     render(<AutomationHealthCard />);
     await waitFor(() => {
@@ -66,6 +70,7 @@ describe("AutomationHealthCard", () => {
     screen.getByText(/sincronizado/);
     screen.getByText(/403/);
     screen.getByText(/971/);
+    expect(screen.queryByText(/hidden\/active\/current/)).toBeNull();
   });
 
   it("renders attention when mirror is behind", async () => {
@@ -100,12 +105,13 @@ describe("AutomationHealthCard", () => {
     screen.getByText("Revisar daily-core");
   });
 
-  it("renders fetch failure without action buttons", async () => {
+  it("renders fetch failure with refresh only (no mutation actions)", async () => {
     mockFetch.mockRejectedValue(new Error("HTTP 500"));
     render(<AutomationHealthCard />);
     await waitFor(() => {
       screen.getByText("No se pudo leer estado de automatización");
     });
+    screen.getByRole("button", { name: /Actualizar estado/i });
     expect(screen.queryByRole("button", { name: /Publicar/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Ejecutar/i })).toBeNull();
   });
@@ -125,5 +131,55 @@ describe("AutomationHealthCard", () => {
       screen.getByTestId("automation-lock-pause-hint");
     });
     screen.getByText(/Refresh Gmail en curso/);
+  });
+
+  it("renders detailed fields in detailed mode", async () => {
+    mockFetch.mockResolvedValue(BASE_STATUS);
+    render(<AutomationHealthCard variant="detailed" />);
+    await waitFor(() => {
+      screen.getByText("Estado de automatización");
+    });
+    screen.getByText("Daily-core");
+    screen.getByText("Mail auto-refresh");
+    screen.getByText("Dashboard auto-mirror");
+    screen.getByText("no_change");
+    screen.getByText(/not inspected by API/);
+    expect(screen.queryByText(/hidden\/active\/current/)).toBeNull();
+  });
+
+  it("shows friendly help when operator state files are missing", async () => {
+    mockFetch.mockResolvedValue({
+      ...BASE_STATUS,
+      verdict: "attention",
+      recommended_action: "create_missing_state_by_running_dry_run",
+      daily_core: { ...BASE_STATUS.daily_core, exists: false },
+      mail_auto_refresh: { ...BASE_STATUS.mail_auto_refresh, state_exists: false },
+      dashboard_auto_mirror: { ...BASE_STATUS.dashboard_auto_mirror, state_exists: false },
+    });
+    render(<AutomationHealthCard variant="detailed" />);
+    await waitFor(() => {
+      screen.getByTestId("automation-missing-state-help");
+    });
+    screen.getByText(AUTOMATION_MISSING_STATE_HELP);
+    expect(screen.getAllByText("Ejecutar dry-run para crear estado").length).toBeGreaterThan(0);
+  });
+
+  it("refetches when Actualizar estado is clicked", async () => {
+    mockFetch.mockResolvedValue(BASE_STATUS);
+    const onRefresh = vi.fn();
+    render(<AutomationHealthCard variant="detailed" onRefresh={onRefresh} />);
+    await screen.findByText("Estado de automatización");
+    const callsBeforeRefresh = mockFetch.mock.calls.length;
+    mockFetch.mockResolvedValueOnce({
+      ...BASE_STATUS,
+      verdict: "attention",
+      recommended_action: "run_auto_mirror_dashboard",
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Actualizar estado/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText("Publicar espejo dashboard").length).toBeGreaterThan(0);
+    });
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBeforeRefresh);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 });
