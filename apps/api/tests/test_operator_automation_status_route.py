@@ -108,6 +108,7 @@ def test_healthy_fixture_verdict(tmp_path: Path) -> None:
     assert data["verdict"] == "healthy"
     assert data["mail_auto_refresh"]["dirty"] is False
     assert data["dashboard_auto_mirror"]["mirror_matches_daily_core"] is True
+    assert data["cron"] == {"note": "not inspected by API"}
 
 
 def test_attention_mail_dirty(tmp_path: Path) -> None:

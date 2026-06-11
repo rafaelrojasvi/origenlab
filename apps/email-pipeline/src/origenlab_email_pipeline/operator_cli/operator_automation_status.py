@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,11 +36,20 @@ VERDICT_HEALTHY = "healthy"
 VERDICT_ATTENTION = "attention"
 VERDICT_BLOCKED = "blocked"
 
+TRACKED_MAIL_CRON_SCRIPT = "scripts/operator/run_auto_refresh_mail.sh"
+TRACKED_MIRROR_CRON_SCRIPT = "scripts/operator/run_auto_mirror_dashboard.sh"
+LEGACY_MIRROR_CRON_WRAPPER = "reports/out/active/current/bin/run_auto_mirror_dashboard.sh"
+JOINED_FLAG_PATTERN = re.compile(r"--\w+--\w+")
+
+CrontabInspectFn = Callable[[], dict[str, Any]]
+
 
 @dataclass(frozen=True)
 class OperatorAutomationStatusOptions:
     json_output: bool = False
     mirror_cooldown_seconds: int = MIRROR_DEFAULT_COOLDOWN_SECONDS
+    skip_cron_inspection: bool = False
+    cron_note: str | None = None
 
 
 def _active_current_path(reports_dir: Path | None = None) -> Path:
@@ -112,6 +123,146 @@ def _cooldown_remaining(last_at: str | None, *, cooldown_seconds: int, now: date
     return max(0, int(remaining))
 
 
+def _crontab_active_lines(content: str) -> list[str]:
+    lines: list[str] = []
+    for raw in content.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        lines.append(line)
+    return lines
+
+
+def _inspect_crontab_content(content: str) -> dict[str, Any]:
+    cron_warnings: list[str] = []
+    lines = _crontab_active_lines(content)
+    joined_flags = any(JOINED_FLAG_PATTERN.search(line) for line in lines)
+
+    mail_entry_present = False
+    mirror_entry_present = False
+    mail_uses_tracked_script = False
+    mirror_uses_tracked_script = False
+    legacy_runtime_wrapper_present = False
+
+    for line in lines:
+        if "auto-refresh-mail" in line or "run_auto_refresh_mail.sh" in line:
+            mail_entry_present = True
+        if TRACKED_MAIL_CRON_SCRIPT in line:
+            mail_uses_tracked_script = True
+
+        if "auto-mirror-dashboard" in line or "run_auto_mirror_dashboard.sh" in line:
+            mirror_entry_present = True
+        if LEGACY_MIRROR_CRON_WRAPPER in line or "active/current/bin/run_auto_mirror_dashboard.sh" in line:
+            legacy_runtime_wrapper_present = True
+        if TRACKED_MIRROR_CRON_SCRIPT in line and LEGACY_MIRROR_CRON_WRAPPER not in line:
+            mirror_uses_tracked_script = True
+
+    if joined_flags:
+        cron_warnings.append("broken_joined_flags_detected")
+    if legacy_runtime_wrapper_present:
+        cron_warnings.append("legacy_runtime_mirror_wrapper_detected")
+
+    return {
+        "inspected": True,
+        "crontab_available": True,
+        "mail_entry_present": mail_entry_present,
+        "mirror_entry_present": mirror_entry_present,
+        "mail_uses_tracked_script": mail_uses_tracked_script,
+        "mirror_uses_tracked_script": mirror_uses_tracked_script,
+        "legacy_runtime_wrapper_present": legacy_runtime_wrapper_present,
+        "broken_joined_flags": joined_flags,
+        "warnings": cron_warnings,
+    }
+
+
+def _empty_crontab_inspection(*, warning: str | None = None) -> dict[str, Any]:
+    cron_warnings = [warning] if warning else []
+    return {
+        "inspected": True,
+        "crontab_available": True,
+        "mail_entry_present": False,
+        "mirror_entry_present": False,
+        "mail_uses_tracked_script": False,
+        "mirror_uses_tracked_script": False,
+        "legacy_runtime_wrapper_present": False,
+        "broken_joined_flags": False,
+        "warnings": cron_warnings,
+    }
+
+
+def read_user_crontab() -> dict[str, Any]:
+    """Read the current user's crontab without mutation."""
+    try:
+        proc = subprocess.run(
+            ["crontab", "-l"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except FileNotFoundError:
+        return {
+            "inspected": True,
+            "crontab_available": False,
+            "mail_entry_present": False,
+            "mirror_entry_present": False,
+            "mail_uses_tracked_script": False,
+            "mirror_uses_tracked_script": False,
+            "legacy_runtime_wrapper_present": False,
+            "broken_joined_flags": False,
+            "warnings": ["crontab_command_unavailable"],
+        }
+    except subprocess.TimeoutExpired:
+        return _empty_crontab_inspection(warning="crontab_read_timeout")
+
+    stderr = (proc.stderr or "").strip().lower()
+    if proc.returncode != 0:
+        if "no crontab" in stderr:
+            return _empty_crontab_inspection(warning="no_crontab_for_user")
+        return {
+            "inspected": True,
+            "crontab_available": True,
+            "mail_entry_present": False,
+            "mirror_entry_present": False,
+            "mail_uses_tracked_script": False,
+            "mirror_uses_tracked_script": False,
+            "legacy_runtime_wrapper_present": False,
+            "broken_joined_flags": False,
+            "warnings": ["crontab_read_failed"],
+        }
+
+    return _inspect_crontab_content(proc.stdout or "")
+
+
+def _apply_cron_verdict_override(
+    *,
+    verdict: str,
+    recommended_action: str,
+    cron: dict[str, Any],
+    warnings: list[str],
+) -> tuple[str, str]:
+    if not cron.get("inspected"):
+        return verdict, recommended_action
+    if verdict != VERDICT_HEALTHY:
+        return verdict, recommended_action
+
+    cron_warnings = cron.get("warnings") or []
+    for item in cron_warnings:
+        if item not in warnings:
+            warnings.append(item)
+
+    if cron.get("broken_joined_flags"):
+        return VERDICT_ATTENTION, "fix_crontab_spacing"
+    if cron.get("legacy_runtime_wrapper_present"):
+        return VERDICT_ATTENTION, "migrate_cron_to_tracked_scripts"
+    if not cron.get("crontab_available"):
+        return verdict, recommended_action
+    if not cron.get("mail_entry_present") or not cron.get("mirror_entry_present"):
+        return VERDICT_ATTENTION, "inspect_crontab"
+
+    return verdict, recommended_action
+
+
 def _safe_load_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     if not path.is_file():
         return None, "missing"
@@ -130,6 +281,7 @@ def build_operator_automation_status(
     options: OperatorAutomationStatusOptions | None = None,
     now: datetime | None = None,
     process_alive: ProcessAliveFn | None = None,
+    read_crontab: CrontabInspectFn | None = None,
 ) -> dict[str, Any]:
     opts = options or OperatorAutomationStatusOptions()
     now_dt = now or datetime.now(timezone.utc)
@@ -242,6 +394,20 @@ def build_operator_automation_status(
         warnings=warnings,
     )
 
+    if opts.skip_cron_inspection:
+        cron_section: dict[str, Any] = {
+            "note": opts.cron_note or "not inspected by this command",
+        }
+    else:
+        inspect_crontab = read_crontab or read_user_crontab
+        cron_section = inspect_crontab()
+        verdict, recommended_action = _apply_cron_verdict_override(
+            verdict=verdict,
+            recommended_action=recommended_action,
+            cron=cron_section,
+            warnings=warnings,
+        )
+
     return {
         "generated_at_utc": _iso_now(now_dt),
         "active_current_dir": str(active_current),
@@ -249,7 +415,7 @@ def build_operator_automation_status(
         "daily_core": daily_core_section,
         "mail_auto_refresh": mail_section,
         "dashboard_auto_mirror": mirror_section,
-        "cron": {"note": "not inspected by this command"},
+        "cron": cron_section,
         "recommended_action": recommended_action,
         "warnings": warnings,
     }
@@ -395,7 +561,24 @@ def format_operator_automation_status_text(report: dict[str, Any]) -> str:
 
     lines.append("")
     lines.append("cron")
-    lines.append(f"  note={report['cron']['note']}")
+    cron = report["cron"]
+    if cron.get("note") is not None:
+        lines.append(f"  note={cron['note']}")
+    else:
+        for key in (
+            "inspected",
+            "crontab_available",
+            "mail_entry_present",
+            "mirror_entry_present",
+            "mail_uses_tracked_script",
+            "mirror_uses_tracked_script",
+            "legacy_runtime_wrapper_present",
+            "broken_joined_flags",
+        ):
+            if key in cron:
+                lines.append(f"  {key}={_fmt_value(cron.get(key))}")
+        if cron.get("warnings"):
+            lines.append(f"  warnings={','.join(cron['warnings'])}")
     lines.append("")
     lines.append(f"recommended_action={report['recommended_action']}")
     if report.get("warnings"):
@@ -409,12 +592,14 @@ def run_operator_automation_status(
     reports_dir: Path | None = None,
     process_alive: ProcessAliveFn | None = None,
     now: datetime | None = None,
+    read_crontab: CrontabInspectFn | None = None,
 ) -> int:
     report = build_operator_automation_status(
         reports_dir=reports_dir,
         options=options,
         now=now,
         process_alive=process_alive,
+        read_crontab=read_crontab,
     )
     if options and options.json_output:
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -438,10 +623,16 @@ def parse_operator_automation_status_args(argv: list[str]) -> OperatorAutomation
         default=MIRROR_DEFAULT_COOLDOWN_SECONDS,
         help="Dashboard mirror cooldown for remaining-seconds calculation",
     )
+    parser.add_argument(
+        "--skip-cron-inspection",
+        action="store_true",
+        help="Do not read user crontab (preserves legacy cron output)",
+    )
     ns = parser.parse_args(argv)
     return OperatorAutomationStatusOptions(
         json_output=ns.json,
         mirror_cooldown_seconds=ns.cooldown_seconds,
+        skip_cron_inspection=ns.skip_cron_inspection,
     )
 
 
@@ -449,6 +640,8 @@ def print_operator_automation_status_help() -> None:
     print(
         "operator-automation-status — read-only health for automation loops A and B\n\n"
         "  uv run origenlab operator-automation-status\n"
-        "  uv run origenlab operator-automation-status --json\n\n"
-        "Inspects local state files only (no Gmail, Postgres, daily-core, or mirror writes).\n"
+        "  uv run origenlab operator-automation-status --json\n"
+        "  uv run origenlab operator-automation-status --skip-cron-inspection\n\n"
+        "Inspects local state files and user crontab read-only (no Gmail, Postgres, daily-core, "
+        "or mirror writes).\n"
     )

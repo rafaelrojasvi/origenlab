@@ -123,7 +123,7 @@ SUBCOMMAND_HELP: dict[str, str] = {
         "mail state (dry-run default; --apply requires --allow-non-scratch-postgres)"
     ),
     "operator-automation-status": (
-        "Read-only automation health: daily-core manifest, mail auto-refresh, dashboard auto-mirror "
-        "(local state files only; optional --json)"
+        "Read-only automation health: daily-core manifest, mail auto-refresh, dashboard auto-mirror, "
+        "user crontab (local state only; optional --json, --skip-cron-inspection)"
     ),
 }
