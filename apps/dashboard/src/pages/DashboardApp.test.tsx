@@ -231,7 +231,7 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
       "Proveedores",
       "Licitaciones / equipos",
       "Pagos y logística",
-      "Contactos",
+      "Clientes / instituciones",
       "Sistema",
     ]) {
       expect(within(nav).getByRole("link", { name: label })).toBeTruthy();

@@ -79,9 +79,9 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
       },
       {
         id: "contacts",
-        label: "Contactos",
-        shortLabel: "Contactos",
-        description: "Perfiles de contacto en solo lectura",
+        label: "Clientes / instituciones",
+        shortLabel: "Clientes",
+        description: "Instituciones compradoras, contactos e historial",
         iconName: "contacts",
       },
     ],
