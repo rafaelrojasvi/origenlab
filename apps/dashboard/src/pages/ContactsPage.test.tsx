@@ -150,6 +150,15 @@ describe("ContactsPage", () => {
     );
   });
 
+  it("renders espejo vs Gmail detectado in institution table", async () => {
+    render(wrap(<ContactsPage />));
+    await waitFor(() => expect(screen.getByText("Gmail Hist Co")).toBeTruthy());
+    const cells = screen.getAllByTestId("institution-gmail-history-cell");
+    expect(cells.length).toBeGreaterThan(0);
+    expect(cells[0]?.textContent).toMatch(/Espejo:/);
+    expect(cells[0]?.textContent).toMatch(/Gmail detectado:/);
+  });
+
   it("shows friendly card error state when mirror load fails", async () => {
     vi.mocked(fetchLeadProspectsMirror).mockRejectedValue(
       new OperatorApiError('{"detail":"Input should be less than or equal to 100"}', 503),

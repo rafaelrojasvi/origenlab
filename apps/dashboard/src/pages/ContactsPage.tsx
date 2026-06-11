@@ -13,7 +13,7 @@ import {
   type CustomerInstitutionGroup,
   type InstitutionViewPreset,
 } from "../lib/customerInstitutionGroups";
-import { formatDashboardDateTime } from "../lib/dashboardDateFormat";
+import { institutionGmailHistorySummary } from "../lib/institutionMirrorDepth";
 import { formatMirrorLoadError } from "../lib/humanizeApiError";
 import { useClientTablePagination } from "../lib/useClientTablePagination";
 
@@ -28,10 +28,17 @@ function KpiCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function gmailHistoryCell(group: CustomerInstitutionGroup): string {
-  if (!group.hasGmailHistory) return "Sin historial en espejo";
-  const last = formatDashboardDateTime(group.latestGmailLastContactedAt);
-  return `${group.totalGmailSent} env. / ${group.totalGmailReceived} rec. · ${last}`;
+function InstitutionGmailHistoryCell({ group }: { group: CustomerInstitutionGroup }) {
+  const summary = institutionGmailHistorySummary(group);
+  if (summary.compactLine === "Sin historial en espejo") {
+    return <span className="text-xs">{summary.compactLine}</span>;
+  }
+  return (
+    <div className="space-y-0.5 text-xs" data-testid="institution-gmail-history-cell">
+      <p>{summary.mirrorLine}</p>
+      <p className="text-[var(--color-muted)]">{summary.detectedLine}</p>
+    </div>
+  );
 }
 
 export function ContactsPage() {
@@ -231,7 +238,9 @@ export function ContactsPage() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 max-w-[12rem] text-xs">{gmailHistoryCell(group)}</td>
+                  <td className="px-4 py-3 max-w-[14rem]">
+                    <InstitutionGmailHistoryCell group={group} />
+                  </td>
                   <td className="px-4 py-3">{group.maxFinalScore}</td>
                   <td className="px-4 py-3 max-w-[10rem] truncate">
                     {[group.sectors[0], group.regions[0]].filter(Boolean).join(" · ") || "—"}

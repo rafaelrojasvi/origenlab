@@ -78,6 +78,50 @@ export function formatAutomationTimestamp(ts: string | null | undefined): string
 export const AUTOMATION_MISSING_STATE_PRIMARY =
   "Snapshot local no publicado";
 
+export const AUTOMATION_SNAPSHOT_PUBLISHED_PRIMARY =
+  "Snapshot local publicado";
+
+function pickLatestAutomationTimestamp(
+  values: Array<string | null | undefined>,
+): string | null {
+  let best: { iso: string; ts: number } | null = null;
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed) continue;
+    const ts = Date.parse(trimmed);
+    if (!Number.isFinite(ts)) continue;
+    if (!best || ts > best.ts) {
+      best = { iso: trimmed, ts };
+    }
+  }
+  return best?.iso ?? null;
+}
+
+export function buildAutomationSnapshotSummary(
+  status: OperatorAutomationStatus,
+): string | null {
+  if (operatorAutomationStatePartiallyMissing(status)) {
+    return null;
+  }
+  const lastUpdate = pickLatestAutomationTimestamp([
+    status.generated_at_utc,
+    status.daily_core.generated_at_utc,
+    status.mail_auto_refresh.last_successful_refresh_at,
+    status.dashboard_auto_mirror.last_successful_mirror_at,
+  ]);
+  const parts = [AUTOMATION_SNAPSHOT_PUBLISHED_PRIMARY];
+  if (lastUpdate) {
+    parts.push(`última actualización ${formatAutomationTimestamp(lastUpdate)}`);
+  }
+  if (status.daily_core.exists) {
+    parts.push("daily-core visible");
+  }
+  if (status.dashboard_auto_mirror.state_exists) {
+    parts.push("mirror visible");
+  }
+  return parts.join(" · ");
+}
+
 export function mailLoopStatusLabel(status: OperatorAutomationStatus): string {
   if (status.mail_auto_refresh.dirty || status.mail_auto_refresh.pending) {
     return "pendiente";

@@ -122,7 +122,7 @@ describe("SupplierEntityGroups", () => {
         onContactSelect={() => {}}
       />,
     );
-    const servaCard = screen.getByRole("button", { name: /SERVA, 1 caso activo/i });
+    const servaCard = screen.getByRole("button", { name: /SERVA, 1 caso en espejo/i });
     expect(servaCard.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByTestId("supplier-detail-title").textContent).toBe("SERVA");
     screen.getByText("sales@serva.de");
@@ -142,7 +142,7 @@ describe("SupplierEntityGroups", () => {
         onContactSelect={() => {}}
       />,
     );
-    const ikaCard = screen.getByRole("button", { name: /IKA, 1 caso activo/i });
+    const ikaCard = screen.getByRole("button", { name: /IKA, 1 caso en espejo/i });
     fireEvent.click(ikaCard);
     expect(ikaCard.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByTestId("supplier-detail-title").textContent).toBe("IKA");
