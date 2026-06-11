@@ -28,6 +28,10 @@ from origenlab_email_pipeline.operator_cli.mail_auto_refresh import (
     _process_alive,
     read_lock,
 )
+from origenlab_email_pipeline.qa.ndr_pending_review_status import (
+    apply_ndr_recommended_action,
+    build_ndr_pending_review_status,
+)
 
 ProcessAliveFn = Callable[[int], bool]
 NowFn = Callable[[], datetime]
@@ -408,6 +412,13 @@ def build_operator_automation_status(
             warnings=warnings,
         )
 
+    ndr_section = build_ndr_pending_review_status(active_current)
+    recommended_action = apply_ndr_recommended_action(
+        verdict=verdict,
+        recommended_action=recommended_action,
+        ndr_pending_review=ndr_section,
+    )
+
     return {
         "generated_at_utc": _iso_now(now_dt),
         "active_current_dir": str(active_current),
@@ -415,6 +426,7 @@ def build_operator_automation_status(
         "daily_core": daily_core_section,
         "mail_auto_refresh": mail_section,
         "dashboard_auto_mirror": mirror_section,
+        "ndr_pending_review": ndr_section,
         "cron": cron_section,
         "recommended_action": recommended_action,
         "warnings": warnings,
@@ -558,6 +570,30 @@ def format_operator_automation_status_text(report: dict[str, Any]) -> str:
         "consecutive_failures",
     ):
         lines.append(f"  {key}={_fmt_value(mirror.get(key))}")
+
+    lines.append("")
+    lines.append("ndr_pending_review")
+    ndr = report.get("ndr_pending_review") or {}
+    for key in (
+        "queue_exists",
+        "pending_review",
+        "queue_dir",
+        "date_label",
+        "generated_at_utc",
+        "since_days",
+        "candidates_total",
+        "candidates_already_suppressed",
+        "candidates_unsuppressed",
+        "allowlist_batch_a_count",
+        "allowlist_batch_b_count",
+        "batch_cde_count",
+        "parse_error",
+    ):
+        lines.append(f"  {key}={_fmt_value(ndr.get(key))}")
+    batch_counts = ndr.get("batch_counts")
+    if isinstance(batch_counts, dict):
+        for batch in ("A", "B", "C", "D", "E"):
+            lines.append(f"  batch_{batch}={_fmt_value(batch_counts.get(batch))}")
 
     lines.append("")
     lines.append("cron")

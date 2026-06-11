@@ -68,6 +68,9 @@ def redact_automation_status_for_publish(status: dict[str, Any]) -> dict[str, An
     redacted.pop("sqlite_path", None)
     if "active_current_dir" in redacted:
         redacted["active_current_dir"] = ACTIVE_CURRENT_REDACTION
+    ndr = redacted.get("ndr_pending_review")
+    if isinstance(ndr, dict) and ndr.get("queue_dir"):
+        ndr["queue_dir"] = ACTIVE_CURRENT_REDACTION
     warnings = redacted.get("warnings")
     if isinstance(warnings, list):
         redacted["warnings"] = [

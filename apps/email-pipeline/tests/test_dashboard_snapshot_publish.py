@@ -23,10 +23,14 @@ def test_redact_automation_status_removes_local_paths() -> None:
         "active_current_dir": "/home/op/reports/out/active/current",
         "sqlite_path": "/home/op/data/emails.sqlite",
         "warnings": ["see /home/op/reports/out/active/current/manifest.json"],
+        "ndr_pending_review": {
+            "queue_dir": "/home/op/reports/out/active/current/ndr_review_queue_2026_06_11",
+        },
         "verdict": "healthy",
     }
     redacted = redact_automation_status_for_publish(payload)
     assert redacted["active_current_dir"] == ACTIVE_CURRENT_REDACTION
+    assert redacted["ndr_pending_review"]["queue_dir"] == ACTIVE_CURRENT_REDACTION
     assert "sqlite_path" not in redacted
     assert "/home/op" not in json.dumps(redacted)
 
