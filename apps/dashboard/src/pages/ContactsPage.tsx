@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LeadProspectListItemUi } from "../api/leadIntelTypes";
+import type { GmailInteractionAuditSnapshot } from "../api/gmailInteractionAuditTypes";
+import { fetchGmailInteractionAudit } from "../api/mirrorAuditClient";
 import { fetchLeadProspectsMirror } from "../api/mirrorLeadIntelClient";
 import { InstitutionDrawer } from "../components/contacts/InstitutionDrawer";
 import { TechnicalDetailDisclosure } from "../components/operator/TechnicalDetailDisclosure";
@@ -28,8 +30,14 @@ function KpiCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function InstitutionGmailHistoryCell({ group }: { group: CustomerInstitutionGroup }) {
-  const summary = institutionGmailHistorySummary(group);
+function InstitutionGmailHistoryCell({
+  group,
+  auditSnapshot,
+}: {
+  group: CustomerInstitutionGroup;
+  auditSnapshot: GmailInteractionAuditSnapshot | null;
+}) {
+  const summary = institutionGmailHistorySummary(group, auditSnapshot);
   if (summary.compactLine === "Sin historial en espejo") {
     return <span className="text-xs">{summary.compactLine}</span>;
   }
@@ -37,6 +45,7 @@ function InstitutionGmailHistoryCell({ group }: { group: CustomerInstitutionGrou
     <div className="space-y-0.5 text-xs" data-testid="institution-gmail-history-cell">
       <p>{summary.mirrorLine}</p>
       <p className="text-[var(--color-muted)]">{summary.detectedLine}</p>
+      <p className="text-sky-900">{summary.sqliteLine}</p>
     </div>
   );
 }
@@ -55,6 +64,7 @@ export function ContactsPage() {
   const [listError, setListError] = useState<string | null>(null);
   const [listErrorDetail, setListErrorDetail] = useState<string | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<CustomerInstitutionGroup | null>(null);
+  const [auditSnapshot, setAuditSnapshot] = useState<GmailInteractionAuditSnapshot | null>(null);
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -79,6 +89,24 @@ export function ContactsPage() {
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchGmailInteractionAudit()
+      .then((response) => {
+        if (!cancelled && response.status === "ok" && response.snapshot) {
+          setAuditSnapshot(response.snapshot);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuditSnapshot(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const allGroups = useMemo(() => buildCustomerInstitutionGroups(items), [items]);
 
@@ -239,7 +267,7 @@ export function ContactsPage() {
                     ) : null}
                   </td>
                   <td className="px-4 py-3 max-w-[14rem]">
-                    <InstitutionGmailHistoryCell group={group} />
+                    <InstitutionGmailHistoryCell group={group} auditSnapshot={auditSnapshot} />
                   </td>
                   <td className="px-4 py-3">{group.maxFinalScore}</td>
                   <td className="px-4 py-3 max-w-[10rem] truncate">
@@ -291,6 +319,7 @@ export function ContactsPage() {
       {selectedGroup ? (
         <InstitutionDrawer
           group={selectedGroup}
+          auditSnapshot={auditSnapshot}
           onClose={() => setSelectedGroup(null)}
           onSelectEmail={setContactEmail}
         />

@@ -21,3 +21,6 @@ class OperatorAutomationStatusResponse(BaseModel):
     cron: CronNote = Field(default_factory=lambda: CronNote(note="not inspected by this command"))
     recommended_action: str
     warnings: list[str] = Field(default_factory=list)
+    source: str | None = None
+    snapshot_updated_at: str | None = None
+    snapshot_stale: bool | None = None

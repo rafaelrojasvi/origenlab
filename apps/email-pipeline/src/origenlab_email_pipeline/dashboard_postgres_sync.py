@@ -35,6 +35,9 @@ from origenlab_email_pipeline.mart_core_postgres_migrate import (
     resolve_postgres_url,
     resolve_sqlite_path,
 )
+from origenlab_email_pipeline.dashboard_snapshot_publish import (
+    publish_operator_dashboard_snapshots,
+)
 from origenlab_email_pipeline.warm_case_promotion import (
     apply_promotion as apply_warm_case_promotion,
     preview_promotion as preview_warm_case_promotion,
@@ -823,7 +826,31 @@ def build_parser() -> argparse.ArgumentParser:
             "candidate snapshot."
         ),
     )
+    p.add_argument(
+        "--include-operator-snapshots",
+        action="store_true",
+        help=(
+            "Build Gmail interaction audit + operator automation status snapshots "
+            "and publish to ops.pipeline_kv on apply (read-only evidence)."
+        ),
+    )
     return p
+
+
+def run_operator_snapshots_sync(
+    *,
+    pg_url: str,
+    sqlite_path: Path,
+    repo_root: Path,
+    dry_run: bool,
+) -> dict[str, Any]:
+    active_current = default_active_current_dir(repo_root)
+    return publish_operator_dashboard_snapshots(
+        pg_url,
+        sqlite_path=sqlite_path,
+        active_current_dir=active_current,
+        dry_run=dry_run,
+    )
 
 
 def run_dashboard_mirror_sync(
@@ -954,11 +981,22 @@ def run_dashboard_mirror_sync(
             result["equipment_opportunity_sync"] = equipment_summary
         if warm_summary is not None:
             result["warm_case_sync"] = warm_summary
+        operator_snapshots: dict[str, Any] | None = None
+        if args.include_operator_snapshots:
+            operator_snapshots = run_operator_snapshots_sync(
+                pg_url=pg_url,
+                sqlite_path=sqlite_path,
+                repo_root=root,
+                dry_run=True,
+            )
+            result["operator_snapshots"] = operator_snapshots
         result["details"] = merge_optional_loader_details(
             {"loader_steps": result["loader_steps"], "alembic_version": alembic_version},
             equipment_summary=equipment_summary,
             warm_summary=warm_summary,
         )
+        if operator_snapshots is not None:
+            result["details"]["operator_snapshots"] = operator_snapshots
         result["ok"] = True
         result["status"] = "dry_run"
         result["elapsed_seconds"] = round(time.monotonic() - t0, 3)
@@ -1075,6 +1113,22 @@ def run_dashboard_mirror_sync(
                 equipment_summary=equipment_summary,
                 warm_summary=warm_summary,
             )
+            if sync_id is not None:
+                update_sync_run_details(pg_url, sync_id, details)
+
+        if args.include_operator_snapshots:
+            stage_t0 = time.monotonic()
+            operator_snapshots = run_operator_snapshots_sync(
+                pg_url=pg_url,
+                sqlite_path=sqlite_path,
+                repo_root=root,
+                dry_run=False,
+            )
+            result.setdefault("timings", {})["operator_snapshots_seconds"] = round(
+                time.monotonic() - stage_t0, 3
+            )
+            result["operator_snapshots"] = operator_snapshots
+            details["operator_snapshots"] = operator_snapshots
             if sync_id is not None:
                 update_sync_run_details(pg_url, sync_id, details)
 

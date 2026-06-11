@@ -37,6 +37,22 @@ describe("supplierMirrorDepth", () => {
     );
   });
 
+  it("prefers SQLite audit snapshot when present", () => {
+    expect(
+      buildSupplierMirrorDepthSummary([row(1)], {
+        domain: "ika.net.br",
+        message_count: 9,
+        sent_count: 5,
+        received_count: 4,
+        thread_count: 1,
+        latest_email_at: null,
+        latest_subject_safe: "",
+        has_attachments: false,
+        matched_aliases: ["ika.net.br"],
+      }),
+    ).toBe("1 caso en espejo · 9 mensajes SQLite/Gmail · 1 hilo");
+  });
+
   it("omits Gmail depth when only one message grouped", () => {
     expect(buildSupplierMirrorDepthSummary([row(1)])).toBe("1 caso en espejo");
   });

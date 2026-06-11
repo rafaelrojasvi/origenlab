@@ -950,3 +950,90 @@ def test_alembic_migration_defines_warm_case_role_category() -> None:
     text = path.read_text(encoding="utf-8")
     assert "commercial.warm_case" in text
     assert "api.v_warm_case" in text
+
+
+_PATCH_OPERATOR_SNAPSHOTS = (
+    "origenlab_email_pipeline.dashboard_postgres_sync.run_operator_snapshots_sync"
+)
+
+
+def test_dry_run_includes_operator_snapshot_summary_when_flag_enabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(
+        _PATCH_OPERATOR_SNAPSHOTS,
+        return_value={
+            "dry_run": True,
+            "gmail_interaction_audit": {"domain_count": 2, "lookback_days": 180},
+            "operator_automation_status": {"verdict": "healthy"},
+        },
+    ):
+        result = run_dashboard_mirror_sync(
+            ["--sqlite-db", str(db), "--dry-run", "--include-operator-snapshots"],
+            repo_root=REPO,
+        )
+
+    assert result["ok"] is True
+    assert result["operator_snapshots"]["gmail_interaction_audit"]["domain_count"] == 2
+    assert "operator_snapshots" in result["details"]
+
+
+def test_apply_writes_operator_snapshots_when_flag_enabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "emails.sqlite"
+    _setup_sqlite(db, with_mart_rows=True)
+    monkeypatch.setenv("ORIGENLAB_POSTGRES_URL", "postgresql://u:p@127.0.0.1:5432/scratch")
+
+    with patch(_PATCH_PG, return_value=(EXPECTED_ALEMBIC_HEAD, [])), patch(
+        _PATCH_COUNTS,
+        return_value=_sample_mirror_counts(),
+    ), patch(_PATCH_WM, return_value=1), patch(_PATCH_CLASSIFY, return_value={}), patch(
+        _PATCH_PURCHASE, return_value={}
+    ), patch(_PATCH_UPDATE_DETAILS), patch(
+        _PATCH_OPERATOR_SNAPSHOTS,
+        return_value={
+            "dry_run": False,
+            "gmail_interaction_audit": {
+                "domain_count": 1,
+                "publish": {"published": True, "kv_key": "dashboard_gmail_interaction_audit_v1"},
+            },
+            "operator_automation_status": {
+                "verdict": "healthy",
+                "publish": {
+                    "published": True,
+                    "kv_key": "operator_automation_status_snapshot_v1",
+                },
+            },
+        },
+    ):
+        result = run_dashboard_mirror_sync(
+            ["--sqlite-db", str(db), "--include-operator-snapshots"],
+            repo_root=REPO,
+            loader_runner=lambda _c, _r: 0,
+        )
+
+    assert result["ok"] is True
+    assert result["operator_snapshots"]["operator_automation_status"]["verdict"] == "healthy"
+
+
+def test_live_dashboard_flags_include_operator_snapshots() -> None:
+    from origenlab_email_pipeline.operator_cli.mirror import (
+        LIVE_DASHBOARD_FLAGS,
+        build_live_dashboard_passthrough,
+    )
+
+    assert "--include-operator-snapshots" in LIVE_DASHBOARD_FLAGS
+    passthrough = build_live_dashboard_passthrough(
+        updated_by="op",
+        reason="live mirror",
+        passthrough=[],
+    )
+    assert "--include-operator-snapshots" in passthrough

@@ -169,7 +169,7 @@ describe("SupplierEntityGroups", () => {
     expect(screen.getByTestId("supplier-detail-title").textContent).toBe("IKA");
   });
 
-  it("shows mirror scope and Gmail history hints in detail panel", () => {
+  it("shows mirror scope and missing audit fallback in detail panel", () => {
     render(
       <SupplierEntityGroups
         backend="sqlite"
@@ -184,7 +184,48 @@ describe("SupplierEntityGroups", () => {
     expect(screen.getByTestId("supplier-mirror-scope-note").textContent).toMatch(
       /casos tibios del espejo/i,
     );
-    expect(screen.getByTestId("supplier-gmail-hint").textContent).toMatch(/historial completo/i);
+    expect(screen.getByTestId("supplier-gmail-hint").textContent).toMatch(
+      /Sin snapshot Gmail publicado/i,
+    );
+  });
+
+  it("shows SQLite audit counts when snapshot present", () => {
+    render(
+      <SupplierEntityGroups
+        backend="sqlite"
+        allItems={items}
+        auditSnapshot={{
+          schema_version: 1,
+          generated_at_utc: "2026-06-11T12:00:00+00:00",
+          source: "sqlite:gmail:contacto",
+          lookback_days: 180,
+          domains: [
+            {
+              domain: "serva.de",
+              message_count: 9,
+              sent_count: 5,
+              received_count: 4,
+              thread_count: 1,
+              latest_email_at: "2026-06-10T10:00:00+00:00",
+              latest_subject_safe: "SERVA quote",
+              has_attachments: false,
+              matched_aliases: ["serva.de"],
+            },
+          ],
+        }}
+        meta={meta}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("supplier-gmail-hint").textContent).toMatch(
+      /9 mensajes · 5 enviados · 4 recibidos · 1 hilo/i,
+    );
+    expect(
+      screen.getByRole("button", { name: /SERVA, 1 caso en espejo · 9 mensajes SQLite\/Gmail/i }),
+    ).toBeTruthy();
   });
 
   it("does not introduce send, export, or write buttons", () => {

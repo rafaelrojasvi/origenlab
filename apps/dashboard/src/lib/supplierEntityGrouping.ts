@@ -1,6 +1,11 @@
+import type {
+  GmailInteractionAuditDomainRow,
+  GmailInteractionAuditSnapshot,
+} from "../api/gmailInteractionAuditTypes";
 import type { WarmCaseCategory, WarmCaseItem } from "../api/commercialTypes";
 import { emailDomain, parseSortableTimestamp } from "./clientTableView";
 import { formatDashboardDateTime } from "./dashboardDateFormat";
+import { findGmailAuditForDomains } from "./gmailInteractionAuditMatch";
 import { buildSupplierMirrorDepthSummary } from "./supplierMirrorDepth";
 import { truncate } from "./safeText";
 
@@ -37,6 +42,7 @@ export interface SupplierEntityGroup {
   label: string;
   count: number;
   summaryLabel: string;
+  auditDomain: GmailInteractionAuditDomainRow | null;
   quoteCount: number;
   followupCount: number;
   latestSeenAt: string | null;
@@ -68,8 +74,11 @@ export function roleBadgeForCategory(category: WarmCaseCategory | undefined): Su
   return "Hilo activo";
 }
 
-export function buildSupplierCaseSummary(items: WarmCaseItem[]): string {
-  return buildSupplierMirrorDepthSummary(items);
+export function buildSupplierCaseSummary(
+  items: WarmCaseItem[],
+  audit?: GmailInteractionAuditDomainRow | null,
+): string {
+  return buildSupplierMirrorDepthSummary(items, audit);
 }
 
 function previewSubject(row: WarmCaseItem | null): string {
@@ -88,13 +97,21 @@ function formatActivityDate(iso: string | null): string | null {
   return formatted === "—" ? null : formatted;
 }
 
-function buildGroup(id: string, label: string, items: WarmCaseItem[]): SupplierEntityGroup {
+function buildGroup(
+  id: string,
+  label: string,
+  items: WarmCaseItem[],
+  auditSnapshot: GmailInteractionAuditSnapshot | null | undefined,
+  domains: readonly string[],
+): SupplierEntityGroup {
   const latest = latestItem(items);
+  const auditDomain = findGmailAuditForDomains(auditSnapshot, domains);
   return {
     id,
     label,
     count: items.length,
-    summaryLabel: buildSupplierCaseSummary(items),
+    summaryLabel: buildSupplierCaseSummary(items, auditDomain),
+    auditDomain,
     quoteCount: items.filter((row) => QUOTE_CATEGORIES.has(row.category)).length,
     followupCount: items.filter((row) => FOLLOWUP_CATEGORIES.has(row.category)).length,
     latestSeenAt: latest?.last_seen_at ?? null,
@@ -124,7 +141,10 @@ export function resolveSupplierGroupId(row: WarmCaseItem): string {
   return "other";
 }
 
-export function groupSupplierWarmCases(items: WarmCaseItem[]): SupplierEntityGroup[] {
+export function groupSupplierWarmCases(
+  items: WarmCaseItem[],
+  auditSnapshot?: GmailInteractionAuditSnapshot | null,
+): SupplierEntityGroup[] {
   const buckets = new Map<string, WarmCaseItem[]>();
 
   for (const row of items) {
@@ -140,7 +160,7 @@ export function groupSupplierWarmCases(items: WarmCaseItem[]): SupplierEntityGro
     if (groupItems.length === 0) {
       continue;
     }
-    known.push(buildGroup(def.id, def.label, groupItems));
+    known.push(buildGroup(def.id, def.label, groupItems, auditSnapshot, def.domains));
     buckets.delete(def.id);
   }
 
@@ -155,7 +175,10 @@ export function groupSupplierWarmCases(items: WarmCaseItem[]): SupplierEntityGro
         : id.startsWith("domain:")
           ? id.replace("domain:", "")
           : id;
-    extras.push(buildGroup(id, label, groupItems));
+    const domain = id.startsWith("domain:") ? id.replace("domain:", "") : "";
+    extras.push(
+      buildGroup(id, label, groupItems, auditSnapshot, domain ? [domain] : []),
+    );
   }
 
   extras.sort((a, b) => b.count - a.count);

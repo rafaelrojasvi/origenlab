@@ -22,6 +22,7 @@ LIVE_DASHBOARD_FLAGS = (
     "--include-equipment-opportunities",
     "--include-warm-cases",
     "--include-commercial-deals",
+    "--include-operator-snapshots",
 )
 
 LIVE_WARM_DAYS = "14"

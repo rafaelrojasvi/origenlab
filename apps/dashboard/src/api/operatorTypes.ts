@@ -92,4 +92,7 @@ export interface OperatorAutomationStatus {
   cron: { note: string };
   recommended_action: string;
   warnings: string[];
+  source?: "postgres_snapshot" | "filesystem_active_current" | null;
+  snapshot_updated_at?: string | null;
+  snapshot_stale?: boolean | null;
 }

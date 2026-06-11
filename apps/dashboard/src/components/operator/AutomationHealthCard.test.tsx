@@ -159,6 +159,26 @@ describe("AutomationHealthCard", () => {
     expect(screen.queryByText(/hidden\/active\/current/)).toBeNull();
   });
 
+  it("shows postgres snapshot source when published to mirror", async () => {
+    mockFetch.mockResolvedValue({
+      ...BASE_STATUS,
+      source: "postgres_snapshot",
+      snapshot_updated_at: "2026-06-11T12:00:00+00:00",
+      snapshot_stale: false,
+    });
+    render(<AutomationHealthCard variant="detailed" />);
+    await waitFor(() => {
+      screen.getByTestId("automation-postgres-snapshot");
+    });
+    expect(screen.getByTestId("automation-postgres-snapshot").textContent).toMatch(
+      /Snapshot local publicado/i,
+    );
+    expect(screen.getByTestId("automation-postgres-snapshot").textContent).toMatch(
+      /Fuente: espejo Postgres/i,
+    );
+    expect(screen.queryByTestId("automation-missing-state-help")).toBeNull();
+  });
+
   it("shows friendly help when operator state files are missing", async () => {
     mockFetch.mockResolvedValue({
       ...BASE_STATUS,

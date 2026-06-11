@@ -25,6 +25,9 @@ AUTOMATION_STATUS_KEYS = frozenset(
         "cron",
         "recommended_action",
         "warnings",
+        "source",
+        "snapshot_updated_at",
+        "snapshot_stale",
     }
 )
 
@@ -100,6 +103,7 @@ def test_route_returns_200_and_stable_keys(tmp_path: Path) -> None:
     assert set(data.keys()) == AUTOMATION_STATUS_KEYS
     assert data["verdict"] == "healthy"
     assert data["recommended_action"] == "none"
+    assert data["source"] == "filesystem_active_current"
 
 
 def test_healthy_fixture_verdict(tmp_path: Path) -> None:
@@ -162,6 +166,54 @@ def test_no_subprocess_or_shell(
     monkeypatch.setattr(subprocess, "Popen", fail_subprocess)
     client = _client_with_active_current(_healthy_fixture(tmp_path))
     assert client.get("/operator/automation-status").status_code == 200
+
+
+def test_uses_postgres_snapshot_before_filesystem(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 6, 11, 12, 0, 0, tzinfo=timezone.utc)
+    pg_snapshot = {
+        "updated_at": now.isoformat(),
+        "snapshot": {
+            "generated_at_utc": now.isoformat(),
+            "active_current_dir": "<local-active-current>",
+            "verdict": "healthy",
+            "daily_core": {"exists": True, "status": "success", "returncode": 0},
+            "mail_auto_refresh": {"state_exists": True, "dirty": False, "pending": False},
+            "dashboard_auto_mirror": {
+                "state_exists": True,
+                "mirror_matches_daily_core": True,
+            },
+            "cron": {"note": "not inspected by API"},
+            "recommended_action": "none",
+            "warnings": [],
+        },
+    }
+
+    def _fake_pg(_settings: object) -> dict[str, object]:
+        return pg_snapshot
+
+    monkeypatch.setattr(
+        "origenlab_api.services.operator_automation_status_service.snapshot_repo.get_operator_automation_status_snapshot",
+        _fake_pg,
+    )
+    get_settings = __import__(
+        "origenlab_api.settings", fromlist=["get_settings"]
+    ).get_settings
+    get_settings.cache_clear()
+    settings = Settings(active_current=_healthy_fixture(tmp_path))
+    app = create_app()
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_settings] = lambda: settings
+    client = TestClient(app)
+    data = client.get("/operator/automation-status").json()
+    assert data["source"] == "postgres_snapshot"
+    assert data["snapshot_updated_at"] == now.isoformat()
+    assert data["verdict"] == "healthy"
+    get_settings.cache_clear()
 
 
 def test_mirror_behind_attention(tmp_path: Path) -> None:
