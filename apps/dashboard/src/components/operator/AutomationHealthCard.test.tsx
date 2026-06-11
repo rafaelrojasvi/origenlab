@@ -48,11 +48,18 @@ const BASE_STATUS: OperatorAutomationStatus = {
   warnings: [],
 };
 
-vi.mock("../../api/operatorClient", () => ({
-  fetchOperatorAutomationStatus: vi.fn(),
-}));
+vi.mock("../../api/operatorClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../api/operatorClient")>();
+  return {
+    ...actual,
+    fetchOperatorAutomationStatus: vi.fn(),
+  };
+});
 
-import { fetchOperatorAutomationStatus } from "../../api/operatorClient";
+import {
+  fetchOperatorAutomationStatus,
+  parseOperatorAutomationStatus,
+} from "../../api/operatorClient";
 
 const mockFetch = vi.mocked(fetchOperatorAutomationStatus);
 
@@ -160,12 +167,14 @@ describe("AutomationHealthCard", () => {
   });
 
   it("shows postgres snapshot source when published to mirror", async () => {
-    mockFetch.mockResolvedValue({
-      ...BASE_STATUS,
-      source: "postgres_snapshot",
-      snapshot_updated_at: "2026-06-11T12:00:00+00:00",
-      snapshot_stale: false,
-    });
+    mockFetch.mockResolvedValue(
+      parseOperatorAutomationStatus({
+        ...BASE_STATUS,
+        source: "postgres_snapshot",
+        snapshot_updated_at: "2026-06-11T12:00:00+00:00",
+        snapshot_stale: false,
+      }),
+    );
     render(<AutomationHealthCard variant="detailed" />);
     await waitFor(() => {
       screen.getByTestId("automation-postgres-snapshot");

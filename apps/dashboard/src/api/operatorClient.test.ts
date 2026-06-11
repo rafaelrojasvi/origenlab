@@ -9,6 +9,7 @@ import {
   getOperatorApiBaseUrl,
   operatorApiUrl,
   parseHealthResponse,
+  parseOperatorAutomationStatus,
   parseOperatorStatusResponse,
   parseDailyCoreRunStatus,
 } from "./operatorClient";
@@ -88,6 +89,40 @@ describe("operator API client", () => {
       warnings: [],
     });
     expect(parsed.daily_core_run).toEqual({ exists: false });
+  });
+
+  it("parseOperatorAutomationStatus preserves postgres snapshot source fields", () => {
+    const parsed = parseOperatorAutomationStatus({
+      generated_at_utc: "2026-06-11T14:38:18+00:00",
+      active_current_dir: "<local-active-current>",
+      verdict: "healthy",
+      daily_core: { exists: true, status: "success", returncode: 0 },
+      mail_auto_refresh: { state_exists: true, dirty: false, pending: false },
+      dashboard_auto_mirror: { state_exists: true, mirror_matches_daily_core: true },
+      cron: { note: "not inspected by API" },
+      recommended_action: "none",
+      warnings: [],
+      source: "postgres_snapshot",
+      snapshot_updated_at: "2026-06-11T14:38:21+00:00",
+      snapshot_stale: false,
+    });
+    expect(parsed.source).toBe("postgres_snapshot");
+    expect(parsed.snapshot_updated_at).toBe("2026-06-11T14:38:21+00:00");
+    expect(parsed.snapshot_stale).toBe(false);
+  });
+
+  it("parseOperatorAutomationStatus nulls unknown source values", () => {
+    const parsed = parseOperatorAutomationStatus({
+      generated_at_utc: "2026-06-11T14:38:18+00:00",
+      active_current_dir: "/tmp",
+      verdict: "healthy",
+      recommended_action: "none",
+      source: "unexpected",
+      snapshot_stale: undefined,
+    });
+    expect(parsed.source).toBeNull();
+    expect(parsed.snapshot_updated_at).toBeNull();
+    expect(parsed.snapshot_stale).toBeNull();
   });
 
   it("parseDailyCoreRunStatus parses valid summary fields", () => {
