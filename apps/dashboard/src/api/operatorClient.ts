@@ -216,6 +216,15 @@ export function parseOperatorAutomationStatus(data: unknown): OperatorAutomation
     },
     recommended_action: String(row.recommended_action ?? "inspect_logs"),
     warnings: Array.isArray(row.warnings) ? row.warnings.map(String) : [],
+    source:
+      row.source === "postgres_snapshot" || row.source === "filesystem_active_current"
+        ? row.source
+        : null,
+    snapshot_updated_at: optionalString(row.snapshot_updated_at) ?? null,
+    snapshot_stale:
+      row.snapshot_stale === null || row.snapshot_stale === undefined
+        ? null
+        : Boolean(row.snapshot_stale),
   };
 }
 
