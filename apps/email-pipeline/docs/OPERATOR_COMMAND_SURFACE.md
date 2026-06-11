@@ -2,7 +2,7 @@
 
 Status: canonical (navigation)  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-03 (Phase 7C)
+Last reviewed: 2026-06-11 (NDR safe auto-apply runbook)
 
 Procedures: [`pipeline/DAILY_CORE.md`](pipeline/DAILY_CORE.md) · [`RUNBOOK.md`](RUNBOOK.md) · post-send: [`pipeline/POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md) · tags / break-glass: [`SCRIPT_MAP.md`](SCRIPT_MAP.md).
 
@@ -19,6 +19,8 @@ uv run origenlab check-readiness
 uv run origenlab post-send-digest
 uv run origenlab export-dnr
 uv run origenlab ndr-review
+uv run origenlab ndr-safe-auto-apply --batch A --dry-run
+uv run origenlab ndr-safe-auto-apply --batch A --apply --operator <name> --confirm-reviewed
 uv run origenlab audit-overlap
 uv run origenlab audit-facades
 uv run origenlab audit-institution-grouping
@@ -51,6 +53,7 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `post-send-digest` | `qa/build_post_send_digest.py` | After `audit_contacted_universe` |
 | `export-dnr` | `qa/export_do_not_repeat_master.py` | Volume lane DNR |
 | `ndr-review` | `qa/build_ndr_review_queue.py` | Read-only NDR batches |
+| `ndr-safe-auto-apply` | `operator_cli/ndr_safe_auto_apply.py` | Guarded Batch A NDR suppression helper — dry-run: **Reports**; `--apply`: **SQLite** + **Reports** (see notes below) |
 | `audit-overlap` | `qa/export_contacted_lead_overlap_audit.py` | Pre-send overlap |
 | `audit-facades` | `qa/audit_module_facades.py` | Read-only module facade audit |
 | `audit-institution-grouping` | `qa/audit_institution_grouping.py` | Read-only institution/domain grouping — **not** send safety |
@@ -75,6 +78,8 @@ Module fallback: `uv run python -m origenlab_email_pipeline.cli <subcommand>`. P
 | `operator-automation-status` | read-only automation health (manifest + mail + mirror + user crontab) | No |
 | `operator-automation-status --json` | same as structured JSON | No |
 | `operator-automation-status --skip-cron-inspection` | skip `crontab -l` read | No |
+
+**`ndr-safe-auto-apply` notes:** Batch **A** only (`bounce_no_such_user`, exact email — **no** domain suppression). Dry-run previews allowlist from latest `ndr_review_queue_*` and appends audit JSONL. **`--apply`** requires **`--operator`** and **`--confirm-reviewed`**; runs targeted `flag_ndr_bounces_from_contacto.py`, then `refresh-safety`, then rebuilds `ndr-review`. Batches **B/C/D/E** are refused for apply. Not cron-scheduled. Design: [`design/NDR_SAFE_AUTO_APPLY_PLAN.md`](design/NDR_SAFE_AUTO_APPLY_PLAN.md).
 
 Cron wrappers (tracked): `scripts/operator/run_auto_refresh_mail.sh`, `scripts/operator/run_auto_mirror_dashboard.sh` — see [`pipeline/OPERATOR_CRON.md`](pipeline/OPERATOR_CRON.md).
 
@@ -113,6 +118,8 @@ Workspace: `reports/out/active/current/`. Volume: `reviewed_marketing_contacts.c
 | `cli daily-health` | Bundled health | Reports |
 | `cli audit-overlap` | Overlap audit | Reports |
 | `cli ndr-review` | NDR review batches | Reports |
+| `cli ndr-safe-auto-apply --batch A --dry-run` | Preview Batch A allowlist + audit JSONL | Reports |
+| `cli ndr-safe-auto-apply --batch A --apply --operator <name> --confirm-reviewed` | Guarded Batch A suppression apply | SQLite + Reports |
 | `cli audit-facades` | Module facade audit | No |
 | `cli audit-institution-grouping` | Institution/domain grouping audit | Reports only — **not** send safety |
 | `scripts/qa/export_gate_audit_csv.py` | Gate flags sample | Reports |
@@ -131,7 +138,8 @@ Order: [`POST_SEND_SAFE_LOOP.md`](pipeline/POST_SEND_SAFE_LOOP.md). Key CLI step
 | Command | Purpose | Mutates? |
 |---------|---------|----------|
 | `cli gmail-ingest` | Ingest INBOX + Sent | SQLite |
-| `scripts/tools/flag_ndr_bounces_from_contacto.py` | NDR scan / apply | SQLite (`--apply`) |
+| `cli ndr-safe-auto-apply` | Guarded Batch A NDR apply (preferred after review) | Reports (dry-run) · SQLite (`--apply`) |
+| `scripts/tools/flag_ndr_bounces_from_contacto.py` | NDR scan / targeted apply (advanced/manual fallback) | SQLite (`--apply`) |
 | `scripts/leads/audit_contacted_universe.py` | Exclusion CSVs | Reports |
 | `cli refresh-safety` | Safety chain | Reports |
 | `cli post-send-digest` | Digest artifacts | Reports |
