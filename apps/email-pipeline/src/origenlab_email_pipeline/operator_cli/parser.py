@@ -130,7 +130,12 @@ def _build_parser() -> argparse.ArgumentParser:
             p.add_argument(
                 "--apply",
                 action="store_true",
-                help="Not implemented yet — refused in this release",
+                help="Apply Batch A exact-email suppressions after guard checks",
+            )
+            p.add_argument(
+                "--confirm-reviewed",
+                action="store_true",
+                help="Required with --apply: operator reviewed the allowlist",
             )
             p.add_argument("--json", action="store_true", help="Emit structured JSON")
             p.add_argument(
@@ -142,7 +147,19 @@ def _build_parser() -> argparse.ArgumentParser:
             p.add_argument(
                 "--operator",
                 default=None,
-                help="Operator name recorded in dry-run audit JSONL (optional)",
+                help="Operator name (required for --apply)",
+            )
+            p.add_argument(
+                "--max-apply",
+                type=int,
+                default=50,
+                help="Refuse apply when allowlist exceeds this count",
+            )
+            p.add_argument(
+                "--max-parser-uncertain",
+                type=int,
+                default=10,
+                help="Refuse apply when Batch E count exceeds this threshold",
             )
             continue
         if name == OPERATOR_AUTOMATION_STATUS_COMMAND:

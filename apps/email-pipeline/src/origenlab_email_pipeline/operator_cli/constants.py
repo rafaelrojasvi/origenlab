@@ -130,7 +130,7 @@ SUBCOMMAND_HELP: dict[str, str] = {
         "user crontab (local state only; optional --json, --skip-cron-inspection)"
     ),
     "ndr-safe-auto-apply": (
-        "Dry-run plan for safe NDR Batch A suppressions from ndr_review_queue artifacts "
-        "(--batch A --dry-run; --apply not enabled yet)"
+        "Dry-run or guarded Batch A NDR apply from ndr_review_queue artifacts "
+        "(--batch A --dry-run | --apply --operator NAME --confirm-reviewed)"
     ),
 }
