@@ -975,3 +975,15 @@ def test_operator_automation_status_help_no_subprocess(capsys: pytest.CaptureFix
     out = capsys.readouterr().out
     assert "operator-automation-status" in out
     assert "--json" in out
+
+
+def test_ndr_safe_auto_apply_in_cli_command_names() -> None:
+    assert "ndr-safe-auto-apply" in CLI_COMMAND_NAMES
+
+
+def test_ndr_safe_auto_apply_help_no_subprocess(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["ndr-safe-auto-apply", "--help"]) == 0
+    out = capsys.readouterr().out
+    assert "ndr-safe-auto-apply" in out
+    assert "--batch" in out
+    assert "--dry-run" in out

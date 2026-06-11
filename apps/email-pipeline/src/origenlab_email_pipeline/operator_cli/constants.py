@@ -45,6 +45,8 @@ AUTO_MIRROR_DASHBOARD_COMMAND = "auto-mirror-dashboard"
 AUTO_MIRROR_DASHBOARD_USAGE = "uv run origenlab auto-mirror-dashboard"
 OPERATOR_AUTOMATION_STATUS_COMMAND = "operator-automation-status"
 OPERATOR_AUTOMATION_STATUS_USAGE = "uv run origenlab operator-automation-status"
+NDR_SAFE_AUTO_APPLY_COMMAND = "ndr-safe-auto-apply"
+NDR_SAFE_AUTO_APPLY_USAGE = "uv run origenlab ndr-safe-auto-apply"
 REFRESH_DASHBOARD_COMMAND = "refresh-dashboard"
 REFRESH_DASHBOARD_USAGE = "uv run origenlab refresh-dashboard"
 SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset(
@@ -55,6 +57,7 @@ SPECIAL_COMMANDS: frozenset[str] = GMAIL_INGEST_COMMANDS | frozenset(
         AUTO_REFRESH_MAIL_COMMAND,
         AUTO_MIRROR_DASHBOARD_COMMAND,
         OPERATOR_AUTOMATION_STATUS_COMMAND,
+        NDR_SAFE_AUTO_APPLY_COMMAND,
     }
 )
 
@@ -125,5 +128,9 @@ SUBCOMMAND_HELP: dict[str, str] = {
     "operator-automation-status": (
         "Read-only automation health: daily-core manifest, mail auto-refresh, dashboard auto-mirror, "
         "user crontab (local state only; optional --json, --skip-cron-inspection)"
+    ),
+    "ndr-safe-auto-apply": (
+        "Dry-run plan for safe NDR Batch A suppressions from ndr_review_queue artifacts "
+        "(--batch A --dry-run; --apply not enabled yet)"
     ),
 }

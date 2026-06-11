@@ -45,7 +45,7 @@ def _empty_ndr_pending_review_status(*, parse_error: str | None = None) -> dict[
     }
 
 
-def _load_summary_json(queue_dir: Path) -> tuple[dict[str, Any] | None, str | None]:
+def load_ndr_review_summary_json(queue_dir: Path) -> tuple[dict[str, Any] | None, str | None]:
     summary_path = queue_dir / NDR_REVIEW_SUMMARY_FILENAME
     if not summary_path.is_file():
         return None, "missing_summary"
@@ -80,7 +80,7 @@ def build_ndr_pending_review_status(active_current: Path) -> dict[str, Any]:
     if queue_dir is None:
         return _empty_ndr_pending_review_status()
 
-    summary, parse_error = _load_summary_json(queue_dir)
+    summary, parse_error = load_ndr_review_summary_json(queue_dir)
     if summary is None:
         return {
             **_empty_ndr_pending_review_status(parse_error=parse_error),
