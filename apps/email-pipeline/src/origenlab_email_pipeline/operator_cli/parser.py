@@ -139,6 +139,11 @@ def _build_parser() -> argparse.ArgumentParser:
                 default=None,
                 help="Use a specific ndr_review_queue_* directory",
             )
+            p.add_argument(
+                "--operator",
+                default=None,
+                help="Operator name recorded in dry-run audit JSONL (optional)",
+            )
             continue
         if name == OPERATOR_AUTOMATION_STATUS_COMMAND:
             p = sub.add_parser(

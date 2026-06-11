@@ -987,3 +987,4 @@ def test_ndr_safe_auto_apply_help_no_subprocess(capsys: pytest.CaptureFixture[st
     assert "ndr-safe-auto-apply" in out
     assert "--batch" in out
     assert "--dry-run" in out
+    assert "--operator" in out
