@@ -21,8 +21,8 @@ jobs:
       run:
         working-directory: apps/email-pipeline
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --group dev --group data-tools --group postgres --group lab --frozen
