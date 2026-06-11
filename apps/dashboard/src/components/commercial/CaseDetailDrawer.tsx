@@ -1,4 +1,5 @@
 import type { WarmCaseItem } from "../../api/commercialTypes";
+import { formatDashboardDateTime } from "../../lib/dashboardDateFormat";
 import { dashboardSectionToHash } from "../../lib/dashboardHashRoute";
 import type { DashboardSection } from "../../lib/dashboardNav";
 import { buildWarmCaseDetailView } from "../../lib/warmCaseDetailStrategy";
@@ -78,7 +79,7 @@ export function CaseDetailDrawer({
             </p>
             {item.last_seen_at ? (
               <p className="text-xs text-[var(--color-muted)]">
-                Última actividad: {item.last_seen_at}
+                Última actividad: {formatDashboardDateTime(item.last_seen_at)}
               </p>
             ) : null}
           </section>

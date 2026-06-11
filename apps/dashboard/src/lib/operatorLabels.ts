@@ -1,5 +1,7 @@
 /** Etiquetas en español para tokens de la API (solo lectura). */
 
+import { safePreviewText, truncate } from "./safeText";
+
 export type OperatorLabelKind =
   | "warm_status"
   | "warm_category"
@@ -92,6 +94,22 @@ function normalizeToken(raw: string): string {
   return raw.trim().toLowerCase().replace(/\s+/g, "_");
 }
 
+function isActionKind(kind: OperatorLabelKind): boolean {
+  return kind === "warm_next_action" || kind === "equipment_next_action";
+}
+
+function looksHumanReadableAction(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return false;
+  }
+  return (
+    /\s/.test(trimmed) ||
+    /[.;,:¿?¡!—-]/.test(trimmed) ||
+    /[áéíóúñÁÉÍÓÚÑ]/.test(trimmed)
+  );
+}
+
 /** Etiqueta visible; no expone el token técnico en la UI. */
 export const UNMAPPED_OPERATOR_TOKEN_TITLE =
   "Etiqueta no mapeada en la interfaz; revisar token técnico si se repite.";
@@ -100,7 +118,8 @@ export function formatOperatorToken(
   raw: string | null | undefined,
   kind: OperatorLabelKind,
 ): { label: string; raw: string; title?: string } {
-  const token = normalizeToken(raw || "");
+  const original = (raw || "").trim();
+  const token = normalizeToken(original);
   if (!token) {
     return { label: "—", raw: "" };
   }
@@ -108,6 +127,14 @@ export function formatOperatorToken(
   const mapped = table[token];
   if (mapped) {
     return { label: mapped, raw: token };
+  }
+  if (isActionKind(kind) && looksHumanReadableAction(original)) {
+    const label = truncate(safePreviewText(original, 180), 180);
+    return {
+      label,
+      raw: token,
+      title: original,
+    };
   }
   return {
     label: "Sin clasificar",
