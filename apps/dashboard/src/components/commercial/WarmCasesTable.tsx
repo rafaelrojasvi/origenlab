@@ -17,6 +17,7 @@ import {
   type WarmCaseTableFilters,
 } from "../../lib/warmCaseTableView";
 import { formatOperatorToken } from "../../lib/operatorLabels";
+import { formatWarmCaseNextAction } from "../../lib/warmCaseDetailStrategy";
 import { formatDashboardDateTime } from "../../lib/dashboardDateFormat";
 import { truncate } from "../../lib/safeText";
 import {
@@ -331,11 +332,7 @@ export function WarmCasesTable({
                   ) : null}
                 </td>
                 <td className="px-3 py-2">
-                  <TokenLabel
-                    token={row.next_action}
-                    kind="warm_next_action"
-                    className="text-xs text-slate-800"
-                  />
+                  <span className="text-xs text-slate-800">{formatWarmCaseNextAction(row)}</span>
                 </td>
               </tr>
             ))}

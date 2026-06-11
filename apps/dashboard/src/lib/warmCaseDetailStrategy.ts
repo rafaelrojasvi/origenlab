@@ -65,6 +65,61 @@ function linkedSectionForCategory(category: WarmCaseCategory): DashboardSection 
   }
 }
 
+export function fallbackNextActionForWarmCategory(
+  category: WarmCaseCategory | string | null | undefined,
+): string {
+  switch (category) {
+    case "supplier_quote_received":
+      return "Vincular cotización de proveedor a oportunidad/cliente.";
+    case "supplier_followup":
+    case "supplier_reply":
+      return "Revisar respuesta del proveedor y cerrar datos faltantes.";
+    case "payment_admin":
+    case "payment_received":
+      return "Registrar o confirmar pago/datos bancarios.";
+    case "logistics_admin":
+    case "vendor_logistics":
+      return "Resolver logística, importación o despacho.";
+    case "deal_evidence_candidate":
+      return "Vincular al negocio comercial existente.";
+    case "quote_sent":
+      return "Confirmar si el cliente respondió; no duplicar cotización.";
+    case "waiting_supplier":
+      return "Hacer seguimiento al proveedor por precio, stock o plazo.";
+    case "waiting_client":
+      return "Esperar respuesta del cliente o hacer seguimiento suave si corresponde.";
+    case "client_response":
+    case "client_reply":
+      return "Responder al cliente verificando especificaciones antes de comprometer plazos.";
+    case "client_opportunity":
+    case "opportunity":
+      return "Validar equipo, especificaciones, precio y disponibilidad antes de cotizar.";
+    case "bounce_problem":
+    case "bounce":
+      return "Corregir dirección o rebote antes de reintentar contacto.";
+    case "system_noise":
+    case "auto_reply":
+    case "auto_acknowledgement":
+      return "Ignorar salvo que oculte un hilo real.";
+    case "internal_admin":
+      return "Tratar como administración interna.";
+    case "campaign_outreach":
+      return "Monitorear respuesta de campaña sin reenviar desde este panel.";
+    case "waiting_campaign_reply":
+      return "Esperar respuesta de campaña antes de insistir.";
+    default:
+      return "Revisar y clasificar el caso antes de actuar.";
+  }
+}
+
+export function formatWarmCaseNextAction(row: WarmCaseItem): string {
+  const formatted = formatOperatorToken(row.next_action, "warm_next_action").label;
+  if (formatted && formatted !== "—" && formatted !== "Sin clasificar") {
+    return formatted;
+  }
+  return fallbackNextActionForWarmCategory(row.category);
+}
+
 function strategyForCategory(category: WarmCaseCategory): { summary: string; strategy: string } {
   switch (category) {
     case "supplier_quote_received":
@@ -219,7 +274,7 @@ export function buildWarmCaseDetailView(row: WarmCaseItem): WarmCaseDetailView {
     statusLabel: formatOperatorToken(row.status, "warm_status").label,
     inferredSummary,
     recommendedStrategy: strategy,
-    nextActionLabel: formatOperatorToken(row.next_action, "warm_next_action").label,
+    nextActionLabel: formatWarmCaseNextAction(row),
     linkedSection,
     linkedSectionLabel: linkedSection ? dashboardSectionLabel(linkedSection) : null,
     safeSubject: row.subject ? sanitizeOperatorPreview(row.subject, 160) : "—",
