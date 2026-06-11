@@ -86,6 +86,11 @@ For a heavier full monorepo check (including web), use [`./scripts/check-all.sh`
 - Keep operational artifacts (PST/mbox/SQLite/JSONL/reports) outside Git by default.
 - Use [`apps/email-pipeline/.env.example`](apps/email-pipeline/.env.example) as the template.
 - Follow coordinated disclosure in [`SECURITY.md`](SECURITY.md).
+- Public-repo guardrails: [`docs/SECURITY_PUBLIC_REPO.md`](docs/SECURITY_PUBLIC_REPO.md).
+
+```bash
+./scripts/security/check-public-repo-hygiene.sh
+```
 
 Pipeline-specific handling is documented at [`apps/email-pipeline/docs/SECURITY.md`](apps/email-pipeline/docs/SECURITY.md).
 
@@ -98,7 +103,7 @@ Pipeline-specific handling is documented at [`apps/email-pipeline/docs/SECURITY.
 - Operator API: [`apps/api/README.md`](apps/api/README.md)
 - Dashboard (freeze handoff): [`apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md)
 - Contribution guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- Security policy: [`SECURITY.md`](SECURITY.md)
+- Security policy: [`SECURITY.md`](SECURITY.md) · public repo: [`docs/SECURITY_PUBLIC_REPO.md`](docs/SECURITY_PUBLIC_REPO.md)
 
 ## License
 

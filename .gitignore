@@ -100,3 +100,7 @@ docs/origenlab-brochures/catalog-premium/design-prototype.pdf
 
 # Pipeline input reports (may contain PII)
 apps/email-pipeline/reports/in/
+
+# Monorepo-level report inputs/outputs (may contain PII; never public)
+reports/in/
+reports/out/

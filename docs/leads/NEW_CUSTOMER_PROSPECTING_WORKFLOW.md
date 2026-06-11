@@ -42,7 +42,7 @@ Expected columns (DeepSearch export):
 
 `organization_name`, `contact_name`, `email`, `domain`, `role_title`, `sector`, `region`, `buyer_type`, `likely_need`, `product_angle`, `evidence_url`, `evidence_note`, `source`, `priority_score`, `confidence`, `recommended_message_angle`, `risk_flags`
 
-Example: `deepsearch_chile_labs_2026-05.csv`
+Example (local path under `reports/in/`, not committed): `deepsearch_chile_labs_2026-05.csv`
 
 ## Step 3 — Process prospects (10B)
 

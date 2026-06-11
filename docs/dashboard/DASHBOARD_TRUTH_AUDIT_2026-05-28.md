@@ -323,4 +323,4 @@ Integrate catalog sync into daily fast refresh — **Phase 9D** recommendation.
 
 ---
 
-*Machine-readable findings: [`reports/out/audits/dashboard_truth_audit_2026-05-28_findings.csv`](../../reports/out/audits/dashboard_truth_audit_2026-05-28_findings.csv)*
+*Machine-readable findings: `reports/out/audits/dashboard_truth_audit_2026-05-28_findings.csv` (local operator output only — not committed to the public repository).*
