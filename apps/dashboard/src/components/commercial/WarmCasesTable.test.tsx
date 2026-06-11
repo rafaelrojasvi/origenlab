@@ -502,6 +502,30 @@ describe("WarmCasesTable", () => {
     expect(screen.queryByText("contacto@origenlab.cl")).toBeNull();
   });
 
+  it("shows category fallback for unmapped next_action instead of Sin clasificar", () => {
+    render(
+      <WarmCasesTable
+        backend="sqlite"
+        items={[
+          {
+            ...row,
+            category: "client_opportunity",
+            next_action: "unknown_token",
+          },
+        ]}
+        meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 1 }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+        showViewPresets={false}
+        initialFilters={{ preset: "todo", hideInternalContacts: false }}
+      />,
+    );
+    expect(screen.queryByText("Sin clasificar")).toBeNull();
+    screen.getByText(/Validar equipo, especificaciones, precio y disponibilidad/i);
+  });
+
   it("formats last_seen_at without raw ISO", () => {
     render(
       <WarmCasesTable

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WarmCaseItem } from "../api/commercialTypes";
 import {
   buildWarmCaseDetailView,
+  formatWarmCaseNextAction,
   sanitizeOperatorPreview,
 } from "./warmCaseDetailStrategy";
 
@@ -75,6 +76,43 @@ describe("warmCaseDetailStrategy (español)", () => {
     expect(detail.inferredSummary).toContain("RV10.70");
     expect(detail.inferredSummary).toContain("Falta confirmar moneda y despacho");
     expect(detail.recommendedStrategy).toContain("San Bernardo");
+  });
+
+  it("uses category fallback when next_action is unmapped", () => {
+    const detail = buildWarmCaseDetailView(
+      row({
+        category: "client_opportunity",
+        next_action: "unknown_token",
+      }),
+    );
+    expect(detail.nextActionLabel).not.toBe("Sin clasificar");
+    expect(detail.nextActionLabel).toMatch(/Validar equipo/i);
+  });
+
+  it("preserves human-readable next_action sentences", () => {
+    const sentence = "Cotización enviada; monitorear respuesta del cliente.";
+    expect(
+      formatWarmCaseNextAction(
+        row({
+          category: "quote_sent",
+          next_action: sentence,
+        }),
+      ),
+    ).toBe(sentence);
+    const detail = buildWarmCaseDetailView(
+      row({
+        category: "quote_sent",
+        next_action: sentence,
+      }),
+    );
+    expect(detail.nextActionLabel).toBe(sentence);
+  });
+
+  it("preserves mapped legacy next_action tokens", () => {
+    expect(formatWarmCaseNextAction(row({ next_action: "follow" }))).toBe("Dar seguimiento");
+    expect(formatWarmCaseNextAction(row({ next_action: "supplier_reply" }))).toBe(
+      "Revisar propuesta del proveedor",
+    );
   });
 
   it("aplica resumen seguro para cotización CRTOP", () => {
