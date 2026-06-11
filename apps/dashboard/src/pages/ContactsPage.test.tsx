@@ -11,6 +11,7 @@ vi.mock("../api/mirrorLeadIntelClient", () => ({
 }));
 
 import { fetchLeadProspectsMirror } from "../api/mirrorLeadIntelClient";
+import { OperatorApiError } from "../api/operatorClient";
 
 function wrap(ui: ReactNode) {
   return (
@@ -123,12 +124,33 @@ describe("ContactsPage", () => {
     expect(screen.getByRole("button", { name: /Actualizar datos/i })).toBeTruthy();
   });
 
-  it("requests prospects with include_blocked false and limit 200", async () => {
+  it("requests prospects with include_blocked false and limit 100", async () => {
     render(wrap(<ContactsPage />));
     await waitFor(() => expect(fetchLeadProspectsMirror).toHaveBeenCalled());
     expect(fetchLeadProspectsMirror).toHaveBeenCalledWith({
-      limit: 200,
+      limit: 100,
       include_blocked: false,
     });
+  });
+
+  it("renders mirror limit note for operators", async () => {
+    render(wrap(<ContactsPage />));
+    await waitFor(() => expect(screen.getByTestId("institution-mirror-limit-note")).toBeTruthy());
+    expect(screen.getByTestId("institution-mirror-limit-note").textContent).toMatch(
+      /hasta 100 prospectos/i,
+    );
+  });
+
+  it("shows friendly card error state when mirror load fails", async () => {
+    vi.mocked(fetchLeadProspectsMirror).mockRejectedValue(
+      new OperatorApiError('{"detail":"Input should be less than or equal to 100"}', 503),
+    );
+    render(wrap(<ContactsPage />));
+    await waitFor(() => expect(screen.getByTestId("institution-load-error")).toBeTruthy());
+    expect(screen.getByTestId("institution-load-error").textContent).toMatch(
+      /No se pudieron cargar las instituciones desde el espejo/i,
+    );
+    expect(screen.getByText("Ver detalle técnico")).toBeTruthy();
+    expect(screen.queryByRole("table")).toBeNull();
   });
 });

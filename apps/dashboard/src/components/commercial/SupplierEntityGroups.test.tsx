@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { WarmCaseItem } from "../../api/commercialTypes";
 import { SupplierEntityGroups } from "./SupplierEntityGroups";
@@ -51,7 +51,28 @@ describe("SupplierEntityGroups", () => {
     ),
   ];
 
-  it("renders compact cards without list bullet markers", () => {
+  it("renders KPI cards and split workspace", () => {
+    render(
+      <SupplierEntityGroups
+        backend="sqlite"
+        allItems={items}
+        meta={meta}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    const kpis = screen.getByTestId("supplier-kpis");
+    expect(within(kpis).getByText("Proveedores")).toBeTruthy();
+    expect(within(kpis).getByText("Cotizaciones recibidas")).toBeTruthy();
+    expect(within(kpis).getByText("Seguimientos")).toBeTruthy();
+    expect(within(kpis).getByText("Hilos activos")).toBeTruthy();
+    expect(screen.getByTestId("suppliers-workspace")).toBeTruthy();
+    expect(screen.getByTestId("supplier-detail-panel")).toBeTruthy();
+  });
+
+  it("renders compact provider cards without list bullet markers", () => {
     const { container } = render(
       <SupplierEntityGroups
         backend="sqlite"
@@ -64,10 +85,10 @@ describe("SupplierEntityGroups", () => {
       />,
     );
     const grid = screen.getByTestId("supplier-entity-cards");
-    expect(grid.className).toMatch(/list-none/);
     expect(container.querySelector("ul")).toBeNull();
     expect(container.querySelector(".list-disc")).toBeNull();
     expect(container.querySelector("li")).toBeNull();
+    expect(grid.querySelectorAll('[data-testid="supplier-entity-card"]').length).toBe(2);
   });
 
   it("shows latest subject on supplier cards", () => {
@@ -82,13 +103,34 @@ describe("SupplierEntityGroups", () => {
         onContactSelect={() => {}}
       />,
     );
-    screen.getByText("SERVA thread subject");
-    screen.getByText("IKA price response");
-    screen.getByText("Cotización recibida");
-    screen.getByText("Seguimiento");
+    const cards = screen.getByTestId("supplier-entity-cards");
+    expect(within(cards).getByText("SERVA thread subject")).toBeTruthy();
+    expect(within(cards).getByText("IKA price response")).toBeTruthy();
+    expect(within(cards).getByText("Cotización recibida")).toBeTruthy();
+    expect(within(cards).getByText("Seguimiento")).toBeTruthy();
   });
 
-  it("marks selected supplier and filters warm-case table", () => {
+  it("auto-selects first provider and shows detail panel", () => {
+    render(
+      <SupplierEntityGroups
+        backend="sqlite"
+        allItems={items}
+        meta={meta}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    const servaCard = screen.getByRole("button", { name: /SERVA, 1 seguimiento/i });
+    expect(servaCard.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("supplier-detail-title").textContent).toBe("SERVA");
+    screen.getByText("sales@serva.de");
+    expect(screen.queryByText("beatriz.bonon@ika.net.br")).toBeNull();
+    screen.getByTestId("supplier-readonly-note");
+  });
+
+  it("selecting another provider updates detail panel", () => {
     render(
       <SupplierEntityGroups
         backend="sqlite"
@@ -102,14 +144,13 @@ describe("SupplierEntityGroups", () => {
     );
     const ikaCard = screen.getByRole("button", { name: /IKA, 1 cotización/i });
     fireEvent.click(ikaCard);
-    expect(screen.getByText("Seleccionado")).toBeTruthy();
     expect(ikaCard.getAttribute("aria-pressed")).toBe("true");
-    screen.getByRole("heading", { name: /Hilos de IKA/i });
+    expect(screen.getByTestId("supplier-detail-title").textContent).toBe("IKA");
     screen.getByText("beatriz.bonon@ika.net.br");
     expect(screen.queryByText("sales@serva.de")).toBeNull();
   });
 
-  it("clicking SERVA shows SERVA threads only", () => {
+  it("search narrows visible provider cards", () => {
     render(
       <SupplierEntityGroups
         backend="sqlite"
@@ -121,9 +162,27 @@ describe("SupplierEntityGroups", () => {
         onContactSelect={() => {}}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /SERVA, 1 seguimiento/i }));
-    screen.getByRole("heading", { name: /Hilos de SERVA/i });
-    screen.getByText("sales@serva.de");
-    expect(screen.queryByText("beatriz.bonon@ika.net.br")).toBeNull();
+    fireEvent.change(screen.getByTestId("supplier-search"), { target: { value: "IKA" } });
+    const cards = screen.getByTestId("supplier-entity-cards");
+    expect(within(cards).queryByRole("button", { name: /SERVA/i })).toBeNull();
+    expect(within(cards).getByRole("button", { name: /IKA/i })).toBeTruthy();
+    expect(screen.getByTestId("supplier-detail-title").textContent).toBe("IKA");
+  });
+
+  it("does not introduce send, export, or write buttons", () => {
+    render(
+      <SupplierEntityGroups
+        backend="sqlite"
+        allItems={items}
+        meta={meta}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /enviar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /exportar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /mandar/i })).toBeNull();
   });
 });

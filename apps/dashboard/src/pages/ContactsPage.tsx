@@ -16,6 +16,8 @@ import {
 import { formatMirrorLoadError } from "../lib/humanizeApiError";
 import { useClientTablePagination } from "../lib/useClientTablePagination";
 
+const CUSTOMER_INSTITUTION_LIMIT = 100;
+
 function KpiCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 shadow-sm">
@@ -51,13 +53,16 @@ export function ContactsPage() {
     setListError(null);
     setListErrorDetail(null);
     try {
-      const res = await fetchLeadProspectsMirror({ limit: 200, include_blocked: false });
+      const res = await fetchLeadProspectsMirror({
+        limit: CUSTOMER_INSTITUTION_LIMIT,
+        include_blocked: false,
+      });
       setItems(res.items);
       setDisclaimer(res.disclaimer);
     } catch (e) {
       const formatted = formatMirrorLoadError("No se pudieron cargar instituciones", e);
-      setListError(formatted.message);
-      setListErrorDetail(formatted.detail);
+      setListError("No se pudieron cargar las instituciones desde el espejo.");
+      setListErrorDetail(formatted.detail ?? formatted.message);
     } finally {
       setListLoading(false);
     }
@@ -101,6 +106,9 @@ export function ContactsPage() {
         <p className="mt-1 text-sm text-[var(--color-muted)]">
           Agrupa prospectos compradores por institución, dominio e historial de contacto. Solo lectura; no
           envía correos.
+        </p>
+        <p className="mt-1 text-xs text-[var(--color-muted)]" data-testid="institution-mirror-limit-note">
+          Muestra hasta {CUSTOMER_INSTITUTION_LIMIT} prospectos desde el espejo actual.
         </p>
         {disclaimer ? <p className="mt-2 text-xs text-sky-900">{disclaimer}</p> : null}
       </header>
@@ -165,13 +173,23 @@ export function ContactsPage() {
       </section>
 
       {listError ? (
-        <div className="text-sm text-red-800" role="alert">
+        <div
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-900"
+          role="alert"
+          data-testid="institution-load-error"
+        >
           <p className="font-medium">{listError}</p>
           {listErrorDetail ? <TechnicalDetailDisclosure detail={listErrorDetail} /> : null}
         </div>
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-white shadow-sm">
+        {!listError && !listLoading && pagedGroups.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-[var(--color-muted)]" role="status">
+            No hay instituciones para mostrar con los filtros actuales.
+          </p>
+        ) : null}
+        {!listError ? (
         <table className="min-w-full text-left text-sm">
           <thead className="border-b border-[var(--color-border)] bg-slate-50 text-xs uppercase text-[var(--color-muted)]">
             <tr>
@@ -231,7 +249,8 @@ export function ContactsPage() {
             })}
           </tbody>
         </table>
-        {filteredGroups.length > 0 && !listLoading ? (
+        ) : null}
+        {filteredGroups.length > 0 && !listLoading && !listError ? (
           <TablePaginationBar
             page={pagination.page}
             totalPages={pagination.totalPages}
@@ -244,6 +263,8 @@ export function ContactsPage() {
         <div className="border-t border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-muted)]">
           {listLoading ? (
             <p>Cargando…</p>
+          ) : listError ? (
+            <p>Sin datos de instituciones cargados.</p>
           ) : (
             <p>
               {filteredGroups.length} institución{filteredGroups.length === 1 ? "" : "es"} ·{" "}
