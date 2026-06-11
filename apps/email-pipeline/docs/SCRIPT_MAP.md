@@ -65,7 +65,9 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | *(orchestrator)* | active_operator_command | `origenlab refresh-dashboard` | Multi-step | SQLite + reports + optional PG | **high** | `uv run origenlab refresh-dashboard` (plan default) | `--apply` runs ingest→mart→commercial→safety→mirror |
 | *(orchestrator)* | active_operator_command | `origenlab auto-refresh-mail` | Gmail IMAP probe + optional daily-core | state file + optional SQLite | medium | `uv run origenlab auto-refresh-mail --once` | Debounced; `--apply` runs `daily-core --apply` — see [`pipeline/MAIL_AUTO_REFRESH.md`](pipeline/MAIL_AUTO_REFRESH.md) |
 | *(orchestrator)* | active_operator_command | `origenlab auto-mirror-dashboard` | manifest + mail state gates + optional mirror | state file + optional Postgres | **high** | `uv run origenlab auto-mirror-dashboard --once` | Separate ~15m loop; `--apply` requires `--allow-non-scratch-postgres` — [`pipeline/DASHBOARD_AUTO_MIRROR.md`](pipeline/DASHBOARD_AUTO_MIRROR.md) |
-| *(orchestrator)* | read_only_qa_report | `origenlab operator-automation-status` | local state files only | — | low | `uv run origenlab operator-automation-status` | Read-only health for loops A+B; `--json` for scripts |
+| *(orchestrator)* | read_only_qa_report | `origenlab operator-automation-status` | local state files + user crontab | — | low | `uv run origenlab operator-automation-status` | Read-only health for loops A+B; `--json`; `--skip-cron-inspection` |
+| `scripts/operator/run_auto_refresh_mail.sh` | active_operator_command | cron wrapper | — | optional SQLite via CLI | medium | `scripts/operator/run_auto_refresh_mail.sh` | ~3m cron; calls `auto-refresh-mail --once --apply` — [`pipeline/OPERATOR_CRON.md`](pipeline/OPERATOR_CRON.md) |
+| `scripts/operator/run_auto_mirror_dashboard.sh` | active_operator_command | cron wrapper | — | optional Postgres via CLI | **high** | `scripts/operator/run_auto_mirror_dashboard.sh` | ~15m cron; calls `auto-mirror-dashboard --once --apply --allow-non-scratch-postgres` |
 
 ### Daily outbound lanes (scripts — no `origenlab` wrapper yet)
 

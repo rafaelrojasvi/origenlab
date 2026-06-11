@@ -29,7 +29,7 @@ Four applications share this monorepo:
 
 Send/outreach truth stays in **SQLite + email-pipeline scripts**, not in Postgres mirror or dashboard reads.
 
-Automation health (`auto-refresh-mail` + `auto-mirror-dashboard`) is inspectable via `operator-automation-status` and the dashboard **Automatización operador** card on Today.
+Automation health (`auto-refresh-mail` + `auto-mirror-dashboard`) is inspectable via `operator-automation-status` (includes read-only cron inspection) and the dashboard **Automatización operador** card on Today. Tracked cron wrappers: `apps/email-pipeline/scripts/operator/` — see [`apps/email-pipeline/docs/pipeline/OPERATOR_CRON.md`](apps/email-pipeline/docs/pipeline/OPERATOR_CRON.md).
 
 ## Scope and limitations
 

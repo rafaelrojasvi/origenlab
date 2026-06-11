@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,10 +13,17 @@ from origenlab_email_pipeline.operator_cli.daily_core_manifest import MANIFEST_F
 from origenlab_email_pipeline.operator_cli.dashboard_auto_mirror import STATE_FILENAME as MIRROR_STATE_FILENAME
 from origenlab_email_pipeline.operator_cli.mail_auto_refresh import STATE_FILENAME as MAIL_STATE_FILENAME
 from origenlab_email_pipeline.operator_cli.operator_automation_status import (
+    LEGACY_MIRROR_CRON_WRAPPER,
+    TRACKED_MAIL_CRON_SCRIPT,
+    TRACKED_MIRROR_CRON_SCRIPT,
     OperatorAutomationStatusOptions,
+    _inspect_crontab_content,
     build_operator_automation_status,
+    read_user_crontab,
     run_operator_automation_status,
 )
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 _T0 = datetime(2026, 6, 10, 18, 30, 0, tzinfo=timezone.utc)
 _DAILY_CORE_TS = "2026-06-10T18:12:48+00:00"
@@ -73,9 +81,28 @@ def _healthy_fixture(active_current: Path) -> Path:
     return active_current.parent.parent
 
 
+def _healthy_tracked_crontab() -> dict[str, Any]:
+    return _inspect_crontab_content(
+        "\n".join(
+            [
+                f"*/3 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MAIL_CRON_SCRIPT}",
+                f"*/15 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MIRROR_CRON_SCRIPT}",
+            ]
+        )
+    )
+
+
+def _crontab_from_lines(*lines: str) -> dict[str, Any]:
+    return _inspect_crontab_content("\n".join(lines))
+
+
 def test_healthy_state(active_current: Path) -> None:
     reports = _healthy_fixture(active_current)
-    report = build_operator_automation_status(reports_dir=reports, now=_T0)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab,
+    )
     assert report["verdict"] == "healthy"
     assert report["recommended_action"] == "none"
     assert report["mail_auto_refresh"]["dirty"] is False
@@ -88,6 +115,7 @@ def test_json_output_keys(active_current: Path, capsys: pytest.CaptureFixture[st
         OperatorAutomationStatusOptions(json_output=True),
         reports_dir=reports,
         now=_T0,
+        read_crontab=_healthy_tracked_crontab,
     )
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
@@ -98,10 +126,12 @@ def test_json_output_keys(active_current: Path, capsys: pytest.CaptureFixture[st
         "daily_core",
         "mail_auto_refresh",
         "dashboard_auto_mirror",
+        "cron",
         "recommended_action",
         "warnings",
     ):
         assert key in data
+    assert data["cron"]["inspected"] is True
 
 
 def test_missing_daily_core_manifest(active_current: Path) -> None:
@@ -196,6 +226,7 @@ def test_mirror_cooldown_healthy_when_already_mirrored(active_current: Path) -> 
         reports_dir=reports,
         now=_T0,
         options=OperatorAutomationStatusOptions(mirror_cooldown_seconds=900),
+        read_crontab=_healthy_tracked_crontab,
     )
     assert report["verdict"] == "healthy"
     assert report["dashboard_auto_mirror"]["cooldown_remaining_seconds"] > 0
@@ -260,3 +291,147 @@ def test_pause_file(active_current: Path) -> None:
     report = build_operator_automation_status(reports_dir=reports, now=_T0)
     assert report["verdict"] == "attention"
     assert report["recommended_action"] == "resume_or_leave_paused"
+
+
+def test_healthy_with_tracked_cron_entries(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    assert report["verdict"] == "healthy"
+    assert report["recommended_action"] == "none"
+    assert report["cron"]["mail_uses_tracked_script"] is True
+    assert report["cron"]["mirror_uses_tracked_script"] is True
+
+
+def test_missing_mail_cron_entry_attention(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=lambda: _crontab_from_lines(
+            f"*/15 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MIRROR_CRON_SCRIPT}",
+        ),
+    )
+    assert report["verdict"] == "attention"
+    assert report["recommended_action"] == "inspect_crontab"
+    assert report["cron"]["mail_entry_present"] is False
+    assert report["cron"]["mirror_entry_present"] is True
+
+
+def test_missing_mirror_cron_entry_attention(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=lambda: _crontab_from_lines(
+            f"*/3 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MAIL_CRON_SCRIPT}",
+        ),
+    )
+    assert report["verdict"] == "attention"
+    assert report["recommended_action"] == "inspect_crontab"
+    assert report["cron"]["mirror_entry_present"] is False
+
+
+def test_legacy_runtime_wrapper_attention(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=lambda: _crontab_from_lines(
+            f"*/3 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MAIL_CRON_SCRIPT}",
+            f"*/15 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{LEGACY_MIRROR_CRON_WRAPPER}",
+        ),
+    )
+    assert report["verdict"] == "attention"
+    assert report["recommended_action"] == "migrate_cron_to_tracked_scripts"
+    assert report["cron"]["legacy_runtime_wrapper_present"] is True
+
+
+def test_broken_joined_flags_attention(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=lambda: _crontab_from_lines(
+            "*/3 * * * * uv run origenlab auto-refresh-mail --once--apply",
+            f"*/15 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MIRROR_CRON_SCRIPT}",
+        ),
+    )
+    assert report["verdict"] == "attention"
+    assert report["recommended_action"] == "fix_crontab_spacing"
+    assert report["cron"]["broken_joined_flags"] is True
+
+
+def test_crontab_unavailable_warning_not_blocked(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=lambda: {
+            "inspected": True,
+            "crontab_available": False,
+            "mail_entry_present": False,
+            "mirror_entry_present": False,
+            "mail_uses_tracked_script": False,
+            "mirror_uses_tracked_script": False,
+            "legacy_runtime_wrapper_present": False,
+            "broken_joined_flags": False,
+            "warnings": ["crontab_command_unavailable"],
+        },
+    )
+    assert report["verdict"] == "healthy"
+    assert "crontab_command_unavailable" in report["warnings"]
+
+
+def test_skip_cron_inspection_preserves_legacy_output(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        options=OperatorAutomationStatusOptions(skip_cron_inspection=True),
+    )
+    assert report["verdict"] == "healthy"
+    assert report["cron"] == {"note": "not inspected by this command"}
+
+
+def test_read_user_crontab_mocked_no_real_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    class _Result:
+        returncode = 0
+        stdout = f"*/3 * * * * {TRACKED_MAIL_CRON_SCRIPT}\n"
+        stderr = ""
+
+    def fake_run(cmd: list[str], **kwargs: object) -> _Result:
+        calls.append(cmd)
+        return _Result()
+
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.operator_cli.operator_automation_status.subprocess.run",
+        fake_run,
+    )
+    data = read_user_crontab()
+    assert calls == [["crontab", "-l"]]
+    assert data["inspected"] is True
+    assert data["mail_entry_present"] is True
+
+
+def test_tracked_cron_wrapper_scripts_exist_and_contain_commands() -> None:
+    mail_script = _REPO_ROOT / "scripts/operator/run_auto_refresh_mail.sh"
+    mirror_script = _REPO_ROOT / "scripts/operator/run_auto_mirror_dashboard.sh"
+    assert mail_script.is_file()
+    assert mirror_script.is_file()
+    mail_text = mail_script.read_text(encoding="utf-8")
+    mirror_text = mirror_script.read_text(encoding="utf-8")
+    assert "auto-refresh-mail --once --apply" in mail_text
+    assert "auto-mirror-dashboard" in mirror_text
+    assert "--once" in mirror_text
+    assert "--apply" in mirror_text
+    assert "--allow-non-scratch-postgres" in mirror_text
+    assert "ORIGENLAB_UV_BIN" in mail_text
+    assert "ORIGENLAB_OPERATOR_NAME" in mirror_text

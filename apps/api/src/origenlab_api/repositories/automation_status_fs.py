@@ -23,5 +23,7 @@ def get_automation_status_from_active_current(
         reports_dir=reports_dir,
         options=OperatorAutomationStatusOptions(
             mirror_cooldown_seconds=mirror_cooldown_seconds,
+            skip_cron_inspection=True,
+            cron_note="not inspected by API",
         ),
     )
