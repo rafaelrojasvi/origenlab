@@ -331,7 +331,8 @@ describe("DashboardApp shell (Phase 7B.1)", () => {
 
     await navigateTo("Proveedores");
     await waitFor(() => {
-      screen.getByText("IKA");
+      expect(screen.getByTestId("suppliers-workspace")).toBeTruthy();
+      expect(screen.getByTestId("supplier-detail-title").textContent).toBe("IKA");
     });
     fireEvent.click(screen.getByRole("button", { name: /IKA, 1 cotización/i }));
     await waitFor(() => {

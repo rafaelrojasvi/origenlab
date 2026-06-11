@@ -1,11 +1,22 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { WarmCaseItem } from "../../api/commercialTypes";
 import type { ApiBackend } from "../../api/operatorTypes";
+import { emailDomain } from "../../lib/clientTableView";
 import {
   groupSupplierWarmCases,
   type SupplierEntityGroup,
 } from "../../lib/supplierEntityGrouping";
 import { WarmCasesTable } from "./WarmCasesTable";
+
+function roleBadgeClassName(badge: SupplierEntityGroup["roleBadge"]): string {
+  if (badge === "Cotización recibida") {
+    return "bg-teal-100 text-teal-900";
+  }
+  if (badge === "Seguimiento") {
+    return "bg-amber-100 text-amber-950";
+  }
+  return "bg-slate-100 text-slate-700";
+}
 
 function SupplierEntityCard({
   group,
@@ -22,41 +33,73 @@ function SupplierEntityCard({
       aria-pressed={active}
       aria-label={`${group.label}, ${group.summaryLabel}`}
       onClick={onSelect}
-      className={`w-full rounded-lg border px-3 py-3 text-left transition-all ${
+      data-testid="supplier-entity-card"
+      className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors motion-reduce:transition-none ${
         active
-          ? "border-brand-600 bg-brand-50 shadow-sm ring-2 ring-brand-600/25"
-          : "border-[var(--color-border)] bg-[var(--color-card)] hover:border-brand-500/60 hover:bg-brand-50/40"
+          ? "border-brand-500 bg-brand-50/80 ring-1 ring-brand-500/40"
+          : "border-[var(--color-border)] bg-[var(--color-card)] hover:border-brand-400/50 hover:bg-brand-50/30"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-semibold text-brand-950">{group.label}</p>
-        {active ? (
-          <span className="shrink-0 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-            Seleccionado
-          </span>
-        ) : (
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-              group.roleBadge === "Cotización recibida"
-                ? "bg-teal-100 text-teal-900"
-                : group.roleBadge === "Seguimiento"
-                  ? "bg-amber-100 text-amber-950"
-                  : "bg-slate-100 text-slate-700"
-            }`}
-          >
-            {group.roleBadge}
-          </span>
-        )}
+        <p className="truncate text-sm font-semibold text-brand-950">{group.label}</p>
+        <span
+          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${roleBadgeClassName(group.roleBadge)}`}
+        >
+          {group.roleBadge}
+        </span>
       </div>
-      <p className="mt-1.5 text-xs font-medium text-brand-800">{group.summaryLabel}</p>
-      <p className="mt-1 text-[11px] text-[var(--color-muted)]">
-        Último hilo · {group.latestActivityLabel ?? "sin fecha"}
+      <p className="mt-1 text-[11px] font-medium text-brand-800">{group.summaryLabel}</p>
+      <p className="mt-0.5 text-[10px] text-[var(--color-muted)]">
+        {group.latestActivityLabel ?? "Sin actividad reciente"}
       </p>
-      <p className="mt-1 line-clamp-2 text-xs text-slate-700" title={group.latestSubject}>
+      <p className="mt-0.5 line-clamp-1 text-[10px] text-slate-500" title={group.latestSubject}>
         {group.latestSubject}
       </p>
     </button>
   );
+}
+
+function KpiCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-brand-900">{value}</p>
+    </div>
+  );
+}
+
+function supplierKpis(groups: SupplierEntityGroup[], allItems: WarmCaseItem[]) {
+  return {
+    providers: groups.length,
+    quotes: groups.reduce((sum, group) => sum + group.quoteCount, 0),
+    followups: groups.reduce((sum, group) => sum + group.followupCount, 0),
+    activeThreads: allItems.length,
+  };
+}
+
+function filterSupplierGroups(groups: SupplierEntityGroup[], search: string): SupplierEntityGroup[] {
+  const query = search.trim().toLowerCase();
+  if (!query) {
+    return groups;
+  }
+  return groups.filter((group) => {
+    if (group.label.toLowerCase().includes(query)) {
+      return true;
+    }
+    if (group.latestSubject.toLowerCase().includes(query)) {
+      return true;
+    }
+    return group.items.some((row) => {
+      const email = row.contact_email?.toLowerCase() ?? "";
+      const domain = emailDomain(row.contact_email).toLowerCase();
+      return (
+        email.includes(query) ||
+        domain.includes(query) ||
+        (row.account_name?.toLowerCase().includes(query) ?? false) ||
+        (row.subject?.toLowerCase().includes(query) ?? false)
+      );
+    });
+  });
 }
 
 export function SupplierEntityGroups({
@@ -82,14 +125,32 @@ export function SupplierEntityGroups({
   onContactSelect: (email: string) => void;
 }) {
   const groups = useMemo(() => groupSupplierWarmCases(allItems), [allItems]);
+  const [searchInput, setSearchInput] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+  const filteredGroups = useMemo(
+    () => filterSupplierGroups(groups, searchInput),
+    [groups, searchInput],
+  );
+
+  useEffect(() => {
+    if (filteredGroups.length === 0) {
+      setSelectedGroupId(null);
+      return;
+    }
+    if (!selectedGroupId || !filteredGroups.some((group) => group.id === selectedGroupId)) {
+      setSelectedGroupId(filteredGroups[0].id);
+    }
+  }, [filteredGroups, selectedGroupId]);
 
   const selectedGroup: SupplierEntityGroup | null = useMemo(() => {
     if (!selectedGroupId) {
       return null;
     }
-    return groups.find((g) => g.id === selectedGroupId) ?? null;
-  }, [groups, selectedGroupId]);
+    return filteredGroups.find((group) => group.id === selectedGroupId) ?? null;
+  }, [filteredGroups, selectedGroupId]);
+
+  const kpis = useMemo(() => supplierKpis(groups, allItems), [groups, allItems]);
 
   if (loading || error || allItems.length === 0) {
     return (
@@ -102,7 +163,7 @@ export function SupplierEntityGroups({
         onRetry={onRetry}
         onContactSelect={onContactSelect}
         title="Proveedores"
-        subtitle="Cotizaciones y seguimientos de proveedores."
+        subtitle="Cotizaciones, seguimientos y hilos de proveedores. Solo lectura."
         showViewPresets={false}
         initialFilters={{ preset: "todo", hideInternalContacts: false }}
       />
@@ -110,51 +171,105 @@ export function SupplierEntityGroups({
   }
 
   return (
-    <div className="space-y-6">
-      <section aria-labelledby="supplier-groups-heading">
-        <h2 id="supplier-groups-heading" className="text-lg font-semibold text-brand-950">
-          Proveedores por entidad
-        </h2>
-        <p className="mt-1 text-sm text-[var(--color-muted)]">
-          Selecciona un proveedor para revisar sus hilos.
+    <div className="space-y-6" data-testid="suppliers-workspace">
+      <header data-testid="suppliers-page-intro">
+        <p className="text-sm text-[var(--color-muted)]">
+          Cotizaciones, seguimientos y hilos de proveedores. Solo lectura.
         </p>
-        <div
-          className="mt-4 grid list-none gap-3 sm:grid-cols-2 lg:grid-cols-3"
-          data-testid="supplier-entity-cards"
+      </header>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="supplier-kpis">
+        <KpiCard label="Proveedores" value={kpis.providers} />
+        <KpiCard label="Cotizaciones recibidas" value={kpis.quotes} />
+        <KpiCard label="Seguimientos" value={kpis.followups} />
+        <KpiCard label="Hilos activos" value={kpis.activeThreads} />
+      </div>
+
+      <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-sm">
+        <input
+          type="search"
+          placeholder="Buscar proveedor, email, dominio o asunto"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
+          data-testid="supplier-search"
+        />
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(220px,280px)_1fr]">
+        <aside
+          className="space-y-2 lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto"
+          aria-label="Lista de proveedores"
         >
-          {groups.map((group) => {
-            const active = selectedGroupId === group.id;
-            return (
+          <div className="space-y-2" data-testid="supplier-entity-cards">
+            {filteredGroups.map((group) => (
               <SupplierEntityCard
                 key={group.id}
                 group={group}
-                active={active}
-                onSelect={() => setSelectedGroupId(active ? null : group.id)}
+                active={selectedGroupId === group.id}
+                onSelect={() => setSelectedGroupId(group.id)}
               />
-            );
-          })}
-        </div>
-      </section>
+            ))}
+          </div>
+          {filteredGroups.length === 0 ? (
+            <p className="text-sm text-[var(--color-muted)]" role="status">
+              Ningún proveedor coincide con la búsqueda.
+            </p>
+          ) : null}
+        </aside>
 
-      {selectedGroup ? (
-        <WarmCasesTable
-          backend={backend}
-          items={selectedGroup.items}
-          meta={meta}
-          loading={false}
-          error={null}
-          onRetry={onRetry}
-          onContactSelect={onContactSelect}
-          title={`Hilos de ${selectedGroup.label}`}
-          subtitle={`${selectedGroup.summaryLabel} · cola de solo lectura`}
-          showViewPresets={false}
-          initialFilters={{ preset: "todo", hideInternalContacts: false }}
-        />
-      ) : (
-        <p className="text-sm text-[var(--color-muted)]" role="status">
-          Selecciona un proveedor arriba para ver sus casos tibios.
-        </p>
-      )}
+        <section
+          className="min-w-0 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-sm"
+          data-testid="supplier-detail-panel"
+        >
+          {selectedGroup ? (
+            <>
+              <div className="border-b border-[var(--color-border)] pb-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h2 className="text-lg font-semibold text-brand-950" data-testid="supplier-detail-title">
+                    {selectedGroup.label}
+                  </h2>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${roleBadgeClassName(selectedGroup.roleBadge)}`}
+                  >
+                    {selectedGroup.roleBadge}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-brand-800">{selectedGroup.summaryLabel}</p>
+                <p className="mt-1 text-xs text-[var(--color-muted)]">
+                  Última actividad · {selectedGroup.latestActivityLabel ?? "sin fecha"}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">{selectedGroup.latestSubject}</p>
+                <p
+                  className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950"
+                  data-testid="supplier-readonly-note"
+                >
+                  Solo lectura: revisar historial antes de contactar.
+                </p>
+              </div>
+              <div className="mt-4">
+                <WarmCasesTable
+                  backend={backend}
+                  items={selectedGroup.items}
+                  meta={meta}
+                  loading={false}
+                  error={null}
+                  onRetry={onRetry}
+                  onContactSelect={onContactSelect}
+                  title="Hilos del proveedor"
+                  subtitle="Cola de solo lectura · solo asunto y vista previa (sin cuerpo del correo)."
+                  showViewPresets={false}
+                  initialFilters={{ preset: "todo", hideInternalContacts: false }}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-[var(--color-muted)]" role="status">
+              Selecciona un proveedor para revisar sus hilos.
+            </p>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
