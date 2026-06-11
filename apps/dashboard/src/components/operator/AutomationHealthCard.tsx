@@ -4,6 +4,7 @@ import type { OperatorAutomationStatus } from "../../api/operatorTypes";
 import {
   AUTOMATION_MISSING_STATE_HELP,
   AUTOMATION_MISSING_STATE_PRIMARY,
+  buildAutomationSnapshotSummary,
   automationRecommendedActionLabel,
   automationVerdictLabel,
   automationVerdictTone,
@@ -136,6 +137,7 @@ export function AutomationHealthCard({
     status.mail_auto_refresh.paused ||
     status.dashboard_auto_mirror.paused;
   const missingState = operatorAutomationStatePartiallyMissing(status);
+  const snapshotSummary = buildAutomationSnapshotSummary(status);
   const cronNote = status.cron.note?.trim();
 
   return (
@@ -185,6 +187,13 @@ export function AutomationHealthCard({
           </p>
           <p>{AUTOMATION_MISSING_STATE_HELP}</p>
         </div>
+      ) : snapshotSummary ? (
+        <p
+          className="mt-3 rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs text-emerald-950"
+          data-testid="automation-snapshot-summary"
+        >
+          {snapshotSummary}
+        </p>
       ) : null}
 
       {variant === "summary" ? (

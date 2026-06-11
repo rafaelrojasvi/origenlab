@@ -1,6 +1,7 @@
 import type { WarmCaseCategory, WarmCaseItem } from "../api/commercialTypes";
 import { emailDomain, parseSortableTimestamp } from "./clientTableView";
 import { formatDashboardDateTime } from "./dashboardDateFormat";
+import { buildSupplierMirrorDepthSummary } from "./supplierMirrorDepth";
 import { truncate } from "./safeText";
 
 export interface SupplierGroupDefinition {
@@ -68,13 +69,7 @@ export function roleBadgeForCategory(category: WarmCaseCategory | undefined): Su
 }
 
 export function buildSupplierCaseSummary(items: WarmCaseItem[]): string {
-  const n = items.length;
-  const casoLabel = `${n} ${n === 1 ? "caso" : "casos"}`;
-  const groupedTotal = items.reduce((sum, row) => sum + (row.grouped_email_count ?? 1), 0);
-  if (groupedTotal > n) {
-    return `${casoLabel} · ${groupedTotal} correos agrupados`;
-  }
-  return n === 1 ? "1 caso activo" : `${n} casos activos`;
+  return buildSupplierMirrorDepthSummary(items);
 }
 
 function previewSubject(row: WarmCaseItem | null): string {

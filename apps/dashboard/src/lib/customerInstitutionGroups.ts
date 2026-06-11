@@ -121,8 +121,16 @@ export function institutionStatusChips(group: CustomerInstitutionGroup): Institu
   if (group.hasGmailHistory) {
     chips.push({
       code: "gmail_history",
-      label: "Gmail histórico",
+      label: "Gmail en espejo",
       className: "border-sky-200 bg-sky-50 text-sky-950",
+    });
+  }
+  const gmailDetected = group.totalGmailSent + group.totalGmailReceived;
+  if (gmailDetected > 0) {
+    chips.push({
+      code: "gmail_detected",
+      label: `${gmailDetected} Gmail detectado`,
+      className: "border-indigo-200 bg-indigo-50 text-indigo-950",
     });
   }
   if (group.contactsMissingEmail > 0) {

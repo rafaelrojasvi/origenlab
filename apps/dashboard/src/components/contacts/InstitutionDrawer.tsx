@@ -1,5 +1,6 @@
 import type { CustomerInstitutionGroup } from "../../lib/customerInstitutionGroups";
 import { formatDashboardDateTime } from "../../lib/dashboardDateFormat";
+import { institutionGmailHistorySummary } from "../../lib/institutionMirrorDepth";
 import {
   hasProspectEmail,
   parseRiskFlagChips,
@@ -22,6 +23,7 @@ export function InstitutionDrawer({
   onSelectEmail?: (email: string) => void;
 }) {
   const chips = institutionStatusChips(group);
+  const gmailSummary = institutionGmailHistorySummary(group);
   const riskRows = group.rows.flatMap((row) => parseRiskFlagChips(row.risk_flags));
 
   return (
@@ -126,27 +128,31 @@ export function InstitutionDrawer({
             </div>
           </section>
 
-          {group.hasGmailHistory ? (
-            <section data-testid="institution-gmail-history">
-              <h3 className="text-sm font-semibold text-brand-900">Historial Gmail</h3>
-              <dl className="mt-2 grid gap-1 text-sm">
-                <div>
-                  <dt className="text-[var(--color-muted)]">Enviados / recibidos (total)</dt>
-                  <dd>
-                    {group.totalGmailSent} / {group.totalGmailReceived}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[var(--color-muted)]">Último contacto</dt>
-                  <dd>{formatDashboardDateTime(group.latestGmailLastContactedAt)}</dd>
-                </div>
-                <div>
-                  <dt className="text-[var(--color-muted)]">Último asunto (redactado)</dt>
-                  <dd>{group.latestSafeSubject ?? "—"}</dd>
-                </div>
-              </dl>
-            </section>
-          ) : null}
+          <section data-testid="institution-gmail-history">
+            <h3 className="text-sm font-semibold text-brand-900">Historial Gmail</h3>
+            <dl className="mt-2 grid gap-1 text-sm">
+              <div>
+                <dt className="text-[var(--color-muted)]">En espejo</dt>
+                <dd>{gmailSummary.mirrorLine}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--color-muted)]">Gmail detectado</dt>
+                <dd>{gmailSummary.detectedLine}</dd>
+              </div>
+              {group.hasGmailHistory ? (
+                <>
+                  <div>
+                    <dt className="text-[var(--color-muted)]">Último contacto</dt>
+                    <dd>{formatDashboardDateTime(group.latestGmailLastContactedAt)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--color-muted)]">Último asunto (redactado)</dt>
+                    <dd>{group.latestSafeSubject ?? "—"}</dd>
+                  </div>
+                </>
+              ) : null}
+            </dl>
+          </section>
 
           <section data-testid="institution-prospect-rows">
             <h3 className="text-sm font-semibold text-brand-900">Prospectos / fuentes</h3>

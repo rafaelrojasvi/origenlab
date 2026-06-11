@@ -67,6 +67,15 @@ describe("AutomationHealthCard", () => {
     await waitFor(() => {
       screen.getByText("Automatización al día");
     });
+    expect(screen.getByTestId("automation-snapshot-summary").textContent).toMatch(
+      /Snapshot local publicado/i,
+    );
+    expect(screen.getByTestId("automation-snapshot-summary").textContent).toMatch(
+      /daily-core visible/i,
+    );
+    expect(screen.getByTestId("automation-snapshot-summary").textContent).toMatch(
+      /mirror visible/i,
+    );
     screen.getByText("Sin acción requerida");
     screen.getByText(/Gmail → SQLite:/);
     screen.getByText(/limpio/);
