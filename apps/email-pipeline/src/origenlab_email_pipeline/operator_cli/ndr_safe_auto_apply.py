@@ -106,6 +106,9 @@ def build_ndr_safe_auto_apply_audit_record(
         record["phase"] = phase
     if subprocess_results is not None:
         record["subprocess_results"] = subprocess_results
+    for key in ("refresh_safety_completed", "needs_safety_refresh"):
+        if key in plan:
+            record[key] = plan[key]
     return record
 
 
@@ -369,6 +372,8 @@ def format_ndr_safe_auto_apply_text(plan: dict[str, Any]) -> str:
         "candidates_unsuppressed",
         "allowlist_count",
         "exit_code",
+        "refresh_safety_completed",
+        "needs_safety_refresh",
     ):
         if key in plan and plan[key] is not None:
             lines.append(f"{key}={plan[key]}")
@@ -488,7 +493,13 @@ def _run_apply_path(
         result=refresh_result,
     )
     if refresh_result.returncode != 0:
-        plan = {**plan, "reason": "refresh_safety_failed", "applied": False}
+        plan = {
+            **plan,
+            "reason": "refresh_safety_failed",
+            "applied": True,
+            "refresh_safety_completed": False,
+            "needs_safety_refresh": True,
+        }
         append_ndr_safe_auto_apply_audit_record(
             active_current,
             build_ndr_safe_auto_apply_audit_record(
@@ -496,7 +507,7 @@ def _run_apply_path(
                 operator=options.operator,
                 timestamp_utc=_iso_now(now_fn),
                 dry_run=False,
-                applied=False,
+                applied=True,
                 confirm_reviewed=options.confirm_reviewed,
                 phase="after_apply",
                 exit_code=2,

@@ -304,6 +304,41 @@ def test_apply_refuses_parser_uncertain_exceeded(reports_dir: Path) -> None:
     assert _read_audit_lines(active_current)[-1]["reason"] == "parser_uncertain_exceeded"
 
 
+def test_refresh_safety_failure_records_partial_apply(reports_dir: Path) -> None:
+    active_current = reports_dir / "active" / "current"
+    _write_queue(
+        active_current,
+        date_label="2026_06_11",
+        summary=_ready_summary(),
+        allowlist_emails=["partial@example.cl"],
+    )
+
+    def _ndr_ok_refresh_fails(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if "refresh-safety" in cmd:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="refresh failed\n")
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+
+    mock_subprocess = MagicMock(side_effect=_ndr_ok_refresh_fails)
+    mock_rebuild = MagicMock()
+    rc = _run_with_reports(
+        reports_dir,
+        _apply_options(reports_dir, json_output=True),
+        subprocess_run=mock_subprocess,
+        rebuild_queue_fn=mock_rebuild,
+    )
+    assert rc == 2
+    mock_rebuild.assert_not_called()
+
+    record = _read_audit_lines(active_current)[-1]
+    assert record["reason"] == "refresh_safety_failed"
+    assert record["applied"] is True
+    assert record["refresh_safety_completed"] is False
+    assert record["needs_safety_refresh"] is True
+    assert record["exit_code"] == 2
+    assert record["subprocess_results"]["ndr_apply"]["returncode"] == 0
+    assert record["subprocess_results"]["refresh_safety"]["returncode"] == 1
+
+
 def test_successful_apply_runs_targeted_ndr_refresh_and_rebuild(reports_dir: Path) -> None:
     active_current = reports_dir / "active" / "current"
     queue_dir = _write_queue(
