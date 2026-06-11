@@ -1,109 +1,190 @@
 # OrigenLab
 
 <p align="center">
-  Commercial engineering monorepo for OrigenLab — four apps:
-  <br /><br />
-  public website (Astro) · email pipeline (Python/SQLite) · operator API (FastAPI) · operator dashboard (React)
+  <strong>Commercial-operations monorepo</strong> for OrigenLab — public website, email intelligence pipeline, read-only operator API, and dashboard.
 </p>
 
 <p align="center">
-  <img alt="Astro" src="https://img.shields.io/badge/Astro-5.x-ff5d01?logo=astro&logoColor=white" />
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" />
+  <a href="https://github.com/rafaelRojasVi/origenlab/actions/workflows/email-pipeline.yml"><img alt="email-pipeline CI" src="https://github.com/rafaelRojasVi/origenlab/actions/workflows/email-pipeline.yml/badge.svg" /></a>
+  <a href="https://github.com/rafaelRojasVi/origenlab/actions/workflows/api.yml"><img alt="api CI" src="https://github.com/rafaelRojasVi/origenlab/actions/workflows/api.yml/badge.svg" /></a>
+  <a href="https://github.com/rafaelRojasVi/origenlab/actions/workflows/dashboard.yml"><img alt="dashboard CI" src="https://github.com/rafaelRojasVi/origenlab/actions/workflows/dashboard.yml/badge.svg" /></a>
+  <a href="https://github.com/rafaelRojasVi/origenlab/actions/workflows/web.yml"><img alt="web CI" src="https://github.com/rafaelRojasVi/origenlab/actions/workflows/web.yml/badge.svg" /></a>
+  <a href="https://github.com/rafaelRojasVi/origenlab/actions/workflows/secret-scan.yml"><img alt="secret scan" src="https://github.com/rafaelRojasVi/origenlab/actions/workflows/secret-scan.yml/badge.svg" /></a>
+  <img alt="Python 3.12" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" />
   <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" />
 </p>
 
-## Overview
+---
 
-Four applications share this monorepo:
+## What this is
 
-| App | Role |
-|-----|------|
-| **`apps/web`** | Public marketing site (Astro) |
-| **`apps/email-pipeline`** | Gmail ingest, SQLite operational truth, outbound safety, reports, mutation scripts |
-| **`apps/api`** | Read-only operator HTTP API on **:8001** (Today routes + `GET /mirror/*` Postgres reporting) |
-| **`apps/dashboard`** | Read-only operator UI on **:5173** (**Today** page → `apps/api` only) |
+OrigenLab is **not just a website repository**. It is a **commercial-operations monorepo** that combines a public marketing site with operator tooling for commercial intelligence, outbound safety, and read-only operational visibility.
 
-**Architecture (canonical):** [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md) — do not duplicate full topology here.
+Gmail and archive signals are ingested into **SQLite operational truth** on the operator machine. A feature-backed email mart supports fast `daily-core` rebuilds. **Postgres** is a read-only dashboard/reporting mirror — not send/outreach authority. The **FastAPI operator API** (`:8001`) and **React dashboard** (`:5173`) are read-only surfaces for triage and reporting. Sending, outreach batches, and safety mutations stay in explicit email-pipeline workflows with human review.
 
-**Operator dashboard + API:** [`apps/api/README.md`](apps/api/README.md) · [`apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md)
+Sensitive operational datasets (mail exports, SQLite files, generated reports, client collateral) are **intentionally kept outside Git**. This public repository holds code, tests, and documentation — not live mailbox content or customer data.
 
-Send/outreach truth stays in **SQLite + email-pipeline scripts**, not in Postgres mirror or dashboard reads.
+Full topology and precedence rules: [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md).
 
-Automation health (`auto-refresh-mail` + `auto-mirror-dashboard`) is inspectable via `operator-automation-status` (includes read-only cron inspection) and the dashboard **Automatización operador** card on Today. Tracked cron wrappers: `apps/email-pipeline/scripts/operator/` — see [`apps/email-pipeline/docs/pipeline/OPERATOR_CRON.md`](apps/email-pipeline/docs/pipeline/OPERATOR_CRON.md).
+## Why it is interesting
 
-## Scope and limitations
+- **SQLite-first operational truth** — outbound safety, Sent memory, and outreach sidecars live locally, not in the dashboard mirror.
+- **Feature-backed email mart** — `email_mart_features` accelerates daily-core mart rebuilds without re-scanning the full archive each run.
+- **Debounced two-loop automation** — separate cron loops for Gmail → SQLite and SQLite → Postgres/dashboard publishing.
+- **One-command health check** — `uv run origenlab operator-automation-status` (manifest, mail state, mirror state, cron inspection).
+- **Read-only API/dashboard health** — automation verdict visible on the dashboard Today page via `GET /operator/automation-status`.
+- **Public-repo guardrails** — gitleaks secret scan, grouped Dependabot updates, workflow read-only permissions, hygiene script, and documented security policy.
+- **Human-reviewed outreach** — drafting/copilot flows produce suggestions; there is no autonomous send path.
 
-- Drafting/copilot flows generate suggestions only; there is no autonomous send path.
-- Sensitive operational datasets are intentionally kept outside Git.
-- Public business claims follow canonical docs and site data.
+## Architecture at a glance
 
-## Monorepo apps
+```mermaid
+flowchart LR
+  Gmail[Gmail / archives] --> MailRefresh[auto-refresh-mail]
+  MailRefresh --> SQLite[(SQLite operational truth)]
+  SQLite --> DailyCore[daily-core + email_mart_features]
+  DailyCore --> Reports[reports / safety state]
+  DailyCore --> Mirror[auto-mirror-dashboard]
+  Mirror --> Postgres[(Postgres read mirror)]
+  Postgres --> API[FastAPI read-only API]
+  API --> Dashboard[React operator dashboard]
+  Web[Astro public website] -. separate public surface .- Dashboard
+```
 
-| App | Path | Stack |
-|-----|------|-------|
-| Website | [`apps/web/`](apps/web/) | Astro 5, Tailwind 4, TypeScript, Node 20 |
-| Email pipeline | [`apps/email-pipeline/`](apps/email-pipeline/) | Python 3.12, `uv`, SQLite, operator CLIs/scripts, optional CUDA ML (**no product UI**) |
-| Operator API | [`apps/api/`](apps/api/) | FastAPI :8001 — operator routes + `GET /mirror/*` Postgres reporting |
-| Dashboard | [`apps/dashboard/`](apps/dashboard/) | React + Vite — read-only operator **Today** UI |
+| Layer | Role |
+|-------|------|
+| Gmail / archives | External source |
+| SQLite | Operational truth (ingest, safety, sidecars) |
+| Postgres | Read-only dashboard/reporting mirror |
+| API / dashboard | Read-only operator surfaces |
+| `apps/web` | Public marketing site (separate from operator stack) |
 
-## Quick demo
+Streamlit UI in `apps/email-pipeline` was **retired** (2026-06-04). Active operator UI: **`apps/dashboard`** + **`apps/api`**.
+
+## Applications
+
+| App | Path | Stack | Role | Writes? |
+|-----|------|-------|------|---------|
+| **Web** | [`apps/web/`](apps/web/) | Astro 5, Tailwind 4, TypeScript | Public marketing site | No operational data |
+| **Email pipeline** | [`apps/email-pipeline/`](apps/email-pipeline/) | Python 3.12, `uv`, SQLite | Ingest, mart, reports, safety, operator CLIs | Yes — local SQLite/reports when explicitly applied |
+| **Operator API** | [`apps/api/`](apps/api/) | FastAPI | Read-only HTTP API (`:8001`) | No mutation |
+| **Dashboard** | [`apps/dashboard/`](apps/dashboard/) | React, Vite | Read-only operator **Today** UI (`:5173`) | No mutation |
+
+**Default ports:** API `:8001` · Dashboard `:5173` · Web dev/preview `:4321`
+
+## Automation model
+
+Two debounced cron loops keep operational truth and the dashboard mirror fresh without coupling ingest to publish:
+
+| Loop | Cadence | Tracked wrapper | Purpose |
+|------|---------|-----------------|---------|
+| **A** — mail refresh | ~3 min | [`scripts/operator/run_auto_refresh_mail.sh`](apps/email-pipeline/scripts/operator/run_auto_refresh_mail.sh) | Gmail → SQLite via `auto-refresh-mail --once --apply` when gates pass |
+| **B** — dashboard mirror | ~15 min | [`scripts/operator/run_auto_mirror_dashboard.sh`](apps/email-pipeline/scripts/operator/run_auto_mirror_dashboard.sh) | SQLite → Postgres/dashboard via `auto-mirror-dashboard --once --apply` |
+
+Gates include dirty/pending mail state, quiet window, mirror cooldown, live locks, pause files, successful `daily-core`, and explicit `--apply` / `--allow-non-scratch-postgres` consent. Wrappers are thin; safety logic lives in the operator CLI.
+
+**Cron runbook:** [`apps/email-pipeline/docs/pipeline/OPERATOR_CRON.md`](apps/email-pipeline/docs/pipeline/OPERATOR_CRON.md)
+
+**Check status (read-only):**
+
+```bash
+cd apps/email-pipeline
+uv run origenlab operator-automation-status
+```
+
+Automation health is also exposed on the dashboard Today page and via `GET /operator/automation-status` (API skips live crontab inspection).
+
+## Source-of-truth boundaries
+
+- **Gmail / archives** — external source; not in Git.
+- **SQLite** — operational truth for ingest, outbound safety, and send decisions.
+- **Postgres** — read-only dashboard/reporting mirror when auto-mirror publishes.
+- **API / dashboard** — read-only operator surfaces; mirror responses are not send approval.
+- **Send / outreach** — human-reviewed batches via email-pipeline scripts; no autonomous send path.
+- **Generated datasets** — `reports/out`, `reports/in`, SQLite files, and mail exports stay out of Git.
+
+Canonical outbound rules: [`apps/email-pipeline/docs/OUTBOUND_SOURCE_OF_TRUTH.md`](apps/email-pipeline/docs/OUTBOUND_SOURCE_OF_TRUTH.md)
+
+## Quick start
+
+**Website**
 
 ```bash
 cd apps/web
 npm ci
-npm run build
-npm run preview
+npm run dev
 ```
+
+**Operator API**
 
 ```bash
-cd apps/api && uv sync && uv run uvicorn origenlab_api.main:app --port 8001
-cd apps/dashboard && npm ci && npm run dev
+cd apps/api
+uv sync
+uv run uvicorn origenlab_api.main:app --host 127.0.0.1 --port 8001
 ```
 
-Open `http://localhost:4321` (web preview) and `http://localhost:5173` (operator dashboard → API on **:8001**).
-Streamlit Python UI in `apps/email-pipeline` was **removed** (2026-06-04). Active operator UI: **`apps/dashboard`** + **`apps/api`** — see [`apps/email-pipeline/docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md`](apps/email-pipeline/docs/audits/ACTIVE_STACK_AND_STREAMLIT_RETIREMENT_PLAN_20260604.md).
+**Dashboard** (expects API on `:8001`)
 
-## Validate active operator stack
+```bash
+cd apps/dashboard
+npm ci
+npm run dev
+```
 
-Default local check before PRs that touch the active operator stack (email-pipeline, API, dashboard):
+Open `http://localhost:5173` (dashboard) and `http://localhost:4321` (web).
+
+**Email pipeline — read-only status**
+
+```bash
+cd apps/email-pipeline
+uv sync
+uv run origenlab operator-automation-status
+```
+
+Do not run `--apply`, send, purge, or mirror workflows casually from the README. See app runbooks for operator procedures.
+
+## Validation
+
+**Active operator stack** (email-pipeline, API, dashboard — no send/purge/Alembic):
 
 ```bash
 ./scripts/validate-active-stack.sh
 ```
 
-Runs each app’s validation command in order: email-pipeline `./scripts/validate.sh`, API `./scripts/validate.sh`, dashboard `npm run validate`. Does **not** include the public web app. Does **not** run apply/send/purge/Alembic workflows. Fails fast if the tree is dirty before validation and also checks that validation did not dirty tracked files (inspect `apps/api/uv.lock` drift deliberately — do not silently restore lockfiles).
-
-For a heavier full monorepo check (including web), use [`./scripts/check-all.sh`](scripts/check-all.sh).
-
-## Public release checklist
-
-- Use [`docs/PUBLIC_RELEASE_CHECKLIST.md`](docs/PUBLIC_RELEASE_CHECKLIST.md) before switching repo visibility.
-- Never commit secrets or operational datasets.
-
-## Security and data handling
-
-- Never commit `.env`, API keys, OAuth tokens, or mailbox credentials.
-- Keep operational artifacts (PST/mbox/SQLite/JSONL/reports) outside Git by default.
-- Use [`apps/email-pipeline/.env.example`](apps/email-pipeline/.env.example) as the template.
-- Follow coordinated disclosure in [`SECURITY.md`](SECURITY.md).
-- Public-repo guardrails: [`docs/SECURITY_PUBLIC_REPO.md`](docs/SECURITY_PUBLIC_REPO.md).
+**Public-repo hygiene** (tracked files only; no network):
 
 ```bash
 ./scripts/security/check-public-repo-hygiene.sh
 ```
 
-Pipeline-specific handling is documented at [`apps/email-pipeline/docs/SECURITY.md`](apps/email-pipeline/docs/SECURITY.md).
+For a heavier monorepo check including web: [`./scripts/check-all.sh`](scripts/check-all.sh)
+
+Before changing repo visibility: [`docs/PUBLIC_RELEASE_CHECKLIST.md`](docs/PUBLIC_RELEASE_CHECKLIST.md)
+
+## Security and public-repo safety
+
+This repository is **public**. Do not commit `.env`, SQLite databases, mail archives (`*.pst`, `*.mbox`, `*.jsonl`), `reports/out`, `reports/in`, keys, certs, or client collateral. Templates such as `.env.example` are fine.
+
+| Control | Location |
+|---------|----------|
+| Secret scan (gitleaks) | [`.github/workflows/secret-scan.yml`](.github/workflows/secret-scan.yml) |
+| Dependabot (grouped version + security alerts) | [`.github/dependabot.yml`](.github/dependabot.yml) |
+| Coordinated disclosure | [`SECURITY.md`](SECURITY.md) |
+| Public-repo guide | [`docs/SECURITY_PUBLIC_REPO.md`](docs/SECURITY_PUBLIC_REPO.md) |
+| Pipeline-specific notes | [`apps/email-pipeline/docs/SECURITY.md`](apps/email-pipeline/docs/SECURITY.md) |
 
 ## Documentation
 
-- Monorepo architecture: [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md)
-- Documentation map: [`docs/DOCUMENTATION_MAP.md`](docs/DOCUMENTATION_MAP.md)
-- Web app: [`apps/web/docs/README.md`](apps/web/docs/README.md)
-- Email pipeline: [`apps/email-pipeline/docs/README.md`](apps/email-pipeline/docs/README.md)
-- Operator API: [`apps/api/README.md`](apps/api/README.md)
-- Dashboard (freeze handoff): [`apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md)
-- Contribution guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- Security policy: [`SECURITY.md`](SECURITY.md) · public repo: [`docs/SECURITY_PUBLIC_REPO.md`](docs/SECURITY_PUBLIC_REPO.md)
+| Topic | Doc |
+|-------|-----|
+| Monorepo architecture | [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md) |
+| Documentation map | [`docs/DOCUMENTATION_MAP.md`](docs/DOCUMENTATION_MAP.md) |
+| Email pipeline | [`apps/email-pipeline/docs/README.md`](apps/email-pipeline/docs/README.md) |
+| Operator cron | [`apps/email-pipeline/docs/pipeline/OPERATOR_CRON.md`](apps/email-pipeline/docs/pipeline/OPERATOR_CRON.md) |
+| Operator API | [`apps/api/README.md`](apps/api/README.md) |
+| Dashboard handoff | [`apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md) |
+| Web app | [`apps/web/docs/README.md`](apps/web/docs/README.md) |
+| Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 
 ## License
 

@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: project-maintainers  
-Last reviewed: 2026-05-22
+Last reviewed: 2026-06-10
 
 This is the primary monorepo context document for coding agents and contributors.
 
@@ -15,6 +15,8 @@ OrigenLab monorepo with these active applications:
 - [`apps/email-pipeline`](../apps/email-pipeline/): email archive ingestion, enrichment, and reporting pipeline (Python + uv, **no FastAPI**), including **human-in-the-loop drafting assistance** for OrigenLab / Labdelivery-style commercial email (Tatiana copilot — eval and pilot workflows; **not** an autonomous sender).
 - [`apps/api`](../apps/api/): **only** operator HTTP API (FastAPI on **:8001**) — Dashboard Today routes plus Postgres mirror reporting under **`GET /mirror/*`**.
 - [`apps/dashboard`](../apps/dashboard/): read-only operator React UI (**Today** page) — calls `apps/api` operator routes only, not `/mirror/*`.
+
+**Operator automation (read-only health):** debounced Gmail → SQLite (`auto-refresh-mail`) and SQLite → Postgres/dashboard (`auto-mirror-dashboard`) loops with tracked cron wrappers — see [`OPERATOR_CRON.md`](../apps/email-pipeline/docs/pipeline/OPERATOR_CRON.md). Status: `uv run origenlab operator-automation-status`; also `GET /operator/automation-status` and the dashboard Today automation card (API skips live crontab inspection). Public-repo guardrails: [`SECURITY_PUBLIC_REPO.md`](./SECURITY_PUBLIC_REPO.md).
 
 **Supabase:** not currently implemented. If introduced later, treat it as a **hosted Postgres read mirror** for dashboard/reporting unless a formal source-of-truth migration is explicitly approved. It does not replace SQLite for send/outreach safety.
 
