@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { WarmCaseItem } from "../../api/commercialTypes";
+import type { GmailInteractionAuditSnapshot } from "../../api/gmailInteractionAuditTypes";
 import type { ApiBackend } from "../../api/operatorTypes";
 import { emailDomain } from "../../lib/clientTableView";
+import {
+  SUPPLIER_AUDIT_MISSING_LABEL,
+  supplierAuditDetailLabel,
+} from "../../lib/supplierMirrorDepth";
 import {
   groupSupplierWarmCases,
   type SupplierEntityGroup,
@@ -105,6 +110,7 @@ function filterSupplierGroups(groups: SupplierEntityGroup[], search: string): Su
 export function SupplierEntityGroups({
   backend,
   allItems,
+  auditSnapshot,
   meta,
   loading,
   error,
@@ -113,6 +119,7 @@ export function SupplierEntityGroups({
 }: {
   backend: ApiBackend;
   allItems: WarmCaseItem[];
+  auditSnapshot?: GmailInteractionAuditSnapshot | null;
   meta: {
     data_source: "sqlite" | "postgres_mirror";
     reduced_mode: boolean;
@@ -124,7 +131,10 @@ export function SupplierEntityGroups({
   onRetry: () => void;
   onContactSelect: (email: string) => void;
 }) {
-  const groups = useMemo(() => groupSupplierWarmCases(allItems), [allItems]);
+  const groups = useMemo(
+    () => groupSupplierWarmCases(allItems, auditSnapshot),
+    [allItems, auditSnapshot],
+  );
   const [searchInput, setSearchInput] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
@@ -250,8 +260,9 @@ export function SupplierEntityGroups({
                   className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950"
                   data-testid="supplier-gmail-hint"
                 >
-                  Para historial completo, abrir Gmail desde el hilo o revisar el buzón; esta vista
-                  prioriza el último caso tibio.
+                  {selectedGroup.auditDomain
+                    ? supplierAuditDetailLabel(selectedGroup.auditDomain)
+                    : SUPPLIER_AUDIT_MISSING_LABEL}
                 </p>
                 <p
                   className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800"

@@ -100,6 +100,19 @@ function pickLatestAutomationTimestamp(
 export function buildAutomationSnapshotSummary(
   status: OperatorAutomationStatus,
 ): string | null {
+  if (status.source === "postgres_snapshot") {
+    const parts: string[] = [];
+    if (status.snapshot_stale) {
+      parts.push("Snapshot publicado, pero desactualizado");
+    } else {
+      parts.push(AUTOMATION_SNAPSHOT_PUBLISHED_PRIMARY);
+    }
+    parts.push("Fuente: espejo Postgres");
+    if (status.snapshot_updated_at) {
+      parts.push(`Actualizado: ${formatAutomationTimestamp(status.snapshot_updated_at)}`);
+    }
+    return parts.join(" · ");
+  }
   if (operatorAutomationStatePartiallyMissing(status)) {
     return null;
   }
@@ -139,6 +152,9 @@ export const AUTOMATION_MISSING_STATE_HELP =
 export function operatorAutomationStatePartiallyMissing(
   status: OperatorAutomationStatus,
 ): boolean {
+  if (status.source === "postgres_snapshot") {
+    return false;
+  }
   return (
     status.daily_core.exists === false ||
     !status.mail_auto_refresh.state_exists ||

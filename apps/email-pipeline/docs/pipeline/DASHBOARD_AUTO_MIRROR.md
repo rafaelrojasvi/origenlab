@@ -72,6 +72,11 @@ uv run origenlab mirror-dashboard --live --apply \
 - **No Gmail** ingest
 - **No send / purge / NDR apply**
 - **No dashboard UI writes** (Postgres mirror sync only)
+- **`--include-operator-snapshots`** (part of `--live`): publishes read-only dashboard evidence to `ops.pipeline_kv`:
+  - `dashboard_gmail_interaction_audit_v1` — compact per-domain Gmail/SQLite interaction counts (subjects only; no bodies)
+  - `operator_automation_status_snapshot_v1` — redacted automation health from local `active/current` (no filesystem paths)
+
+These snapshots are **read-only dashboard evidence**. They do **not** authorize sending, export, or outreach. Production API reads them from Postgres; local dev may still fall back to filesystem `active/current`.
 
 Postgres mirror and dashboard LISTO are **not send approval**.
 

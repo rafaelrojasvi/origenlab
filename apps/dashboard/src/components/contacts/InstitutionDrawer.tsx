@@ -1,3 +1,4 @@
+import type { GmailInteractionAuditSnapshot } from "../../api/gmailInteractionAuditTypes";
 import type { CustomerInstitutionGroup } from "../../lib/customerInstitutionGroups";
 import { formatDashboardDateTime } from "../../lib/dashboardDateFormat";
 import { institutionGmailHistorySummary } from "../../lib/institutionMirrorDepth";
@@ -15,15 +16,17 @@ import { ContactEmailButton } from "../commercial/ContactEmailButton";
 
 export function InstitutionDrawer({
   group,
+  auditSnapshot,
   onClose,
   onSelectEmail,
 }: {
   group: CustomerInstitutionGroup;
+  auditSnapshot?: GmailInteractionAuditSnapshot | null;
   onClose: () => void;
   onSelectEmail?: (email: string) => void;
 }) {
   const chips = institutionStatusChips(group);
-  const gmailSummary = institutionGmailHistorySummary(group);
+  const gmailSummary = institutionGmailHistorySummary(group, auditSnapshot);
   const riskRows = group.rows.flatMap((row) => parseRiskFlagChips(row.risk_flags));
 
   return (
@@ -138,6 +141,10 @@ export function InstitutionDrawer({
               <div>
                 <dt className="text-[var(--color-muted)]">Gmail detectado</dt>
                 <dd>{gmailSummary.detectedLine}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--color-muted)]">SQLite/Gmail publicado</dt>
+                <dd data-testid="institution-sqlite-audit-line">{gmailSummary.sqliteLine}</dd>
               </div>
               {group.hasGmailHistory ? (
                 <>

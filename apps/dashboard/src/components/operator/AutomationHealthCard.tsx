@@ -187,6 +187,15 @@ export function AutomationHealthCard({
           </p>
           <p>{AUTOMATION_MISSING_STATE_HELP}</p>
         </div>
+      ) : status.source === "postgres_snapshot" && snapshotSummary ? (
+        <div
+          className="mt-3 space-y-1 rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs text-emerald-950"
+          data-testid="automation-postgres-snapshot"
+        >
+          <p className="text-sm font-semibold text-emerald-950" data-testid="automation-snapshot-summary">
+            {snapshotSummary}
+          </p>
+        </div>
       ) : snapshotSummary ? (
         <p
           className="mt-3 rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs text-emerald-950"
