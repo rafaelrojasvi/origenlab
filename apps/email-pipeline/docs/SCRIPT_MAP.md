@@ -10,7 +10,7 @@ Last reviewed: 2026-06-04 (post-#93 refactor checkpoint — script surface class
 cd apps/email-pipeline
 uv run origenlab --help
 # status · daily-health · refresh-safety · validate-csvs · check-readiness · post-send-digest
-# export-dnr · ndr-review · audit-overlap  (+ build-mart · gmail-ingest-help — see OPERATOR_COMMAND_SURFACE)
+# export-dnr · ndr-review · contact-universe-review · audit-overlap  (+ build-mart · gmail-ingest-help — see OPERATOR_COMMAND_SURFACE)
 # fallback: uv run python -m origenlab_email_pipeline.cli <subcommand>
 ```
 
@@ -53,6 +53,7 @@ Mapped from [`operator_cli/constants.py`](../src/origenlab_email_pipeline/operat
 | `scripts/qa/build_post_send_digest.py` | superseded_by_origenlab | `origenlab post-send-digest` | SQLite | `reports/out` only | low | `uv run origenlab post-send-digest` | After `audit_contacted_universe` |
 | `scripts/qa/export_do_not_repeat_master.py` | superseded_by_origenlab | `origenlab export-dnr` | SQLite | `reports/out` only | low | `uv run origenlab export-dnr` | Volume lane DNR input |
 | `scripts/qa/build_ndr_review_queue.py` | superseded_by_origenlab | `origenlab ndr-review` | SQLite (read) | `reports/out` only | low | `uv run origenlab ndr-review` | **No** suppression apply |
+| `scripts/leads/build_contact_universe_review.py` | superseded_by_origenlab | `origenlab contact-universe-review` | SQLite, active/current CSVs, archive research/campaign CSVs, campaign JSON | `reports/out` only | low | `uv run origenlab contact-universe-review --json` | Read-only contact universe review; no Gmail/Postgres/mirror/send mutations; inventory metadata only by default; supports `--focus-domain` |
 | `scripts/qa/export_contacted_lead_overlap_audit.py` | superseded_by_origenlab | `origenlab audit-overlap` | SQLite | `reports/out` only | low | `uv run origenlab audit-overlap` | Pre-send overlap |
 | `scripts/qa/audit_module_facades.py` | superseded_by_origenlab | `origenlab audit-facades` | `src/` scan | — | low | `uv run origenlab audit-facades` | Read-only facade audit |
 | `scripts/qa/audit_institution_grouping.py` | superseded_by_origenlab | `origenlab audit-institution-grouping` | SQLite mart | `reports/out` only | low | `uv run origenlab audit-institution-grouping` | Institution/domain grouping — **not** send safety |
