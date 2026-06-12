@@ -78,8 +78,8 @@ def test_mirror_list_prospects_shape(lead_mirror_client: TestClient) -> None:
     assert body["data_source"] == "postgres_mirror"
     _assert_lead_disclaimer_spacing(body["disclaimer"])
     assert "revisión humana" in body["disclaimer"].lower()
-    assert body["total"] == 7
-    assert len(body["items"]) == 7
+    assert body["total"] == 12
+    assert len(body["items"]) == 12
     keys: set[str] = set()
     _collect_keys(body, keys)
     assert not (_FORBIDDEN_RESPONSE_KEYS & keys)
@@ -101,8 +101,9 @@ def test_filter_classification_and_search(lead_mirror_client: TestClient) -> Non
         params={"classification": "net_new_safe_review", "limit": 50},
     )
     assert r.status_code == 200
-    assert len(r.json()["items"]) == 1
-    assert r.json()["items"][0]["organization_name"] == "Acme Labs"
+    items = r.json()["items"]
+    assert len(items) == 6
+    assert any(i["organization_name"] == "Acme Labs" for i in items)
 
     r2 = lead_mirror_client.get("/mirror/leads/prospects", params={"q": "Hospital", "limit": 50})
     assert r2.status_code == 200
@@ -123,8 +124,8 @@ def test_summary_counts(lead_mirror_client: TestClient) -> None:
     r = lead_mirror_client.get("/mirror/leads/summary")
     assert r.status_code == 200
     body = r.json()
-    assert body["total"] == 8
-    assert body["net_new_safe"] == 1
+    assert body["total"] == 13
+    assert body["net_new_safe"] == 3
     assert body["gmail_historico"] == 2
     assert body["followup_antiguo"] == 1
     assert body["caso_activo"] == 1
@@ -197,9 +198,103 @@ def test_contact_scope_followup_sent_no_inbound(lead_mirror_client: TestClient) 
     )
     assert r.status_code == 200
     for item in r.json()["items"]:
-        assert (item.get("gmail_sent_count") or 0) > 0
         assert (item.get("gmail_received_count") or 0) == 0
         assert item["is_blocked"] is False
+
+
+def test_contact_scope_contacted_includes_outreach_exact_match(
+    lead_mirror_client: TestClient,
+) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "contacted", "q": "sidecar-exact", "limit": 50},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    item = items[0]
+    assert item["email"] == "ops@sidecar-exact.cl"
+    assert (item.get("gmail_sent_count") or 0) == 0
+    assert (item.get("gmail_received_count") or 0) == 0
+
+
+def test_contact_scope_contacted_includes_institutional_domain_match(
+    lead_mirror_client: TestClient,
+) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "contacted", "q": "institutional", "limit": 50},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["email"] == "new@institutional.cl"
+    assert (items[0].get("gmail_sent_count") or 0) == 0
+
+
+def test_contact_scope_contacted_excludes_public_webmail_domain_match(
+    lead_mirror_client: TestClient,
+) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "contacted", "q": "freemail", "limit": 50},
+    )
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+
+
+def test_contact_scope_followup_includes_outreach_contacted_no_inbound(
+    lead_mirror_client: TestClient,
+) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "followup", "q": "sidecar-followup", "limit": 50},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    item = items[0]
+    assert item["email"] == "followup@sidecar-followup.cl"
+    assert (item.get("gmail_received_count") or 0) == 0
+    assert item["is_blocked"] is False
+
+
+def test_contact_scope_active_includes_outreach_replied(
+    lead_mirror_client: TestClient,
+) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "active", "q": "sidecar-replied", "limit": 50},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["email"] == "active@sidecar-replied.cl"
+
+
+def test_contact_scope_net_new_excludes_outreach_contacted(
+    lead_mirror_client: TestClient,
+) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "net_new", "limit": 50},
+    )
+    assert r.status_code == 200
+    emails = {i["email"] for i in r.json()["items"]}
+    assert "ops@sidecar-exact.cl" not in emails
+    assert "new@institutional.cl" not in emails
+    assert "buyer@gmail.com" in emails
+
+
+def test_contact_scope_blocked_unchanged(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "blocked", "limit": 50},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["email"] == "blocked@blocked.cl"
 
 
 def test_filter_source_type_caso_activo(lead_mirror_client: TestClient) -> None:
