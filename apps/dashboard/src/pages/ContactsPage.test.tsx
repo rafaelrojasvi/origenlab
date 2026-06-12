@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardDataContext } from "../context/DashboardDataContext";
 import { ContactsPage } from "./ContactsPage";
 import { leadListFixture } from "../test/fixtures/leadIntelFixtures";
-import type { LeadProspectListItemUi, LeadProspectsListUi } from "../api/leadIntelTypes";
+import type { LeadProspectsListUi } from "../api/leadIntelTypes";
 
 vi.mock("../api/mirrorLeadIntelClient", () => ({
   fetchLeadProspectsMirror: vi.fn(),
@@ -45,19 +45,6 @@ function deepsearchFixture(): LeadProspectsListUi {
   };
 }
 
-function rowWithMissingEmail(): LeadProspectListItemUi {
-  return {
-    ...leadListFixture().items[0],
-    prospect_key: "no-email",
-    organization_name: "Sin Email SA",
-    domain: "sinemail.cl",
-    email: null,
-    classification: "research_only_contact_needed",
-    final_score: 60,
-    source_type: "gmail_historico",
-    gmail_sent_count: 1,
-  };
-}
 
 describe("ContactsPage", () => {
   beforeEach(() => {

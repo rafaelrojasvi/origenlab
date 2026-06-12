@@ -10,6 +10,7 @@ function group(partial: Partial<CustomerInstitutionGroup>): CustomerInstitutionG
     sectors: [],
     regions: [],
     buyerTypes: [],
+    institutionTypes: [],
     contactsWithEmail: 1,
     contactsMissingEmail: 0,
     totalRows: 1,
