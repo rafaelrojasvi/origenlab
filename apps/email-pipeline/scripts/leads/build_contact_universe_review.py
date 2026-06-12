@@ -59,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Cap number of source files scanned (debug/smoke)",
     )
+    p.add_argument(
+        "--include-inventory-sources",
+        action="store_true",
+        help="Also scan contact_csv_inventory.json paths (default: inventory metadata only)",
+    )
     p.add_argument("--json", action="store_true", help="Print summary JSON to stdout")
     return p
 
@@ -86,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
         sent_folders=sent_folders,
         focus_domains=focus,
         limit_sources=args.limit_sources,
+        include_inventory_sources=args.include_inventory_sources,
         do_not_repeat_csv=dnr_csv if dnr_csv.is_file() else None,
     )
     paths = write_contact_universe_review_outputs(result, out_dir)

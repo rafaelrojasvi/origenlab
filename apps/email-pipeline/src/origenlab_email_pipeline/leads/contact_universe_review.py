@@ -94,6 +94,18 @@ RECENT_CAMPAIGN_SOURCE_NAMES: frozenset[str] = frozenset(
 )
 
 RECENT_SENT_DAYS = 30
+DEFAULT_MAX_SOURCE_BYTES = 25 * 1024 * 1024
+
+HARD_SKIP_PATH_MARKERS: tuple[str, ...] = (
+    "reports/local/",
+    "tests/",
+    ".venv/",
+    "node_modules/",
+    "scripts/leads/input/chilecompra_zip/",
+)
+
+# Plain ``contacted`` is historical outreach tagging, not an active thread signal.
+ACTIVE_OUTREACH_STATES: frozenset[str] = frozenset({"replied"})
 
 _EMAIL_COLUMNS: tuple[str, ...] = (
     "normalized_email",
@@ -192,6 +204,15 @@ _JSON_EMAIL_KEYS: frozenset[str] = frozenset(
 )
 
 _EMAIL_IN_TEXT_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+@dataclass(frozen=True)
+class SourcePlanEntry:
+    path: Path
+    source_type: SourceType
+    scan: bool
+    notes: str = ""
+    display_path: str = ""
 
 
 @dataclass
@@ -365,6 +386,163 @@ def extract_emails_from_json_value(value: Any, *, _depth: int = 0) -> list[str]:
     return []
 
 
+def outreach_is_active_conversation(outreach_state: str, *, warm: bool) -> bool:
+    """Warm cases and ``replied`` outreach only — not plain ``contacted``."""
+    if warm:
+        return True
+    return (outreach_state or "").strip().lower() in ACTIVE_OUTREACH_STATES
+
+
+def _display_path(path: Path, repo_root: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(repo_root.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def _normalize_rel_path_str(raw: str) -> str:
+    return raw.replace("\\", "/").strip().lower()
+
+
+def source_skip_reason(
+    path: Path,
+    repo_root: Path,
+    *,
+    max_source_bytes: int = DEFAULT_MAX_SOURCE_BYTES,
+) -> str | None:
+    """Return a stable skip reason, or None when the path may be scanned."""
+    rel = _display_path(path, repo_root)
+    rel_norm = _normalize_rel_path_str(rel)
+    for marker in HARD_SKIP_PATH_MARKERS:
+        if rel_norm.startswith(marker) or f"/{marker}" in rel_norm:
+            return f"skipped_hard_path:{marker.rstrip('/')}"
+    name = path.name.lower()
+    if name.startswith("lic_") and name.endswith(".normalized.csv"):
+        return "skipped_raw_licitacion_csv"
+    if name.startswith("lic_") and name.endswith(".csv"):
+        return "skipped_raw_licitacion_csv"
+    if path.is_file():
+        try:
+            if path.stat().st_size > max_source_bytes:
+                return "skipped_size_cap"
+        except OSError:
+            return "skipped_stat_error"
+    return None
+
+
+def _parse_inventory_paths(repo_root: Path, active_current: Path) -> list[Path]:
+    inventory_path = active_current / "contact_csv_inventory.json"
+    if not inventory_path.is_file():
+        return []
+    try:
+        inv = json.loads(inventory_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    items = inv if isinstance(inv, list) else inv.get("files", [])
+    paths: list[Path] = []
+    seen: set[str] = set()
+    for item in items:
+        raw = ""
+        if isinstance(item, str):
+            raw = item
+        elif isinstance(item, dict):
+            raw = str(item.get("path") or item.get("file") or "")
+        if not raw:
+            continue
+        p = Path(raw)
+        if not p.is_absolute():
+            p = repo_root / p
+        key = str(p)
+        if key in seen:
+            continue
+        seen.add(key)
+        paths.append(p)
+    return paths
+
+
+def build_source_plan(
+    repo_root: Path,
+    *,
+    active_current: Path,
+    include_inventory_sources: bool = False,
+    max_source_bytes: int = DEFAULT_MAX_SOURCE_BYTES,
+    limit_sources: int | None = None,
+) -> list[SourcePlanEntry]:
+    """Curated scan set by default; inventory paths are metadata-only unless opted in."""
+    entries: list[SourcePlanEntry] = []
+    seen_scan_keys: set[str] = set()
+
+    def add_entry(
+        path: Path,
+        source_type: SourceType,
+        *,
+        scan: bool,
+        notes: str = "",
+    ) -> None:
+        display = _display_path(path, repo_root)
+        effective_scan = scan
+        effective_notes = notes
+        if effective_scan:
+            skip = source_skip_reason(path, repo_root, max_source_bytes=max_source_bytes)
+            if skip:
+                effective_scan = False
+                effective_notes = skip if not effective_notes else f"{effective_notes};{skip}"
+        key = str(path.resolve()) if path.exists() else str(path)
+        if effective_scan:
+            if key in seen_scan_keys:
+                return
+            seen_scan_keys.add(key)
+        entries.append(
+            SourcePlanEntry(
+                path=path,
+                source_type=source_type,
+                scan=effective_scan,
+                notes=effective_notes,
+                display_path=display,
+            )
+        )
+
+    for name in ACTIVE_CURRENT_CSV_NAMES:
+        add_entry(active_current / name, "active_current", scan=True)
+
+    conv_dir = active_current / "email_conversation_intelligence"
+    if conv_dir.is_dir():
+        for p in sorted(conv_dir.glob("*.csv")):
+            add_entry(p, "conversation_intelligence", scan=True)
+
+    archive_research = repo_root / "reports" / "out" / "archive" / "research"
+    if archive_research.is_dir():
+        for p in sorted(archive_research.rglob("*.csv")):
+            add_entry(p, "archive_research", scan=True)
+
+    archive_campaigns = repo_root / "reports" / "out" / "archive" / "campaigns"
+    if archive_campaigns.is_dir():
+        for p in sorted(archive_campaigns.rglob("*.csv")):
+            add_entry(p, "archive_campaign", scan=True)
+
+    campaign_json_dir = repo_root / "scripts" / "leads" / "campaigns" / "data"
+    if campaign_json_dir.is_dir():
+        for p in sorted(campaign_json_dir.glob("*.json")):
+            add_entry(p, "campaign_json", scan=True)
+
+    for inv_path in _parse_inventory_paths(repo_root, active_current):
+        if include_inventory_sources:
+            add_entry(inv_path, "inventory", scan=True)
+        else:
+            would_skip = source_skip_reason(inv_path, repo_root, max_source_bytes=max_source_bytes)
+            notes = "inventory_not_scanned_by_default"
+            if would_skip:
+                notes = f"{notes};would_skip:{would_skip}"
+            add_entry(inv_path, "inventory", scan=False, notes=notes)
+
+    if limit_sources is not None and limit_sources >= 0:
+        scanned = [e for e in entries if e.scan][:limit_sources]
+        metadata = [e for e in entries if not e.scan]
+        entries = scanned + metadata
+
+    return entries
+
+
 def classify_recommended_bucket(inp: BucketInput) -> tuple[str, str]:
     """Return (recommended_bucket, review_reason)."""
     if inp.invalid_email or not inp.email:
@@ -490,95 +668,32 @@ def _scan_json_file(
     return len(emails)
 
 
-def discover_source_paths(
-    repo_root: Path,
-    *,
-    active_current: Path,
-    limit_sources: int | None = None,
-) -> list[tuple[Path, SourceType]]:
-    paths: list[tuple[Path, SourceType]] = []
-
-    inventory_path = active_current / "contact_csv_inventory.json"
-    if inventory_path.is_file():
-        try:
-            inv = json.loads(inventory_path.read_text(encoding="utf-8"))
-            for item in inv if isinstance(inv, list) else inv.get("files", []):
-                if isinstance(item, str):
-                    p = Path(item)
-                    if not p.is_absolute():
-                        p = repo_root / p
-                    paths.append((p, "inventory"))
-                elif isinstance(item, dict):
-                    raw = item.get("path") or item.get("file") or ""
-                    if raw:
-                        p = Path(raw)
-                        if not p.is_absolute():
-                            p = repo_root / p
-                        paths.append((p, "inventory"))
-        except (json.JSONDecodeError, OSError, TypeError):
-            pass
-
-    for name in ACTIVE_CURRENT_CSV_NAMES:
-        paths.append((active_current / name, "active_current"))
-
-    conv_dir = active_current / "email_conversation_intelligence"
-    if conv_dir.is_dir():
-        for p in sorted(conv_dir.glob("*.csv")):
-            paths.append((p, "conversation_intelligence"))
-
-    archive_research = repo_root / "reports" / "out" / "archive" / "research"
-    if archive_research.is_dir():
-        for p in sorted(archive_research.rglob("*.csv")):
-            paths.append((p, "archive_research"))
-
-    archive_campaigns = repo_root / "reports" / "out" / "archive" / "campaigns"
-    if archive_campaigns.is_dir():
-        for p in sorted(archive_campaigns.rglob("*.csv")):
-            paths.append((p, "archive_campaign"))
-
-    campaign_json_dir = repo_root / "scripts" / "leads" / "campaigns" / "data"
-    if campaign_json_dir.is_dir():
-        for p in sorted(campaign_json_dir.glob("*.json")):
-            paths.append((p, "campaign_json"))
-
-    seen: set[str] = set()
-    deduped: list[tuple[Path, SourceType]] = []
-    for p, st in paths:
-        key = str(p.resolve()) if p.exists() else str(p)
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append((p, st))
-
-    if limit_sources is not None and limit_sources >= 0:
-        deduped = deduped[:limit_sources]
-    return deduped
-
-
 def collect_candidates_from_sources(
-    source_paths: Iterable[tuple[Path, SourceType]],
+    entries: Iterable[SourcePlanEntry],
 ) -> tuple[dict[str, EmailAccumulator], list[dict[str, str]]]:
     store: dict[str, EmailAccumulator] = {}
     inventory: list[dict[str, str]] = []
 
-    for path, source_type in source_paths:
-        rel = path.name
+    for entry in entries:
+        path = entry.path
         exists = path.is_file()
         extracted = 0
-        notes = ""
-        if exists:
+        notes = entry.notes
+        if entry.scan and exists:
             if path.suffix.lower() == ".json":
-                extracted = _scan_json_file(path, source_type=source_type, store=store)
+                extracted = _scan_json_file(path, source_type=entry.source_type, store=store)
             elif path.suffix.lower() == ".csv":
-                extracted = _scan_csv_file(path, source_type=source_type, store=store)
+                extracted = _scan_csv_file(path, source_type=entry.source_type, store=store)
             else:
-                notes = "skipped_unsupported_extension"
-        else:
-            notes = "missing"
+                notes = notes or "skipped_unsupported_extension"
+        elif entry.scan and not exists:
+            notes = notes or "missing"
+        elif not entry.scan and not notes:
+            notes = "not_scanned"
         inventory.append(
             {
-                "path": rel,
-                "source_type": source_type,
+                "path": entry.display_path or path.name,
+                "source_type": entry.source_type,
                 "exists": str(exists).lower(),
                 "emails_extracted": str(extracted),
                 "notes": notes,
@@ -653,6 +768,7 @@ def enrich_candidates(
         outreach = ctx.all_outreach_state.get(em, "")
         has_response = act.received_count > 0 or outreach == "replied"
         warm = em in ctx.warm_opportunity_contacts
+        active_conversation = outreach_is_active_conversation(outreach, warm=warm)
         dnr = em in ctx.do_not_repeat_emails
         recent_touch = _has_recent_campaign_touch(acc, act, now=now)
         manual = _needs_manual_mapping(acc, ctx)
@@ -667,7 +783,7 @@ def enrich_candidates(
             do_not_repeat=dnr,
             has_recent_campaign_touch=recent_touch,
             has_response=has_response,
-            has_active_or_warm_case=warm or outreach in ("replied", "contacted"),
+            has_active_or_warm_case=active_conversation,
             supplier_domain=supplier,
             invalid_email=False,
             needs_manual_mapping=manual,
@@ -694,7 +810,7 @@ def enrich_candidates(
                 "do_not_repeat": str(dnr).lower(),
                 "has_recent_campaign_touch": str(recent_touch).lower(),
                 "has_response": str(has_response).lower(),
-                "has_active_or_warm_case": str(warm or outreach in ("replied", "contacted")).lower(),
+                "has_active_or_warm_case": str(active_conversation).lower(),
                 "recommended_bucket": bucket,
                 "review_reason": reason,
             }
@@ -910,15 +1026,21 @@ def build_contact_universe_review(
     sent_folders: tuple[str, ...],
     focus_domains: frozenset[str] | None = None,
     limit_sources: int | None = None,
+    include_inventory_sources: bool = False,
+    max_source_bytes: int = DEFAULT_MAX_SOURCE_BYTES,
     do_not_repeat_csv: Path | None = None,
     now: datetime | None = None,
 ) -> ContactUniverseReviewResult:
     """Build read-only contact universe review artifacts."""
     now = now or datetime.now(UTC)
-    source_paths = discover_source_paths(
-        repo_root, active_current=active_current, limit_sources=limit_sources
+    source_plan = build_source_plan(
+        repo_root,
+        active_current=active_current,
+        include_inventory_sources=include_inventory_sources,
+        max_source_bytes=max_source_bytes,
+        limit_sources=limit_sources,
     )
-    store, source_inventory = collect_candidates_from_sources(source_paths)
+    store, source_inventory = collect_candidates_from_sources(source_plan)
 
     conn = connect_readonly(sqlite_path)
     try:
@@ -980,6 +1102,7 @@ def build_contact_universe_review(
         "bucket_counts": dict(bucket_counts),
         "sources_scanned": len(source_inventory),
         "sources_present": sources_present,
+        "include_inventory_sources": include_inventory_sources,
         "focus_domains": sorted(focus_domains) if focus_domains else [],
     }
 
