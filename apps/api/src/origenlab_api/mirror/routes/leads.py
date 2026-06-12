@@ -34,6 +34,7 @@ def mirror_list_lead_prospects(
     campaign_bucket: Annotated[str | None, Query(max_length=80)] = None,
     min_score: Annotated[int | None, Query(ge=0, le=100)] = None,
     include_blocked: Annotated[bool, Query()] = False,
+    contact_scope: Annotated[str | None, Query(max_length=40)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> LeadProspectsListResponse:
     return list_lead_prospects(
@@ -48,6 +49,7 @@ def mirror_list_lead_prospects(
         campaign_bucket=campaign_bucket,
         min_score=min_score,
         include_blocked=include_blocked,
+        contact_scope=contact_scope,
         limit=limit,
     )
 

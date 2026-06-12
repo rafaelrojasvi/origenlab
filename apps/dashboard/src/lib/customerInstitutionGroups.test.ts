@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LeadProspectListItemUi } from "../api/leadIntelTypes";
 import {
   buildCustomerInstitutionGroups,
+  deriveInstitutionType,
   filterCustomerInstitutionGroups,
   institutionNextAction,
   institutionStatusChips,
@@ -151,41 +152,84 @@ describe("customerInstitutionGroups", () => {
     expect(institutionNextAction(gmail)).toMatch(/seguimiento/i);
   });
 
-  it("filters by preset and score", () => {
+  it("derives institution types for hospital, universidad and laboratorio", () => {
+    expect(
+      deriveInstitutionType(
+        row({
+          prospect_key: "h1",
+          organization_name: "Hospital Regional",
+          buyer_type: "hospital_publico",
+          sector: "Salud",
+        }),
+      ),
+    ).toBe("hospital_clinica");
+    expect(
+      deriveInstitutionType(
+        row({
+          prospect_key: "u1",
+          organization_name: "Universidad Austral",
+          buyer_type: "centro_investigacion",
+          campaign_bucket: "university",
+        }),
+      ),
+    ).toBe("universidad");
+    expect(
+      deriveInstitutionType(
+        row({
+          prospect_key: "l1",
+          organization_name: "Lab Servicios SpA",
+          sector: "Laboratorios privados",
+          buyer_type: "laboratorio_privado",
+        }),
+      ),
+    ).toBe("laboratorio_servicio");
+    expect(
+      deriveInstitutionType(
+        row({
+          prospect_key: "r1",
+          organization_name: "RedSalud",
+          domain: "redsalud.gob.cl",
+          sector: "Salud",
+        }),
+      ),
+    ).toBe("hospital_clinica");
+  });
+
+  it("filters by institution type and score", () => {
     const groups = buildCustomerInstitutionGroups([
       row({
         prospect_key: "s1",
-        organization_name: "Safe Co",
-        domain: "safe.cl",
-        email: "ok@safe.cl",
+        organization_name: "Hospital Sur",
+        domain: "hospital.cl",
+        email: "ok@hospital.cl",
         final_score: 90,
+        buyer_type: "hospital_publico",
       }),
       row({
         prospect_key: "s2",
-        organization_name: "Risk Co",
-        domain: "risk.cl",
-        email: "bad@risk.cl",
-        is_blocked: true,
+        organization_name: "Universidad Norte",
+        domain: "universidad.cl",
+        email: "bad@universidad.cl",
+        buyer_type: "centro_investigacion",
+        campaign_bucket: "university",
       }),
     ]);
-    const gmailOnly = filterCustomerInstitutionGroups(groups, {
-      search: "",
-      preset: "blocked_risk",
+    const hospitals = filterCustomerInstitutionGroups(groups, {
+      institutionType: "hospital_clinica",
       sector: "",
       region: "",
       minScore: null,
     });
-    expect(gmailOnly).toHaveLength(1);
-    expect(gmailOnly[0]?.institutionName).toBe("Risk Co");
+    expect(hospitals).toHaveLength(1);
+    expect(hospitals[0]?.institutionName).toBe("Hospital Sur");
 
     const highScore = filterCustomerInstitutionGroups(groups, {
-      search: "",
-      preset: "all",
+      institutionType: "",
       sector: "",
       region: "",
       minScore: 85,
     });
     expect(highScore).toHaveLength(1);
-    expect(highScore[0]?.institutionName).toBe("Safe Co");
+    expect(highScore[0]?.institutionName).toBe("Hospital Sur");
   });
 });

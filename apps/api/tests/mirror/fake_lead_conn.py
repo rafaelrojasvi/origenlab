@@ -210,6 +210,38 @@ class LeadFakeConn(MirrorFakeConn):
                 "gmail_latest_subject_safe": None,
             },
             {
+                "prospect_key": "redsalud-gob-cl",
+                "organization_name": "RedSalud",
+                "contact_name": "Compras",
+                "email": "compras@redsalud.gob.cl",
+                "domain": "redsalud.gob.cl",
+                "sector": "Salud",
+                "region": "RM",
+                "buyer_type": "hospital_publico",
+                "likely_need": "Equipamiento",
+                "product_angle": "centrífugas",
+                "evidence_url": "https://www.redsalud.gob.cl/",
+                "evidence_note": "Red de salud",
+                "source": "gmail_archive",
+                "final_score": 10,
+                "confidence": "alta",
+                "classification": "old_gmail_prospect_review",
+                "spanish_message_angle": "Seguimiento",
+                "risk_flags": "",
+                "block_or_review_reason": "gmail_historico",
+                "recommended_next_action": "Revisar historial",
+                "status": "revision_individual",
+                "campaign_bucket": "hospital",
+                "is_blocked": False,
+                "source_type": "gmail_historico",
+                "dataset_label": "contact_universe_review",
+                "gmail_first_contacted_at": "2024-02-01",
+                "gmail_last_contacted_at": "2025-03-01",
+                "gmail_sent_count": 2,
+                "gmail_received_count": 0,
+                "gmail_latest_subject_safe": "Presentación equipos",
+            },
+            {
                 "prospect_key": "hospitaldemo-cl",
                 "organization_name": "Hospital Demo",
                 "contact_name": None,
@@ -270,28 +302,110 @@ class LeadFakeConn(MirrorFakeConn):
             }
         ]
 
+    @staticmethod
+    def _matches_contact_scope(row: dict[str, Any], scope: str) -> bool:
+        sent = int(row.get("gmail_sent_count") or 0)
+        received = int(row.get("gmail_received_count") or 0)
+        source_type = str(row.get("source_type") or "")
+        if scope == "contacted":
+            return (
+                sent > 0
+                or received > 0
+                or source_type
+                in (
+                    "gmail_historico",
+                    "followup_antiguo",
+                    "caso_activo",
+                    "same_domain_contacted_review",
+                )
+            )
+        if scope == "followup":
+            return sent > 0 and received == 0 and not row["is_blocked"]
+        if scope == "active":
+            return received > 0 or source_type == "caso_activo"
+        if scope == "deepsearch":
+            return source_type == "deepsearch"
+        if scope == "net_new":
+            return sent == 0 and received == 0 and not row["is_blocked"]
+        if scope == "blocked":
+            return bool(row["is_blocked"])
+        return True
+
+    def _detect_contact_scope(self, sql: str) -> str | None:
+        s = " ".join(sql.split()).lower()
+        if "or source_type in (" in s:
+            return "contacted"
+        if "coalesce(gmail_received_count, 0) > 0 or source_type = %s" in s:
+            return "active"
+        if (
+            "coalesce(gmail_sent_count, 0) > 0" in s
+            and "coalesce(gmail_received_count, 0) = 0" in s
+            and "or source_type in" not in s
+        ):
+            return "followup"
+        if (
+            "coalesce(gmail_sent_count, 0) = 0" in s
+            and "coalesce(gmail_received_count, 0) = 0" in s
+            and "or source_type in" not in s
+        ):
+            return "net_new"
+        where = s.split("where", 1)[-1] if "where" in s else ""
+        if where.strip().startswith("source_type = %s"):
+            return "deepsearch"
+        if where.strip().startswith("is_blocked = true") and "coalesce(" not in where:
+            return "blocked"
+        return None
+
     def _apply_filters(self, sql: str, params: list[Any]) -> list[dict[str, Any]]:
         rows = list(self.prospects)
         s = " ".join(sql.split()).lower()
-        idx = 0
-        if "is_blocked = true" in s:
+        p = list(params)
+        i = 0
+
+        scope = self._detect_contact_scope(sql)
+        if scope == "contacted":
+            rows = [r for r in rows if self._matches_contact_scope(r, "contacted")]
+            i += 4
+        elif scope == "followup":
+            rows = [r for r in rows if self._matches_contact_scope(r, "followup")]
+        elif scope == "active":
+            rows = [r for r in rows if self._matches_contact_scope(r, "active")]
+            i += 1
+        elif scope == "deepsearch":
+            rows = [r for r in rows if self._matches_contact_scope(r, "deepsearch")]
+            i += 1
+        elif scope == "net_new":
+            rows = [r for r in rows if self._matches_contact_scope(r, "net_new")]
+        elif scope == "blocked":
+            rows = [r for r in rows if self._matches_contact_scope(r, "blocked")]
+
+        if "is_blocked = true" in s and scope != "blocked":
             rows = [r for r in rows if r["is_blocked"]]
         elif "is_blocked = false" in s:
             rows = [r for r in rows if not r["is_blocked"]]
-        if "source_type = %s" in s:
-            st = str(params[idx])
+
+        if "source_type = %s" in s and scope not in {"deepsearch", "active"}:
+            st = str(p[i])
             rows = [r for r in rows if r.get("source_type") == st]
-            idx += 1
+            i += 1
         if "classification = %s" in s:
-            cls = str(params[idx])
+            cls = str(p[i])
             rows = [r for r in rows if r["classification"] == cls]
-            idx += 1
+            i += 1
+        if "buyer_type = %s" in s:
+            bt = str(p[i])
+            rows = [r for r in rows if r.get("buyer_type") == bt]
+            i += 1
         if "sector ilike" in s:
-            needle = str(params[idx]).strip("%").lower()
+            needle = str(p[i]).strip("%").lower()
             rows = [r for r in rows if needle in (r.get("sector") or "").lower()]
-            idx += 1
+            i += 1
+        if "region ilike" in s:
+            needle = str(p[i]).strip("%").lower()
+            rows = [r for r in rows if needle in (r.get("region") or "").lower()]
+            i += 1
         if "organization_name ilike" in s:
-            like = str(params[idx]).strip("%").lower()
+            like = str(p[i]).strip("%").lower()
             rows = [
                 r
                 for r in rows
@@ -300,7 +414,7 @@ class LeadFakeConn(MirrorFakeConn):
                 or like in (r.get("contact_name") or "").lower()
                 or like in (r.get("domain") or "").lower()
             ]
-            idx += 4
+            i += 4
         return rows
 
     def execute(self, sql: str, params: Any = None) -> _FakeCursor:

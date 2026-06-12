@@ -8,9 +8,39 @@ export type InstitutionViewPreset =
   | "missing_email"
   | "blocked_risk";
 
+export type InstitutionType =
+  | "hospital_clinica"
+  | "universidad"
+  | "laboratorio_servicio"
+  | "laboratorio_publico_instituto"
+  | "agua_ambiente"
+  | "alimentos_agro"
+  | "farmaceutica_biotec"
+  | "mineria_industria_qc"
+  | "centro_id_tecnologico"
+  | "proveedor_vendor"
+  | "otro_revisar";
+
+export const INSTITUTION_TYPE_OPTIONS: ReadonlyArray<{
+  value: InstitutionType | "";
+  label: string;
+}> = [
+  { value: "", label: "Todas" },
+  { value: "hospital_clinica", label: "Hospital / clínica" },
+  { value: "universidad", label: "Universidad" },
+  { value: "laboratorio_servicio", label: "Laboratorio de servicio" },
+  { value: "laboratorio_publico_instituto", label: "Laboratorio público / instituto" },
+  { value: "agua_ambiente", label: "Agua / ambiente" },
+  { value: "alimentos_agro", label: "Alimentos / agro" },
+  { value: "farmaceutica_biotec", label: "Farmacéutica / biotec" },
+  { value: "mineria_industria_qc", label: "Minería / industria QC" },
+  { value: "centro_id_tecnologico", label: "Centro I+D / tecnológico" },
+  { value: "proveedor_vendor", label: "Proveedor / vendor" },
+  { value: "otro_revisar", label: "Otro / revisar" },
+];
+
 export interface CustomerInstitutionFilters {
-  search: string;
-  preset: InstitutionViewPreset;
+  institutionType: InstitutionType | "";
   sector: string;
   region: string;
   minScore: number | null;
@@ -42,8 +72,110 @@ export interface CustomerInstitutionGroup {
   latestSafeSubject: string | null;
   campaignBuckets: string[];
   sourceTypes: string[];
+  institutionTypes: InstitutionType[];
   rows: LeadProspectListItemUi[];
   recommendedNextAction: string;
+}
+
+function blob(row: LeadProspectListItemUi): string {
+  return [
+    row.organization_name,
+    row.domain,
+    row.sector,
+    row.buyer_type,
+    row.risk_flags,
+    row.source_type,
+    row.classification,
+  ]
+    .map((value) => normalizeText(value))
+    .join(" ");
+}
+
+export function deriveInstitutionType(row: LeadProspectListItemUi): InstitutionType {
+  const text = blob(row);
+  if (
+    row.classification === "supplier_or_internal_block" ||
+    text.includes("proveedor") ||
+    text.includes("vendor") ||
+    text.includes("supplier") ||
+    text.includes("interno")
+  ) {
+    return "proveedor_vendor";
+  }
+  if (
+    text.includes("hospital") ||
+    text.includes("clinica") ||
+    text.includes("clínica") ||
+    text.includes("redsalud") ||
+    text.includes("salud") ||
+    row.buyer_type?.includes("hospital")
+  ) {
+    return "hospital_clinica";
+  }
+  if (
+    text.includes("universidad") ||
+    text.includes("university") ||
+    row.buyer_type?.includes("universidad") ||
+    row.campaign_bucket === "university"
+  ) {
+    return "universidad";
+  }
+  if (
+    text.includes("agua") ||
+    text.includes("ambiente") ||
+    text.includes("acuicola") ||
+    text.includes("acuícola") ||
+    row.buyer_type?.includes("acuicola")
+  ) {
+    return "agua_ambiente";
+  }
+  if (text.includes("alimento") || text.includes("agro") || text.includes("food")) {
+    return "alimentos_agro";
+  }
+  if (
+    text.includes("farma") ||
+    text.includes("biotec") ||
+    text.includes("biotech") ||
+    text.includes("biofarma")
+  ) {
+    return "farmaceutica_biotec";
+  }
+  if (
+    text.includes("mineria") ||
+    text.includes("minería") ||
+    text.includes("industria") ||
+    text.includes("qc") ||
+    text.includes("control de calidad")
+  ) {
+    return "mineria_industria_qc";
+  }
+  if (
+    text.includes("instituto") ||
+    text.includes("publico") ||
+    text.includes("público") ||
+    row.buyer_type?.includes("publico")
+  ) {
+    return "laboratorio_publico_instituto";
+  }
+  if (
+    text.includes("investigacion") ||
+    text.includes("investigación") ||
+    text.includes("i+d") ||
+    text.includes("id ") ||
+    text.includes("tecnolog") ||
+    row.buyer_type?.includes("investigacion") ||
+    row.buyer_type?.includes("centro_investigacion")
+  ) {
+    return "centro_id_tecnologico";
+  }
+  if (
+    text.includes("laboratorio") ||
+    row.buyer_type?.includes("laboratorio") ||
+    row.sector?.toLowerCase().includes("laboratorio")
+  ) {
+    return "laboratorio_servicio";
+  }
+  return "otro_revisar";
 }
 
 function normalizeText(value: string | null | undefined): string {
@@ -215,6 +347,9 @@ export function buildCustomerInstitutionGroups(
         null,
       campaignBuckets: uniqueNonEmpty(institutionRows.map((row) => row.campaign_bucket)),
       sourceTypes: uniqueNonEmpty(institutionRows.map((row) => row.source_type)),
+      institutionTypes: uniqueNonEmpty(
+        institutionRows.map((row) => deriveInstitutionType(row)),
+      ) as InstitutionType[],
       rows: [...institutionRows].sort((a, b) => b.final_score - a.final_score),
       recommendedNextAction: "",
     };
@@ -228,25 +363,14 @@ export function buildCustomerInstitutionGroups(
   });
 }
 
-function groupMatchesSearch(group: CustomerInstitutionGroup, search: string): boolean {
-  const q = normalizeText(search);
-  if (!q) return true;
-  if (normalizeText(group.institutionName).includes(q)) return true;
-  if (normalizeText(group.domain).includes(q)) return true;
-  return group.rows.some(
-    (row) =>
-      normalizeText(row.email).includes(q) ||
-      normalizeText(row.contact_name).includes(q) ||
-      normalizeText(row.organization_name).includes(q),
-  );
-}
-
 export function filterCustomerInstitutionGroups(
   groups: CustomerInstitutionGroup[],
   filters: CustomerInstitutionFilters,
 ): CustomerInstitutionGroup[] {
   return groups.filter((group) => {
-    if (!groupMatchesSearch(group, filters.search)) return false;
+    if (filters.institutionType) {
+      if (!group.institutionTypes.includes(filters.institutionType)) return false;
+    }
     if (filters.sector.trim()) {
       const sector = normalizeText(filters.sector);
       if (!group.sectors.some((value) => normalizeText(value).includes(sector))) return false;
@@ -256,19 +380,7 @@ export function filterCustomerInstitutionGroups(
       if (!group.regions.some((value) => normalizeText(value).includes(region))) return false;
     }
     if (filters.minScore != null && group.maxFinalScore < filters.minScore) return false;
-
-    switch (filters.preset) {
-      case "contact_review":
-        return !group.anyBlocked && (group.contactsWithEmail > 0 || group.maxFinalScore >= 70);
-      case "gmail_history":
-        return group.hasGmailHistory;
-      case "missing_email":
-        return group.contactsMissingEmail > 0;
-      case "blocked_risk":
-        return group.anyBlocked || group.anyRisk;
-      default:
-        return true;
-    }
+    return true;
   });
 }
 

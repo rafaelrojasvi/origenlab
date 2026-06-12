@@ -78,8 +78,8 @@ def test_mirror_list_prospects_shape(lead_mirror_client: TestClient) -> None:
     assert body["data_source"] == "postgres_mirror"
     _assert_lead_disclaimer_spacing(body["disclaimer"])
     assert "revisión humana" in body["disclaimer"].lower()
-    assert body["total"] == 6
-    assert len(body["items"]) == 6
+    assert body["total"] == 7
+    assert len(body["items"]) == 7
     keys: set[str] = set()
     _collect_keys(body, keys)
     assert not (_FORBIDDEN_RESPONSE_KEYS & keys)
@@ -123,9 +123,9 @@ def test_summary_counts(lead_mirror_client: TestClient) -> None:
     r = lead_mirror_client.get("/mirror/leads/summary")
     assert r.status_code == 200
     body = r.json()
-    assert body["total"] == 7
+    assert body["total"] == 8
     assert body["net_new_safe"] == 1
-    assert body["gmail_historico"] == 1
+    assert body["gmail_historico"] == 2
     assert body["followup_antiguo"] == 1
     assert body["caso_activo"] == 1
     assert body["blocked_count"] == 1
@@ -149,9 +149,57 @@ def test_filter_source_type_gmail_historico(lead_mirror_client: TestClient) -> N
     )
     assert r.status_code == 200
     items = r.json()["items"]
-    assert len(items) == 1
-    assert items[0]["source_type"] == "gmail_historico"
-    assert items[0]["classification"] == "old_gmail_prospect_review"
+    assert len(items) == 2
+    assert all(i["source_type"] == "gmail_historico" for i in items)
+    assert any(i["organization_name"] == "Gmail Histórico Co" for i in items)
+    assert any(i["organization_name"] == "RedSalud" for i in items)
+
+
+def test_contact_scope_contacted_excludes_deepsearch_only(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "contacted", "limit": 50},
+    )
+    assert r.status_code == 200
+    orgs = {i["organization_name"] for i in r.json()["items"]}
+    assert "Acme Labs" not in orgs
+    assert "Gmail Histórico Co" in orgs
+    assert "RedSalud" in orgs
+
+
+def test_contact_scope_deepsearch_only(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "deepsearch", "limit": 50},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert items
+    assert all(i["source_type"] == "deepsearch" for i in items)
+    assert any(i["organization_name"] == "Acme Labs" for i in items)
+
+
+def test_contact_scope_search_finds_redsalud(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "contacted", "q": "red", "limit": 5},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] >= 1
+    assert any("redsalud" in (i.get("domain") or "").lower() for i in body["items"])
+
+
+def test_contact_scope_followup_sent_no_inbound(lead_mirror_client: TestClient) -> None:
+    r = lead_mirror_client.get(
+        "/mirror/leads/prospects",
+        params={"contact_scope": "followup", "limit": 50},
+    )
+    assert r.status_code == 200
+    for item in r.json()["items"]:
+        assert (item.get("gmail_sent_count") or 0) > 0
+        assert (item.get("gmail_received_count") or 0) == 0
+        assert item["is_blocked"] is False
 
 
 def test_filter_source_type_caso_activo(lead_mirror_client: TestClient) -> None:

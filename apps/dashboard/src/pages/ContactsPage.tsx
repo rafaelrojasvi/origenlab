@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ContactScope } from "../api/leadIntelTypes";
 import type { LeadProspectListItemUi } from "../api/leadIntelTypes";
 import type { GmailInteractionAuditSnapshot } from "../api/gmailInteractionAuditTypes";
 import { fetchGmailInteractionAudit } from "../api/mirrorAuditClient";
@@ -12,14 +13,24 @@ import {
   filterCustomerInstitutionGroups,
   institutionKpis,
   institutionStatusChips,
+  INSTITUTION_TYPE_OPTIONS,
   type CustomerInstitutionGroup,
-  type InstitutionViewPreset,
+  type InstitutionType,
 } from "../lib/customerInstitutionGroups";
 import { institutionGmailHistorySummary } from "../lib/institutionMirrorDepth";
 import { formatMirrorLoadError } from "../lib/humanizeApiError";
 import { useClientTablePagination } from "../lib/useClientTablePagination";
 
 const CUSTOMER_INSTITUTION_LIMIT = 100;
+const SEARCH_DEBOUNCE_MS = 400;
+
+const CONTACT_SCOPE_OPTIONS: ReadonlyArray<{ value: ContactScope; label: string }> = [
+  { value: "contacted", label: "Contactados OrigenLab" },
+  { value: "followup", label: "Seguimiento pendiente" },
+  { value: "active", label: "Conversaciones activas" },
+  { value: "deepsearch", label: "Investigación / DeepSearch" },
+  { value: "blocked", label: "Bloqueados / revisar" },
+];
 
 function KpiCard({ label, value }: { label: string; value: number }) {
   return (
@@ -53,12 +64,15 @@ function InstitutionGmailHistoryCell({
 export function ContactsPage() {
   const { setContactEmail } = useDashboardData();
   const [searchInput, setSearchInput] = useState("");
-  const [preset, setPreset] = useState<InstitutionViewPreset>("all");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [contactScope, setContactScope] = useState<ContactScope>("contacted");
+  const [institutionType, setInstitutionType] = useState<InstitutionType | "">("");
   const [sector, setSector] = useState("");
   const [region, setRegion] = useState("");
   const [minScore, setMinScore] = useState("");
 
   const [items, setItems] = useState<LeadProspectListItemUi[]>([]);
+  const [mirrorTotal, setMirrorTotal] = useState(0);
   const [disclaimer, setDisclaimer] = useState("");
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -66,16 +80,30 @@ export function ContactsPage() {
   const [selectedGroup, setSelectedGroup] = useState<CustomerInstitutionGroup | null>(null);
   const [auditSnapshot, setAuditSnapshot] = useState<GmailInteractionAuditSnapshot | null>(null);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setAppliedSearch(searchInput.trim());
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
   const loadList = useCallback(async () => {
     setListLoading(true);
     setListError(null);
     setListErrorDetail(null);
     try {
+      const parsedMinScore = minScore.trim() ? Number(minScore) : undefined;
       const res = await fetchLeadProspectsMirror({
         limit: CUSTOMER_INSTITUTION_LIMIT,
-        include_blocked: false,
+        contact_scope: contactScope,
+        include_blocked: contactScope === "blocked",
+        q: appliedSearch || undefined,
+        sector: sector.trim() || undefined,
+        region: region.trim() || undefined,
+        min_score: Number.isFinite(parsedMinScore) ? parsedMinScore : undefined,
       });
       setItems(res.items);
+      setMirrorTotal(res.total);
       setDisclaimer(res.disclaimer);
     } catch (e) {
       const formatted = formatMirrorLoadError("No se pudieron cargar instituciones", e);
@@ -84,7 +112,7 @@ export function ContactsPage() {
     } finally {
       setListLoading(false);
     }
-  }, []);
+  }, [appliedSearch, contactScope, minScore, region, sector]);
 
   useEffect(() => {
     void loadList();
@@ -113,20 +141,20 @@ export function ContactsPage() {
   const filteredGroups = useMemo(
     () =>
       filterCustomerInstitutionGroups(allGroups, {
-        search: searchInput,
-        preset,
+        institutionType,
         sector,
         region,
         minScore: minScore.trim() ? Number(minScore) : null,
       }),
-    [allGroups, searchInput, preset, sector, region, minScore],
+    [allGroups, institutionType, sector, region, minScore],
   );
 
-  const kpis = useMemo(() => institutionKpis(allGroups), [allGroups]);
+  const kpis = useMemo(() => institutionKpis(filteredGroups), [filteredGroups]);
 
   const { pageSize, setPage, setPageSize, pagination } = useClientTablePagination(filteredGroups, [
-    searchInput,
-    preset,
+    appliedSearch,
+    contactScope,
+    institutionType,
     sector,
     region,
     minScore,
@@ -135,16 +163,25 @@ export function ContactsPage() {
 
   const pagedGroups = pagination.slice;
 
+  const handleRefresh = () => {
+    setAppliedSearch(searchInput.trim());
+    void loadList();
+  };
+
   return (
     <div className="space-y-6" data-testid="contacts-page">
       <header>
         <h1 className="text-2xl font-semibold text-brand-900">Clientes / instituciones</h1>
         <p className="mt-1 text-sm text-[var(--color-muted)]">
-          Agrupa prospectos compradores por institución, dominio e historial de contacto. Solo lectura; no
-          envía correos.
+          Agrupa instituciones y contactos con historial OrigenLab publicado al espejo. DeepSearch queda
+          separado en Investigación.
+        </p>
+        <p className="mt-1 text-xs text-amber-900" data-testid="institution-send-disclaimer">
+          Este panel no autoriza envíos. Para preparar campañas usar contact-universe-review y revisión
+          humana.
         </p>
         <p className="mt-1 text-xs text-[var(--color-muted)]" data-testid="institution-mirror-limit-note">
-          Muestra hasta {CUSTOMER_INSTITUTION_LIMIT} prospectos desde el espejo actual.
+          Consulta hasta {CUSTOMER_INSTITUTION_LIMIT} filas por vista; el total del espejo puede ser mayor.
         </p>
         <p className="mt-1 text-xs text-[var(--color-muted)]" data-testid="institution-gmail-mirror-note">
           El historial Gmail depende de coincidencias publicadas al espejo; puede no incluir todo el
@@ -152,6 +189,31 @@ export function ContactsPage() {
         </p>
         {disclaimer ? <p className="mt-2 text-xs text-sky-900">{disclaimer}</p> : null}
       </header>
+
+      <div
+        className="flex flex-wrap gap-2"
+        role="tablist"
+        aria-label="Alcance de instituciones"
+        data-testid="institution-scope-tabs"
+      >
+        {CONTACT_SCOPE_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="tab"
+            aria-selected={contactScope === option.value}
+            data-testid={`institution-scope-${option.value}`}
+            onClick={() => setContactScope(option.value)}
+            className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
+              contactScope === option.value
+                ? "border-brand-600 bg-brand-600 text-white"
+                : "border-[var(--color-border)] bg-white text-brand-900 hover:bg-brand-50"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="institution-kpis">
         <KpiCard label="Instituciones" value={kpis.institutions} />
@@ -172,39 +234,42 @@ export function ContactsPage() {
             data-testid="institution-search"
           />
           <select
-            value={preset}
-            onChange={(e) => setPreset(e.target.value as InstitutionViewPreset)}
+            value={institutionType}
+            onChange={(e) => setInstitutionType(e.target.value as InstitutionType | "")}
             className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
-            aria-label="Vista"
-            data-testid="institution-preset-filter"
+            aria-label="Tipo de institución"
+            data-testid="institution-type-filter"
           >
-            <option value="all">Todas</option>
-            <option value="contact_review">Contactar / revisar</option>
-            <option value="gmail_history">Con historial Gmail</option>
-            <option value="missing_email">Falta email</option>
-            <option value="blocked_risk">Bloqueadas / riesgo</option>
+            {INSTITUTION_TYPE_OPTIONS.map((option) => (
+              <option key={option.value || "all"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <input
             placeholder="Sector"
             value={sector}
             onChange={(e) => setSector(e.target.value)}
             className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
+            data-testid="institution-sector-filter"
           />
           <input
             placeholder="Región"
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
+            data-testid="institution-region-filter"
           />
           <input
             placeholder="Score mínimo"
             value={minScore}
             onChange={(e) => setMinScore(e.target.value)}
             className="w-28 rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
+            data-testid="institution-min-score-filter"
           />
           <button
             type="button"
-            onClick={() => void loadList()}
+            onClick={handleRefresh}
             className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
           >
             Actualizar datos
@@ -302,15 +367,18 @@ export function ContactsPage() {
             disabled={listLoading}
           />
         ) : null}
-        <div className="border-t border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-muted)]">
+        <div
+          className="border-t border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-muted)]"
+          data-testid="institution-result-summary"
+        >
           {listLoading ? (
             <p>Cargando…</p>
           ) : listError ? (
             <p>Sin datos de instituciones cargados.</p>
           ) : (
             <p>
-              {filteredGroups.length} institución{filteredGroups.length === 1 ? "" : "es"} ·{" "}
-              {items.length} prospecto{items.length === 1 ? "" : "s"} cargados
+              Mostrando {filteredGroups.length} de {mirrorTotal} coincidencia
+              {mirrorTotal === 1 ? "" : "s"} del espejo
             </p>
           )}
         </div>
