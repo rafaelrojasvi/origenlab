@@ -87,17 +87,18 @@ export function ContactsPage() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  const loadList = useCallback(async () => {
+  const loadList = useCallback(async (searchOverride?: string) => {
     setListLoading(true);
     setListError(null);
     setListErrorDetail(null);
     try {
+      const effectiveSearch = searchOverride ?? appliedSearch;
       const parsedMinScore = minScore.trim() ? Number(minScore) : undefined;
       const res = await fetchLeadProspectsMirror({
         limit: CUSTOMER_INSTITUTION_LIMIT,
         contact_scope: contactScope,
         include_blocked: contactScope === "blocked",
-        q: appliedSearch || undefined,
+        q: effectiveSearch || undefined,
         sector: sector.trim() || undefined,
         region: region.trim() || undefined,
         min_score: Number.isFinite(parsedMinScore) ? parsedMinScore : undefined,
@@ -164,8 +165,9 @@ export function ContactsPage() {
   const pagedGroups = pagination.slice;
 
   const handleRefresh = () => {
-    setAppliedSearch(searchInput.trim());
-    void loadList();
+    const nextSearch = searchInput.trim();
+    setAppliedSearch(nextSearch);
+    void loadList(nextSearch);
   };
 
   return (

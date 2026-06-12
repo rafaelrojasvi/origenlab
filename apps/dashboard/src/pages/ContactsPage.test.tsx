@@ -88,6 +88,7 @@ describe("ContactsPage", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it("shows institution workspace title and groups for contacted scope", async () => {
@@ -128,6 +129,23 @@ describe("ContactsPage", () => {
       );
     });
     await waitFor(() => expect(screen.getByText("RedSalud")).toBeTruthy());
+  });
+
+  it("refresh applies current search before debounce", async () => {
+    render(wrap(<ContactsPage />));
+    await waitFor(() => expect(fetchLeadProspectsMirror).toHaveBeenCalled());
+    vi.mocked(fetchLeadProspectsMirror).mockClear();
+
+    fireEvent.change(screen.getByTestId("institution-search"), {
+      target: { value: "red" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Actualizar datos/i }));
+
+    await waitFor(() => {
+      expect(fetchLeadProspectsMirror).toHaveBeenCalledWith(
+        expect.objectContaining({ q: "red", contact_scope: "contacted" }),
+      );
+    });
   });
 
   it("loads deepsearch scope when Investigación tab is selected", async () => {
