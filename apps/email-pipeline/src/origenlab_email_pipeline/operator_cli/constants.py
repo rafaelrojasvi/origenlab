@@ -24,6 +24,7 @@ SUBCOMMAND_SCRIPTS: dict[str, str] = {
     "post-send-digest": "scripts/qa/build_post_send_digest.py",
     "export-dnr": "scripts/qa/export_do_not_repeat_master.py",
     "ndr-review": "scripts/qa/build_ndr_review_queue.py",
+    "contact-universe-review": "scripts/leads/build_contact_universe_review.py",
     "audit-overlap": "scripts/qa/export_contacted_lead_overlap_audit.py",
     "audit-facades": "scripts/qa/audit_module_facades.py",
     "audit-institution-grouping": "scripts/qa/audit_institution_grouping.py",
@@ -75,6 +76,10 @@ SUBCOMMAND_HELP: dict[str, str] = {
     "post-send-digest": "Post-send digest artifacts (build_post_send_digest.py)",
     "export-dnr": "Export do-not-repeat master lists (export_do_not_repeat_master.py)",
     "ndr-review": "NDR human-review batches — read-only (build_ndr_review_queue.py)",
+    "contact-universe-review": (
+        "Read-only contact universe review export for outreach planning "
+        "(build_contact_universe_review.py)"
+    ),
     "audit-overlap": "Contacted-lead overlap audit CSV (export_contacted_lead_overlap_audit.py)",
     "audit-facades": "Read-only module facade / duplicate basename audit (audit_module_facades.py)",
     "audit-institution-grouping": (
