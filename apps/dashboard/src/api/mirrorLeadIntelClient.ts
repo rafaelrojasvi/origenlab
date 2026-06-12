@@ -41,6 +41,7 @@ export function mirrorLeadProspectsUrl(query: LeadProspectsListQuery = {}): stri
   if (query.buyer_type?.trim()) params.buyer_type = query.buyer_type.trim();
   if (query.campaign_bucket?.trim()) params.campaign_bucket = query.campaign_bucket.trim();
   if (query.min_score != null) params.min_score = query.min_score;
+  if (query.contact_scope?.trim()) params.contact_scope = query.contact_scope.trim();
   return operatorApiUrl(MIRROR_LEADS_PROSPECTS_PATH, params);
 }
 

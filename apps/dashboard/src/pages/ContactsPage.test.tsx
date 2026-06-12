@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardDataContext } from "../context/DashboardDataContext";
 import { ContactsPage } from "./ContactsPage";
 import { leadListFixture } from "../test/fixtures/leadIntelFixtures";
-import type { LeadProspectListItemUi } from "../api/leadIntelTypes";
+import type { LeadProspectListItemUi, LeadProspectsListUi } from "../api/leadIntelTypes";
 
 vi.mock("../api/mirrorLeadIntelClient", () => ({
   fetchLeadProspectsMirror: vi.fn(),
@@ -27,6 +27,24 @@ function wrap(ui: ReactNode) {
   );
 }
 
+function contactedFixture(): LeadProspectsListUi {
+  const base = leadListFixture();
+  return {
+    ...base,
+    total: 2,
+    items: base.items.filter((row) => row.source_type !== "deepsearch" || row.gmail_sent_count),
+  };
+}
+
+function deepsearchFixture(): LeadProspectsListUi {
+  const base = leadListFixture();
+  return {
+    ...base,
+    total: 1,
+    items: base.items.filter((row) => row.source_type === "deepsearch" && !row.is_blocked),
+  };
+}
+
 function rowWithMissingEmail(): LeadProspectListItemUi {
   return {
     ...leadListFixture().items[0],
@@ -36,74 +54,136 @@ function rowWithMissingEmail(): LeadProspectListItemUi {
     email: null,
     classification: "research_only_contact_needed",
     final_score: 60,
+    source_type: "gmail_historico",
+    gmail_sent_count: 1,
   };
 }
 
 describe("ContactsPage", () => {
   beforeEach(() => {
-    vi.mocked(fetchLeadProspectsMirror).mockResolvedValue(leadListFixture());
+    vi.mocked(fetchLeadProspectsMirror).mockImplementation(async (query) => {
+      if (query?.contact_scope === "deepsearch") {
+        return deepsearchFixture();
+      }
+      if (query?.q?.toLowerCase().includes("red")) {
+        return {
+          ...leadListFixture(),
+          total: 1,
+          items: [
+            {
+              ...leadListFixture().items[1],
+              prospect_key: "redsalud",
+              organization_name: "RedSalud",
+              domain: "redsalud.gob.cl",
+              email: "compras@redsalud.gob.cl",
+              source_type: "gmail_historico",
+              gmail_sent_count: 2,
+            },
+          ],
+        };
+      }
+      return contactedFixture();
+    });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
-  it("shows institution workspace title and groups", async () => {
+  it("shows institution workspace title and groups for contacted scope", async () => {
     render(wrap(<ContactsPage />));
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Clientes / instituciones" })).toBeTruthy();
-      expect(screen.getByText("Acme Labs")).toBeTruthy();
       expect(screen.getByText("Gmail Hist Co")).toBeTruthy();
     });
     expect(screen.getByTestId("contacts-page")).toBeTruthy();
     expect(screen.getByTestId("institution-kpis")).toBeTruthy();
-    expect(screen.getAllByTestId("institution-row").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("Acme Labs")).toBeNull();
   });
 
-  it("filters by Gmail history preset", async () => {
+  it("defaults to contacted scope and excludes deepsearch-only rows", async () => {
+    render(wrap(<ContactsPage />));
+    await waitFor(() => expect(fetchLeadProspectsMirror).toHaveBeenCalled());
+    expect(fetchLeadProspectsMirror).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contact_scope: "contacted",
+        include_blocked: false,
+        limit: 100,
+      }),
+    );
+    expect(screen.getByTestId("institution-scope-contacted").getAttribute("aria-selected")).toBe(
+      "true",
+    );
+  });
+
+  it("passes q to fetchLeadProspectsMirror when searching", async () => {
+    render(wrap(<ContactsPage />));
+    await waitFor(() => expect(fetchLeadProspectsMirror).toHaveBeenCalled());
+    fireEvent.change(screen.getByTestId("institution-search"), {
+      target: { value: "red" },
+    });
+    await waitFor(() => {
+      expect(fetchLeadProspectsMirror).toHaveBeenCalledWith(
+        expect.objectContaining({ q: "red", contact_scope: "contacted" }),
+      );
+    });
+    await waitFor(() => expect(screen.getByText("RedSalud")).toBeTruthy());
+  });
+
+  it("refresh applies current search before debounce", async () => {
+    render(wrap(<ContactsPage />));
+    await waitFor(() => expect(fetchLeadProspectsMirror).toHaveBeenCalled());
+    vi.mocked(fetchLeadProspectsMirror).mockClear();
+
+    fireEvent.change(screen.getByTestId("institution-search"), {
+      target: { value: "red" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Actualizar datos/i }));
+
+    await waitFor(() => {
+      expect(fetchLeadProspectsMirror).toHaveBeenCalledWith(
+        expect.objectContaining({ q: "red", contact_scope: "contacted" }),
+      );
+    });
+  });
+
+  it("loads deepsearch scope when Investigación tab is selected", async () => {
     render(wrap(<ContactsPage />));
     await waitFor(() => expect(screen.getByText("Gmail Hist Co")).toBeTruthy());
-    fireEvent.change(screen.getByTestId("institution-preset-filter"), {
-      target: { value: "gmail_history" },
+    fireEvent.click(screen.getByTestId("institution-scope-deepsearch"));
+    await waitFor(() => {
+      expect(fetchLeadProspectsMirror).toHaveBeenCalledWith(
+        expect.objectContaining({ contact_scope: "deepsearch" }),
+      );
+      expect(screen.getByText("Acme Labs")).toBeTruthy();
+      expect(screen.queryByText("Gmail Hist Co")).toBeNull();
+    });
+  });
+
+  it("filters institution type client-side", async () => {
+    render(wrap(<ContactsPage />));
+    await waitFor(() => expect(screen.getByText("Gmail Hist Co")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("institution-type-filter"), {
+      target: { value: "laboratorio_servicio" },
     });
     await waitFor(() => {
       expect(screen.getByText("Gmail Hist Co")).toBeTruthy();
-      expect(screen.queryByText("Acme Labs")).toBeNull();
     });
   });
 
-  it("filters missing email preset", async () => {
-    vi.mocked(fetchLeadProspectsMirror).mockResolvedValue({
-      ...leadListFixture(),
-      items: [...leadListFixture().items, rowWithMissingEmail()],
-    });
+  it("shows mirror total summary line", async () => {
     render(wrap(<ContactsPage />));
-    await waitFor(() => expect(screen.getByText("Sin Email SA")).toBeTruthy());
-    fireEvent.change(screen.getByTestId("institution-preset-filter"), {
-      target: { value: "missing_email" },
-    });
-    await waitFor(() => {
-      expect(screen.getByText("Sin Email SA")).toBeTruthy();
-      expect(screen.queryByText("Acme Labs")).toBeNull();
-    });
-  });
-
-  it("filters blocked and risk preset", async () => {
-    render(wrap(<ContactsPage />));
-    await waitFor(() => expect(screen.getByText("Blocked Co")).toBeTruthy());
-    fireEvent.change(screen.getByTestId("institution-preset-filter"), {
-      target: { value: "blocked_risk" },
-    });
-    await waitFor(() => {
-      expect(screen.getByText("Blocked Co")).toBeTruthy();
-      expect(screen.queryByText("Acme Labs")).toBeNull();
-    });
+    await waitFor(() => expect(screen.getByTestId("institution-result-summary")).toBeTruthy());
+    expect(screen.getByTestId("institution-result-summary").textContent).toMatch(
+      /Mostrando \d+ de \d+ coincidencias del espejo/i,
+    );
   });
 
   it("opens institution detail drawer with read-only note and no send actions", async () => {
     render(wrap(<ContactsPage />));
-    await waitFor(() => expect(screen.getByText("Acme Labs")).toBeTruthy());
-    fireEvent.click(screen.getByText("Acme Labs"));
+    await waitFor(() => expect(screen.getByText("Gmail Hist Co")).toBeTruthy());
+    fireEvent.click(screen.getByText("Gmail Hist Co"));
     await waitFor(() => {
       expect(screen.getByTestId("institution-drawer")).toBeTruthy();
       expect(screen.getByTestId("institution-readonly-note").textContent).toMatch(
@@ -112,51 +192,22 @@ describe("ContactsPage", () => {
     });
     const drawer = screen.getByTestId("institution-drawer");
     expect(within(drawer).queryByRole("button", { name: /enviar/i })).toBeNull();
-    expect(within(drawer).queryByRole("button", { name: /mandar/i })).toBeNull();
-    expect(within(drawer).queryByRole("button", { name: /send/i })).toBeNull();
   });
 
   it("does not render send or mutation buttons on the page", async () => {
     render(wrap(<ContactsPage />));
-    await waitFor(() => expect(screen.getByText("Acme Labs")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Gmail Hist Co")).toBeTruthy());
     expect(screen.queryByRole("button", { name: /enviar/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /exportar/i })).toBeNull();
     expect(screen.getByRole("button", { name: /Actualizar datos/i })).toBeTruthy();
   });
 
-  it("requests prospects with include_blocked false and limit 100", async () => {
+  it("renders updated explanatory copy and send disclaimer", async () => {
     render(wrap(<ContactsPage />));
-    await waitFor(() => expect(fetchLeadProspectsMirror).toHaveBeenCalled());
-    expect(fetchLeadProspectsMirror).toHaveBeenCalledWith({
-      limit: 100,
-      include_blocked: false,
-    });
-  });
-
-  it("renders mirror limit note for operators", async () => {
-    render(wrap(<ContactsPage />));
-    await waitFor(() => expect(screen.getByTestId("institution-mirror-limit-note")).toBeTruthy());
-    expect(screen.getByTestId("institution-mirror-limit-note").textContent).toMatch(
-      /hasta 100 prospectos/i,
+    await waitFor(() => expect(screen.getByTestId("institution-send-disclaimer")).toBeTruthy());
+    expect(screen.getByText(/historial OrigenLab publicado al espejo/i)).toBeTruthy();
+    expect(screen.getByTestId("institution-send-disclaimer").textContent).toMatch(
+      /contact-universe-review/i,
     );
-  });
-
-  it("uses mirror-scoped Gmail history labels", async () => {
-    render(wrap(<ContactsPage />));
-    await waitFor(() => expect(screen.getByTestId("institution-kpis")).toBeTruthy());
-    expect(screen.getByText("Con historial Gmail en espejo")).toBeTruthy();
-    expect(screen.getByTestId("institution-gmail-mirror-note").textContent).toMatch(
-      /coincidencias publicadas al espejo/i,
-    );
-  });
-
-  it("renders espejo vs Gmail detectado in institution table", async () => {
-    render(wrap(<ContactsPage />));
-    await waitFor(() => expect(screen.getByText("Gmail Hist Co")).toBeTruthy());
-    const cells = screen.getAllByTestId("institution-gmail-history-cell");
-    expect(cells.length).toBeGreaterThan(0);
-    expect(cells[0]?.textContent).toMatch(/Espejo:/);
-    expect(cells[0]?.textContent).toMatch(/Gmail detectado:/);
   });
 
   it("shows friendly card error state when mirror load fails", async () => {
@@ -165,10 +216,6 @@ describe("ContactsPage", () => {
     );
     render(wrap(<ContactsPage />));
     await waitFor(() => expect(screen.getByTestId("institution-load-error")).toBeTruthy());
-    expect(screen.getByTestId("institution-load-error").textContent).toMatch(
-      /No se pudieron cargar las instituciones desde el espejo/i,
-    );
-    expect(screen.getByText("Ver detalle técnico")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
   });
 });

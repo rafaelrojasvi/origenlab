@@ -27,6 +27,17 @@ from origenlab_email_pipeline.postgres_dashboard_api.schemas import (
 
 _PROSPECT_TABLE = ("lead_intel", "prospect")
 
+CONTACT_SCOPES: frozenset[str] = frozenset(
+    {"contacted", "followup", "active", "deepsearch", "net_new", "blocked"}
+)
+
+_CONTACTED_SOURCE_TYPES: tuple[str, ...] = (
+    "gmail_historico",
+    "followup_antiguo",
+    "caso_activo",
+    "same_domain_contacted_review",
+)
+
 _LIST_SELECT = """
 SELECT
   prospect_key, organization_name, contact_name, email, domain,
@@ -49,6 +60,54 @@ def _table_available(conn: Connection) -> bool:
     return table_exists(conn, schema=schema, table=table)
 
 
+def contact_scope_sql_clause(contact_scope: str | None) -> str | None:
+    """Return a WHERE fragment for mirror prospect scope filtering."""
+    if not contact_scope:
+        return None
+    scope = contact_scope.strip().lower()
+    if scope not in CONTACT_SCOPES:
+        return None
+    if scope == "contacted":
+        placeholders = ", ".join("%s" for _ in _CONTACTED_SOURCE_TYPES)
+        return (
+            "(COALESCE(gmail_sent_count, 0) > 0 "
+            "OR COALESCE(gmail_received_count, 0) > 0 "
+            f"OR source_type IN ({placeholders}))"
+        )
+    if scope == "followup":
+        return (
+            "(COALESCE(gmail_sent_count, 0) > 0 "
+            "AND COALESCE(gmail_received_count, 0) = 0 "
+            "AND is_blocked = FALSE)"
+        )
+    if scope == "active":
+        return "(COALESCE(gmail_received_count, 0) > 0 OR source_type = %s)"
+    if scope == "deepsearch":
+        return "source_type = %s"
+    if scope == "net_new":
+        return (
+            "(COALESCE(gmail_sent_count, 0) = 0 "
+            "AND COALESCE(gmail_received_count, 0) = 0 "
+            "AND is_blocked = FALSE)"
+        )
+    if scope == "blocked":
+        return "is_blocked = TRUE"
+    return None
+
+
+def contact_scope_sql_params(contact_scope: str | None) -> list[Any]:
+    if not contact_scope:
+        return []
+    scope = contact_scope.strip().lower()
+    if scope == "active":
+        return ["caso_activo"]
+    if scope == "deepsearch":
+        return ["deepsearch"]
+    if scope == "contacted":
+        return list(_CONTACTED_SOURCE_TYPES)
+    return []
+
+
 def list_lead_prospects(
     conn: Connection,
     *,
@@ -62,6 +121,7 @@ def list_lead_prospects(
     campaign_bucket: str | None = None,
     min_score: int | None = None,
     include_blocked: bool = False,
+    contact_scope: str | None = None,
     limit: int = 50,
 ) -> LeadProspectsListResponse:
     if not _table_available(conn):
@@ -72,8 +132,16 @@ def list_lead_prospects(
 
     clauses: list[str] = []
     params: list[Any] = []
+    scope = (contact_scope or "").strip().lower() or None
 
-    if blocked_only:
+    scope_clause = contact_scope_sql_clause(scope)
+    if scope_clause:
+        clauses.append(scope_clause)
+        params.extend(contact_scope_sql_params(scope))
+
+    if scope == "blocked":
+        pass
+    elif blocked_only:
         clauses.append("is_blocked = TRUE")
     elif not include_blocked:
         clauses.append("is_blocked = FALSE")

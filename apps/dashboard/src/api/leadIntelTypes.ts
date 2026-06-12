@@ -121,6 +121,14 @@ export interface LeadResearchSummaryUi {
   disclaimer: string;
 }
 
+export type ContactScope =
+  | "contacted"
+  | "followup"
+  | "active"
+  | "deepsearch"
+  | "net_new"
+  | "blocked";
+
 export type ProspectOriginFilter =
   | ""
   | "deepsearch"
@@ -144,5 +152,6 @@ export interface LeadProspectsListQuery {
   campaign_bucket?: string;
   min_score?: number;
   include_blocked?: boolean;
+  contact_scope?: ContactScope;
   limit?: number;
 }
