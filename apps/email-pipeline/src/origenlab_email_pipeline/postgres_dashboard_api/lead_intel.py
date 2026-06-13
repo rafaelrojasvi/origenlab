@@ -38,6 +38,25 @@ _CONTACTED_SOURCE_TYPES: tuple[str, ...] = (
     "same_domain_contacted_review",
 )
 
+_CONTACTED_OUTREACH_STATES: tuple[str, ...] = ("contacted", "replied")
+_FOLLOWUP_OUTREACH_STATES: tuple[str, ...] = ("contacted",)
+_ACTIVE_OUTREACH_STATES: tuple[str, ...] = ("replied",)
+
+# Institution-domain matching only — exclude consumer webmail domains.
+_PUBLIC_EMAIL_DOMAINS: tuple[str, ...] = (
+    "gmail.com",
+    "googlemail.com",
+    "hotmail.com",
+    "outlook.com",
+    "yahoo.com",
+    "yahoo.cl",
+    "yahoo.es",
+    "icloud.com",
+    "live.com",
+)
+
+_PROSPECT = "lead_intel.prospect"
+
 _LIST_SELECT = """
 SELECT
   prospect_key, organization_name, contact_name, email, domain,
@@ -60,7 +79,53 @@ def _table_available(conn: Connection) -> bool:
     return table_exists(conn, schema=schema, table=table)
 
 
-def contact_scope_sql_clause(contact_scope: str | None) -> str | None:
+def _public_domain_sql_params() -> list[str]:
+    return list(_PUBLIC_EMAIL_DOMAINS)
+
+
+def _outreach_exists_sql(
+    *,
+    states: tuple[str, ...],
+    allow_exact: bool = True,
+    allow_same_domain: bool = True,
+) -> str:
+    state_ph = ", ".join("%s" for _ in states)
+    match_parts: list[str] = []
+    if allow_exact:
+        match_parts.append(
+            f"LOWER(TRIM(ocs.contact_email_norm)) = LOWER(TRIM({_PROSPECT}.email))"
+        )
+    if allow_same_domain:
+        public_ph = ", ".join("%s" for _ in _PUBLIC_EMAIL_DOMAINS)
+        match_parts.append(
+            f"""(
+              {_PROSPECT}.domain IS NOT NULL
+              AND TRIM({_PROSPECT}.domain) <> ''
+              AND LOWER(TRIM({_PROSPECT}.domain)) NOT IN ({public_ph})
+              AND SPLIT_PART(LOWER(TRIM(ocs.contact_email_norm)), '@', 2) = LOWER(TRIM({_PROSPECT}.domain))
+            )"""
+        )
+    match_sql = " OR ".join(match_parts)
+    return f"""EXISTS (
+  SELECT 1
+  FROM outbound.outreach_contact_state ocs
+  WHERE ocs.state IN ({state_ph})
+    AND ({match_sql})
+)"""
+
+
+def _outreach_exists_params(states: tuple[str, ...], *, allow_same_domain: bool = True) -> list[Any]:
+    params: list[Any] = list(states)
+    if allow_same_domain:
+        params.extend(_public_domain_sql_params())
+    return params
+
+
+def contact_scope_sql_clause(
+    contact_scope: str | None,
+    *,
+    include_outreach: bool = True,
+) -> str | None:
     """Return a WHERE fragment for mirror prospect scope filtering."""
     if not contact_scope:
         return None
@@ -69,42 +134,73 @@ def contact_scope_sql_clause(contact_scope: str | None) -> str | None:
         return None
     if scope == "contacted":
         placeholders = ", ".join("%s" for _ in _CONTACTED_SOURCE_TYPES)
-        return (
-            "(COALESCE(gmail_sent_count, 0) > 0 "
-            "OR COALESCE(gmail_received_count, 0) > 0 "
-            f"OR source_type IN ({placeholders}))"
-        )
+        parts = [
+            "COALESCE(gmail_sent_count, 0) > 0",
+            "COALESCE(gmail_received_count, 0) > 0",
+            f"source_type IN ({placeholders})",
+        ]
+        if include_outreach:
+            parts.append(_outreach_exists_sql(states=_CONTACTED_OUTREACH_STATES))
+        return f"({' OR '.join(parts)})"
     if scope == "followup":
-        return (
+        gmail_part = (
             "(COALESCE(gmail_sent_count, 0) > 0 "
             "AND COALESCE(gmail_received_count, 0) = 0 "
             "AND is_blocked = FALSE)"
         )
+        if not include_outreach:
+            return gmail_part
+        outreach_part = (
+            f"(COALESCE(gmail_received_count, 0) = 0 "
+            f"AND is_blocked = FALSE "
+            f"AND {_outreach_exists_sql(states=_FOLLOWUP_OUTREACH_STATES)})"
+        )
+        return f"({gmail_part} OR {outreach_part})"
     if scope == "active":
-        return "(COALESCE(gmail_received_count, 0) > 0 OR source_type = %s)"
+        parts = ["COALESCE(gmail_received_count, 0) > 0", "source_type = %s"]
+        if include_outreach:
+            parts.append(_outreach_exists_sql(states=_ACTIVE_OUTREACH_STATES))
+        return f"({' OR '.join(parts)})"
     if scope == "deepsearch":
         return "source_type = %s"
     if scope == "net_new":
-        return (
+        base = (
             "(COALESCE(gmail_sent_count, 0) = 0 "
             "AND COALESCE(gmail_received_count, 0) = 0 "
-            "AND is_blocked = FALSE)"
+            "AND is_blocked = FALSE"
         )
+        if include_outreach:
+            return f"{base} AND NOT {_outreach_exists_sql(states=_CONTACTED_OUTREACH_STATES)})"
+        return f"{base})"
     if scope == "blocked":
         return "is_blocked = TRUE"
     return None
 
 
-def contact_scope_sql_params(contact_scope: str | None) -> list[Any]:
+def contact_scope_sql_params(
+    contact_scope: str | None,
+    *,
+    include_outreach: bool = True,
+) -> list[Any]:
     if not contact_scope:
         return []
     scope = contact_scope.strip().lower()
     if scope == "active":
-        return ["caso_activo"]
+        params: list[Any] = ["caso_activo"]
+        if include_outreach:
+            params.extend(_outreach_exists_params(_ACTIVE_OUTREACH_STATES))
+        return params
     if scope == "deepsearch":
         return ["deepsearch"]
     if scope == "contacted":
-        return list(_CONTACTED_SOURCE_TYPES)
+        params = list(_CONTACTED_SOURCE_TYPES)
+        if include_outreach:
+            params.extend(_outreach_exists_params(_CONTACTED_OUTREACH_STATES))
+        return params
+    if scope == "followup" and include_outreach:
+        return _outreach_exists_params(_FOLLOWUP_OUTREACH_STATES)
+    if scope == "net_new" and include_outreach:
+        return _outreach_exists_params(_CONTACTED_OUTREACH_STATES)
     return []
 
 
@@ -134,10 +230,13 @@ def list_lead_prospects(
     params: list[Any] = []
     scope = (contact_scope or "").strip().lower() or None
 
-    scope_clause = contact_scope_sql_clause(scope)
+    include_outreach = table_exists(conn, schema="outbound", table="outreach_contact_state")
+    scope_clause = contact_scope_sql_clause(scope, include_outreach=include_outreach)
     if scope_clause:
         clauses.append(scope_clause)
-        params.extend(contact_scope_sql_params(scope))
+        params.extend(
+            contact_scope_sql_params(scope, include_outreach=include_outreach),
+        )
 
     if scope == "blocked":
         pass

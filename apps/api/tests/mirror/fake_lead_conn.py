@@ -6,6 +6,20 @@ from typing import Any
 
 from fake_conn import MirrorFakeConn, _FakeCursor
 
+_PUBLIC_EMAIL_DOMAINS: frozenset[str] = frozenset(
+    {
+        "gmail.com",
+        "googlemail.com",
+        "hotmail.com",
+        "outlook.com",
+        "yahoo.com",
+        "yahoo.cl",
+        "yahoo.es",
+        "icloud.com",
+        "live.com",
+    }
+)
+
 
 class LeadFakeConn(MirrorFakeConn):
     """Postgres fake with sample prospects in lead_intel.* tables."""
@@ -16,6 +30,7 @@ class LeadFakeConn(MirrorFakeConn):
         self.tables[("lead_intel", "evidence")] = True
         self.tables[("lead_intel", "recommendation")] = True
         self.tables[("lead_intel", "block_reason")] = True
+        self.tables[("outbound", "outreach_contact_state")] = True
         self.prospects: list[dict[str, Any]] = [
             {
                 "prospect_key": "contacto-acme-cl",
@@ -273,6 +288,193 @@ class LeadFakeConn(MirrorFakeConn):
                 "gmail_received_count": None,
                 "gmail_latest_subject_safe": None,
             },
+            {
+                "prospect_key": "sidecar-exact-cl",
+                "organization_name": "Sidecar Exact Co",
+                "contact_name": None,
+                "email": "ops@sidecar-exact.cl",
+                "domain": "sidecar-exact.cl",
+                "sector": "Laboratorios",
+                "region": "RM",
+                "buyer_type": "laboratorio_privado",
+                "likely_need": None,
+                "product_angle": "centrífugas",
+                "evidence_url": None,
+                "evidence_note": None,
+                "source": "deepsearch",
+                "final_score": 72,
+                "confidence": "media",
+                "classification": "net_new_safe_review",
+                "spanish_message_angle": "Equipos",
+                "risk_flags": "",
+                "block_or_review_reason": "prospecto_nuevo_seguro",
+                "recommended_next_action": "Revisar historial operacional",
+                "status": "net_new_safe_review",
+                "campaign_bucket": "private_lab",
+                "is_blocked": False,
+                "source_type": "deepsearch",
+                "dataset_label": "phase10b_deepsearch",
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
+            },
+            {
+                "prospect_key": "sidecar-domain-cl",
+                "organization_name": "Institutional Domain Co",
+                "contact_name": None,
+                "email": "new@institutional.cl",
+                "domain": "institutional.cl",
+                "sector": "Salud",
+                "region": "RM",
+                "buyer_type": "hospital_privado",
+                "likely_need": None,
+                "product_angle": "equipos",
+                "evidence_url": None,
+                "evidence_note": None,
+                "source": "deepsearch",
+                "final_score": 71,
+                "confidence": "media",
+                "classification": "net_new_safe_review",
+                "spanish_message_angle": "Equipos",
+                "risk_flags": "",
+                "block_or_review_reason": "prospecto_nuevo_seguro",
+                "recommended_next_action": "Revisar historial operacional",
+                "status": "net_new_safe_review",
+                "campaign_bucket": "hospital",
+                "is_blocked": False,
+                "source_type": "deepsearch",
+                "dataset_label": "phase10b_deepsearch",
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
+            },
+            {
+                "prospect_key": "freemail-domain-cl",
+                "organization_name": "Freemail Consumer",
+                "contact_name": None,
+                "email": "buyer@gmail.com",
+                "domain": "gmail.com",
+                "sector": "Consumo",
+                "region": "RM",
+                "buyer_type": "consumidor",
+                "likely_need": None,
+                "product_angle": None,
+                "evidence_url": None,
+                "evidence_note": None,
+                "source": "deepsearch",
+                "final_score": 40,
+                "confidence": "baja",
+                "classification": "net_new_safe_review",
+                "spanish_message_angle": None,
+                "risk_flags": "",
+                "block_or_review_reason": "prospecto_nuevo_seguro",
+                "recommended_next_action": "Revisar",
+                "status": "net_new_safe_review",
+                "campaign_bucket": "private_lab",
+                "is_blocked": False,
+                "source_type": "deepsearch",
+                "dataset_label": "phase10b_deepsearch",
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
+            },
+            {
+                "prospect_key": "sidecar-followup-cl",
+                "organization_name": "Sidecar Follow-up Co",
+                "contact_name": None,
+                "email": "followup@sidecar-followup.cl",
+                "domain": "sidecar-followup.cl",
+                "sector": "Laboratorios",
+                "region": "RM",
+                "buyer_type": "laboratorio_privado",
+                "likely_need": None,
+                "product_angle": "balances",
+                "evidence_url": None,
+                "evidence_note": None,
+                "source": "deepsearch",
+                "final_score": 68,
+                "confidence": "media",
+                "classification": "net_new_safe_review",
+                "spanish_message_angle": "Seguimiento",
+                "risk_flags": "",
+                "block_or_review_reason": "prospecto_nuevo_seguro",
+                "recommended_next_action": "Seguimiento",
+                "status": "net_new_safe_review",
+                "campaign_bucket": "private_lab",
+                "is_blocked": False,
+                "source_type": "deepsearch",
+                "dataset_label": "phase10b_deepsearch",
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
+            },
+            {
+                "prospect_key": "sidecar-replied-cl",
+                "organization_name": "Sidecar Replied Co",
+                "contact_name": None,
+                "email": "active@sidecar-replied.cl",
+                "domain": "sidecar-replied.cl",
+                "sector": "Laboratorios",
+                "region": "RM",
+                "buyer_type": "laboratorio_privado",
+                "likely_need": None,
+                "product_angle": "equipos",
+                "evidence_url": None,
+                "evidence_note": None,
+                "source": "deepsearch",
+                "final_score": 90,
+                "confidence": "alta",
+                "classification": "net_new_safe_review",
+                "spanish_message_angle": "Conversación activa",
+                "risk_flags": "",
+                "block_or_review_reason": "prospecto_nuevo_seguro",
+                "recommended_next_action": "Responder",
+                "status": "net_new_safe_review",
+                "campaign_bucket": "private_lab",
+                "is_blocked": False,
+                "source_type": "deepsearch",
+                "dataset_label": "phase10b_deepsearch",
+                "gmail_first_contacted_at": None,
+                "gmail_last_contacted_at": None,
+                "gmail_sent_count": None,
+                "gmail_received_count": None,
+                "gmail_latest_subject_safe": None,
+            },
+        ]
+        self.outreach_contact_state: list[dict[str, Any]] = [
+            {
+                "contact_email_norm": "ops@sidecar-exact.cl",
+                "state": "contacted",
+                "source": "mark_sent",
+            },
+            {
+                "contact_email_norm": "peer@institutional.cl",
+                "state": "contacted",
+                "source": "mark_sent",
+            },
+            {
+                "contact_email_norm": "other@gmail.com",
+                "state": "contacted",
+                "source": "mark_sent",
+            },
+            {
+                "contact_email_norm": "followup@sidecar-followup.cl",
+                "state": "contacted",
+                "source": "mark_sent",
+            },
+            {
+                "contact_email_norm": "active@sidecar-replied.cl",
+                "state": "replied",
+                "source": "mark_sent",
+            },
         ]
         self.evidence = [
             {
@@ -303,7 +505,36 @@ class LeadFakeConn(MirrorFakeConn):
         ]
 
     @staticmethod
-    def _matches_contact_scope(row: dict[str, Any], scope: str) -> bool:
+    def _email_domain(email: str) -> str:
+        parts = email.rsplit("@", 1)
+        return parts[-1].strip().lower() if len(parts) == 2 else ""
+
+    @classmethod
+    def _is_public_domain(cls, domain: str) -> bool:
+        return domain.strip().lower() in _PUBLIC_EMAIL_DOMAINS
+
+    def _outreach_matches_prospect(
+        self,
+        row: dict[str, Any],
+        states: frozenset[str] | set[str],
+        *,
+        exact: bool = True,
+        same_domain: bool = True,
+    ) -> bool:
+        email = (row.get("email") or "").strip().lower()
+        domain = (row.get("domain") or "").strip().lower()
+        for ocs in self.outreach_contact_state:
+            if ocs["state"] not in states:
+                continue
+            ocs_email = (ocs.get("contact_email_norm") or "").strip().lower()
+            if exact and email and ocs_email == email:
+                return True
+            if same_domain and domain and not self._is_public_domain(domain):
+                if self._email_domain(ocs_email) == domain:
+                    return True
+        return False
+
+    def _matches_contact_scope(self, row: dict[str, Any], scope: str) -> bool:
         sent = int(row.get("gmail_sent_count") or 0)
         received = int(row.get("gmail_received_count") or 0)
         source_type = str(row.get("source_type") or "")
@@ -318,25 +549,79 @@ class LeadFakeConn(MirrorFakeConn):
                     "caso_activo",
                     "same_domain_contacted_review",
                 )
+                or self._outreach_matches_prospect(row, {"contacted", "replied"})
             )
         if scope == "followup":
-            return sent > 0 and received == 0 and not row["is_blocked"]
+            gmail_followup = sent > 0 and received == 0 and not row["is_blocked"]
+            outreach_followup = (
+                received == 0
+                and not row["is_blocked"]
+                and self._outreach_matches_prospect(row, {"contacted"})
+            )
+            return gmail_followup or outreach_followup
         if scope == "active":
-            return received > 0 or source_type == "caso_activo"
+            return (
+                received > 0
+                or source_type == "caso_activo"
+                or self._outreach_matches_prospect(row, {"replied"})
+            )
         if scope == "deepsearch":
             return source_type == "deepsearch"
         if scope == "net_new":
-            return sent == 0 and received == 0 and not row["is_blocked"]
+            return (
+                sent == 0
+                and received == 0
+                and not row["is_blocked"]
+                and not self._outreach_matches_prospect(row, {"contacted", "replied"})
+            )
         if scope == "blocked":
             return bool(row["is_blocked"])
         return True
 
+    def _has_outreach_scope(self, sql: str) -> bool:
+        return "outbound.outreach_contact_state" in " ".join(sql.split()).lower()
+
+    def _skip_scope_params(self, scope: str | None, sql: str) -> int:
+        if not scope:
+            return 0
+        has_outreach = self._has_outreach_scope(sql)
+        public_n = len(_PUBLIC_EMAIL_DOMAINS)
+        if scope == "contacted":
+            n = 4
+            if has_outreach:
+                n += 2 + public_n
+            return n
+        if scope == "followup" and has_outreach:
+            return 1 + public_n
+        if scope == "active":
+            n = 1
+            if has_outreach:
+                n += 1 + public_n
+            return n
+        if scope == "deepsearch":
+            return 1
+        if scope == "net_new" and has_outreach:
+            return 2 + public_n
+        return 0
+
     def _detect_contact_scope(self, sql: str) -> str | None:
         s = " ".join(sql.split()).lower()
-        if "or source_type in (" in s:
-            return "contacted"
+        if "not exists (" in s and "outbound.outreach_contact_state" in s:
+            return "net_new"
         if "coalesce(gmail_received_count, 0) > 0 or source_type = %s" in s:
             return "active"
+        if (
+            "coalesce(gmail_sent_count, 0) > 0" in s
+            and "coalesce(gmail_received_count, 0) = 0" in s
+            and "is_blocked = false" in s
+            and "or exists (" in s
+            and "outbound.outreach_contact_state" in s
+        ):
+            return "followup"
+        if "or source_type in (" in s or (
+            "or exists (" in s and "outbound.outreach_contact_state" in s
+        ):
+            return "contacted"
         if (
             "coalesce(gmail_sent_count, 0) > 0" in s
             and "coalesce(gmail_received_count, 0) = 0" in s
@@ -347,6 +632,7 @@ class LeadFakeConn(MirrorFakeConn):
             "coalesce(gmail_sent_count, 0) = 0" in s
             and "coalesce(gmail_received_count, 0) = 0" in s
             and "or source_type in" not in s
+            and "not exists" not in s
         ):
             return "net_new"
         where = s.split("where", 1)[-1] if "where" in s else ""
@@ -363,21 +649,9 @@ class LeadFakeConn(MirrorFakeConn):
         i = 0
 
         scope = self._detect_contact_scope(sql)
-        if scope == "contacted":
-            rows = [r for r in rows if self._matches_contact_scope(r, "contacted")]
-            i += 4
-        elif scope == "followup":
-            rows = [r for r in rows if self._matches_contact_scope(r, "followup")]
-        elif scope == "active":
-            rows = [r for r in rows if self._matches_contact_scope(r, "active")]
-            i += 1
-        elif scope == "deepsearch":
-            rows = [r for r in rows if self._matches_contact_scope(r, "deepsearch")]
-            i += 1
-        elif scope == "net_new":
-            rows = [r for r in rows if self._matches_contact_scope(r, "net_new")]
-        elif scope == "blocked":
-            rows = [r for r in rows if self._matches_contact_scope(r, "blocked")]
+        if scope:
+            rows = [r for r in rows if self._matches_contact_scope(r, scope)]
+            i += self._skip_scope_params(scope, sql)
 
         if "is_blocked = true" in s and scope != "blocked":
             rows = [r for r in rows if r["is_blocked"]]
@@ -461,6 +735,18 @@ class LeadFakeConn(MirrorFakeConn):
         if "from lead_intel.block_reason" in s:
             key = str(p[0])
             return _FakeCursor([b for b in self.block_reasons if b["prospect_key"] == key])
+
+        if "from outbound.outreach_contact_state" in s:
+            if "any(%s)" in s:
+                norms = {str(x).strip().lower() for x in p[0]}
+                return _FakeCursor(
+                    [
+                        r
+                        for r in self.outreach_contact_state
+                        if (r.get("contact_email_norm") or "").strip().lower() in norms
+                    ]
+                )
+            return _FakeCursor(self.outreach_contact_state)
 
         if (
             "prospect_key, classification, status, is_blocked, source_type, email"
