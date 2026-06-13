@@ -60,6 +60,8 @@ DANGEROUS_SCRIPT_FRAGMENTS = (
     "build_business_mart.py",
 )
 
+_REVIEW_LIST_CAP = 25
+
 
 @dataclass(frozen=True, slots=True)
 class ImportEdge:
@@ -488,9 +490,51 @@ def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
         ["command", "reference_count", "reference_sources"],
     )
 
-    summary = build_summary(result, out_dir, module_rows, script_rows, cmd_rows)
+    summary = build_summary(
+        result, out_dir, module_rows, script_rows, cmd_rows, zero_mod_rows, zero_script_rows
+    )
     (out_dir / "summary.md").write_text(summary, encoding="utf-8")
-    return build_json_summary(result, out_dir, module_rows, script_rows, cmd_rows)
+    return build_json_summary(
+        result,
+        out_dir,
+        module_rows,
+        script_rows,
+        cmd_rows,
+        zero_mod_rows=zero_mod_rows,
+        zero_script_rows=zero_script_rows,
+    )
+
+
+def _module_review_list_entries(
+    zero_mod_rows: list[dict[str, Any]],
+    *,
+    cap: int = _REVIEW_LIST_CAP,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "module_path": r["module_path"],
+            "module_name": r["module_name"],
+            "doc_reference_count": r["doc_reference_count"],
+            "test_reference_count": r["test_reference_count"],
+            "total_references": r["total_references"],
+        }
+        for r in sorted(zero_mod_rows, key=lambda row: row["module_path"])[:cap]
+    ]
+
+
+def _script_review_list_entries(
+    zero_script_rows: list[dict[str, Any]],
+    *,
+    cap: int = _REVIEW_LIST_CAP,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "script_path": r["script_path"],
+            "python_import_count": r["python_import_count"],
+            "total_references": r["total_references"],
+        }
+        for r in sorted(zero_script_rows, key=lambda row: row["script_path"])[:cap]
+    ]
 
 
 def build_json_summary(
@@ -499,7 +543,12 @@ def build_json_summary(
     module_rows: list[dict[str, Any]],
     script_rows: list[dict[str, Any]],
     cmd_rows: list[dict[str, Any]],
+    *,
+    zero_mod_rows: list[dict[str, Any]] | None = None,
+    zero_script_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    mod_review = _module_review_list_entries(zero_mod_rows or [])
+    script_review = _script_review_list_entries(zero_script_rows or [])
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "out_dir": str(out_dir),
@@ -528,6 +577,8 @@ def build_json_summary(
             key=lambda r: (-r["total_references"], r["script_path"]),
         )[:15],
         "top_commands": cmd_rows[:15],
+        "zero_python_import_module_review_list": mod_review,
+        "zero_doc_reference_script_review_list": script_review,
     }
 
 
@@ -537,8 +588,18 @@ def build_summary(
     module_rows: list[dict[str, Any]],
     script_rows: list[dict[str, Any]],
     cmd_rows: list[dict[str, Any]],
+    zero_mod_rows: list[dict[str, Any]],
+    zero_script_rows: list[dict[str, Any]],
 ) -> str:
-    data = build_json_summary(result, out_dir, module_rows, script_rows, cmd_rows)
+    data = build_json_summary(
+        result,
+        out_dir,
+        module_rows,
+        script_rows,
+        cmd_rows,
+        zero_mod_rows=zero_mod_rows,
+        zero_script_rows=zero_script_rows,
+    )
     lines = [
         "# Import / reference surface audit (read-only planner)",
         "",
@@ -569,6 +630,43 @@ def build_summary(
     lines.extend(["", "## Top `uv run origenlab` command references", ""])
     for row in data["top_commands"][:10]:
         lines.append(f"- `{row['command']}` — {row['reference_count']} doc/test mentions")
+    lines.extend(
+        [
+            "",
+            "## Zero-reference review lists",
+            "",
+            "These are review prompts only. They are not deletion candidates.",
+            "Zero imports/references do not prove deletion safety.",
+            "",
+            "### Zero Python-import modules, non-facade",
+            "",
+        ]
+    )
+    mod_review = data["zero_python_import_module_review_list"]
+    if mod_review:
+        for row in mod_review:
+            lines.append(
+                f"- `{row['module_path']}` — doc {row['doc_reference_count']}, "
+                f"test {row['test_reference_count']}, total {row['total_references']} refs"
+            )
+    else:
+        lines.append("- (none in this scan)")
+    lines.extend(
+        [
+            "",
+            "### Scripts with zero doc/test references, excluding dangerous paths",
+            "",
+        ]
+    )
+    script_review = data["zero_doc_reference_script_review_list"]
+    if script_review:
+        for row in script_review:
+            lines.append(
+                f"- `{row['script_path']}` — python {row['python_import_count']}, "
+                f"total {row['total_references']} refs"
+            )
+    else:
+        lines.append("- (none in this scan)")
     lines.extend(
         [
             "",

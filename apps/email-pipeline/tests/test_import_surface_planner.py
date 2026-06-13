@@ -39,6 +39,7 @@ def _write_synthetic_repo(root: Path) -> None:
         encoding="utf-8",
     )
     (src / "bar.py").write_text("x = 1\n", encoding="utf-8")
+    (src / "orphan_review.py").write_text("# unreferenced module for planner review list\n", encoding="utf-8")
     (core / "keys.py").write_text("KEY = 1\n", encoding="utf-8")
     (src / "business_mart.py").write_text(
         '"""Implementation currently lives in core."""\nfrom origenlab_email_pipeline.core.mart.business_mart import *\n',
@@ -58,6 +59,10 @@ def _write_synthetic_repo(root: Path) -> None:
         "#!/usr/bin/env python3\n"
         "from origenlab_email_pipeline.foo import x\n"
         "if __name__ == '__main__': pass\n",
+        encoding="utf-8",
+    )
+    (scripts_qa / "orphan_review_script.py").write_text(
+        "# unreferenced non-dangerous script for planner review list\n",
         encoding="utf-8",
     )
     (scripts_root / "tools" / "purge_sample.py").parent.mkdir(parents=True)
@@ -156,6 +161,44 @@ def test_dangerous_purge_script_flagged(tmp_path: Path) -> None:
     assert purge["dangerous_path"] == "True"
 
 
+def test_summary_includes_zero_reference_review_lists(tmp_path: Path) -> None:
+    m = _load()
+    _write_synthetic_repo(tmp_path)
+    src = tmp_path / "src" / "origenlab_email_pipeline"
+    out = tmp_path / "out"
+    result = m.scan_roots(src, tmp_path / "scripts", tmp_path / "tests", tmp_path / "docs")
+    summary_json = m.write_reports(result, out)
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+
+    assert "## Zero-reference review lists" in summary
+    assert "review prompts only" in summary
+    assert "not deletion candidates" in summary
+    assert "orphan_review.py" in summary
+    assert "orphan_review_script.py" in summary
+    assert "purge_sample.py" not in summary.split("### Scripts with zero doc/test references")[1]
+    assert "zero_python_import_module_review_list" in summary_json
+    assert "zero_doc_reference_script_review_list" in summary_json
+    assert any(
+        row["module_path"].endswith("orphan_review.py")
+        for row in summary_json["zero_python_import_module_review_list"]
+    )
+    assert any(
+        row["script_path"].endswith("orphan_review_script.py")
+        for row in summary_json["zero_doc_reference_script_review_list"]
+    )
+
+
+def test_json_summary_includes_review_list_keys(tmp_path: Path) -> None:
+    m = _load()
+    _write_synthetic_repo(tmp_path)
+    src = tmp_path / "src" / "origenlab_email_pipeline"
+    out = tmp_path / "out"
+    result = m.scan_roots(src, tmp_path / "scripts", tmp_path / "tests", tmp_path / "docs")
+    report = m.write_reports(result, out)
+    assert isinstance(report["zero_python_import_module_review_list"], list)
+    assert isinstance(report["zero_doc_reference_script_review_list"], list)
+
+
 def test_facade_pair_not_zero_import_delete_proof(tmp_path: Path) -> None:
     m = _load()
     _write_synthetic_repo(tmp_path)
@@ -192,6 +235,8 @@ def test_json_cli_mode(tmp_path: Path) -> None:
     idx = proc.stdout.index("{")
     report = json.loads(proc.stdout[idx:])
     assert report["import_edge_count"] >= 1
+    assert "zero_python_import_module_review_list" in report
+    assert "zero_doc_reference_script_review_list" in report
 
 
 def test_repo_smoke_includes_known_modules() -> None:
