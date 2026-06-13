@@ -156,3 +156,44 @@ def test_scan_tree_production_file_not_tatiana_lab(tmp_path: Path) -> None:
     scans = m.scan_tree(pkg.resolve(), "src")
     assert len(scans) == 1
     assert scans[0].vertical == "outbound"
+
+
+def test_is_excluded_generated_report_py_skips_reports_trees(tmp_path: Path) -> None:
+    m = _load()
+    root = tmp_path / "app"
+    assert m._is_excluded_generated_report_py(
+        root / "reports/local/audit/_audit_runner_snapshot.py",
+        app_root=root,
+    )
+    assert m._is_excluded_generated_report_py(
+        root / "reports/out/active/current/plan_snapshot.py",
+        app_root=root,
+    )
+    assert not m._is_excluded_generated_report_py(
+        root / "scripts/qa/plan_source_quality.py",
+        app_root=root,
+    )
+
+
+def test_iter_py_files_skips_generated_report_artifacts(tmp_path: Path) -> None:
+    m = _load()
+    root = tmp_path / "app"
+    (root / "scripts" / "qa").mkdir(parents=True)
+    (root / "scripts" / "qa" / "maintained.py").write_text("x=1\n", encoding="utf-8")
+    (root / "reports" / "local" / "deep-structure-audit").mkdir(parents=True)
+    (root / "reports" / "local" / "deep-structure-audit" / "_audit_runner_snapshot.py").write_text(
+        "# snapshot\n" * 200,
+        encoding="utf-8",
+    )
+    (root / "reports" / "out" / "active" / "current").mkdir(parents=True)
+    (root / "reports" / "out" / "active" / "current" / "generated_copy.py").write_text(
+        "# copy\n" * 100,
+        encoding="utf-8",
+    )
+
+    files = m.iter_py_files(root.resolve(), app_root=root)
+    assert [p.name for p in files] == ["maintained.py"]
+
+    scans = m.scan_tree(root.resolve(), "scripts", app_root=root)
+    assert len(scans) == 1
+    assert scans[0].path.endswith("scripts/qa/maintained.py")

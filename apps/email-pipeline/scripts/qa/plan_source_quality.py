@@ -6,6 +6,8 @@ use with [`docs/QUALITY_AND_REFACTOR_STRATEGY.md`](../../docs/QUALITY_AND_REFACT
 Does not read SQLite, Gmail, or secrets; does not write outside optional ``--json-out`` path.
 
 Phase 8C extends vertical buckets per ``docs/audits/PHASE8_POST_7C_TREE_CLEANUP_AUDIT_20260603.md`` §3 (planner-only).
+
+Skips Python under ``reports/local/`` and ``reports/out/`` (generated audit snapshots and report artifacts).
 """
 
 from __future__ import annotations
@@ -20,6 +22,12 @@ from pathlib import Path
 APP_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_SRC = APP_ROOT / "src" / "origenlab_email_pipeline"
 _DEFAULT_SCRIPTS = APP_ROOT / "scripts"
+
+# Generated/local report trees — not maintained source (audit snapshots, JSON-out copies).
+_GENERATED_REPORT_PATH_PREFIXES: tuple[str, ...] = (
+    "reports/local/",
+    "reports/out/",
+)
 
 RE_SUBPROCESS = re.compile(r"\bsubprocess\.")
 RE_SQLITE_MUTATION = re.compile(
@@ -76,6 +84,18 @@ def _is_tatiana_lab_path(p: str) -> bool:
 
 def _basename(p: str) -> str:
     return p.rsplit("/", 1)[-1]
+
+
+def _is_excluded_generated_report_py(path: Path, *, app_root: Path = APP_ROOT) -> bool:
+    """Return True for Python files under generated ``reports/local`` or ``reports/out`` trees."""
+    resolved = path.resolve()
+    root = app_root.resolve()
+    try:
+        rel = resolved.relative_to(root).as_posix().lower()
+    except ValueError:
+        posix = resolved.as_posix().lower()
+        return "/reports/local/" in posix or "/reports/out/" in posix
+    return any(rel.startswith(prefix) for prefix in _GENERATED_REPORT_PATH_PREFIXES)
 
 
 def classify_vertical(rel_posix: str) -> str:
@@ -309,21 +329,23 @@ def _scan_text(path: Path, rel: str) -> FileScan:
     )
 
 
-def iter_py_files(root: Path) -> list[Path]:
+def iter_py_files(root: Path, *, app_root: Path = APP_ROOT) -> list[Path]:
     if not root.is_dir():
         return []
     out: list[Path] = []
     for p in root.rglob("*.py"):
         if "__pycache__" in p.parts:
             continue
+        if _is_excluded_generated_report_py(p, app_root=app_root):
+            continue
         out.append(p)
     return sorted(out)
 
 
-def scan_tree(root: Path, label: str) -> list[FileScan]:
+def scan_tree(root: Path, label: str, *, app_root: Path = APP_ROOT) -> list[FileScan]:
     out: list[FileScan] = []
     root = root.resolve()
-    for p in iter_py_files(root):
+    for p in iter_py_files(root, app_root=app_root):
         rel = p.relative_to(root)
         if label == "src":
             rprefix = f"src/origenlab_email_pipeline/{rel.as_posix()}"
