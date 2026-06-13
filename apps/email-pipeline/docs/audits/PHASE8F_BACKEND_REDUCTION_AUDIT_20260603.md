@@ -216,7 +216,7 @@ Full CI pytest is the main **engineering tax** after deps. Splitting CI is optio
 |----|--------|-------------|
 | **8F-1** | Done | `openai` → `lab` group; CI `--group lab`; `tests/test_lab_dependencies.py` |
 | **8F-2** | Done | `hdbscan` → `ml` group; `tests/test_ml_dependencies.py` |
-| **8F-3** | Done | **`docs/DEPENDENCY_GROUPS.md`** — canonical install matrix after 8F-1/8F-2 |
+| **8F-3** | Done | [`docs/DEPENDENCY_GROUPS.md`](../DEPENDENCY_GROUPS.md) — canonical install matrix after 8F-1/8F-2 |
 
 ---
 

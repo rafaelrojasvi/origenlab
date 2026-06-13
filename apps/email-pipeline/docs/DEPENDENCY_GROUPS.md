@@ -2,13 +2,13 @@
 
 Status: canonical install guide  
 Owner: email-pipeline-maintainers  
-Last reviewed: 2026-06-04
+Last reviewed: 2026-06-07
 
 ## Purpose
 
 Explain which `uv sync` dependency groups are needed for each workflow.
 
-Default **`uv sync`** is intentionally small and supports **daily SQLite / document / operator tooling**. Optional groups install heavier or external-service-specific dependencies (OpenAI, Torch, pandas/xlrd, Postgres drivers, Google OAuth).
+Default **`uv sync`** is intentionally small and supports **daily SQLite / document / operator tooling**. Optional groups install heavier or external-service-specific dependencies (OpenAI, Torch, pandas/xlrd, Postgres drivers, Google OAuth). **Keep optional groups out of default installs** unless the workflow you are running actually needs them.
 
 **Phase 8F context:** OpenAI moved to **`lab`** (8F-1); HDBSCAN moved to **`ml`** (8F-2). **`streamlit`** was removed from the repo (2026-06-04); **`data-tools`** holds pandas/xlrd for tests and spreadsheet helpers.
 
@@ -24,12 +24,13 @@ Default **`uv sync`** is intentionally small and supports **daily SQLite / docum
 | ML / embeddings / HDBSCAN / FAISS / Torch | `uv sync --group ml` |
 | Pandas / xlrd (read tests, draft helpers, legacy .xls) | `uv sync --group data-tools` |
 | Postgres mirror / Alembic / verifiers | `uv sync --group postgres` |
+| Legacy FastAPI slice in this package (historical) | `uv sync --group api --group postgres` |
 | Full CI-style local test install | `uv sync --group dev --group data-tools --group postgres --group lab --frozen` |
 | Full local kitchen-sink install (only when needed) | `uv sync --group dev --group data-tools --group postgres --group lab --group gmail --group ml` |
 
 ---
 
-## Default dependencies
+## Default install boundary
 
 Packages in **`[project.dependencies]`** (no extra `--group` flags):
 
@@ -138,6 +139,19 @@ See: [`EXPERIMENTAL_PARKED.md`](EXPERIMENTAL_PARKED.md).
 | **Daily operator?** | **No** (test tooling) |
 
 **Note:** Because `dev` **includes** `postgres`, `uv sync --group dev` already pulls Alembic/psycopg. CI still passes **`--group postgres`** and **`--group data-tools`** explicitly for clarity alongside `dev`.
+
+---
+
+## Cross-package installs (monorepo)
+
+These apps have **their own** `pyproject.toml` / `uv.lock` — do not assume `apps/email-pipeline` groups cover them:
+
+| App | Install | Role |
+|-----|---------|------|
+| **`apps/api`** | `cd apps/api && uv sync` | **Active operator mirror API** on port **8001** (`GET /mirror/*`) |
+| **`apps/dashboard`** | `cd apps/dashboard && npm install` | Operator React UI (read-only Today view) |
+
+The email-pipeline **`api`** group is a **legacy FastAPI/uvicorn** slice kept for Postgres bootstrap notes in this package. Day-to-day dashboard work uses **`apps/api`**, not email-pipeline `api`.
 
 ---
 
