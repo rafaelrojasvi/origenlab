@@ -371,9 +371,17 @@ IMPORT_EDGE_FIELDS = [
 ]
 
 
-def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
-    out_dir.mkdir(parents=True, exist_ok=True)
+@dataclass(frozen=True, slots=True)
+class ReferenceTables:
+    module_rows: list[dict[str, Any]]
+    script_rows: list[dict[str, Any]]
+    zero_mod_rows: list[dict[str, Any]]
+    zero_script_rows: list[dict[str, Any]]
+    cmd_rows: list[dict[str, Any]]
+    edge_rows: list[dict[str, Any]]
 
+
+def build_reference_tables(result: ScanResult) -> ReferenceTables:
     edge_rows = [
         {
             "importer_path": e.importer_path,
@@ -388,7 +396,6 @@ def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
             key=lambda x: (x.target_module, x.importer_path, x.lineno),
         )
     ]
-    _write_csv(out_dir / "import_edges.csv", edge_rows, IMPORT_EDGE_FIELDS)
 
     module_rows: list[dict[str, Any]] = []
     for mod_path in sorted(result.all_py_modules):
@@ -411,11 +418,6 @@ def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
                 "zero_import_not_delete_proof": py_count == 0,
             }
         )
-    _write_csv(
-        out_dir / "module_reference_summary.csv",
-        module_rows,
-        list(module_rows[0].keys()) if module_rows else ["module_path"],
-    )
 
     script_rows: list[dict[str, Any]] = []
     for script_path in sorted(result.all_scripts):
@@ -443,11 +445,6 @@ def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
                 "zero_reference_not_delete_candidate": not_delete,
             }
         )
-    _write_csv(
-        out_dir / "script_reference_summary.csv",
-        script_rows,
-        list(script_rows[0].keys()) if script_rows else ["script_path"],
-    )
 
     zero_mod_rows = [
         r
@@ -456,12 +453,6 @@ def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
         and not r["module_path"].endswith("__init__.py")
         and not r["is_facade_pair"]
     ]
-    _write_csv(
-        out_dir / "zero_python_import_modules.csv",
-        zero_mod_rows,
-        list(zero_mod_rows[0].keys()) if zero_mod_rows else ["module_path"],
-    )
-
     zero_script_rows = [
         r
         for r in script_rows
@@ -469,11 +460,6 @@ def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
         and r["test_reference_count"] == 0
         and not r["dangerous_path"]
     ]
-    _write_csv(
-        out_dir / "zero_doc_reference_scripts.csv",
-        zero_script_rows,
-        list(zero_script_rows[0].keys()) if zero_script_rows else ["script_path"],
-    )
 
     cmd_rows: list[dict[str, Any]] = []
     for cmd, sources in sorted(result.command_refs.items(), key=lambda kv: (-len(kv[1]), kv[0])):
@@ -484,24 +470,66 @@ def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
                 "reference_sources": "; ".join(sorted(sources)[:10]),
             }
         )
+
+    return ReferenceTables(
+        module_rows=module_rows,
+        script_rows=script_rows,
+        zero_mod_rows=zero_mod_rows,
+        zero_script_rows=zero_script_rows,
+        cmd_rows=cmd_rows,
+        edge_rows=edge_rows,
+    )
+
+
+def write_reports(result: ScanResult, out_dir: Path) -> dict[str, Any]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tables = build_reference_tables(result)
+
+    _write_csv(out_dir / "import_edges.csv", tables.edge_rows, IMPORT_EDGE_FIELDS)
+    _write_csv(
+        out_dir / "module_reference_summary.csv",
+        tables.module_rows,
+        list(tables.module_rows[0].keys()) if tables.module_rows else ["module_path"],
+    )
+    _write_csv(
+        out_dir / "script_reference_summary.csv",
+        tables.script_rows,
+        list(tables.script_rows[0].keys()) if tables.script_rows else ["script_path"],
+    )
+    _write_csv(
+        out_dir / "zero_python_import_modules.csv",
+        tables.zero_mod_rows,
+        list(tables.zero_mod_rows[0].keys()) if tables.zero_mod_rows else ["module_path"],
+    )
+    _write_csv(
+        out_dir / "zero_doc_reference_scripts.csv",
+        tables.zero_script_rows,
+        list(tables.zero_script_rows[0].keys()) if tables.zero_script_rows else ["script_path"],
+    )
     _write_csv(
         out_dir / "command_reference_summary.csv",
-        cmd_rows,
+        tables.cmd_rows,
         ["command", "reference_count", "reference_sources"],
     )
 
     summary = build_summary(
-        result, out_dir, module_rows, script_rows, cmd_rows, zero_mod_rows, zero_script_rows
+        result,
+        out_dir,
+        tables.module_rows,
+        tables.script_rows,
+        tables.cmd_rows,
+        tables.zero_mod_rows,
+        tables.zero_script_rows,
     )
     (out_dir / "summary.md").write_text(summary, encoding="utf-8")
     return build_json_summary(
         result,
         out_dir,
-        module_rows,
-        script_rows,
-        cmd_rows,
-        zero_mod_rows=zero_mod_rows,
-        zero_script_rows=zero_script_rows,
+        tables.module_rows,
+        tables.script_rows,
+        tables.cmd_rows,
+        zero_mod_rows=tables.zero_mod_rows,
+        zero_script_rows=tables.zero_script_rows,
     )
 
 
@@ -729,19 +757,36 @@ def run(argv: list[str] | None = None) -> int:
         out_dir = (_DEFAULT_OUT_PARENT / stamp).resolve()
 
     result = scan_roots(src_root, scripts_root, tests_root, docs_root)
+    tables = build_reference_tables(result)
 
     if args.json and args.stdout_only:
-        summary = build_json_summary(result, out_dir, [], [], [])
+        summary = build_json_summary(
+            result,
+            out_dir,
+            tables.module_rows,
+            tables.script_rows,
+            tables.cmd_rows,
+            zero_mod_rows=tables.zero_mod_rows,
+            zero_script_rows=tables.zero_script_rows,
+        )
     else:
         summary = write_reports(result, out_dir)
 
-    print("plan_import_surface (read-only planner — not deletion authority)", file=sys.stdout)
-    print(f"src-dir: {src_root}", file=sys.stdout)
-    print(f"import-edges: {summary.get('import_edge_count', len(result.import_edges))}", file=sys.stdout)
-    if not (args.json and args.stdout_only):
-        print(f"wrote reports: {out_dir}", file=sys.stdout)
     if args.json:
         print(json.dumps(summary, indent=2), file=sys.stdout)
+        print("plan_import_surface (read-only planner — not deletion authority)", file=sys.stderr)
+        print(f"src-dir: {src_root}", file=sys.stderr)
+        print(
+            f"import-edges: {summary.get('import_edge_count', len(result.import_edges))}",
+            file=sys.stderr,
+        )
+        if not args.stdout_only:
+            print(f"wrote reports: {out_dir}", file=sys.stderr)
+    else:
+        print("plan_import_surface (read-only planner — not deletion authority)", file=sys.stdout)
+        print(f"src-dir: {src_root}", file=sys.stdout)
+        print(f"import-edges: {summary.get('import_edge_count', len(result.import_edges))}", file=sys.stdout)
+        print(f"wrote reports: {out_dir}", file=sys.stdout)
     return 0
 
 
