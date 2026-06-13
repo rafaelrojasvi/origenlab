@@ -232,11 +232,103 @@ def test_json_cli_mode(tmp_path: Path) -> None:
         check=False,
     )
     assert proc.returncode == 0, proc.stderr
-    idx = proc.stdout.index("{")
-    report = json.loads(proc.stdout[idx:])
+    report = json.loads(proc.stdout)
     assert report["import_edge_count"] >= 1
     assert "zero_python_import_module_review_list" in report
     assert "zero_doc_reference_script_review_list" in report
+    assert "plan_import_surface" in proc.stderr
+
+
+def test_stdout_only_json_emits_parseable_json(tmp_path: Path) -> None:
+    _write_synthetic_repo(tmp_path)
+    src = tmp_path / "src" / "origenlab_email_pipeline"
+    out = tmp_path / "stdout-only-out"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--src-dir",
+            str(src),
+            "--scripts-dir",
+            str(tmp_path / "scripts"),
+            "--tests-dir",
+            str(tmp_path / "tests"),
+            "--docs-dir",
+            str(tmp_path / "docs"),
+            "--out-dir",
+            str(out),
+            "--stdout-only",
+            "--json",
+        ],
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("{")
+    report = json.loads(proc.stdout)
+    assert report["import_edge_count"] >= 1
+    assert isinstance(report["zero_python_import_module_review_list"], list)
+    assert isinstance(report["zero_doc_reference_script_review_list"], list)
+    assert any(
+        row["module_path"].endswith("orphan_review.py")
+        for row in report["zero_python_import_module_review_list"]
+    )
+    assert any(
+        row["script_path"].endswith("orphan_review_script.py")
+        for row in report["zero_doc_reference_script_review_list"]
+    )
+    assert not out.exists()
+
+
+def test_stdout_only_json_pipeable_by_json_tool(tmp_path: Path) -> None:
+    _write_synthetic_repo(tmp_path)
+    src = tmp_path / "src" / "origenlab_email_pipeline"
+    planner = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--src-dir",
+            str(src),
+            "--scripts-dir",
+            str(tmp_path / "scripts"),
+            "--tests-dir",
+            str(tmp_path / "tests"),
+            "--docs-dir",
+            str(tmp_path / "docs"),
+            "--stdout-only",
+            "--json",
+        ],
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert planner.returncode == 0, planner.stderr
+    tool = subprocess.run(
+        [sys.executable, "-m", "json.tool"],
+        input=planner.stdout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert tool.returncode == 0, tool.stderr
+    report = json.loads(tool.stdout)
+    assert "zero_python_import_module_review_list" in report
+
+
+def test_normal_run_summary_keeps_zero_reference_and_safety_wording(tmp_path: Path) -> None:
+    m = _load()
+    _write_synthetic_repo(tmp_path)
+    src = tmp_path / "src" / "origenlab_email_pipeline"
+    out = tmp_path / "out"
+    result = m.scan_roots(src, tmp_path / "scripts", tmp_path / "tests", tmp_path / "docs")
+    m.write_reports(result, out)
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    assert "## Zero-reference review lists" in summary
+    assert "do not prove deletion safety" in summary.lower()
+    assert (out / "import_edges.csv").is_file()
 
 
 def test_repo_smoke_includes_known_modules() -> None:
