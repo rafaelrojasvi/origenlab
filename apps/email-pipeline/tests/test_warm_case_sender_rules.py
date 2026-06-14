@@ -28,17 +28,24 @@ from origenlab_email_pipeline.warm_case_sender_rules import (
     looks_like_cesmec_catalogue_client_thread,
     looks_like_client_equipment_opportunity_thread,
     looks_like_client_oc_post_sale_subject,
+    looks_like_client_waiting_review_ack,
+    looks_like_contact_routing_notice,
     looks_like_cyberday_bulk_campaign_subject,
+    looks_like_dhl_logistics_account_access_thread,
+    looks_like_idiem_auto_acknowledgement,
     looks_like_internal_admin_thread,
     looks_like_internal_forwarded_client_quote_request,
     looks_like_logistics_admin_contact,
+    looks_like_low_intent_client_acknowledgement,
     looks_like_payment_admin_thread,
+    looks_like_suppressed_promotional_marketing_noise,
     looks_like_real_supplier_quote_content,
     looks_like_security_notification,
     looks_like_supplier_followup_thread,
     looks_like_supplier_marketing_thread,
     looks_like_supplier_quote_response,
     looks_like_system_noise_contact,
+    looks_like_unach_hielscher_supplier_wait,
     should_keep_visible_despite_suppression,
 )
 
@@ -394,6 +401,118 @@ def test_client_equipment_opportunity_unach_hielscher_haystack() -> None:
         "susanaalfaro@unach.cl",
         "RE: [RCH-123] Hielscher UIP2000 escalamiento universidad",
         snippet="extracción ultrason",
+    )
+
+
+# --- Characterization: role-classifier helper edges (direct) ----------------------------
+
+
+def test_idiem_no_reply_and_auto_ack_snippets_match() -> None:
+    assert looks_like_idiem_auto_acknowledgement("no-reply@idiem.cl", "Acuse de recibo")
+    assert looks_like_idiem_auto_acknowledgement(
+        "contacto@idiem.cl",
+        "Re: cotización",
+        snippet="Hemos recibido su mensaje y lo derivaremos.",
+    )
+    assert looks_like_idiem_auto_acknowledgement(
+        "contacto@idiem.cl",
+        "Re: consulta",
+        snippet="acuse de recibo de su requerimiento",
+    )
+
+
+def test_idiem_auto_ack_does_not_match_normal_client_quote() -> None:
+    assert not looks_like_idiem_auto_acknowledgement(
+        "buyer@hospital.cl",
+        "Solicitud de cotización equipos de laboratorio",
+        snippet="Necesitamos cotizar microscopio y balanza.",
+    )
+
+
+def test_contact_routing_notice_ist_autorespuesta_with_forward_cues() -> None:
+    assert looks_like_contact_routing_notice(
+        "Autorespuesta: consulta equipos",
+        snippet="ist.cl se reenvían automáticamente al contacto sugerido",
+    )
+
+
+def test_contact_routing_notice_not_plain_client_quote_request() -> None:
+    assert not looks_like_contact_routing_notice(
+        "Solicitud de cotización microscopio",
+        snippet="Por favor enviar cotización con plazos de entrega.",
+    )
+
+
+def test_low_intent_client_acknowledgement_thanks_for_information() -> None:
+    assert looks_like_low_intent_client_acknowledgement(
+        "Re: información",
+        snippet="Gracias por la información, la revisaremos.",
+    )
+
+
+def test_low_intent_client_acknowledgement_not_quote_request() -> None:
+    assert not looks_like_low_intent_client_acknowledgement(
+        "Cotización balanza y microscopio",
+        snippet="Solicito cotización formal con precio y stock.",
+    )
+
+
+def test_client_waiting_review_ack_review_phrases() -> None:
+    assert looks_like_client_waiting_review_ack("Re: consulta", snippet="Lo revisaremos y responderemos.")
+    assert looks_like_client_waiting_review_ack(
+        "Re: equipos",
+        snippet="Gracias, revisaremos su solicitud.",
+    )
+
+
+def test_client_waiting_review_ack_uc_subject_boundary() -> None:
+    uc_subject = "Re: OrigenLab | Equipos para laboratorio"
+    assert looks_like_client_waiting_review_ack(
+        uc_subject,
+        contact_email="compras@uc.cl",
+    )
+    assert not looks_like_client_waiting_review_ack(
+        uc_subject,
+        contact_email="buyer@hospital.cl",
+    )
+
+
+def test_unach_hielscher_supplier_wait_rch_thread_matches() -> None:
+    assert looks_like_unach_hielscher_supplier_wait(
+        "susanaalfaro@unach.cl",
+        "RE: [RCH-456] Hielscher UIP2000 UNACH escalamiento",
+        snippet="cotización ultrason Hielscher universidad adventista",
+    )
+
+
+def test_unach_without_hielscher_or_supplier_cue_does_not_match() -> None:
+    assert not looks_like_unach_hielscher_supplier_wait(
+        "susanaalfaro@unach.cl",
+        "Consulta general equipos laboratorio UNACH",
+        snippet="Necesitamos información sobre microscopios.",
+    )
+
+
+def test_dhl_logistics_account_access_thread_esecure_cues() -> None:
+    assert looks_like_dhl_logistics_account_access_thread(
+        "ops@dhl.com",
+        "Solicitud de acceso eSecure",
+        snippet="aprobar o rechazar acceso a cuenta DHL",
+    )
+
+
+def test_suppressed_promotional_marketing_noise_no_reply_promo() -> None:
+    assert looks_like_suppressed_promotional_marketing_noise(
+        "no-reply@tidio.net",
+        "Tidio <no-reply@tidio.net>",
+        "🚀 ¡95% de DESCUENTO en Tidio!",
+        has_suppression_signal=True,
+    )
+    assert not looks_like_suppressed_promotional_marketing_noise(
+        "no-reply@tidio.net",
+        "Tidio <no-reply@tidio.net>",
+        "🚀 ¡95% de DESCUENTO en Tidio!",
+        has_suppression_signal=False,
     )
 
 
