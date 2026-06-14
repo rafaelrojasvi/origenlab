@@ -340,3 +340,101 @@ def test_cesmec_stays_visible_as_client_opportunity() -> None:
     )
     role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
     assert role == "client_opportunity"
+
+
+# --- E2E characterization: sender-rule helper edges (role classifier) -------------------
+
+
+def test_idiem_no_reply_is_auto_acknowledgement_not_client_opportunity() -> None:
+    row = _row(
+        sender="IDIEM <no-reply@idiem.cl>",
+        subject="Acuse de recibo",
+        contact_email="no-reply@idiem.cl",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "auto_acknowledgement"
+    assert role not in ("client_opportunity", "client_response", "system_noise")
+
+
+def test_ist_autorespuesta_routing_notice_not_client_or_supplier_opportunity() -> None:
+    row = _row(
+        sender="Alfredo Valdebenito <alfredo.valdebenito@ist.cl>",
+        subject="Autorespuesta: consulta equipos",
+        contact_email="alfredo.valdebenito@ist.cl",
+        snippet="ist.cl se reenvían automáticamente al contacto sugerido",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "system_noise"
+    assert role not in ("client_opportunity", "supplier_quote_received", "supplier_followup")
+
+
+def test_gracias_por_la_informacion_is_client_response_not_opportunity() -> None:
+    row = _row(
+        sender="Cliente Externo <cliente@gmail.com>",
+        subject="Re: información equipos",
+        contact_email="cliente@gmail.com",
+        snippet="Gracias por la información, saludos cordiales.",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "client_response"
+    assert role != "client_opportunity"
+
+
+def test_formal_cotizacion_request_is_client_opportunity_not_low_intent_response() -> None:
+    row = _row(
+        sender="Buyer <buyer@hospital.cl>",
+        subject="Cotización balanza y microscopio",
+        contact_email="buyer@hospital.cl",
+        snippet="Solicito cotización formal con precio y stock.",
+        has_positive_signal=True,
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=True, include_noise=False)
+    assert role == "client_opportunity"
+    assert role != "client_response"
+
+
+def test_uc_pipe_subject_without_snippet_is_waiting_client() -> None:
+    row = _row(
+        sender="Francisca Echeverria <franciscaecheverria@uc.cl>",
+        subject="Re: OrigenLab | Equipos para laboratorio",
+        contact_email="franciscaecheverria@uc.cl",
+        snippet="",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "waiting_client"
+
+
+def test_non_uc_pipe_subject_not_waiting_client() -> None:
+    row = _row(
+        sender="Buyer <buyer@hospital.cl>",
+        subject="Re: OrigenLab | Equipos para laboratorio",
+        contact_email="buyer@hospital.cl",
+        snippet="",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role != "waiting_client"
+    assert role not in ("client_opportunity", "supplier_quote_received")
+
+
+def test_unach_rch_hielscher_from_client_sender_is_waiting_supplier() -> None:
+    row = _row(
+        sender="Susana Alfaro <susanaalfaro@unach.cl>",
+        subject="RE: [RCH-456] Hielscher UIP2000 UNACH escalamiento",
+        contact_email="susanaalfaro@unach.cl",
+        snippet="cotización ultrason Hielscher universidad adventista",
+    )
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "waiting_supplier"
+    assert role not in ("client_opportunity", "supplier_quote_received")
+
+
+def test_tidio_suppressed_promo_is_system_noise_not_client_response() -> None:
+    row = _row(
+        sender="Tidio <no-reply@tidio.net>",
+        subject="🚀 ¡95% de DESCUENTO en Tidio!",
+        contact_email="no-reply@tidio.net",
+    )
+    row["has_suppression_signal"] = True
+    role = infer_warm_case_role_category(row, enrichment_available=False, include_noise=False)
+    assert role == "system_noise"
+    assert role not in ("client_response", "client_opportunity")
