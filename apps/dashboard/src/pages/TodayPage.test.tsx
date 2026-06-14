@@ -95,6 +95,14 @@ vi.mock("../api/mirrorCommercialClient", () => ({
   fetchCommercialDealsMirror: vi.fn(),
 }));
 
+vi.mock("../api/mirrorCatalogClient", () => ({
+  fetchCatalogProductsMirror: vi.fn(),
+}));
+
+vi.mock("../api/mirrorLeadIntelClient", () => ({
+  fetchLeadResearchSummaryMirror: vi.fn(),
+}));
+
 vi.mock("../lib/logo/threeBodyCanvasRunner", () => ({
   startThreeBodyCanvas: vi.fn(() => () => {}),
 }));
@@ -106,6 +114,11 @@ import {
   fetchWarmCases,
 } from "../api/operatorClient";
 import { fetchCommercialDealsMirror } from "../api/mirrorCommercialClient";
+import { fetchCatalogProductsMirror } from "../api/mirrorCatalogClient";
+import { fetchLeadResearchSummaryMirror } from "../api/mirrorLeadIntelClient";
+import { catalogListFixture } from "../test/fixtures/catalogMirrorFixtures";
+import { leadSummaryFixture } from "../test/fixtures/leadIntelFixtures";
+import { waitForDashboardReady } from "../test/renderDashboardApp";
 
 describe("DashboardApp (legacy TodayPage tests)", () => {
   beforeEach(() => {
@@ -124,6 +137,8 @@ describe("DashboardApp (legacy TodayPage tests)", () => {
     vi.mocked(fetchTodayPanel).mockResolvedValue(panelSqlite);
     vi.mocked(fetchWarmCases).mockResolvedValue(warmPayload);
     vi.mocked(fetchEquipmentOpportunities).mockResolvedValue(equipmentPayload);
+    vi.mocked(fetchCatalogProductsMirror).mockResolvedValue(catalogListFixture());
+    vi.mocked(fetchLeadResearchSummaryMirror).mockResolvedValue(leadSummaryFixture());
     vi.mocked(fetchCommercialDealsMirror).mockResolvedValue({
       table_available: true,
       read_only: true,
@@ -134,11 +149,12 @@ describe("DashboardApp (legacy TodayPage tests)", () => {
     });
   }
 
-  it("shows legacy :8000 dev warning when env points at wrong port", () => {
+  it("shows legacy :8000 dev warning when env points at wrong port", async () => {
     vi.stubEnv("VITE_ORIGENLAB_API_BASE_URL", "http://127.0.0.1:8000");
     mockAllOk();
     render(<DashboardApp />);
-    screen.getByText(/Configuración local incorrecta/);
+    await screen.findByText(/Configuración local incorrecta/);
+    await waitForDashboardReady();
   });
 
   it("does not expose sqlite paths or raw body fields", async () => {
