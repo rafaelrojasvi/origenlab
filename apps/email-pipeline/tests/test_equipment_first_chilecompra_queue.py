@@ -12,8 +12,11 @@ import pytest
 
 from origenlab_email_pipeline.chilecompra_api import ChileCompraHttpError, ChileCompraTicketMissingError
 from origenlab_email_pipeline.equipment_first_chilecompra_queue import (
+    CANDIDATE_AUDIT_FIELDS,
     build_equipment_queue_from_chilecompra_api,
+    read_detail_cache,
     summary_passes_keyword_prefilter,
+    write_candidate_audit_csv,
     write_chilecompra_api_queue_outputs,
 )
 from origenlab_email_pipeline.equipment_first_licitacion_queue import (
@@ -149,7 +152,7 @@ def test_build_equipment_queue_from_chilecompra_api_mocked(tmp_path: Path) -> No
     fetch_list = MagicMock(return_value=summaries)
     fetch_detail = MagicMock(return_value=detail)
 
-    rows, manifest = build_equipment_queue_from_chilecompra_api(
+    rows, manifest, _audit = build_equipment_queue_from_chilecompra_api(
         ticket=_SECRET_TICKET,
         max_details=100,
         now=_T0,
@@ -193,7 +196,7 @@ def test_build_equipment_queue_respects_max_details() -> None:
         }
     )
 
-    _rows, manifest = build_equipment_queue_from_chilecompra_api(
+    _rows, manifest, _audit = build_equipment_queue_from_chilecompra_api(
         ticket=_SECRET_TICKET,
         max_details=2,
         now=_T0,
@@ -332,7 +335,7 @@ def test_http_429_on_detail_lookup_records_error_and_continues() -> None:
 
     fetch_detail = MagicMock(side_effect=_detail_side_effect)
 
-    rows, manifest = build_equipment_queue_from_chilecompra_api(
+    rows, manifest, _audit = build_equipment_queue_from_chilecompra_api(
         ticket=_SECRET_TICKET,
         max_details=2,
         now=_T0,
@@ -371,7 +374,7 @@ def test_max_details_zero_skips_detail_lookups() -> None:
     fetch_list = MagicMock(return_value=_equipment_summaries(3))
     fetch_detail = MagicMock()
 
-    _rows, manifest = build_equipment_queue_from_chilecompra_api(
+    _rows, manifest, _audit = build_equipment_queue_from_chilecompra_api(
         ticket=_SECRET_TICKET,
         max_details=0,
         now=_T0,
@@ -382,3 +385,125 @@ def test_max_details_zero_skips_detail_lookups() -> None:
     fetch_detail.assert_not_called()
     assert manifest["detail_requests"] == 0
     assert manifest["detail_error_count"] == 0
+
+
+def test_detail_cache_hit_avoids_fetch_detail(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "chilecompra_detail_cache"
+    codigo = "1-1-LP26"
+    cached_payload = _equipment_detail_payload(codigo)
+    from origenlab_email_pipeline.equipment_first_chilecompra_queue import write_detail_cache
+
+    write_detail_cache(cache_dir, codigo, cached_payload)
+
+    fetch_list = MagicMock(return_value=_equipment_summaries(1))
+    fetch_detail = MagicMock()
+
+    rows, manifest, audit_rows = build_equipment_queue_from_chilecompra_api(
+        ticket=_SECRET_TICKET,
+        max_details=1,
+        detail_cache_dir=cache_dir,
+        now=_T0,
+        fetch_licitaciones_fn=fetch_list,
+        fetch_licitacion_by_codigo_fn=fetch_detail,
+    )
+
+    fetch_detail.assert_not_called()
+    assert manifest["detail_cache_hits"] == 1
+    assert manifest["detail_cache_writes"] == 0
+    assert manifest["detail_requests"] == 0
+    assert audit_rows[0]["detail_cache_hit"] == "true"
+    assert rows
+
+
+def test_successful_detail_fetch_writes_cache(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "chilecompra_detail_cache"
+    codigo = "1-1-LP26"
+    fetch_list = MagicMock(return_value=_equipment_summaries(1))
+    fetch_detail = MagicMock(
+        side_effect=lambda requested_codigo, ticket: _equipment_detail_payload(requested_codigo)
+    )
+
+    _rows, manifest, _audit = build_equipment_queue_from_chilecompra_api(
+        ticket=_SECRET_TICKET,
+        max_details=1,
+        detail_cache_dir=cache_dir,
+        now=_T0,
+        fetch_licitaciones_fn=fetch_list,
+        fetch_licitacion_by_codigo_fn=fetch_detail,
+    )
+
+    assert manifest["detail_cache_writes"] == 1
+    cached = read_detail_cache(cache_dir, codigo)
+    assert cached is not None
+    cache_text = (cache_dir / "1-1-LP26.json").read_text(encoding="utf-8")
+    assert _SECRET_TICKET not in cache_text
+
+
+def test_candidate_audit_includes_matched_and_rejected_rows(tmp_path: Path) -> None:
+    summaries = {
+        "Listado": [
+            {
+                "CodigoExterno": "1051-1-LP26",
+                "Nombre": "Adquisición centrifuga laboratorio",
+                "Descripcion": "Equipos laboratorio",
+                "Comprador": {"NombreOrganismo": "Hospital Demo", "Region": "RM"},
+                "FechaCierre": "20/06/2026 17:00:00",
+            },
+            {
+                "CodigoExterno": "2000-1-LP26",
+                "Nombre": "Adquisición insumos laboratorio",
+                "Descripcion": "Equipos para laboratorio",
+                "Comprador": {"NombreOrganismo": "Universidad Demo", "Region": "RM"},
+                "FechaCierre": "21/06/2026 17:00:00",
+            },
+            {
+                "CodigoExterno": "3000-1-LP26",
+                "Nombre": "Adquisición reactivos laboratorio",
+                "Descripcion": "Insumos microbiológicos",
+                "Comprador": {"NombreOrganismo": "SEREMI Demo", "Region": "RM"},
+                "FechaCierre": "22/06/2026 17:00:00",
+            },
+        ]
+    }
+
+    def _detail_side_effect(codigo: str, ticket: str) -> dict[str, object]:
+        if codigo == "1051-1-LP26":
+            return _equipment_detail_payload(codigo)
+        if codigo == "2000-1-LP26":
+            return {
+                "Listado": [
+                    {
+                        "CodigoExterno": codigo,
+                        "Nombre": "Adquisición insumos laboratorio",
+                        "Items": {"Descripcion": "Papel bond y carpetas administrativas"},
+                    }
+                ]
+            }
+        return _equipment_detail_payload(codigo)
+
+    fetch_list = MagicMock(return_value=summaries)
+    fetch_detail = MagicMock(side_effect=_detail_side_effect)
+
+    rows, manifest, audit_rows = build_equipment_queue_from_chilecompra_api(
+        ticket=_SECRET_TICKET,
+        max_details=2,
+        now=_T0,
+        fetch_licitaciones_fn=fetch_list,
+        fetch_licitacion_by_codigo_fn=fetch_detail,
+    )
+
+    audit_path = tmp_path / "chilecompra_equipment_candidate_audit_20260614.csv"
+    write_candidate_audit_csv(audit_rows, audit_path)
+    audit_text = audit_path.read_text(encoding="utf-8")
+    assert _SECRET_TICKET not in audit_text
+
+    with audit_path.open(encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        assert reader.fieldnames == list(CANDIDATE_AUDIT_FIELDS)
+        by_codigo = {row["codigo"]: row for row in reader}
+
+    assert by_codigo["1051-1-LP26"]["detected_output_rows"] == "1"
+    assert by_codigo["1051-1-LP26"]["reject_reason"] == ""
+    assert by_codigo["2000-1-LP26"]["reject_reason"] == "no_equipment_match_after_detail"
+    assert by_codigo["3000-1-LP26"]["reject_reason"] == "not_detailed_max_details"
+    assert manifest["output_rows"] == len(rows)
