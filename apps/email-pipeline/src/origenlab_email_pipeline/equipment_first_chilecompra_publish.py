@@ -7,6 +7,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
+
+from collections import defaultdict
 
 from origenlab_email_pipeline.chilecompra_api import (
     VALIDITY_STATUS_CLOSES_TODAY,
@@ -22,6 +25,23 @@ CHILECOMPRA_REVIEW_NOTE = (
 CHILECOMPRA_SAFE_CHANNEL = "mercado_publico_only"
 CHILECOMPRA_CONTACT_STATUS = "review_required"
 CHILECOMPRA_CONTACT_STATUS_MISSING_CLOSE_DATE = "review_required_missing_close_date"
+
+MERCADO_PUBLICO_SEARCH_URL_TEMPLATE = (
+    "https://www.mercadopublico.cl/BuscarLicitacion?IsFirstTableDesign=true&codigoLicitacion={codigo}"
+)
+
+CHILECOMPRA_ITEM_METADATA_FIELDS: tuple[str, ...] = (
+    "fecha_publicacion",
+    "descripcion",
+    "line_description",
+    "unspsc_code",
+    "unidad",
+    "cantidad",
+    "producto",
+    "nivel_1",
+    "nivel_2",
+    "nivel_3",
+)
 
 DASHBOARD_ACTIVE_VALIDITY_STATUSES = frozenset(
     {
@@ -50,6 +70,8 @@ PUBLISHED_DASHBOARD_FIELDS: tuple[str, ...] = (
     "validity_status",
     "api_checked_at_utc",
     "source",
+    *CHILECOMPRA_ITEM_METADATA_FIELDS,
+    "mercado_publico_url",
 )
 
 _CHILECOMPRA_API_QUEUE_PREFIX = "equipment_first_operator_queue_chilecompra_api_"
@@ -118,6 +140,100 @@ def _unique_join(values: list[str], separator: str, *, max_len: int) -> str:
     return separator.join(seen)[:max_len]
 
 
+def build_mercado_publico_search_url(codigo_licitacion: str) -> str:
+    """Public Mercado Público search URL by licitación code (no API ticket)."""
+    codigo = (codigo_licitacion or "").strip()
+    if not codigo:
+        return ""
+    return MERCADO_PUBLICO_SEARCH_URL_TEMPLATE.format(codigo=quote(codigo, safe=""))
+
+
+def _merge_cantidad(values: list[str], *, max_len: int = 80) -> str:
+    numeric: list[float] = []
+    text_values: list[str] = []
+    for value in values:
+        text = (value or "").strip()
+        if not text:
+            continue
+        try:
+            numeric.append(float(text.replace(",", ".")))
+        except ValueError:
+            text_values.append(text)
+    if numeric:
+        total = sum(numeric)
+        if total == int(total):
+            rendered = str(int(total))
+        else:
+            rendered = str(total)
+        return rendered[:max_len]
+    return _unique_join(text_values, "; ", max_len=max_len)
+
+
+def _pick_first_non_empty(values: list[str]) -> str:
+    for value in values:
+        text = (value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def aggregate_chilecompra_item_metadata(
+    normalized_rows: list[dict[str, str]],
+) -> dict[str, dict[str, str]]:
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in normalized_rows:
+        codigo = (row.get("codigo") or row.get("codigo_licitacion") or "").strip()
+        if codigo:
+            grouped[codigo].append(row)
+
+    aggregated: dict[str, dict[str, str]] = {}
+    for codigo, rows in grouped.items():
+        aggregated[codigo] = {
+            "fecha_publicacion": _pick_first_non_empty(
+                [item.get("fecha_publicacion", "") for item in rows]
+            ),
+            "descripcion": _pick_first_non_empty([item.get("descripcion", "") for item in rows])[:500],
+            "line_description": _unique_join(
+                [item.get("line_description", "") for item in rows],
+                " || ",
+                max_len=500,
+            ),
+            "unspsc_code": _unique_join(
+                [item.get("unspsc_code", "") for item in rows],
+                "; ",
+                max_len=120,
+            ),
+            "unidad": _unique_join([item.get("unidad", "") for item in rows], "; ", max_len=80),
+            "cantidad": _merge_cantidad([item.get("cantidad", "") for item in rows]),
+            "producto": _unique_join([item.get("producto", "") for item in rows], "; ", max_len=200),
+            "nivel_1": _unique_join([item.get("nivel_1", "") for item in rows], "; ", max_len=200),
+            "nivel_2": _unique_join([item.get("nivel_2", "") for item in rows], "; ", max_len=200),
+            "nivel_3": _unique_join([item.get("nivel_3", "") for item in rows], "; ", max_len=200),
+            "mercado_publico_url": build_mercado_publico_search_url(codigo),
+        }
+    return aggregated
+
+
+def attach_item_metadata_to_queue_rows(
+    queue_rows: list[dict[str, str]],
+    normalized_rows: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    metadata_by_codigo = aggregate_chilecompra_item_metadata(normalized_rows)
+    attached: list[dict[str, str]] = []
+    for row in queue_rows:
+        merged = dict(row)
+        codigo = (row.get("codigo_licitacion") or "").strip()
+        meta = metadata_by_codigo.get(codigo, {})
+        for field in CHILECOMPRA_ITEM_METADATA_FIELDS:
+            value = (meta.get(field) or "").strip()
+            if value:
+                merged[field] = value
+        if not (merged.get("mercado_publico_url") or "").strip():
+            merged["mercado_publico_url"] = build_mercado_publico_search_url(codigo)
+        attached.append(merged)
+    return attached
+
+
 def coalesce_dashboard_rows_by_codigo(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     """Merge multiple dashboard rows for the same codigo_licitacion into one row."""
     grouped: dict[str, list[dict[str, str]]] = {}
@@ -159,6 +275,25 @@ def coalesce_dashboard_rows_by_codigo(rows: list[dict[str, str]]) -> list[dict[s
         )
         merged["fit_score"] = str(max(_parse_fit_score(row.get("fit_score")) for row in group))
         merged["next_action"] = _best_next_action(group)
+        merged["fecha_publicacion"] = _pick_first_non_empty(
+            [row.get("fecha_publicacion", "") for row in group]
+        )
+        merged["descripcion"] = _pick_first_non_empty([row.get("descripcion", "") for row in group])[:500]
+        merged["line_description"] = _unique_join(
+            [row.get("line_description", "") for row in group],
+            " || ",
+            max_len=500,
+        )
+        for field in ("unspsc_code", "producto", "nivel_1", "nivel_2", "nivel_3", "unidad"):
+            merged[field] = _unique_join(
+                [row.get(field, "") for row in group],
+                "; ",
+                max_len=200 if field.startswith("nivel") else 120,
+            )
+        merged["cantidad"] = _merge_cantidad([row.get("cantidad", "") for row in group])
+        merged["mercado_publico_url"] = _pick_first_non_empty(
+            [row.get("mercado_publico_url", "") for row in group]
+        ) or build_mercado_publico_search_url(codigo)
         supplier_needed = any((row.get("supplier_needed") or "").strip().lower() == "yes" for row in group)
         merged["supplier_needed"] = "yes" if supplier_needed else "no"
         merged["supplier_contact"] = "yes" if supplier_needed else ""
@@ -191,9 +326,10 @@ def enrich_chilecompra_row_for_dashboard(row: dict[str, str]) -> dict[str, str]:
     ]
     if validity_status == VALIDITY_STATUS_MISSING_CLOSE_DATE:
         note_parts.append("missing_close_date; revisar fecha de cierre en Mercado Público")
+    codigo = (row.get("codigo_licitacion") or "").strip()
     enriched = {
         "priority_rank": (row.get("priority_rank") or "").strip(),
-        "codigo_licitacion": (row.get("codigo_licitacion") or "").strip(),
+        "codigo_licitacion": codigo,
         "buyer": (row.get("buyer") or "").strip(),
         "region": (row.get("region") or "").strip(),
         "close_date": (row.get("close_date") or "").strip(),
@@ -216,7 +352,11 @@ def enrich_chilecompra_row_for_dashboard(row: dict[str, str]) -> dict[str, str]:
         "validity_status": validity_status,
         "api_checked_at_utc": (row.get("api_checked_at_utc") or "").strip(),
         "source": (row.get("source") or "chilecompra_api").strip() or "chilecompra_api",
+        "mercado_publico_url": (row.get("mercado_publico_url") or "").strip()
+        or build_mercado_publico_search_url(codigo),
     }
+    for field in CHILECOMPRA_ITEM_METADATA_FIELDS:
+        enriched[field] = (row.get(field) or "").strip()
     return enriched
 
 

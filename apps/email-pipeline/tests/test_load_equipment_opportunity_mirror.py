@@ -90,6 +90,25 @@ def test_parse_close_at_dd_mm_yyyy_hms() -> None:
     assert dt.hour == 17 and dt.minute == 0
 
 
+def test_parse_close_at_iso_formats() -> None:
+    iso_full = mirror.parse_close_at("2026-06-17T19:00:00")
+    assert iso_full is not None
+    assert iso_full.year == 2026 and iso_full.month == 6 and iso_full.day == 17
+    assert iso_full.hour == 19 and iso_full.minute == 0
+
+    iso_minutes = mirror.parse_close_at("2026-06-17T19:00")
+    assert iso_minutes is not None
+    assert iso_minutes.hour == 19
+
+    iso_space = mirror.parse_close_at("2026-06-17 19:00:00")
+    assert iso_space is not None
+    assert iso_space.hour == 19
+
+    iso_z = mirror.parse_close_at("2026-06-17T19:00:00Z")
+    assert iso_z is not None
+    assert iso_z.tzinfo is not None
+
+
 def test_parse_priority_rank_empty_is_null() -> None:
     assert mirror.parse_priority_rank("") is None
     assert mirror.parse_priority_rank("   ") is None

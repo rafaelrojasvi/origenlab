@@ -52,6 +52,34 @@ describe("commercialParse", () => {
     expect(JSON.stringify(parsed.meta)).not.toContain("secret.csv");
   });
 
+  it("parseEquipmentOpportunitiesResponse keeps ChileCompra detail fields", () => {
+    const parsed = parseEquipmentOpportunitiesResponse({
+      meta: { data_source: "postgres_mirror", count: 1, reduced_mode: false, note: "" },
+      items: [
+        {
+          priority_rank: 1,
+          codigo_licitacion: "1051-1-LP26",
+          buyer: "Hospital",
+          close_date: "2026-06-17T19:00:00",
+          close_at: "2026-06-17T19:00:00-04:00",
+          fecha_publicacion: "10/06/2026",
+          mercado_publico_url:
+            "https://www.mercadopublico.cl/BuscarLicitacion?codigoLicitacion=1051-1-LP26",
+          unspsc_code: "41100000",
+          cantidad: "2",
+          producto: "Centrifuga",
+          validity_status: "open",
+          chilecompra_status: "Publicada",
+        },
+      ],
+    });
+
+    expect(parsed.items[0].fecha_publicacion).toBe("10/06/2026");
+    expect(parsed.items[0].mercado_publico_url).toContain("mercadopublico.cl");
+    expect(parsed.items[0].unspsc_code).toBe("41100000");
+    expect(JSON.stringify(parsed)).not.toMatch(/CHILECOMPRA_API_TICKET/i);
+  });
+
   it("normalizeWarmCaseItem redacts path-like preview text", () => {
     const row = normalizeWarmCaseItem(
       { snippet: "see /home/user/data/emails.sqlite for details" },

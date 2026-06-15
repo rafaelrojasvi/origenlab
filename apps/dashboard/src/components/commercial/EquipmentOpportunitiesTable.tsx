@@ -17,11 +17,54 @@ import {
   EQUIPMENT_FEED_UNAVAILABLE_TITLE,
   isEquipmentFeedUnavailable,
 } from "../../lib/equipmentFeedStatus";
+import {
+  formatEquipmentCloseDate,
+  formatEquipmentPublicationDate,
+} from "../../lib/dashboardDateFormat";
 import { truncate } from "../../lib/safeText";
 import { TokenLabel } from "../operator/TokenLabel";
 import { ContactEmailButton } from "./ContactEmailButton";
 import { TableListToolbar, ToolbarField, toolbarInputClass, toolbarSelectClass } from "./TableListToolbar";
 import { TableSection } from "./TableSection";
+
+function EquipmentItemMetadata({ row }: { row: EquipmentOpportunityItem }) {
+  const lines: string[] = [];
+  if (row.cantidad) lines.push(`Cantidad: ${row.cantidad}`);
+  if (row.unidad) lines.push(`Unidad: ${row.unidad}`);
+  if (row.producto) lines.push(`Producto: ${truncate(row.producto, 60)}`);
+  if (row.unspsc_code) lines.push(`UNSPSC: ${row.unspsc_code}`);
+  if (row.nivel_1) lines.push(`Nivel 1: ${truncate(row.nivel_1, 50)}`);
+  if (row.nivel_2) lines.push(`Nivel 2: ${truncate(row.nivel_2, 50)}`);
+  if (row.nivel_3) lines.push(`Nivel 3: ${truncate(row.nivel_3, 50)}`);
+  const statusParts = [
+    row.chilecompra_status,
+    row.validity_status ? `validez: ${row.validity_status}` : "",
+  ].filter(Boolean);
+  if (statusParts.length) lines.push(statusParts.join(" · "));
+  if (!lines.length) return null;
+  return (
+    <div className="mt-1 space-y-0.5 text-xs text-slate-600">
+      {lines.map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+    </div>
+  );
+}
+
+function MercadoPublicoLink({ url }: { url: string }) {
+  if (!url.trim()) return null;
+  if (/ticket|api\.chilecompra/i.test(url)) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-1 inline-block text-xs text-sky-700 hover:underline"
+    >
+      Buscar en Mercado Público
+    </a>
+  );
+}
 
 export function EquipmentOpportunitiesTable({
   backend,
@@ -164,6 +207,14 @@ export function EquipmentOpportunitiesTable({
                 <td className="px-3 py-2">
                   <div className="font-medium text-slate-900">{row.buyer || "—"}</div>
                   <div className="text-xs text-[var(--color-muted)]">{row.codigo_licitacion}</div>
+                  {row.fecha_publicacion ? (
+                    <div className="mt-0.5 text-xs text-slate-600">
+                      Publicado: {formatEquipmentPublicationDate(row.fecha_publicacion)}
+                    </div>
+                  ) : null}
+                  {row.mercado_publico_url ? (
+                    <MercadoPublicoLink url={row.mercado_publico_url} />
+                  ) : null}
                 </td>
                 <td className="px-3 py-2">
                   <ContactEmailButton email={row.contact_email} onSelect={onContactSelect} />
@@ -184,7 +235,7 @@ export function EquipmentOpportunitiesTable({
                   />
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap text-xs text-slate-600">
-                  {row.close_date || "—"}
+                  {formatEquipmentCloseDate(row.close_date, row.close_at)}
                 </td>
                 <td className="px-3 py-2">
                   <TokenLabel
@@ -205,6 +256,7 @@ export function EquipmentOpportunitiesTable({
                   {row.supplier_needed ? (
                     <p className="mt-1 text-xs text-slate-600">Supplier: {row.supplier_needed}</p>
                   ) : null}
+                  <EquipmentItemMetadata row={row} />
                 </td>
                 <td className="px-3 py-2">
                   <TokenLabel

@@ -8,6 +8,9 @@ from typing import Any
 
 from origenlab_email_pipeline.equipment_first_operator_queue import _load_csv
 
+from origenlab_api.repositories.equipment_detail_fields import merge_equipment_detail_fields
+from origenlab_api.schemas.opportunities import EquipmentOpportunitiesMeta
+
 _OPERATOR_QUEUE_PREFIX = "equipment_first_operator_queue_"
 _STALE_CROSSCHECK_FRAGMENT = "buyer_opportunity_crosscheck"
 _ACCOUNT_INTEL_SAFE = frozenset({"account_intelligence_only"})
@@ -70,21 +73,24 @@ def _parse_priority(value: str | None) -> int:
 
 
 def row_to_equipment_item(row: dict[str, str]) -> dict[str, Any]:
-    return {
-        "priority_rank": _parse_priority(row.get("priority_rank")),
-        "codigo_licitacion": (row.get("codigo_licitacion") or "").strip(),
-        "buyer": (row.get("buyer") or "").strip(),
-        "region": (row.get("region") or "").strip(),
-        "close_date": (row.get("close_date") or "").strip(),
-        "equipment_category": (row.get("equipment_category") or "").strip(),
-        "item_description": (row.get("item_description") or "").strip(),
-        "next_action": (row.get("next_action") or "").strip(),
-        "safe_channel": (row.get("safe_channel") or "").strip(),
-        "supplier_needed": (row.get("supplier_needed") or "").strip(),
-        "contact_status": (row.get("contact_status") or "").strip(),
-        "contact_email": (row.get("contact_email") or "").strip(),
-        "operator_note": (row.get("operator_note") or "").strip(),
-    }
+    return merge_equipment_detail_fields(
+        {
+            "priority_rank": _parse_priority(row.get("priority_rank")),
+            "codigo_licitacion": (row.get("codigo_licitacion") or "").strip(),
+            "buyer": (row.get("buyer") or "").strip(),
+            "region": (row.get("region") or "").strip(),
+            "close_date": (row.get("close_date") or "").strip(),
+            "equipment_category": (row.get("equipment_category") or "").strip(),
+            "item_description": (row.get("item_description") or "").strip(),
+            "next_action": (row.get("next_action") or "").strip(),
+            "safe_channel": (row.get("safe_channel") or "").strip(),
+            "supplier_needed": (row.get("supplier_needed") or "").strip(),
+            "contact_status": (row.get("contact_status") or "").strip(),
+            "contact_email": (row.get("contact_email") or "").strip(),
+            "operator_note": (row.get("operator_note") or "").strip(),
+        },
+        row,
+    )
 
 
 def fetch_equipment_opportunities(
@@ -96,8 +102,6 @@ def fetch_equipment_opportunities(
     safe_channel: str | None = None,
     include_account_intelligence: bool = True,
 ) -> tuple[list[dict[str, Any]], EquipmentOpportunitiesMeta]:
-    from origenlab_api.schemas.opportunities import EquipmentOpportunitiesMeta
-
     manifest = load_manifest(active_current)
     campaign_mode = manifest.get("campaign_mode")
     if isinstance(campaign_mode, str):

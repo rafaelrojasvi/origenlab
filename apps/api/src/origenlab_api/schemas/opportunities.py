@@ -31,6 +31,22 @@ class EquipmentOpportunityItem(BaseModel):
     contact_status: str = ""
     contact_email: str = ""
     operator_note: str = ""
+    fecha_publicacion: str = ""
+    close_at: str = ""
+    validity_status: str = ""
+    chilecompra_status: str = ""
+    chilecompra_status_code: str = ""
+    api_checked_at_utc: str = ""
+    source: str = ""
+    mercado_publico_url: str = ""
+    title: str = ""
+    unspsc_code: str = ""
+    unidad: str = ""
+    cantidad: str = ""
+    producto: str = ""
+    nivel_1: str = ""
+    nivel_2: str = ""
+    nivel_3: str = ""
 
 
 class EquipmentOpportunitiesResponse(BaseModel):
