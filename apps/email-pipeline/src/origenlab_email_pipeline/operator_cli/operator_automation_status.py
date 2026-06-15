@@ -460,6 +460,9 @@ def build_operator_automation_status(
         "last_error": chilecompra_state.last_error if chilecompra_state else None,
         "fetched_summaries": chilecompra_state.fetched_summaries if chilecompra_state else None,
         "candidate_summaries": chilecompra_state.candidate_summaries if chilecompra_state else None,
+        "prefilter_skipped_summaries": (
+            chilecompra_state.prefilter_skipped_summaries if chilecompra_state else None
+        ),
         "detail_requests": chilecompra_state.detail_requests if chilecompra_state else None,
         "detail_cache_hits": chilecompra_state.detail_cache_hits if chilecompra_state else None,
         "detail_error_count": chilecompra_state.detail_error_count if chilecompra_state else None,

@@ -91,6 +91,7 @@ def _write_chilecompra_state(active_current: Path, **kwargs: object) -> None:
         "consecutive_failures": 0,
         "fetched_summaries": 10,
         "candidate_summaries": 3,
+        "prefilter_skipped_summaries": 7,
         "detail_requests": 2,
         "detail_cache_hits": 1,
         "detail_error_count": 0,
@@ -183,6 +184,23 @@ def test_json_output_keys(active_current: Path, capsys: pytest.CaptureFixture[st
         assert key in data
     assert data["cron"]["inspected"] is True
     assert data["ndr_pending_review"]["queue_exists"] is False
+
+
+def test_chilecompra_prefilter_skips_surface_in_operator_status(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_chilecompra_state(active_current, prefilter_skipped_summaries=7)
+
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab_with_chilecompra,
+    )
+
+    chilecompra = report["chilecompra_equipment_auto_refresh"]
+    assert chilecompra["fetched_summaries"] == 10
+    assert chilecompra["candidate_summaries"] == 3
+    assert chilecompra["prefilter_skipped_summaries"] == 7
+    assert chilecompra["detail_requests"] == 2
 
 
 def test_healthy_with_pending_ndr_sets_review_recommended_action(active_current: Path) -> None:
