@@ -7,7 +7,7 @@ import re
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -246,6 +246,13 @@ def parse_close_date(raw: str) -> datetime | None:
     return None
 
 
+def _as_naive_datetime(value: datetime) -> datetime:
+    """Normalize datetimes for safe naive close-date comparisons."""
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 @dataclass
 class TenderAccumulator:
     codigo: str
@@ -311,6 +318,9 @@ def _fit_score(
     convenio_reactivos: bool,
     now: datetime,
 ) -> int:
+    now = _as_naive_datetime(now)
+    if close_dt is not None:
+        close_dt = _as_naive_datetime(close_dt)
     score = 50
     if codigo in STOP_CONSUMABLES_OUTREACH_CODES:
         return 5
@@ -351,6 +361,9 @@ def classify_next_action(
     convenio_reactivos: bool,
     now: datetime,
 ) -> str:
+    now = _as_naive_datetime(now)
+    if close_dt is not None:
+        close_dt = _as_naive_datetime(close_dt)
     if codigo in STOP_CONSUMABLES_OUTREACH_CODES:
         return "skip_consumables"
     if close_dt and (close_dt - now).days < 0:
@@ -376,7 +389,7 @@ def build_equipment_queue_rows_from_normalized_rows(
     now: datetime | None = None,
 ) -> list[dict[str, str]]:
     """Build equipment queue rows from normalized licitación line dicts (CSV or API)."""
-    now = now or datetime.now()
+    now = _as_naive_datetime(now or datetime.now())
     tenders: dict[str, TenderAccumulator] = {}
 
     for row in rows:

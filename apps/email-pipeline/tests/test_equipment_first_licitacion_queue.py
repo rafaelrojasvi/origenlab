@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from origenlab_email_pipeline.equipment_first_licitacion_queue import (
     STOP_CONSUMABLES_OUTREACH_CODES,
     build_equipment_queue_rows,
+    build_equipment_queue_rows_from_normalized_rows,
     classify_next_action,
     detect_equipment_categories,
     line_blob,
@@ -152,3 +153,46 @@ def test_parse_close_date_supports_iso_datetime_formats() -> None:
 def test_parse_close_date_supports_iso_timezone_suffix_as_naive_wall_time() -> None:
     assert parse_close_date("2026-06-17T19:00:00+00:00") == datetime(2026, 6, 17, 19, 0, 0)
     assert parse_close_date("2026-06-17T19:00:00Z") == datetime(2026, 6, 17, 19, 0, 0)
+
+
+def test_build_equipment_queue_rows_accepts_aware_now_with_iso_close_date() -> None:
+    rows = build_equipment_queue_rows_from_normalized_rows(
+        [
+            {
+                "codigo": "1051-1-LP26",
+                "buyer": "Hospital Demo",
+                "region": "RM",
+                "close_date": "2026-06-17T19:00:00",
+                "title": "Adquisición centrifuga laboratorio",
+                "line_description": "Centrifuga refrigerada para laboratorio clínico",
+                "producto": "Centrifuga",
+            }
+        ],
+        now=datetime(2026, 6, 14, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["codigo_licitacion"] == "1051-1-LP26"
+    assert rows[0]["close_date"] == "2026-06-17T19:00:00"
+    assert rows[0]["next_action"] == "quote_now"
+
+
+def test_build_equipment_queue_rows_naive_now_still_works() -> None:
+    rows = build_equipment_queue_rows_from_normalized_rows(
+        [
+            {
+                "codigo": "2000-1-LP26",
+                "buyer": "Hospital Demo",
+                "region": "RM",
+                "close_date": "20/06/2026 17:00:00",
+                "title": "Balanza analítica laboratorio",
+                "line_description": "Balanza analítica 0.1 mg para laboratorio clínico",
+                "producto": "Balanza",
+            }
+        ],
+        now=datetime(2026, 6, 14, 12, 0, 0),
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["equipment_category"] == "balance"
+    assert rows[0]["next_action"] in {"quote_now", "needs_supplier_quote"}
