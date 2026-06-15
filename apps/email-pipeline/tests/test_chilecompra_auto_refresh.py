@@ -61,6 +61,7 @@ def _mock_build_result() -> tuple[list[dict[str, str]], dict[str, object], list[
     manifest = {
         "fetched_summaries": 10,
         "candidate_summaries": 3,
+        "prefilter_skipped_summaries": 7,
         "detail_requests": 2,
         "detail_cache_hits": 1,
         "detail_error_count": 0,
@@ -132,12 +133,14 @@ def test_apply_writes_state_and_calls_mocked_build_publish(
     assert out["published_rows"] == "1"
     assert out["detail_requests"] == "2"
     assert out["detail_cache_hits"] == "1"
+    assert out["prefilter_skipped_summaries"] == "7"
     publish.assert_called_once()
 
     state = load_state(state_path(reports_dir))
     assert state.last_result == "refreshed"
     assert state.fetched_summaries == 10
     assert state.candidate_summaries == 3
+    assert state.prefilter_skipped_summaries == 7
     assert state.output_rows == 1
     assert state.published_rows == 1
     assert state.next_recommended_run_at is not None
