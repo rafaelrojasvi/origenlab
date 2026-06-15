@@ -22,6 +22,7 @@ AUTOMATION_STATUS_KEYS = frozenset(
         "daily_core",
         "mail_auto_refresh",
         "dashboard_auto_mirror",
+        "chilecompra_equipment_auto_refresh",
         "cron",
         "recommended_action",
         "warnings",
@@ -34,6 +35,7 @@ AUTOMATION_STATUS_KEYS = frozenset(
 DAILY_CORE_MANIFEST_NAME = "daily_core_run_manifest.json"
 MAIL_STATE_NAME = "mail_auto_refresh_state.json"
 MIRROR_STATE_NAME = "dashboard_auto_mirror_state.json"
+CHILECOMPRA_STATE_NAME = "chilecompra_equipment_auto_refresh_state.json"
 _DAILY_CORE_TS = "2026-06-10T18:12:48+00:00"
 _MIRROR_TS = "2026-06-10T18:18:33+00:00"
 _T0 = datetime(2026, 6, 10, 18, 30, 0, tzinfo=timezone.utc)
@@ -85,6 +87,20 @@ def _write_mirror_state(active_current: Path, **kwargs: object) -> None:
         **kwargs,
     }
     (active_current / MIRROR_STATE_NAME).write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_chilecompra_state(active_current: Path, **kwargs: object) -> None:
+    payload = {
+        "last_result": "refreshed",
+        "last_successful_refresh_at": _DAILY_CORE_TS,
+        "last_successful_publish_at": _MIRROR_TS,
+        "consecutive_failures": 0,
+        "published_rows": 7,
+        "candidate_summaries": 81,
+        "detail_cache_hits": 50,
+        **kwargs,
+    }
+    (active_current / CHILECOMPRA_STATE_NAME).write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _healthy_fixture(tmp_path: Path) -> Path:
@@ -187,6 +203,13 @@ def test_uses_postgres_snapshot_before_filesystem(
                 "state_exists": True,
                 "mirror_matches_daily_core": True,
             },
+            "chilecompra_equipment_auto_refresh": {
+                "state_exists": True,
+                "last_result": "refreshed",
+                "published_rows": 7,
+                "candidate_summaries": 81,
+                "detail_cache_hits": 50,
+            },
             "cron": {"note": "not inspected by API"},
             "recommended_action": "none",
             "warnings": [],
@@ -213,7 +236,21 @@ def test_uses_postgres_snapshot_before_filesystem(
     assert data["source"] == "postgres_snapshot"
     assert data["snapshot_updated_at"] == now.isoformat()
     assert data["verdict"] == "healthy"
+    chilecompra = data["chilecompra_equipment_auto_refresh"]
+    assert chilecompra["state_exists"] is True
+    assert chilecompra["published_rows"] == 7
     get_settings.cache_clear()
+
+
+def test_filesystem_includes_chilecompra_equipment_auto_refresh(tmp_path: Path) -> None:
+    active = _healthy_fixture(tmp_path)
+    _write_chilecompra_state(active)
+    data = _client_with_active_current(active).get("/operator/automation-status").json()
+    assert data["source"] == "filesystem_active_current"
+    chilecompra = data["chilecompra_equipment_auto_refresh"]
+    assert chilecompra["state_exists"] is True
+    assert chilecompra["published_rows"] == 7
+    assert chilecompra["detail_cache_hits"] == 50
 
 
 def test_mirror_behind_attention(tmp_path: Path) -> None:
