@@ -500,6 +500,8 @@ def run_dashboard_auto_mirror(
     mirror_state = load_state(state_file)
     mirror_state.last_run_started_at = _iso_now(now)
 
+    exit_rc = 0
+    should_publish_snapshot = False
     try:
         manifest = load_daily_core_manifest(reports_dir)
         mail_state_path = mail_auto_refresh_state_path(reports_dir)
@@ -556,14 +558,17 @@ def run_dashboard_auto_mirror(
             mirror_state.last_result = result.reason
 
         save_state(state_file, mirror_state)
-        _publish_automation_status_snapshot_if_configured(options, reports_dir)
+        should_publish_snapshot = True
         for line in result.output_lines():
             print(line)
         if mirror_rc is not None and mirror_rc != 0:
-            return mirror_rc
-        return 0
+            exit_rc = mirror_rc
     finally:
         release_lock(mirror_lock)
+        if should_publish_snapshot:
+            _publish_automation_status_snapshot_if_configured(options, reports_dir)
+
+    return exit_rc
 
 
 def parse_dashboard_auto_mirror_args(argv: list[str]) -> DashboardAutoMirrorOptions:

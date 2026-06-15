@@ -448,6 +448,94 @@ def test_mirror_success_publishes_automation_snapshot_after_state_update(
     assert mock_publish_snapshot == [(True, True, reports)]
 
 
+def test_publish_automation_snapshot_called_after_release_lock(
+    active_current: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import origenlab_email_pipeline.operator_cli.dashboard_auto_mirror as mirror_mod
+
+    _ready_fixture(active_current)
+    reports = active_current.parent.parent
+    order: list[str] = []
+    real_release = mirror_mod.release_lock
+
+    def track_release(lock_file: Path) -> None:
+        order.append("release_lock")
+        real_release(lock_file)
+
+    def track_publish(
+        options: DashboardAutoMirrorOptions,
+        reports_dir: Path | None = None,
+    ) -> None:
+        order.append("publish_snapshot")
+
+    monkeypatch.setattr(mirror_mod, "release_lock", track_release)
+    monkeypatch.setattr(
+        mirror_mod,
+        "_publish_automation_status_snapshot_if_configured",
+        track_publish,
+    )
+
+    run_dashboard_auto_mirror(
+        _opts(apply=True, allow_non_scratch_postgres=True),
+        reports_dir=reports,
+        run_mirror_fn=lambda: 0,
+        now_fn=lambda: _T0,
+    )
+    assert order == ["release_lock", "publish_snapshot"]
+
+
+def test_mirror_success_snapshot_does_not_report_live_mirror_lock(
+    active_current: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import origenlab_email_pipeline.operator_cli.dashboard_auto_mirror as mirror_mod
+
+    from origenlab_email_pipeline.dashboard_snapshot_publish import (
+        build_operator_automation_status_snapshot,
+    )
+
+    _ready_fixture(active_current)
+    reports = active_current.parent.parent
+    lock_live_at_publish: list[bool] = []
+    published_snapshots: list[dict[str, object]] = []
+
+    def publish_and_verify(
+        options: DashboardAutoMirrorOptions,
+        reports_dir: Path | None = None,
+    ) -> None:
+        lock_file = mirror_mod.lock_path(reports_dir)
+        lock_live_at_publish.append(mirror_mod._lock_is_live(lock_file))
+        snapshot = build_operator_automation_status_snapshot(
+            mirror_mod.active_current_dir(reports_dir),
+            mirror_cooldown_seconds=options.cooldown_seconds,
+        )
+        published_snapshots.append(snapshot)
+
+    monkeypatch.setattr(
+        mirror_mod,
+        "_publish_automation_status_snapshot_if_configured",
+        publish_and_verify,
+    )
+    monkeypatch.setattr(
+        mirror_mod,
+        "_process_alive",
+        lambda pid: True,
+    )
+
+    run_dashboard_auto_mirror(
+        _opts(apply=True, allow_non_scratch_postgres=True),
+        reports_dir=reports,
+        run_mirror_fn=lambda: 0,
+        now_fn=lambda: _T0,
+    )
+
+    assert lock_live_at_publish == [False]
+    mirror_section = published_snapshots[0]["dashboard_auto_mirror"]
+    assert isinstance(mirror_section, dict)
+    assert mirror_section["lock_live"] is False
+
+
 def test_daily_core_mirrored_but_fingerprint_changed_should_run(
     active_current: Path,
     capsys: pytest.CaptureFixture[str],
