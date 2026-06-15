@@ -21,6 +21,7 @@ from origenlab_email_pipeline.operator_cli.mail_auto_refresh import (
 )
 from origenlab_email_pipeline.operator_cli.operator_automation_status import (
     LEGACY_MIRROR_CRON_WRAPPER,
+    TRACKED_CHILECOMPRA_CRON_SCRIPT,
     TRACKED_MAIL_CRON_SCRIPT,
     TRACKED_MIRROR_CRON_SCRIPT,
     OperatorAutomationStatusOptions,
@@ -122,6 +123,18 @@ def _healthy_tracked_crontab() -> dict[str, Any]:
             [
                 f"*/3 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MAIL_CRON_SCRIPT}",
                 f"*/15 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MIRROR_CRON_SCRIPT}",
+            ]
+        )
+    )
+
+
+def _healthy_tracked_crontab_with_chilecompra() -> dict[str, Any]:
+    return _inspect_crontab_content(
+        "\n".join(
+            [
+                f"*/3 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MAIL_CRON_SCRIPT}",
+                f"*/15 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MIRROR_CRON_SCRIPT}",
+                f"12 8-20/2 * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_CHILECOMPRA_CRON_SCRIPT}",
             ]
         )
     )
@@ -445,8 +458,10 @@ def test_crontab_unavailable_warning_not_blocked(active_current: Path) -> None:
             "crontab_available": False,
             "mail_entry_present": False,
             "mirror_entry_present": False,
+            "chilecompra_entry_present": False,
             "mail_uses_tracked_script": False,
             "mirror_uses_tracked_script": False,
+            "chilecompra_uses_tracked_script": False,
             "legacy_runtime_wrapper_present": False,
             "broken_joined_flags": False,
             "warnings": ["crontab_command_unavailable"],
@@ -629,3 +644,62 @@ def test_missing_chilecompra_state_remains_non_blocking(active_current: Path) ->
     assert report["verdict"] == "healthy"
     assert report["chilecompra_equipment_auto_refresh"]["state_exists"] is False
     assert report["chilecompra_equipment_auto_refresh"]["parse_error"] == "missing"
+
+
+def test_crontab_with_mail_mirror_chilecompra_scripts_is_healthy(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_chilecompra_state(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab_with_chilecompra,
+    )
+    assert report["verdict"] == "healthy"
+    assert report["recommended_action"] == "none"
+    assert report["cron"]["chilecompra_entry_present"] is True
+    assert report["cron"]["chilecompra_uses_tracked_script"] is True
+
+
+def test_missing_chilecompra_cron_when_state_exists(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_chilecompra_state(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    assert report["verdict"] == "attention"
+    assert report["recommended_action"] == "install_chilecompra_cron"
+    assert report["cron"]["chilecompra_entry_present"] is False
+    assert "chilecompra_cron_missing" in report["warnings"]
+
+
+def test_missing_chilecompra_cron_not_blocking_without_state(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    assert report["verdict"] == "healthy"
+    assert report["recommended_action"] == "none"
+    assert report["cron"]["chilecompra_entry_present"] is False
+    assert "chilecompra_cron_missing" not in report["warnings"]
+
+
+def test_wrong_chilecompra_cron_detected_not_tracked(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_chilecompra_state(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=lambda: _crontab_from_lines(
+            f"*/3 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MAIL_CRON_SCRIPT}",
+            f"*/15 * * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/{TRACKED_MIRROR_CRON_SCRIPT}",
+            "12 8-20/2 * * * uv run origenlab auto-refresh-chilecompra-equipment --once --apply",
+        ),
+    )
+    assert report["cron"]["chilecompra_entry_present"] is True
+    assert report["cron"]["chilecompra_uses_tracked_script"] is False
+    assert report["verdict"] == "healthy"
+    assert report["recommended_action"] == "none"
