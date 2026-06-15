@@ -1,5 +1,7 @@
 import { parseSortableTimestamp } from "./clientTableView";
 
+const CHILE_TIME_ZONE = "America/Santiago";
+
 function parseIsoTimestamp(iso: string | null | undefined): number | null {
   const trimmed = iso?.trim();
   if (!trimmed) return null;
@@ -43,20 +45,34 @@ function parseChileanDateTime(value: string): number | null {
   return Number.isFinite(ts) ? ts : null;
 }
 
-function formatTimestampEsCl(ts: number, includeTime: boolean): string {
+function formatTimestampEsCl(
+  ts: number,
+  includeTime: boolean,
+  timeZone?: string,
+): string {
   const date = new Date(ts);
+  const zoneOptions = timeZone ? { timeZone } : {};
   const datePart = new Intl.DateTimeFormat("es-CL", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    ...zoneOptions,
   }).format(date);
   if (!includeTime) return datePart;
   const timePart = new Intl.DateTimeFormat("es-CL", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    ...zoneOptions,
   }).format(date);
   return `${datePart}, ${timePart}`;
+}
+
+function formatEquipmentCloseAt(closeAt: string): string {
+  const ts = parseIsoTimestamp(closeAt);
+  if (ts == null) return closeAt;
+  const hasTime = /T\d{1,2}:\d{2}/.test(closeAt) || /\d{1,2}:\d{2}/.test(closeAt);
+  return formatTimestampEsCl(ts, hasTime, CHILE_TIME_ZONE);
 }
 
 /** Equipment close display: prefers mirror close_at, else Chilean or ISO close_date. */
@@ -65,7 +81,7 @@ export function formatEquipmentCloseDate(
   closeAt?: string | null,
 ): string {
   const at = closeAt?.trim();
-  if (at) return formatDashboardDateTime(at);
+  if (at) return formatEquipmentCloseAt(at);
   const date = closeDate?.trim();
   if (!date) return "—";
   const chileanTs = parseChileanDateTime(date);
