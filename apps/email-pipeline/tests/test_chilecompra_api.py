@@ -16,6 +16,7 @@ from origenlab_email_pipeline.chilecompra_api import (
     ChileCompraHttpError,
     ChileCompraJsonError,
     ChileCompraTicketMissingError,
+    VALIDITY_STATUS_CLOSES_TODAY,
     VALIDITY_STATUS_EXPIRED,
     VALIDITY_STATUS_MISSING_CLOSE_DATE,
     VALIDITY_STATUS_NOT_PUBLICADA,
@@ -360,3 +361,33 @@ def test_missing_close_date_maps_to_missing_validity() -> None:
         now=datetime(2026, 6, 14, 12, 0, 0),
     )
     assert validity == VALIDITY_STATUS_MISSING_CLOSE_DATE
+
+
+def test_iso_future_close_date_maps_to_open_validity() -> None:
+    validity = classify_chilecompra_validity_status(
+        chilecompra_status_code="5",
+        chilecompra_status="Publicada",
+        close_date="2026-06-17T19:00:00",
+        now=datetime(2026, 6, 14, 12, 0, 0),
+    )
+    assert validity == VALIDITY_STATUS_OPEN
+
+
+def test_iso_same_day_close_date_maps_to_closes_today_validity() -> None:
+    validity = classify_chilecompra_validity_status(
+        chilecompra_status_code="5",
+        chilecompra_status="Publicada",
+        close_date="2026-06-14T19:00:00",
+        now=datetime(2026, 6, 14, 12, 0, 0),
+    )
+    assert validity == VALIDITY_STATUS_CLOSES_TODAY
+
+
+def test_iso_past_close_date_maps_to_expired_validity() -> None:
+    validity = classify_chilecompra_validity_status(
+        chilecompra_status_code="5",
+        chilecompra_status="Publicada",
+        close_date="2026-06-10T19:00:00",
+        now=datetime(2026, 6, 14, 12, 0, 0),
+    )
+    assert validity == VALIDITY_STATUS_EXPIRED
