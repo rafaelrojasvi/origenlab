@@ -44,11 +44,11 @@ def upgrade() -> None:
           eo.supplier_needed,
           eo.contact_status,
           eo.operator_note,
-          eo.extra_json,
           ls.csv_path AS source_path,
           ls.campaign_mode,
           ls.synced_at,
-          (eo.source_id = ls.id) AS is_canonical_source
+          (eo.source_id = ls.id) AS is_canonical_source,
+          eo.extra_json
         FROM commercial.equipment_opportunity eo
         JOIN commercial.equipment_opportunity_source src ON src.id = eo.source_id
         JOIN latest_source ls ON src.id = ls.id
