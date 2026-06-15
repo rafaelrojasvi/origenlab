@@ -47,6 +47,7 @@ VERDICT_BLOCKED = "blocked"
 
 TRACKED_MAIL_CRON_SCRIPT = "scripts/operator/run_auto_refresh_mail.sh"
 TRACKED_MIRROR_CRON_SCRIPT = "scripts/operator/run_auto_mirror_dashboard.sh"
+TRACKED_CHILECOMPRA_CRON_SCRIPT = "scripts/operator/run_auto_refresh_chilecompra_equipment.sh"
 LEGACY_MIRROR_CRON_WRAPPER = "reports/out/active/current/bin/run_auto_mirror_dashboard.sh"
 JOINED_FLAG_PATTERN = re.compile(r"--\w+--\w+")
 
@@ -149,8 +150,10 @@ def _inspect_crontab_content(content: str) -> dict[str, Any]:
 
     mail_entry_present = False
     mirror_entry_present = False
+    chilecompra_entry_present = False
     mail_uses_tracked_script = False
     mirror_uses_tracked_script = False
+    chilecompra_uses_tracked_script = False
     legacy_runtime_wrapper_present = False
 
     for line in lines:
@@ -166,6 +169,14 @@ def _inspect_crontab_content(content: str) -> dict[str, Any]:
         if TRACKED_MIRROR_CRON_SCRIPT in line and LEGACY_MIRROR_CRON_WRAPPER not in line:
             mirror_uses_tracked_script = True
 
+        if (
+            "auto-refresh-chilecompra-equipment" in line
+            or "run_auto_refresh_chilecompra_equipment.sh" in line
+        ):
+            chilecompra_entry_present = True
+        if TRACKED_CHILECOMPRA_CRON_SCRIPT in line:
+            chilecompra_uses_tracked_script = True
+
     if joined_flags:
         cron_warnings.append("broken_joined_flags_detected")
     if legacy_runtime_wrapper_present:
@@ -176,8 +187,10 @@ def _inspect_crontab_content(content: str) -> dict[str, Any]:
         "crontab_available": True,
         "mail_entry_present": mail_entry_present,
         "mirror_entry_present": mirror_entry_present,
+        "chilecompra_entry_present": chilecompra_entry_present,
         "mail_uses_tracked_script": mail_uses_tracked_script,
         "mirror_uses_tracked_script": mirror_uses_tracked_script,
+        "chilecompra_uses_tracked_script": chilecompra_uses_tracked_script,
         "legacy_runtime_wrapper_present": legacy_runtime_wrapper_present,
         "broken_joined_flags": joined_flags,
         "warnings": cron_warnings,
@@ -191,8 +204,10 @@ def _empty_crontab_inspection(*, warning: str | None = None) -> dict[str, Any]:
         "crontab_available": True,
         "mail_entry_present": False,
         "mirror_entry_present": False,
+        "chilecompra_entry_present": False,
         "mail_uses_tracked_script": False,
         "mirror_uses_tracked_script": False,
+        "chilecompra_uses_tracked_script": False,
         "legacy_runtime_wrapper_present": False,
         "broken_joined_flags": False,
         "warnings": cron_warnings,
@@ -215,8 +230,10 @@ def read_user_crontab() -> dict[str, Any]:
             "crontab_available": False,
             "mail_entry_present": False,
             "mirror_entry_present": False,
+            "chilecompra_entry_present": False,
             "mail_uses_tracked_script": False,
             "mirror_uses_tracked_script": False,
+            "chilecompra_uses_tracked_script": False,
             "legacy_runtime_wrapper_present": False,
             "broken_joined_flags": False,
             "warnings": ["crontab_command_unavailable"],
@@ -233,8 +250,10 @@ def read_user_crontab() -> dict[str, Any]:
             "crontab_available": True,
             "mail_entry_present": False,
             "mirror_entry_present": False,
+            "chilecompra_entry_present": False,
             "mail_uses_tracked_script": False,
             "mirror_uses_tracked_script": False,
+            "chilecompra_uses_tracked_script": False,
             "legacy_runtime_wrapper_present": False,
             "broken_joined_flags": False,
             "warnings": ["crontab_read_failed"],
@@ -248,6 +267,7 @@ def _apply_cron_verdict_override(
     verdict: str,
     recommended_action: str,
     cron: dict[str, Any],
+    chilecompra: dict[str, Any],
     warnings: list[str],
 ) -> tuple[str, str]:
     if not cron.get("inspected"):
@@ -268,6 +288,13 @@ def _apply_cron_verdict_override(
         return verdict, recommended_action
     if not cron.get("mail_entry_present") or not cron.get("mirror_entry_present"):
         return VERDICT_ATTENTION, "inspect_crontab"
+    if (
+        chilecompra.get("state_exists")
+        and chilecompra.get("last_successful_refresh_at")
+        and not cron.get("chilecompra_entry_present")
+    ):
+        warnings.append("chilecompra_cron_missing")
+        return VERDICT_ATTENTION, "install_chilecompra_cron"
 
     return verdict, recommended_action
 
@@ -464,6 +491,7 @@ def build_operator_automation_status(
             verdict=verdict,
             recommended_action=recommended_action,
             cron=cron_section,
+            chilecompra=chilecompra_section,
             warnings=warnings,
         )
 
@@ -707,8 +735,10 @@ def format_operator_automation_status_text(report: dict[str, Any]) -> str:
             "crontab_available",
             "mail_entry_present",
             "mirror_entry_present",
+            "chilecompra_entry_present",
             "mail_uses_tracked_script",
             "mirror_uses_tracked_script",
+            "chilecompra_uses_tracked_script",
             "legacy_runtime_wrapper_present",
             "broken_joined_flags",
         ):

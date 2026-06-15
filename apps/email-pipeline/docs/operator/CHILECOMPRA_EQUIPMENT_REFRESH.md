@@ -41,10 +41,46 @@ Useful flags:
 
 Do **not** add cron entries in code — schedule externally when ready.
 
+### Rollout checklist
+
+Complete these steps **in order** before installing cron:
+
+1. **Dry-run** — confirm command wiring without API calls or writes:
+   ```bash
+   cd apps/email-pipeline
+   uv run origenlab auto-refresh-chilecompra-equipment --once
+   ```
+2. **Apply once with `--force`** — prove fetch, publish, and state update:
+   ```bash
+   cd apps/email-pipeline
+   uv run origenlab auto-refresh-chilecompra-equipment --once --apply --force
+   ```
+3. **Check automation status** — verify ChileCompra section and mail/mirror health:
+   ```bash
+   cd apps/email-pipeline
+   uv run origenlab operator-automation-status
+   ```
+4. **Mirror dashboard manually once** — confirm Postgres mirror after publish:
+   ```bash
+   cd apps/email-pipeline
+   uv run origenlab auto-mirror-dashboard --once --apply --allow-non-scratch-postgres
+   ```
+5. **Only then install cron** — add the tracked wrapper entry below. `operator-automation-status` will report `install_chilecompra_cron` until the entry is present.
+
+### Recommended crontab block
+
+Every 2 hours during daytime (08:00–20:00), offset from dashboard mirror jobs:
+
+```cron
+12 8-20/2 * * * /home/rafael/dev/freelance/origenlab/apps/email-pipeline/scripts/operator/run_auto_refresh_chilecompra_equipment.sh >> /home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current/auto_chilecompra_cron.log 2>&1
+```
+
+`operator-automation-status` inspects crontab read-only and reports `chilecompra_entry_present` / `chilecompra_uses_tracked_script` under the `cron` section.
+
 Suggested starting point for daytime operations:
 
 - Every **2–4 hours** during business hours, **not** on the same minute as `auto-mirror-dashboard`.
-- Example pattern: refresh ChileCompra at `:20`, mirror dashboard at `:35` every 2 hours.
+- Example pattern: refresh ChileCompra at `:12`, mirror dashboard at `:35` every 2 hours.
 
 Keep `max-details` conservative (50 or lower) to respect API quotas.
 
