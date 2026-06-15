@@ -12,6 +12,7 @@ from origenlab_email_pipeline.operator_cli.daily_core_manifest import MANIFEST_F
 from origenlab_email_pipeline.operator_cli.dashboard_auto_mirror import (
     DashboardAutoMirrorOptions,
     DashboardAutoMirrorState,
+    compute_dashboard_input_fingerprint,
     evaluate_dashboard_auto_mirror,
     load_state,
     run_dashboard_auto_mirror,
@@ -76,6 +77,21 @@ def _write_mail_state(
 def _ready_fixture(active_current: Path) -> None:
     _write_daily_core_manifest(active_current)
     _write_mail_state(active_current, dirty=False)
+
+
+def _write_dashboard_manifest(active_current: Path, *, canonical_files: list[str]) -> None:
+    active_current.mkdir(parents=True, exist_ok=True)
+    (active_current / "manifest.json").write_text(
+        json.dumps({"campaign_mode": "equipment_first", "canonical_files": canonical_files}),
+        encoding="utf-8",
+    )
+
+
+def _write_equipment_queue_csv(active_current: Path, *, filename: str, content: str) -> Path:
+    active_current.mkdir(parents=True, exist_ok=True)
+    path = active_current / filename
+    path.write_text(content, encoding="utf-8")
+    return path
 
 
 @pytest.fixture
@@ -158,14 +174,17 @@ def test_mail_pending_no_run(active_current: Path, capsys: pytest.CaptureFixture
 
 def test_already_mirrored_no_run(active_current: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _ready_fixture(active_current)
+    reports = active_current.parent.parent
+    fingerprint = compute_dashboard_input_fingerprint(reports)
     mirror_state = DashboardAutoMirrorState(
         last_mirrored_daily_core_generated_at=_DAILY_CORE_TS,
         last_successful_mirror_at=_T0.isoformat(),
+        last_mirrored_dashboard_input_fingerprint=fingerprint,
     )
-    state_file = state_path(active_current.parent.parent)
+    state_file = state_path(reports)
     state_file.write_text(json.dumps(mirror_state.to_dict()), encoding="utf-8")
 
-    run_dashboard_auto_mirror(_opts(), reports_dir=active_current.parent.parent, now_fn=lambda: _T0)
+    run_dashboard_auto_mirror(_opts(), reports_dir=reports, now_fn=lambda: _T0)
     out = _parse_output(capsys.readouterr().out)
     assert out["reason"] == "already_mirrored"
     assert out["should_run"] == "false"
@@ -239,6 +258,9 @@ def test_mirror_success_updates_state(active_current: Path) -> None:
     state = load_state(state_path(reports))
     assert state.last_successful_mirror_at is not None
     assert state.last_mirrored_daily_core_generated_at == _DAILY_CORE_TS
+    assert state.last_mirrored_dashboard_input_fingerprint == compute_dashboard_input_fingerprint(
+        reports
+    )
     assert state.consecutive_failures == 0
     assert state.last_result == "success"
 
@@ -331,6 +353,7 @@ def test_evaluate_unit_missing_manifest() -> None:
         manifest=None,
         mail_state=MailAutoRefreshState(),
         now=_T0,
+        dashboard_input_fingerprint="abc123",
     )
     assert result.reason == "daily_core_manifest_missing"
 
@@ -423,3 +446,100 @@ def test_mirror_success_publishes_automation_snapshot_after_state_update(
     state = load_state(state_path(reports))
     assert state.last_result == "success"
     assert mock_publish_snapshot == [(True, True, reports)]
+
+
+def test_daily_core_mirrored_but_fingerprint_changed_should_run(
+    active_current: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _ready_fixture(active_current)
+    reports = active_current.parent.parent
+    _write_dashboard_manifest(
+        active_current,
+        canonical_files=["equipment_first_operator_queue_20260614.csv"],
+    )
+    _write_equipment_queue_csv(
+        active_current,
+        filename="equipment_first_operator_queue_20260614.csv",
+        content="codigo_licitacion,buyer\n1051-1-LP26,Hospital\n",
+    )
+    current_fingerprint = compute_dashboard_input_fingerprint(reports)
+    mirror_state = DashboardAutoMirrorState(
+        last_mirrored_daily_core_generated_at=_DAILY_CORE_TS,
+        last_successful_mirror_at=(_T0 - timedelta(hours=2)).isoformat(),
+        last_mirrored_dashboard_input_fingerprint="stale-fingerprint",
+    )
+    state_path(reports).write_text(json.dumps(mirror_state.to_dict()), encoding="utf-8")
+
+    run_dashboard_auto_mirror(_opts(apply=False), reports_dir=reports, now_fn=lambda: _T0)
+    out = _parse_output(capsys.readouterr().out)
+    assert out["reason"] == "dry_run"
+    assert out["should_run"] == "true"
+    assert out["dashboard_input_fingerprint"] == current_fingerprint
+
+
+def test_daily_core_and_fingerprint_matched_is_already_mirrored(
+    active_current: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _ready_fixture(active_current)
+    reports = active_current.parent.parent
+    _write_dashboard_manifest(
+        active_current,
+        canonical_files=["equipment_first_operator_queue_20260614.csv"],
+    )
+    _write_equipment_queue_csv(
+        active_current,
+        filename="equipment_first_operator_queue_20260614.csv",
+        content="codigo_licitacion,buyer\n1051-1-LP26,Hospital\n",
+    )
+    fingerprint = compute_dashboard_input_fingerprint(reports)
+    mirror_state = DashboardAutoMirrorState(
+        last_mirrored_daily_core_generated_at=_DAILY_CORE_TS,
+        last_successful_mirror_at=_T0.isoformat(),
+        last_mirrored_dashboard_input_fingerprint=fingerprint,
+    )
+    state_path(reports).write_text(json.dumps(mirror_state.to_dict()), encoding="utf-8")
+
+    run_dashboard_auto_mirror(_opts(), reports_dir=reports, now_fn=lambda: _T0)
+    out = _parse_output(capsys.readouterr().out)
+    assert out["reason"] == "already_mirrored"
+    assert out["should_run"] == "false"
+
+
+def test_compute_dashboard_input_fingerprint_changes_when_manifest_or_queue_changes(
+    active_current: Path,
+) -> None:
+    reports = active_current.parent.parent
+    empty_fp = compute_dashboard_input_fingerprint(reports)
+
+    _write_equipment_queue_csv(
+        active_current,
+        filename="equipment_first_operator_queue_20260614.csv",
+        content="codigo_licitacion,buyer\nA-1,Buyer\n",
+    )
+    queue_fp = compute_dashboard_input_fingerprint(reports)
+    assert queue_fp != empty_fp
+
+    _write_dashboard_manifest(
+        active_current,
+        canonical_files=["equipment_first_operator_queue_20260614.csv"],
+    )
+    manifest_fp = compute_dashboard_input_fingerprint(reports)
+    assert manifest_fp != empty_fp
+
+    _write_equipment_queue_csv(
+        active_current,
+        filename="equipment_first_operator_queue_20260614.csv",
+        content="codigo_licitacion,buyer\nB-2,Buyer\n",
+    )
+    updated_fp = compute_dashboard_input_fingerprint(reports)
+    assert updated_fp != manifest_fp
+
+
+def test_missing_dashboard_manifest_fingerprint_is_stable(active_current: Path) -> None:
+    reports = active_current.parent.parent
+    first = compute_dashboard_input_fingerprint(reports)
+    second = compute_dashboard_input_fingerprint(reports)
+    assert first == second
+    assert len(first) == 64
