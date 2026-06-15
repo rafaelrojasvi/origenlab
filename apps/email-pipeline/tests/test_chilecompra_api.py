@@ -23,9 +23,11 @@ from origenlab_email_pipeline.chilecompra_api import (
     VALIDITY_STATUS_OPEN,
     build_licitaciones_url,
     classify_chilecompra_validity_status,
+    extract_licitacion_anexos,
     fetch_licitacion_by_codigo,
     fetch_licitaciones,
     is_active_chilecompra_licitacion,
+    is_safe_public_attachment_url,
     normalize_licitacion_detail_items,
     normalize_licitacion_summary,
     normalize_licitaciones_response,
@@ -391,3 +393,49 @@ def test_iso_past_close_date_maps_to_expired_validity() -> None:
         now=datetime(2026, 6, 14, 12, 0, 0),
     )
     assert validity == VALIDITY_STATUS_EXPIRED
+
+
+def test_is_safe_public_attachment_url_rejects_ticket_and_api_hosts() -> None:
+    assert is_safe_public_attachment_url(
+        "https://www.mercadopublico.cl/Procurement/Modules/RFB/Details.aspx"
+    )
+    assert not is_safe_public_attachment_url(
+        "https://api.mercadopublico.cl/servicios/v1/publico/ordencompra.json?ticket=SECRET"
+    )
+    assert not is_safe_public_attachment_url("https://api.chilecompra.cl/archivo.pdf")
+    assert not is_safe_public_attachment_url("ftp://files.example/base.pdf")
+
+
+def test_extract_licitacion_anexos_normalizes_safe_fields_only() -> None:
+    licitacion = {
+        "Anexos": {
+            "Listado": [
+                {
+                    "Nombre": "Bases técnicas.pdf",
+                    "Tipo": "Bases",
+                    "Descripcion": "Especificaciones del equipo",
+                    "Tamano": "1.2 MB",
+                    "Fecha": "01/06/2026",
+                    "Url": "https://www.mercadopublico.cl/archivos/bases.pdf",
+                },
+                {
+                    "Nombre": "Anexo ticket",
+                    "Url": "https://api.mercadopublico.cl/v1/doc?ticket=SECRET",
+                },
+            ]
+        }
+    }
+    anexos = extract_licitacion_anexos(licitacion)
+    assert len(anexos) == 2
+    assert anexos[0]["nombre"] == "Bases técnicas.pdf"
+    assert anexos[0]["tipo"] == "Bases"
+    assert anexos[0]["descripcion"] == "Especificaciones del equipo"
+    assert anexos[0]["tamano"] == "1.2 MB"
+    assert anexos[0]["fecha_adjunto"] == "01/06/2026"
+    assert "mercadopublico.cl" in anexos[0]["url"]
+    assert anexos[1]["nombre"] == "Anexo ticket"
+    assert anexos[1]["url"] == ""
+
+
+def test_extract_licitacion_anexos_empty_when_payload_has_no_attachment_keys() -> None:
+    assert extract_licitacion_anexos({"CodigoExterno": "1702-20-L126", "Items": {"Listado": []}}) == []

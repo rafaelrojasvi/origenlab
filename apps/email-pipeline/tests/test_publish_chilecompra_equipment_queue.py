@@ -501,3 +501,17 @@ def test_coalesce_combines_item_metadata_for_same_codigo() -> None:
     assert "Centrifuga" in merged["producto"]
     assert "Homogeneizador" in merged["producto"]
     assert merged["cantidad"] == "3"
+
+
+def test_enrich_carries_anexos_json_to_published_row() -> None:
+    enriched = enrich_chilecompra_row_for_dashboard(
+        {
+            **_source_row(codigo="1051-1-LP26", next_action="quote_now", fit_score="90"),
+            "anexos_json": json.dumps(
+                [{"nombre": "Bases.pdf", "tipo": "Bases", "url": "https://www.mercadopublico.cl/bases.pdf"}]
+            ),
+        }
+    )
+    assert "anexos_json" in enriched
+    assert "Bases.pdf" in enriched["anexos_json"]
+    assert "anexos_json" in PUBLISHED_DASHBOARD_FIELDS

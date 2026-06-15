@@ -20,6 +20,25 @@ TICKET_ENV_VAR = "CHILECOMPRA_API_TICKET"
 DEFAULT_TIMEOUT_SECONDS = 30.0
 FECHA_PATTERN = re.compile(r"^\d{8}$")
 _TICKET_IN_URL_RE = re.compile(r"([?&]ticket=)[^&]*", re.IGNORECASE)
+_UNSAFE_ATTACHMENT_URL_RE = re.compile(r"ticket|api\.chilecompra|api\.mercadopublico\.cl", re.IGNORECASE)
+
+_ANEXOS_CONTAINER_KEYS = (
+    "Anexos",
+    "Adjuntos",
+    "Documentos",
+    "Archivos",
+    "ListadoAnexos",
+    "ListadoAdjuntos",
+)
+_ANEXO_ITEM_KEYS = ("Anexo", "Adjunto", "Documento", "Archivo")
+_ANEXO_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "nombre": ("Nombre", "nombre", "NombreArchivo", "NombreDocumento", "Titulo"),
+    "tipo": ("Tipo", "tipo", "TipoDocumento", "TipoArchivo"),
+    "descripcion": ("Descripcion", "descripcion", "Detalle", "Glosa"),
+    "tamano": ("Tamano", "Tamanio", "tamano", "Size", "Peso"),
+    "fecha_adjunto": ("Fecha", "FechaAdjunto", "fecha_adjunto", "FechaPublicacion"),
+    "url": ("Url", "URL", "url", "Link", "Enlace", "Uri"),
+}
 
 CHILECOMPRA_EXTRA_FIELDS = (
     "chilecompra_status_code",
@@ -277,6 +296,76 @@ def _extract_listado(payload: dict[str, Any]) -> list[dict[str, Any]]:
         if isinstance(nested, dict):
             return [nested]
     return []
+
+
+def is_safe_public_attachment_url(url: str) -> bool:
+    text = (url or "").strip()
+    if not text:
+        return False
+    if not text.lower().startswith(("http://", "https://")):
+        return False
+    return _UNSAFE_ATTACHMENT_URL_RE.search(text) is None
+
+
+def _pick_anexo_field(item: dict[str, Any], field: str) -> str:
+    for key in _ANEXO_FIELD_ALIASES.get(field, ()):
+        value = _as_str(item.get(key))
+        if value:
+            return value
+    return ""
+
+
+def _extract_anexo_items(container: Any) -> list[dict[str, Any]]:
+    if container is None:
+        return []
+    if isinstance(container, list):
+        return [item for item in container if isinstance(item, dict)]
+    if isinstance(container, dict):
+        for key in ("Listado", "listado", *_ANEXO_ITEM_KEYS):
+            nested = container.get(key)
+            if nested is None:
+                continue
+            if isinstance(nested, list):
+                return [item for item in nested if isinstance(item, dict)]
+            if isinstance(nested, dict):
+                return [nested]
+        return [container]
+    return []
+
+
+def _normalize_anexo_item(item: dict[str, Any]) -> dict[str, str]:
+    url = _pick_anexo_field(item, "url")
+    if url and not is_safe_public_attachment_url(url):
+        url = ""
+    return {
+        "nombre": _pick_anexo_field(item, "nombre"),
+        "tipo": _pick_anexo_field(item, "tipo"),
+        "descripcion": _pick_anexo_field(item, "descripcion"),
+        "tamano": _pick_anexo_field(item, "tamano"),
+        "fecha_adjunto": _pick_anexo_field(item, "fecha_adjunto"),
+        "url": url,
+    }
+
+
+def extract_licitacion_anexos(licitacion: dict[str, Any]) -> list[dict[str, str]]:
+    """Extract safe read-only attachment metadata from a licitación detail payload."""
+    seen: set[tuple[str, str, str]] = set()
+    out: list[dict[str, str]] = []
+    for key in _ANEXOS_CONTAINER_KEYS:
+        for item in _extract_anexo_items(licitacion.get(key)):
+            normalized = _normalize_anexo_item(item)
+            if not any(normalized.values()):
+                continue
+            dedupe_key = (
+                normalized["nombre"],
+                normalized["tipo"],
+                normalized["url"],
+            )
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            out.append(normalized)
+    return out
 
 
 def _extract_items(licitacion: dict[str, Any]) -> list[dict[str, Any]]:

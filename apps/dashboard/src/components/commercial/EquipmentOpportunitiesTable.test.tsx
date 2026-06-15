@@ -413,5 +413,44 @@ describe("EquipmentOpportunitiesTable", () => {
     fireEvent.click(within(drawer).getByRole("button", { name: "Cerrar detalle de licitación" }));
     expect(screen.queryByTestId("equipment-opportunity-detail-drawer")).toBeNull();
   });
+
+  it("drawer shows attachment list when anexos are present", () => {
+    renderDetailTable([
+      {
+        ...detailRow,
+        anexos: [
+          {
+            nombre: "Bases técnicas.pdf",
+            tipo: "Bases",
+            descripcion: "Especificaciones del equipo",
+            tamano: "1.2 MB",
+            fecha_adjunto: "01/06/2026",
+            url: "https://www.mercadopublico.cl/archivos/bases.pdf",
+          },
+        ],
+      },
+    ]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ver detalle de licitación 1051-1-LP26" }),
+    );
+    const drawer = screen.getByTestId("equipment-opportunity-detail-drawer");
+    expect(drawer.textContent).toContain("Adjuntos / bases");
+    expect(drawer.textContent).toContain("Bases técnicas.pdf");
+    expect(drawer.textContent).toContain("1.2 MB");
+    expect(within(drawer).getByRole("link", { name: "Abrir adjunto" })).toBeTruthy();
+  });
+
+  it("drawer shows Mercado Público fallback when anexos are empty", () => {
+    renderDetailTable();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ver detalle de licitación 1051-1-LP26" }),
+    );
+    const drawer = screen.getByTestId("equipment-opportunity-detail-drawer");
+    expect(drawer.textContent).toContain("Adjuntos / bases");
+    expect(drawer.textContent).toContain(
+      "Adjuntos disponibles en Mercado Público; abrir la licitación para ver anexos.",
+    );
+    expect(within(drawer).getAllByRole("link", { name: "Buscar en Mercado Público" })).toHaveLength(1);
+  });
 });
 

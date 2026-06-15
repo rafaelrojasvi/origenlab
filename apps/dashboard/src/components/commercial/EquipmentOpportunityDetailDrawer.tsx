@@ -65,6 +65,55 @@ function DrawerSection({
   );
 }
 
+function AnexosSection({ item }: { item: EquipmentOpportunityItem }) {
+  const anexos = item.anexos ?? [];
+  const hasAnexos = anexos.length > 0;
+
+  return (
+    <DrawerSection title="Adjuntos / bases">
+      {hasAnexos ? (
+        <ul className="space-y-3">
+          {anexos.map((anexo, index) => {
+            const label = anexo.nombre?.trim() || `Adjunto ${index + 1}`;
+            const safeUrl =
+              anexo.url && isSafeMercadoPublicoUrl(anexo.url) ? anexo.url.trim() : "";
+            return (
+              <li
+                key={`${label}-${index}`}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800"
+              >
+                <p className="font-medium text-slate-900">{label}</p>
+                {anexo.tipo ? (
+                  <p className="text-xs text-[var(--color-muted)]">Tipo: {anexo.tipo}</p>
+                ) : null}
+                {anexo.descripcion ? <p className="mt-1">{anexo.descripcion}</p> : null}
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-muted)]">
+                  {anexo.tamano ? <span>Tamaño: {anexo.tamano}</span> : null}
+                  {anexo.fecha_adjunto ? <span>Fecha: {anexo.fecha_adjunto}</span> : null}
+                </div>
+                {safeUrl ? (
+                  <a
+                    href={safeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex text-sm font-medium text-sky-800 hover:underline"
+                  >
+                    Abrir adjunto
+                  </a>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-sm text-slate-700">
+          Adjuntos disponibles en Mercado Público; abrir la licitación para ver anexos.
+        </p>
+      )}
+    </DrawerSection>
+  );
+}
+
 function DrawerBody({ item }: { item: EquipmentOpportunityItem }) {
   const publication = item.fecha_publicacion
     ? formatEquipmentPublicationDate(item.fecha_publicacion)
@@ -126,6 +175,8 @@ function DrawerBody({ item }: { item: EquipmentOpportunityItem }) {
         <DetailRow label="Nivel 2">{item.nivel_2 || "—"}</DetailRow>
         <DetailRow label="Nivel 3">{item.nivel_3 || "—"}</DetailRow>
       </DrawerSection>
+
+      <AnexosSection item={item} />
 
       <DrawerSection title="Procedencia (solo lectura)" muted>
         <DetailRow label="Fuente">{item.source || "—"}</DetailRow>

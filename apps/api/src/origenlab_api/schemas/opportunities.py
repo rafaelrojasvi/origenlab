@@ -17,6 +17,15 @@ class EquipmentOpportunitiesMeta(BaseModel):
     note: str = ""
 
 
+class EquipmentAnexoItem(BaseModel):
+    nombre: str = ""
+    tipo: str = ""
+    descripcion: str = ""
+    tamano: str = ""
+    fecha_adjunto: str = ""
+    url: str = ""
+
+
 class EquipmentOpportunityItem(BaseModel):
     priority_rank: int
     codigo_licitacion: str = ""
@@ -47,6 +56,7 @@ class EquipmentOpportunityItem(BaseModel):
     nivel_1: str = ""
     nivel_2: str = ""
     nivel_3: str = ""
+    anexos: list[EquipmentAnexoItem] = Field(default_factory=list)
 
 
 class EquipmentOpportunitiesResponse(BaseModel):

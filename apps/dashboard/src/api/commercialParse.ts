@@ -4,6 +4,7 @@
  */
 
 import type {
+  EquipmentAnexoItem,
   EquipmentOpportunityItem,
   EquipmentOpportunitiesMeta,
   EquipmentOpportunitiesUiResponse,
@@ -141,6 +142,37 @@ function optionalEquipmentField(
   return value || undefined;
 }
 
+function normalizeAnexoItem(raw: unknown): EquipmentAnexoItem | null {
+  const item = asRecord(raw);
+  const nombre = safePreviewText(item.nombre, 200);
+  const tipo = safePreviewText(item.tipo, 80);
+  const descripcion = safePreviewText(item.descripcion, 300);
+  const tamano = safePreviewText(item.tamano, 40);
+  const fecha_adjunto = safePreviewText(item.fecha_adjunto, 40);
+  const url = safePreviewText(item.url, 300);
+  if (!nombre && !tipo && !descripcion && !tamano && !fecha_adjunto && !url) {
+    return null;
+  }
+  const anexo: EquipmentAnexoItem = {};
+  if (nombre) anexo.nombre = nombre;
+  if (tipo) anexo.tipo = tipo;
+  if (descripcion) anexo.descripcion = descripcion;
+  if (tamano) anexo.tamano = tamano;
+  if (fecha_adjunto) anexo.fecha_adjunto = fecha_adjunto;
+  if (url && !/ticket|api\.chilecompra/i.test(url)) {
+    anexo.url = url;
+  }
+  return anexo;
+}
+
+function parseEquipmentAnexos(raw: unknown): EquipmentAnexoItem[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const items = raw
+    .map((entry) => normalizeAnexoItem(entry))
+    .filter((entry): entry is EquipmentAnexoItem => entry !== null);
+  return items.length > 0 ? items : undefined;
+}
+
 export function normalizeEquipmentItem(raw: unknown, index: number): EquipmentOpportunityItem {
   const r = asRecord(raw);
   const rank =
@@ -168,6 +200,10 @@ export function normalizeEquipmentItem(raw: unknown, index: number): EquipmentOp
     if (value) {
       item[field] = value;
     }
+  }
+  const anexos = parseEquipmentAnexos(r.anexos);
+  if (anexos) {
+    item.anexos = anexos;
   }
   return item;
 }
