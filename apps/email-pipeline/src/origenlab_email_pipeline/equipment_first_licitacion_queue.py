@@ -9,7 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 # User-requested deprioritization (consumables / reagents; not equipment-first).
 STOP_CONSUMABLES_OUTREACH_CODES: frozenset[str] = frozenset(
@@ -351,15 +351,16 @@ def classify_next_action(
     return "account_intelligence_only"
 
 
-def build_equipment_queue_rows(
-    csv_path: Path,
+def build_equipment_queue_rows_from_normalized_rows(
+    rows: Iterable[dict[str, str]],
     *,
     now: datetime | None = None,
 ) -> list[dict[str, str]]:
+    """Build equipment queue rows from normalized licitación line dicts (CSV or API)."""
     now = now or datetime.now()
     tenders: dict[str, TenderAccumulator] = {}
 
-    for row in iter_licitacion_publicada_rows(csv_path):
+    for row in rows:
         codigo = (row.get("codigo") or "").strip()
         if not codigo:
             continue
@@ -438,6 +439,17 @@ def build_equipment_queue_rows(
         )
     )
     return out
+
+
+def build_equipment_queue_rows(
+    csv_path: Path,
+    *,
+    now: datetime | None = None,
+) -> list[dict[str, str]]:
+    return build_equipment_queue_rows_from_normalized_rows(
+        iter_licitacion_publicada_rows(csv_path),
+        now=now,
+    )
 
 
 def write_equipment_queue_csv(rows: list[dict[str, str]], out_path: Path) -> None:
