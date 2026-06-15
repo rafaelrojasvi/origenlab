@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import datetime
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
-from origenlab_email_pipeline.equipment_first_licitacion_queue import CSV_COLUMNS
+from origenlab_email_pipeline.equipment_first_licitacion_queue import CSV_COLUMNS, parse_close_date
 
 LICITACIONES_API_BASE = (
     "https://api.mercadopublico.cl/servicios/v1/publico/licitaciones.json"
@@ -19,6 +20,30 @@ TICKET_ENV_VAR = "CHILECOMPRA_API_TICKET"
 DEFAULT_TIMEOUT_SECONDS = 30.0
 FECHA_PATTERN = re.compile(r"^\d{8}$")
 _TICKET_IN_URL_RE = re.compile(r"([?&]ticket=)[^&]*", re.IGNORECASE)
+
+CHILECOMPRA_EXTRA_FIELDS = (
+    "chilecompra_status_code",
+    "chilecompra_status",
+)
+CHILECOMPRA_NORMALIZED_FIELDS = (*CSV_COLUMNS, *CHILECOMPRA_EXTRA_FIELDS)
+
+ACTIVE_CHILECOMPRA_STATUS_CODE = "5"
+INACTIVE_CHILECOMPRA_STATUS_CODES = frozenset({"6", "7", "8", "18", "19"})
+INACTIVE_CHILECOMPRA_STATUS_NAMES = frozenset(
+    {
+        "cerrada",
+        "desierta",
+        "adjudicada",
+        "revocada",
+        "suspendida",
+    }
+)
+
+VALIDITY_STATUS_OPEN = "open"
+VALIDITY_STATUS_CLOSES_TODAY = "closes_today"
+VALIDITY_STATUS_EXPIRED = "expired"
+VALIDITY_STATUS_NOT_PUBLICADA = "status_not_publicada"
+VALIDITY_STATUS_MISSING_CLOSE_DATE = "missing_close_date"
 
 UrlopenFn = Callable[..., Any]
 
@@ -95,7 +120,7 @@ def build_licitaciones_url(
 
 
 def _empty_row() -> dict[str, str]:
-    return {column: "" for column in CSV_COLUMNS}
+    return {column: "" for column in CHILECOMPRA_NORMALIZED_FIELDS}
 
 
 def _as_str(value: Any) -> str:
@@ -149,6 +174,73 @@ def _codigo_externo(licitacion: dict[str, Any]) -> str:
     return ""
 
 
+def _normalize_status_name(value: str) -> str:
+    return (value or "").strip().casefold()
+
+
+def _extract_status_fields(licitacion: dict[str, Any]) -> tuple[str, str]:
+    return (
+        _as_str(licitacion.get("CodigoEstado")),
+        _as_str(licitacion.get("Estado")),
+    )
+
+
+def _extract_close_date(licitacion: dict[str, Any]) -> str:
+    for key in ("FechaCierre", "FechaFinal", "FechaCierre1"):
+        text = _as_str(licitacion.get(key))
+        if text:
+            return text
+    fechas = licitacion.get("Fechas")
+    if isinstance(fechas, dict):
+        for key in ("FechaCierre", "FechaFinal"):
+            text = _as_str(fechas.get(key))
+            if text:
+                return text
+    return ""
+
+
+def is_active_chilecompra_licitacion(
+    *,
+    chilecompra_status_code: str,
+    chilecompra_status: str,
+) -> bool:
+    code = (chilecompra_status_code or "").strip()
+    status = _normalize_status_name(chilecompra_status)
+    if code in INACTIVE_CHILECOMPRA_STATUS_CODES:
+        return False
+    if status in INACTIVE_CHILECOMPRA_STATUS_NAMES:
+        return False
+    if code and code != ACTIVE_CHILECOMPRA_STATUS_CODE:
+        return False
+    return True
+
+
+def classify_chilecompra_validity_status(
+    *,
+    chilecompra_status_code: str,
+    chilecompra_status: str,
+    close_date: str,
+    now: datetime,
+) -> str:
+    if not is_active_chilecompra_licitacion(
+        chilecompra_status_code=chilecompra_status_code,
+        chilecompra_status=chilecompra_status,
+    ):
+        return VALIDITY_STATUS_NOT_PUBLICADA
+    raw_close_date = (close_date or "").strip()
+    if not raw_close_date:
+        return VALIDITY_STATUS_MISSING_CLOSE_DATE
+    close_dt = parse_close_date(raw_close_date)
+    if close_dt is None:
+        return VALIDITY_STATUS_MISSING_CLOSE_DATE
+    days = (close_dt.date() - now.date()).days
+    if days < 0:
+        return VALIDITY_STATUS_EXPIRED
+    if days == 0:
+        return VALIDITY_STATUS_CLOSES_TODAY
+    return VALIDITY_STATUS_OPEN
+
+
 def normalize_licitacion_summary(licitacion: dict[str, Any]) -> dict[str, str]:
     """Normalize a basic licitación payload to equipment-first CSV row shape."""
     row = _empty_row()
@@ -163,9 +255,10 @@ def normalize_licitacion_summary(licitacion: dict[str, Any]) -> dict[str, str]:
     row["fecha_publicacion"] = _as_str(
         licitacion.get("FechaPublicacion") or licitacion.get("FechaCreacion")
     )
-    row["close_date"] = _as_str(
-        licitacion.get("FechaCierre") or licitacion.get("FechaFinal") or licitacion.get("FechaCierre1")
-    )
+    row["close_date"] = _extract_close_date(licitacion)
+    status_code, status_name = _extract_status_fields(licitacion)
+    row["chilecompra_status_code"] = status_code
+    row["chilecompra_status"] = status_name
     return row
 
 
@@ -239,9 +332,19 @@ def _normalize_item_fields(item: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def normalize_licitacion_detail_items(licitacion: dict[str, Any]) -> list[dict[str, str]]:
+def normalize_licitacion_detail_items(
+    licitacion: dict[str, Any],
+    *,
+    summary_fallback: dict[str, str] | None = None,
+) -> list[dict[str, str]]:
     """Normalize a detailed licitación plus its line items to CSV-shaped rows."""
     summary = normalize_licitacion_summary(licitacion)
+    if summary_fallback:
+        for field in ("close_date", "chilecompra_status_code", "chilecompra_status"):
+            if not (summary.get(field) or "").strip():
+                fallback_value = (summary_fallback.get(field) or "").strip()
+                if fallback_value:
+                    summary[field] = fallback_value
     items = _extract_items(licitacion)
     if not items:
         return [summary]

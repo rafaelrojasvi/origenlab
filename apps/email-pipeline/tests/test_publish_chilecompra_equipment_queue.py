@@ -7,17 +7,24 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from origenlab_email_pipeline.chilecompra_api import (
+    VALIDITY_STATUS_EXPIRED,
+    VALIDITY_STATUS_MISSING_CLOSE_DATE,
+    VALIDITY_STATUS_NOT_PUBLICADA,
+    VALIDITY_STATUS_OPEN,
+)
 from origenlab_email_pipeline.equipment_first_chilecompra_publish import (
     CHILECOMPRA_CONTACT_STATUS,
+    CHILECOMPRA_CONTACT_STATUS_MISSING_CLOSE_DATE,
     CHILECOMPRA_REVIEW_NOTE,
     CHILECOMPRA_SAFE_CHANNEL,
     PUBLISHED_DASHBOARD_FIELDS,
     enrich_chilecompra_row_for_dashboard,
+    is_dashboard_active_chilecompra_row,
     publish_chilecompra_equipment_queue_for_dashboard,
     publish_chilecompra_equipment_rows,
     sort_chilecompra_dashboard_rows,
     update_active_manifest_canonical_queue,
-    write_published_dashboard_csv,
 )
 
 _SECRET_TICKET = "00000000-0000-0000-0000-000000000099"
@@ -30,6 +37,9 @@ def _source_row(
     fit_score: str,
     close_date: str = "20/06/2026 17:00:00",
     title: str = "Adquisición centrifuga laboratorio",
+    validity_status: str = VALIDITY_STATUS_OPEN,
+    chilecompra_status_code: str = "5",
+    chilecompra_status: str = "Publicada",
 ) -> dict[str, str]:
     return {
         "codigo_licitacion": codigo,
@@ -42,6 +52,11 @@ def _source_row(
         "fit_score": fit_score,
         "reason": "source:chilecompra_api; equipment:centrifuge",
         "next_action": next_action,
+        "api_checked_at_utc": "2026-06-14T12:00:00+00:00",
+        "validity_status": validity_status,
+        "chilecompra_status_code": chilecompra_status_code,
+        "chilecompra_status": chilecompra_status,
+        "source": "chilecompra_api",
     }
 
 
@@ -96,25 +111,10 @@ def test_publish_writes_stable_dashboard_columns(tmp_path: Path) -> None:
     source_csv = tmp_path / "equipment_first_operator_queue_chilecompra_api_20260614.csv"
     out_csv = tmp_path / "equipment_first_operator_queue_20260614.csv"
     with source_csv.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "codigo_licitacion",
-                "buyer",
-                "region",
-                "close_date",
-                "title",
-                "item_description",
-                "equipment_category",
-                "fit_score",
-                "reason",
-                "next_action",
-            ],
-        )
+        sample = _source_row(codigo="1051-1-LP26", next_action="quote_now", fit_score="85")
+        writer = csv.DictWriter(handle, fieldnames=list(sample.keys()))
         writer.writeheader()
-        writer.writerow(
-            _source_row(codigo="1051-1-LP26", next_action="quote_now", fit_score="85")
-        )
+        writer.writerow(sample)
 
     result = publish_chilecompra_equipment_queue_for_dashboard(
         source_csv=source_csv,
@@ -129,6 +129,10 @@ def test_publish_writes_stable_dashboard_columns(tmp_path: Path) -> None:
     assert row["codigo_licitacion"] == "1051-1-LP26"
     assert row["priority_rank"] == "1"
     assert row["contact_email"] == ""
+    assert row["close_date"] == "20/06/2026 17:00:00"
+    assert row["validity_status"] == VALIDITY_STATUS_OPEN
+    assert row["chilecompra_status_code"] == "5"
+    assert row["source"] == "chilecompra_api"
     assert _SECRET_TICKET not in out_csv.read_text(encoding="utf-8")
 
 
@@ -189,3 +193,58 @@ def test_sort_uses_close_date_when_fit_and_action_tie() -> None:
         ]
     )
     assert rows[0]["codigo_licitacion"] == "SOON-1-LP26"
+
+
+def test_publish_excludes_expired_and_inactive_status_rows(tmp_path: Path) -> None:
+    source_csv = tmp_path / "equipment_first_operator_queue_chilecompra_api_20260614.csv"
+    out_csv = tmp_path / "equipment_first_operator_queue_20260614.csv"
+    rows = [
+        _source_row(codigo="OPEN-1-LP26", next_action="quote_now", fit_score="85"),
+        _source_row(
+            codigo="EXPIRED-1-LP26",
+            next_action="quote_now",
+            fit_score="90",
+            validity_status=VALIDITY_STATUS_EXPIRED,
+            close_date="10/06/2026 17:00:00",
+        ),
+        _source_row(
+            codigo="CLOSED-1-LP26",
+            next_action="quote_now",
+            fit_score="95",
+            validity_status=VALIDITY_STATUS_NOT_PUBLICADA,
+            chilecompra_status_code="6",
+            chilecompra_status="Cerrada",
+        ),
+    ]
+    with source_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    result = publish_chilecompra_equipment_queue_for_dashboard(
+        source_csv=source_csv,
+        out_csv=out_csv,
+    )
+
+    assert result["input_rows"] == 3
+    assert result["excluded_rows"] == 2
+    assert result["output_rows"] == 1
+    with out_csv.open(encoding="utf-8") as handle:
+        published = list(csv.DictReader(handle))
+    assert len(published) == 1
+    assert published[0]["codigo_licitacion"] == "OPEN-1-LP26"
+
+
+def test_missing_close_date_stays_review_only_in_dashboard_publish() -> None:
+    source = _source_row(
+        codigo="MISSING-1-LP26",
+        next_action="needs_supplier_quote",
+        fit_score="70",
+        close_date="",
+        validity_status=VALIDITY_STATUS_MISSING_CLOSE_DATE,
+    )
+    assert is_dashboard_active_chilecompra_row(source)
+    enriched = enrich_chilecompra_row_for_dashboard(source)
+    assert enriched["contact_status"] == CHILECOMPRA_CONTACT_STATUS_MISSING_CLOSE_DATE
+    assert enriched["close_date"] == ""
+    assert "missing_close_date" in enriched["operator_note"]
