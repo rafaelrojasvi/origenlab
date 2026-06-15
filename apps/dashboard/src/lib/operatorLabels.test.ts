@@ -57,4 +57,36 @@ describe("operatorLabels", () => {
   it("falls back to Sin clasificar for unknown non-action tokens", () => {
     expect(formatOperatorToken("custom_token", "warm_category").label).toBe("Sin clasificar");
   });
+
+  it("maps ChileCompra equipment next action, channel, and contact status tokens", () => {
+    expect(formatOperatorToken("contact_after_close", "equipment_next_action").label).toBe(
+      "Revisar después del cierre",
+    );
+    expect(formatOperatorToken("mercado_publico_only", "equipment_safe_channel").label).toBe(
+      "Mercado Público",
+    );
+    expect(formatOperatorToken("review_required", "equipment_contact_status").label).toBe(
+      "Revisión requerida",
+    );
+  });
+
+  it("maps ChileCompra equipment category tokens", () => {
+    expect(formatOperatorToken("homogenizer", "equipment_category").label).toBe(
+      "Homogeneizador / agitador",
+    );
+    expect(formatOperatorToken("osmometer", "equipment_category").label).toBe("Osmómetro");
+  });
+
+  it("maps combined equipment category tokens", () => {
+    const out = formatOperatorToken("centrifuge; homogenizer", "equipment_category");
+    expect(out.label).toBe("Centrífuga; Homogeneizador / agitador");
+    expect(out.raw).toBe("centrifuge;homogenizer");
+    expect(out.title).toBeUndefined();
+  });
+
+  it("marks only unmapped parts in combined equipment categories", () => {
+    const out = formatOperatorToken("centrifuge; custom_token", "equipment_category");
+    expect(out.label).toBe("Centrífuga; Sin clasificar");
+    expect(out.title).toMatch(/custom_token/);
+  });
 });

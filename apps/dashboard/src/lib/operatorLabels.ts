@@ -61,15 +61,18 @@ const EQUIPMENT_NEXT_ACTION: Record<string, string> = {
   quote_now: "Cotizar ahora",
   needs_supplier_quote: "Requiere cotización de proveedor",
   monitor: "Monitorear",
+  contact_after_close: "Revisar después del cierre",
 };
 
 const EQUIPMENT_CONTACT_STATUS: Record<string, string> = {
   no_verified_buyer_email: "Sin correo verificado del comprador",
   pending: "Pendiente",
+  review_required: "Revisión requerida",
 };
 
 const EQUIPMENT_SAFE_CHANNEL: Record<string, string> = {
   mercado_publico_bid: "Mercado Público",
+  mercado_publico_only: "Mercado Público",
   supplier_quote_request: "Cotización a proveedor",
 };
 
@@ -78,6 +81,8 @@ const EQUIPMENT_CATEGORY: Record<string, string> = {
   balance: "Balanza",
   incubator: "Incubadora",
   lab_ultrasonic_processor: "Procesador ultrasónico",
+  homogenizer: "Homogeneizador / agitador",
+  osmometer: "Osmómetro",
 };
 
 const TABLES: Record<OperatorLabelKind, Record<string, string>> = {
@@ -110,6 +115,43 @@ function looksHumanReadableAction(raw: string): boolean {
   );
 }
 
+const EQUIPMENT_CATEGORY_SEPARATORS = /[;,|]/;
+
+function formatEquipmentCategory(original: string): { label: string; raw: string; title?: string } {
+  const parts = original
+    .split(EQUIPMENT_CATEGORY_SEPARATORS)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) {
+    return { label: "—", raw: "" };
+  }
+
+  const labels: string[] = [];
+  const unmappedTokens: string[] = [];
+
+  for (const part of parts) {
+    const token = normalizeToken(part);
+    const mapped = EQUIPMENT_CATEGORY[token];
+    if (mapped) {
+      labels.push(mapped);
+      continue;
+    }
+    labels.push("Sin clasificar");
+    unmappedTokens.push(token);
+  }
+
+  const raw = parts.map((part) => normalizeToken(part)).join(";");
+  const label = labels.join("; ");
+  if (unmappedTokens.length === 0) {
+    return { label, raw };
+  }
+  return {
+    label,
+    raw,
+    title: `${UNMAPPED_OPERATOR_TOKEN_TITLE} (${unmappedTokens.join(", ")})`,
+  };
+}
+
 /** Etiqueta visible; no expone el token técnico en la UI. */
 export const UNMAPPED_OPERATOR_TOKEN_TITLE =
   "Etiqueta no mapeada en la interfaz; revisar token técnico si se repite.";
@@ -119,10 +161,13 @@ export function formatOperatorToken(
   kind: OperatorLabelKind,
 ): { label: string; raw: string; title?: string } {
   const original = (raw || "").trim();
-  const token = normalizeToken(original);
-  if (!token) {
+  if (!original) {
     return { label: "—", raw: "" };
   }
+  if (kind === "equipment_category") {
+    return formatEquipmentCategory(original);
+  }
+  const token = normalizeToken(original);
   const table = TABLES[kind];
   const mapped = table[token];
   if (mapped) {
