@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ApiBackend } from "../../api/operatorTypes";
 import type { EquipmentOpportunityItem } from "../../api/commercialTypes";
 import { formatPagedFooterLabel } from "../../lib/clientTablePagination";
@@ -24,6 +24,11 @@ import {
 import { truncate } from "../../lib/safeText";
 import { TokenLabel } from "../operator/TokenLabel";
 import { ContactEmailButton } from "./ContactEmailButton";
+import {
+  EquipmentOpportunityDetailDrawer,
+  MercadoPublicoLink,
+  equipmentOpportunityRowKey,
+} from "./EquipmentOpportunityDetailDrawer";
 import { TableListToolbar, ToolbarField, toolbarInputClass, toolbarSelectClass } from "./TableListToolbar";
 import { TableSection } from "./TableSection";
 
@@ -51,21 +56,6 @@ function EquipmentItemMetadata({ row }: { row: EquipmentOpportunityItem }) {
   );
 }
 
-function MercadoPublicoLink({ url }: { url: string }) {
-  if (!url.trim()) return null;
-  if (/ticket|api\.chilecompra/i.test(url)) return null;
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mt-1 inline-block text-xs text-sky-700 hover:underline"
-    >
-      Buscar en Mercado Público
-    </a>
-  );
-}
-
 export function EquipmentOpportunitiesTable({
   backend,
   items,
@@ -90,6 +80,7 @@ export function EquipmentOpportunitiesTable({
   onRetry: () => void;
 }) {
   const [filters, setFilters] = useState<EquipmentTableFilters>(DEFAULT_EQUIPMENT_FILTERS);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const sourceLabel = meta
     ? equipmentSourceLabel(backend, meta.data_source)
@@ -109,6 +100,21 @@ export function EquipmentOpportunitiesTable({
   const feedUnavailable = isEquipmentFeedUnavailable(meta);
   const showUnavailableEmpty = !loading && !error && feedUnavailable;
   const showZeroEmpty = !loading && !error && !feedUnavailable && loadedCount === 0;
+
+  const selectedRow = useMemo(() => {
+    if (!selectedKey) return null;
+    return visibleRows.find((row) => equipmentOpportunityRowKey(row) === selectedKey) ?? null;
+  }, [selectedKey, visibleRows]);
+
+  useEffect(() => {
+    if (!selectedKey) return;
+    const stillVisible = visibleRows.some((row) => equipmentOpportunityRowKey(row) === selectedKey);
+    if (!stillVisible) setSelectedKey(null);
+  }, [selectedKey, visibleRows]);
+
+  const openRow = (row: EquipmentOpportunityItem) => {
+    setSelectedKey(equipmentOpportunityRowKey(row));
+  };
 
   const toolbar = (
     <TableListToolbar>
@@ -198,25 +204,55 @@ export function EquipmentOpportunitiesTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
-            {pagedRows.map((row, index) => (
+            {pagedRows.map((row, index) => {
+              const rowKey = equipmentOpportunityRowKey(row);
+              const isSelected = selectedKey === rowKey;
+              const licitationLabel = row.codigo_licitacion
+                ? `Ver detalle de licitación ${row.codigo_licitacion}`
+                : `Ver detalle de oportunidad ${row.buyer || row.priority_rank}`;
+
+              return (
               <tr
-                key={`eq-${row.priority_rank}-${row.codigo_licitacion || index}`}
-                className="align-top hover:bg-slate-50/80"
+                key={rowKey}
+                className={`align-top cursor-pointer transition-colors hover:bg-slate-50/80 ${
+                  isSelected ? "bg-sky-50/90 ring-1 ring-inset ring-sky-200" : ""
+                }`}
+                onClick={() => openRow(row)}
+                aria-selected={isSelected}
               >
                 <td className="px-3 py-2 font-semibold text-slate-900">{row.priority_rank ?? index + 1}</td>
                 <td className="px-3 py-2">
-                  <div className="font-medium text-slate-900">{row.buyer || "—"}</div>
-                  <div className="text-xs text-[var(--color-muted)]">{row.codigo_licitacion}</div>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    aria-expanded={isSelected}
+                    aria-controls="equipment-opportunity-detail-panel"
+                    aria-label={licitationLabel}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openRow(row);
+                    }}
+                  >
+                    <div className="font-medium text-slate-900 hover:text-brand-800">
+                      {row.buyer || "—"}
+                    </div>
+                    <div className="text-xs text-[var(--color-muted)]">{row.codigo_licitacion}</div>
+                  </button>
                   {row.fecha_publicacion ? (
                     <div className="mt-0.5 text-xs text-slate-600">
                       Publicado: {formatEquipmentPublicationDate(row.fecha_publicacion)}
                     </div>
                   ) : null}
                   {row.mercado_publico_url ? (
-                    <MercadoPublicoLink url={row.mercado_publico_url} />
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <MercadoPublicoLink
+                        url={row.mercado_publico_url}
+                        className="mt-1 inline-block text-xs text-sky-700 hover:underline"
+                      />
+                    </div>
                   ) : null}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
                   <ContactEmailButton email={row.contact_email} onSelect={onContactSelect} />
                 </td>
                 <td className="px-3 py-2 text-slate-700">{row.region || "—"}</td>
@@ -266,7 +302,8 @@ export function EquipmentOpportunitiesTable({
                   />
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
         {visibleRows.length > 0 ? (
@@ -296,6 +333,13 @@ export function EquipmentOpportunitiesTable({
           })}
         </p>
       </div>
+      ) : null}
+      {selectedRow ? (
+        <EquipmentOpportunityDetailDrawer
+          item={selectedRow}
+          open
+          onClose={() => setSelectedKey(null)}
+        />
       ) : null}
     </TableSection>
   );
