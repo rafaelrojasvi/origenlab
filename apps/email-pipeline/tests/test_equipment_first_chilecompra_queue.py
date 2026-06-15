@@ -6,11 +6,11 @@ import csv
 import json
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
-from origenlab_email_pipeline.chilecompra_api import ChileCompraTicketMissingError
+from origenlab_email_pipeline.chilecompra_api import ChileCompraHttpError, ChileCompraTicketMissingError
 from origenlab_email_pipeline.equipment_first_chilecompra_queue import (
     build_equipment_queue_from_chilecompra_api,
     summary_passes_keyword_prefilter,
@@ -269,3 +269,116 @@ def test_build_equipment_queue_missing_ticket_raises_clear_error() -> None:
             fetch_licitaciones_fn=MagicMock(),
             fetch_licitacion_by_codigo_fn=MagicMock(),
         )
+
+
+def _equipment_summaries(count: int) -> dict[str, list[dict[str, str]]]:
+    return {
+        "Listado": [
+            {
+                "CodigoExterno": f"{index}-1-LP26",
+                "Nombre": f"Adquisición centrifuga laboratorio {index}",
+                "Descripcion": "Equipos laboratorio",
+            }
+            for index in range(1, count + 1)
+        ]
+    }
+
+
+def _equipment_detail_payload(codigo: str) -> dict[str, list[dict[str, object]]]:
+    return {
+        "Listado": [
+            {
+                "CodigoExterno": codigo,
+                "Nombre": "Adquisición centrifuga laboratorio",
+                "Items": {
+                    "Descripcion": "Centrifuga refrigerada laboratorio clínico",
+                },
+            }
+        ]
+    }
+
+
+def test_detail_lookups_sleep_between_requests() -> None:
+    fetch_list = MagicMock(return_value=_equipment_summaries(3))
+    fetch_detail = MagicMock(
+        side_effect=lambda codigo, ticket: _equipment_detail_payload(codigo)
+    )
+    sleep_fn = MagicMock()
+
+    build_equipment_queue_from_chilecompra_api(
+        ticket=_SECRET_TICKET,
+        max_details=3,
+        detail_sleep_seconds=1.5,
+        now=_T0,
+        fetch_licitaciones_fn=fetch_list,
+        fetch_licitacion_by_codigo_fn=fetch_detail,
+        sleep_fn=sleep_fn,
+    )
+
+    assert fetch_detail.call_count == 3
+    assert sleep_fn.call_count == 2
+    assert sleep_fn.call_args_list == [call(1.5), call(1.5)]
+
+
+def test_http_429_on_detail_lookup_records_error_and_continues() -> None:
+    fetch_list = MagicMock(return_value=_equipment_summaries(2))
+
+    def _detail_side_effect(codigo: str, ticket: str) -> dict[str, object]:
+        if codigo == "1-1-LP26":
+            raise ChileCompraHttpError(
+                f"HTTP 429 while fetching https://api.mercadopublico.cl/?ticket={ticket}"
+            )
+        return _equipment_detail_payload(codigo)
+
+    fetch_detail = MagicMock(side_effect=_detail_side_effect)
+
+    rows, manifest = build_equipment_queue_from_chilecompra_api(
+        ticket=_SECRET_TICKET,
+        max_details=2,
+        now=_T0,
+        fetch_licitaciones_fn=fetch_list,
+        fetch_licitacion_by_codigo_fn=fetch_detail,
+    )
+
+    assert manifest["detail_error_count"] == 1
+    assert manifest["detail_error_codes"] == ["1-1-LP26"]
+    assert manifest["detail_requests"] == 2
+    assert manifest["detail_errors"][0]["codigo"] == "1-1-LP26"
+    manifest_blob = json.dumps(manifest)
+    assert _SECRET_TICKET not in manifest_blob
+    assert "<redacted>" in manifest["detail_errors"][0]["error"]
+    assert rows
+
+
+def test_fail_fast_detail_errors_reraises() -> None:
+    fetch_list = MagicMock(return_value=_equipment_summaries(1))
+    fetch_detail = MagicMock(
+        side_effect=ChileCompraHttpError("HTTP 429 while fetching https://example.test")
+    )
+
+    with pytest.raises(ChileCompraHttpError, match="HTTP 429"):
+        build_equipment_queue_from_chilecompra_api(
+            ticket=_SECRET_TICKET,
+            max_details=1,
+            continue_on_detail_error=False,
+            now=_T0,
+            fetch_licitaciones_fn=fetch_list,
+            fetch_licitacion_by_codigo_fn=fetch_detail,
+        )
+
+
+def test_max_details_zero_skips_detail_lookups() -> None:
+    fetch_list = MagicMock(return_value=_equipment_summaries(3))
+    fetch_detail = MagicMock()
+
+    _rows, manifest = build_equipment_queue_from_chilecompra_api(
+        ticket=_SECRET_TICKET,
+        max_details=0,
+        now=_T0,
+        fetch_licitaciones_fn=fetch_list,
+        fetch_licitacion_by_codigo_fn=fetch_detail,
+    )
+
+    fetch_detail.assert_not_called()
+    assert manifest["detail_requests"] == 0
+    assert manifest["detail_error_count"] == 0
