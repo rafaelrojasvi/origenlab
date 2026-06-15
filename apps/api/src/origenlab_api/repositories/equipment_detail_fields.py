@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime
 from typing import Any
 
@@ -23,6 +24,12 @@ EQUIPMENT_DETAIL_OPTIONAL_FIELDS: tuple[str, ...] = (
     "nivel_1",
     "nivel_2",
     "nivel_3",
+)
+
+_ANEXO_FIELDS = ("nombre", "tipo", "descripcion", "tamano", "fecha_adjunto", "url")
+_UNSAFE_ATTACHMENT_URL_RE = re.compile(
+    r"ticket|api\.chilecompra|api\.mercadopublico\.cl",
+    re.IGNORECASE,
 )
 
 
@@ -49,6 +56,50 @@ def _format_close_at(value: Any) -> str:
     return str(value).strip()
 
 
+def _is_safe_public_attachment_url(url: str) -> bool:
+    text = (url or "").strip()
+    if not text:
+        return False
+    if not text.lower().startswith(("http://", "https://")):
+        return False
+    return _UNSAFE_ATTACHMENT_URL_RE.search(text) is None
+
+
+def _normalize_anexo_item(item: dict[str, Any]) -> dict[str, str]:
+    normalized = {
+        field: str(item.get(field) or "").strip()
+        for field in _ANEXO_FIELDS
+    }
+    if normalized["url"] and not _is_safe_public_attachment_url(normalized["url"]):
+        normalized["url"] = ""
+    return normalized
+
+
+def _parse_anexos_json(source: dict[str, Any]) -> list[dict[str, str]]:
+    raw: Any = source.get("anexos_json")
+    if raw is None:
+        raw = _extra_json_dict(source).get("anexos_json")
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        items = parsed if isinstance(parsed, list) else []
+    else:
+        return []
+
+    out: list[dict[str, str]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        normalized = _normalize_anexo_item(item)
+        if any(normalized.values()):
+            out.append(normalized)
+    return out
+
+
 def merge_equipment_detail_fields(item: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
     """Merge read-only detail fields from row columns and/or extra_json."""
     out = dict(item)
@@ -70,4 +121,9 @@ def merge_equipment_detail_fields(item: dict[str, Any], source: dict[str, Any]) 
     formatted_close_at = _format_close_at(close_at)
     if formatted_close_at:
         out["close_at"] = formatted_close_at
+    anexos = _parse_anexos_json(source)
+    if not anexos:
+        anexos = _parse_anexos_json(extra)
+    if anexos:
+        out["anexos"] = anexos
     return out

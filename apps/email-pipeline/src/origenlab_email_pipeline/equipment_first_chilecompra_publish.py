@@ -41,6 +41,7 @@ CHILECOMPRA_ITEM_METADATA_FIELDS: tuple[str, ...] = (
     "nivel_1",
     "nivel_2",
     "nivel_3",
+    "anexos_json",
 )
 
 DASHBOARD_ACTIVE_VALIDITY_STATUSES = frozenset(
@@ -57,6 +58,7 @@ NEXT_ACTION_SORT_ORDER: dict[str, int] = {
     "contact_after_close": 2,
     "account_intelligence_only": 3,
     "skip_consumables": 4,
+    "skip_maintenance_service": 5,
 }
 
 PUBLISHED_DASHBOARD_FIELDS: tuple[str, ...] = (
@@ -294,6 +296,9 @@ def coalesce_dashboard_rows_by_codigo(rows: list[dict[str, str]]) -> list[dict[s
         merged["mercado_publico_url"] = _pick_first_non_empty(
             [row.get("mercado_publico_url", "") for row in group]
         ) or build_mercado_publico_search_url(codigo)
+        merged["anexos_json"] = _pick_first_non_empty(
+            [row.get("anexos_json", "") for row in group]
+        )
         supplier_needed = any((row.get("supplier_needed") or "").strip().lower() == "yes" for row in group)
         merged["supplier_needed"] = "yes" if supplier_needed else "no"
         merged["supplier_contact"] = "yes" if supplier_needed else ""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -73,6 +74,32 @@ def test_map_equipment_row_merges_extra_json_detail_fields() -> None:
     assert mapped["cantidad"] == "3"
     assert mapped["producto"] == "Centrifuga"
     assert "ticket" not in mapped["mercado_publico_url"].lower()
+
+
+def test_map_equipment_row_parses_anexos_from_extra_json() -> None:
+    mapped = map_equipment_row(
+        _fixture_row(
+            extra_json={
+                "anexos_json": json.dumps(
+                    [
+                        {
+                            "nombre": "Bases administrativas.pdf",
+                            "tipo": "Bases",
+                            "url": "https://www.mercadopublico.cl/archivos/bases.pdf",
+                        },
+                        {
+                            "nombre": "Ticket doc",
+                            "url": "https://api.mercadopublico.cl/v1/doc?ticket=SECRET",
+                        },
+                    ]
+                )
+            },
+        )
+    )
+    assert len(mapped["anexos"]) == 2
+    assert mapped["anexos"][0]["nombre"] == "Bases administrativas.pdf"
+    assert "mercadopublico.cl" in mapped["anexos"][0]["url"]
+    assert mapped["anexos"][1]["url"] == ""
 
 
 def test_build_equipment_meta_empty_has_note() -> None:

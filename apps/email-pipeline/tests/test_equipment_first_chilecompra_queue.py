@@ -155,6 +155,15 @@ def test_build_equipment_queue_from_chilecompra_api_mocked(tmp_path: Path) -> No
                         }
                     ]
                 },
+                "Anexos": {
+                    "Listado": [
+                        {
+                            "Nombre": "Bases técnicas.pdf",
+                            "Tipo": "Bases",
+                            "Url": "https://www.mercadopublico.cl/archivos/bases.pdf",
+                        }
+                    ]
+                },
             }
         ]
     }
@@ -181,6 +190,9 @@ def test_build_equipment_queue_from_chilecompra_api_mocked(tmp_path: Path) -> No
     assert rows[0]["validity_status"] == VALIDITY_STATUS_OPEN
     assert rows[0]["chilecompra_status_code"] == "5"
     assert "source:chilecompra_api" in rows[0]["reason"]
+    anexos = json.loads(rows[0]["anexos_json"])
+    assert anexos[0]["nombre"] == "Bases técnicas.pdf"
+    assert "mercadopublico.cl" in anexos[0]["url"]
 
 
 def test_build_equipment_queue_respects_max_details() -> None:

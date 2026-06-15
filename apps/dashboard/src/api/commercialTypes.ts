@@ -70,6 +70,15 @@ export interface EquipmentOpportunitiesMeta {
   note: string;
 }
 
+export interface EquipmentAnexoItem {
+  nombre?: string;
+  tipo?: string;
+  descripcion?: string;
+  tamano?: string;
+  fecha_adjunto?: string;
+  url?: string;
+}
+
 export interface EquipmentOpportunityItem {
   priority_rank: number;
   codigo_licitacion: string;
@@ -100,6 +109,7 @@ export interface EquipmentOpportunityItem {
   nivel_1?: string;
   nivel_2?: string;
   nivel_3?: string;
+  anexos?: EquipmentAnexoItem[];
 }
 
 export interface EquipmentOpportunitiesResponse {

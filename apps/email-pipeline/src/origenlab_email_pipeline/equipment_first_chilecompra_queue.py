@@ -14,6 +14,7 @@ from typing import Any, Callable
 from origenlab_email_pipeline.chilecompra_api import (
     ChileCompraHttpError,
     classify_chilecompra_validity_status,
+    extract_licitacion_anexos,
     fetch_licitacion_by_codigo,
     fetch_licitaciones,
     normalize_licitacion_detail_items,
@@ -81,6 +82,7 @@ CHILECOMPRA_QUEUE_FIELDS = (
     "nivel_2",
     "nivel_3",
     "mercado_publico_url",
+    "anexos_json",
 )
 
 FetchLicitacionesFn = Callable[..., dict[str, Any]]
@@ -246,6 +248,36 @@ def _annotate_chilecompra_queue_validity(
     return updated
 
 
+def _merge_anexos_lists(
+    existing: list[dict[str, str]],
+    incoming: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    seen = {(a.get("nombre", ""), a.get("tipo", ""), a.get("url", "")) for a in existing}
+    merged = list(existing)
+    for item in incoming:
+        key = (item.get("nombre", ""), item.get("tipo", ""), item.get("url", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    return merged
+
+
+def _attach_anexos_to_queue_rows(
+    queue_rows: list[dict[str, str]],
+    anexos_by_codigo: dict[str, list[dict[str, str]]],
+) -> list[dict[str, str]]:
+    attached: list[dict[str, str]] = []
+    for row in queue_rows:
+        merged = dict(row)
+        codigo = (row.get("codigo_licitacion") or "").strip()
+        anexos = anexos_by_codigo.get(codigo, [])
+        if anexos:
+            merged["anexos_json"] = json.dumps(anexos, ensure_ascii=False)
+        attached.append(merged)
+    return attached
+
+
 def write_chilecompra_equipment_queue_csv(rows: list[dict[str, str]], out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", newline="", encoding="utf-8") as handle:
@@ -371,6 +403,7 @@ def build_equipment_queue_from_chilecompra_api(
     }
 
     normalized_item_rows: list[dict[str, str]] = []
+    anexos_by_codigo: dict[str, list[dict[str, str]]] = {}
     detail_requests = 0
     detail_cache_hits = 0
     detail_cache_writes = 0
@@ -424,6 +457,12 @@ def build_equipment_queue_from_chilecompra_api(
             codigo_item_rows.append(summary)
         else:
             for licitacion in licitaciones:
+                anexos = extract_licitacion_anexos(licitacion)
+                if anexos:
+                    anexos_by_codigo[codigo] = _merge_anexos_lists(
+                        anexos_by_codigo.get(codigo, []),
+                        anexos,
+                    )
                 codigo_item_rows.extend(
                     normalize_licitacion_detail_items(licitacion, summary_fallback=summary)
                 )
@@ -438,6 +477,7 @@ def build_equipment_queue_from_chilecompra_api(
         now=now_utc,
     )
     queue_rows = attach_item_metadata_to_queue_rows(queue_rows, normalized_item_rows)
+    queue_rows = _attach_anexos_to_queue_rows(queue_rows, anexos_by_codigo)
     queue_rows = _annotate_chilecompra_api_source(queue_rows)
     queue_rows = [
         _annotate_chilecompra_queue_validity(

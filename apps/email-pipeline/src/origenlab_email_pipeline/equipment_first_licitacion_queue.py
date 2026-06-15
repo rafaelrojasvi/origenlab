@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import re
-import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -149,16 +148,27 @@ LAB_CONTEXT_RE = re.compile(
     re.I,
 )
 MAINTENANCE_RE = re.compile(r"manten(ci|ció)n|mantencion", re.I)
+MAINTENANCE_ONLY_SERVICE_RE = re.compile(
+    r"mantenimiento\s+preventiv|mantenimiento\s+correctiv|"
+    r"mantencion\s+preventiv|mantencion\s+correctiv|"
+    r"mantenci[oó]n\s+preventiv|mantenci[oó]n\s+correctiv|"
+    r"\breparaci[oó]n\b|servicio\s+t[eé]cnico|servicio\s+de\s+mantenimiento|"
+    r"servicio\s+de\s+mantencion|contratar\s+el\s+servicio\s+de\s+manten",
+    re.I,
+)
+EQUIPMENT_PURCHASE_SIGNAL_RE = re.compile(
+    r"adquisici[oó]n|compra\s+de|comprar\s+equipo|suministro\s+de\s+equipo|"
+    r"provisi[oó]n\s+de\s+equipo|venta\s+de\s+equipo|equipo\s+nuevo|"
+    r"reposici[oó]n\s+de\s+equipo|instalaci[oó]n\s+de\s+equipo|"
+    r"adquisici[oó]n\s+de\s+centrifug|adquisici[oó]n\s+de\s+balanza|"
+    r"fabricaci[oó]n\s+de\s+equipo|entrega\s+de\s+equipo",
+    re.I,
+)
 ARRIENDO_RE = re.compile(r"\barriendo\b", re.I)
 CONVENIO_REACTIVOS_RE = re.compile(
     r"convenio.*reactivo|reactivo.*comodato|insumos.*comodato",
     re.I,
 )
-
-
-def _strip_accents(text: str) -> str:
-    nfkd = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
 def line_blob(row: dict[str, str]) -> str:
@@ -172,6 +182,30 @@ def line_blob(row: dict[str, str]) -> str:
         row.get("nivel_3", ""),
     ]
     return " | ".join(p for p in parts if p.strip())
+
+
+def is_maintenance_only_service(blob: str) -> bool:
+    """True when text is service/maintenance-only without equipment purchase signals."""
+    text = (blob or "").strip()
+    if not text:
+        return False
+    if not MAINTENANCE_ONLY_SERVICE_RE.search(text):
+        return False
+    if EQUIPMENT_PURCHASE_SIGNAL_RE.search(text):
+        return False
+    return True
+
+
+def _tender_blob(acc: "TenderAccumulator") -> str:
+    return " | ".join(
+        part
+        for part in (
+            acc.title,
+            acc.descripcion,
+            " ".join(sum(acc.categories.values(), [])),
+        )
+        if (part or "").strip()
+    )
 
 
 def detect_equipment_categories(blob: str) -> list[tuple[str, str]]:
@@ -260,6 +294,7 @@ class TenderAccumulator:
     region: str = ""
     close_date: str = ""
     title: str = ""
+    descripcion: str = ""
     categories: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
     has_equipment_line: bool = False
     has_consumable_line: bool = False
@@ -273,8 +308,11 @@ class TenderAccumulator:
             self.region = row.get("region", "")
             self.close_date = row.get("close_date", "")
             self.title = row.get("title", "")
+            self.descripcion = row.get("descripcion", "")
         elif not self.close_date and (row.get("close_date") or "").strip():
             self.close_date = row.get("close_date", "")
+        if not self.descripcion and (row.get("descripcion") or "").strip():
+            self.descripcion = row.get("descripcion", "")
         for cat, span in detect_equipment_categories(blob):
             self.has_equipment_line = True
             desc = row.get("line_description") or row.get("producto") or span
@@ -334,8 +372,6 @@ def _fit_score(
     }
     if category in high_ticket:
         score += 25
-    if maintenance and category == "centrifuge":
-        score += 15
     if close_dt:
         days = (close_dt - now).days
         if days < 0:
@@ -360,6 +396,7 @@ def classify_next_action(
     arriendo: bool,
     convenio_reactivos: bool,
     now: datetime,
+    service_only: bool = False,
 ) -> str:
     now = _as_naive_datetime(now)
     if close_dt is not None:
@@ -372,8 +409,8 @@ def classify_next_action(
         return "account_intelligence_only"
     if arriendo:
         return "account_intelligence_only"
-    if maintenance:
-        return "needs_supplier_quote"
+    if maintenance and service_only:
+        return "skip_maintenance_service"
     if category in ("centrifuge", "balance", "sonicator", "osmometer", "homogenizer"):
         if close_dt and (close_dt - now).days <= 21:
             return "quote_now"
@@ -415,11 +452,20 @@ def build_equipment_queue_rows_from_normalized_rows(
                 re.I,
             ):
                 continue
+        if is_maintenance_only_service(_tender_blob(acc)):
+            continue
         close_dt = parse_close_date(acc.close_date)
         for category, descriptions in sorted(acc.categories.items()):
             item_desc = " ; ".join(descriptions[:4])
             if len(descriptions) > 4:
                 item_desc += f" (+{len(descriptions) - 4} líneas)"
+            category_blob = " | ".join(
+                part
+                for part in (acc.title, acc.descripcion, item_desc)
+                if (part or "").strip()
+            )
+            if is_maintenance_only_service(category_blob):
+                continue
             reason_parts = [f"equipment:{category}"]
             if acc.has_consumable_line:
                 reason_parts.append("also_has_consumable_lines")
@@ -438,6 +484,7 @@ def build_equipment_queue_rows_from_normalized_rows(
                 arriendo=acc.arriendo_signal,
                 convenio_reactivos=acc.convenio_reactivos,
                 now=now,
+                service_only=is_maintenance_only_service(category_blob),
             )
             score = _fit_score(
                 codigo=acc.codigo,
