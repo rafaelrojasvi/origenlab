@@ -27,7 +27,8 @@ describe("dashboardDateFormat", () => {
     expect(chilean).toMatch(/2026/);
     expect(chilean).toMatch(/19:00/);
 
-    const iso = formatEquipmentCloseDate("2026-06-17T19:00:00", "2026-06-17T19:00:00-04:00");
-    expect(iso).not.toMatch(/T19:00:00/);
+    expect(
+      formatEquipmentCloseDate("2026-06-17T19:00:00", "2026-06-17T19:00:00-04:00"),
+    ).toBe("17 jun 2026, 19:00");
   });
 });

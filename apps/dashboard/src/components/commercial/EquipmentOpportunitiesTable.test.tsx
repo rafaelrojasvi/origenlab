@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { EquipmentOpportunityItem } from "../../api/commercialTypes";
 import { EquipmentOpportunitiesTable } from "./EquipmentOpportunitiesTable";
@@ -311,6 +311,107 @@ describe("EquipmentOpportunitiesTable", () => {
     expect(screen.getByRole("link", { name: "Buscar en Mercado Público" }).getAttribute("href")).not.toMatch(
       /ticket/i,
     );
+  });
+
+  const detailRow: EquipmentOpportunityItem = {
+    ...row,
+    codigo_licitacion: "1051-1-LP26",
+    title: "Adquisición centrifuga laboratorio",
+    close_date: "2026-06-17T19:00:00",
+    close_at: "2026-06-17T19:00:00-04:00",
+    fecha_publicacion: "10/06/2026 08:00:00",
+    mercado_publico_url:
+      "https://www.mercadopublico.cl/BuscarLicitacion?codigoLicitacion=1051-1-LP26",
+    item_description:
+      "Centrifuga refrigerada de alta velocidad con rotor incluido para laboratorio clínico",
+    operator_note: "fit=90 | source:chilecompra_api | revisar pliego",
+    unspsc_code: "41100000",
+    cantidad: "2",
+    unidad: "Unidad",
+    producto: "Centrifuga refrigerada",
+    nivel_1: "Equipamiento médico",
+    chilecompra_status: "Publicada",
+    chilecompra_status_code: "5",
+    validity_status: "open",
+    source: "chilecompra_api",
+    api_checked_at_utc: "2026-06-14T12:00:00+00:00",
+  };
+
+  function renderDetailTable(items: EquipmentOpportunityItem[] = [detailRow]) {
+    return render(
+      <EquipmentOpportunitiesTable
+        backend="postgres"
+        items={items}
+        meta={{
+          data_source: "postgres_mirror",
+          reduced_mode: false,
+          note: "",
+          count: items.length,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+  }
+
+  it("opens detail drawer when licitation code is clicked", () => {
+    renderDetailTable();
+    expect(screen.queryByTestId("equipment-opportunity-detail-drawer")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ver detalle de licitación 1051-1-LP26" }),
+    );
+    expect(screen.getByTestId("equipment-opportunity-detail-drawer")).toBeTruthy();
+  });
+
+  it("drawer shows full opportunity detail and formatted dates", () => {
+    renderDetailTable();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ver detalle de licitación 1051-1-LP26" }),
+    );
+    const drawer = screen.getByTestId("equipment-opportunity-detail-drawer");
+    expect(drawer.textContent).toContain("Universidad Ejemplo");
+    expect(drawer.textContent).toContain("1051-1-LP26");
+    expect(drawer.textContent).toContain("Adquisición centrifuga laboratorio");
+    expect(drawer.textContent).toContain(
+      "Centrifuga refrigerada de alta velocidad con rotor incluido para laboratorio clínico",
+    );
+    expect(drawer.textContent).toContain("fit=90 | source:chilecompra_api | revisar pliego");
+    expect(drawer.textContent).toMatch(/Fecha cierre/i);
+    expect(drawer.textContent).toMatch(/17 jun 2026, 19:00/);
+    expect(drawer.textContent).toMatch(/Fecha publicación/i);
+    expect(drawer.textContent).toContain("Cantidad");
+    expect(drawer.textContent).toContain("41100000");
+    expect(drawer.textContent).toContain("Equipamiento médico");
+    expect(within(drawer).getByRole("link", { name: "Buscar en Mercado Público" })).toBeTruthy();
+  });
+
+  it("drawer does not render unsafe Mercado Público ticket URLs", () => {
+    renderDetailTable([
+      {
+        ...detailRow,
+        mercado_publico_url:
+          "https://api.chilecompra.cl/...?ticket=SECRET-TICKET-UUID",
+      },
+    ]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ver detalle de licitación 1051-1-LP26" }),
+    );
+    const drawer = screen.getByTestId("equipment-opportunity-detail-drawer");
+    expect(drawer.querySelector("a[href*='ticket']")).toBeNull();
+    expect(drawer.textContent).not.toMatch(/SECRET-TICKET-UUID/);
+  });
+
+  it("close button hides the detail drawer", () => {
+    renderDetailTable();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ver detalle de licitación 1051-1-LP26" }),
+    );
+    const drawer = screen.getByTestId("equipment-opportunity-detail-drawer");
+    fireEvent.click(within(drawer).getByRole("button", { name: "Cerrar detalle de licitación" }));
+    expect(screen.queryByTestId("equipment-opportunity-detail-drawer")).toBeNull();
   });
 });
 
