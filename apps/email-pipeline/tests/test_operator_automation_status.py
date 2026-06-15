@@ -9,9 +9,16 @@ from typing import Any
 
 import pytest
 
+from origenlab_email_pipeline.operator_cli.chilecompra_auto_refresh import (
+    LOCK_FILENAME as CHILECOMPRA_LOCK_FILENAME,
+    STATE_FILENAME as CHILECOMPRA_STATE_FILENAME,
+)
 from origenlab_email_pipeline.operator_cli.daily_core_manifest import MANIFEST_FILENAME
 from origenlab_email_pipeline.operator_cli.dashboard_auto_mirror import STATE_FILENAME as MIRROR_STATE_FILENAME
-from origenlab_email_pipeline.operator_cli.mail_auto_refresh import STATE_FILENAME as MAIL_STATE_FILENAME
+from origenlab_email_pipeline.operator_cli.mail_auto_refresh import (
+    STATE_FILENAME as MAIL_STATE_FILENAME,
+    STALE_LOCK_SECONDS,
+)
 from origenlab_email_pipeline.operator_cli.operator_automation_status import (
     LEGACY_MIRROR_CRON_WRAPPER,
     TRACKED_MAIL_CRON_SCRIPT,
@@ -19,6 +26,7 @@ from origenlab_email_pipeline.operator_cli.operator_automation_status import (
     OperatorAutomationStatusOptions,
     _inspect_crontab_content,
     build_operator_automation_status,
+    format_operator_automation_status_text,
     read_user_crontab,
     run_operator_automation_status,
 )
@@ -72,6 +80,27 @@ def _write_mirror_state(active_current: Path, **kwargs: object) -> None:
         **kwargs,
     }
     (active_current / MIRROR_STATE_FILENAME).write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_chilecompra_state(active_current: Path, **kwargs: object) -> None:
+    payload = {
+        "last_result": "refreshed",
+        "last_successful_refresh_at": _DAILY_CORE_TS,
+        "last_successful_publish_at": _MIRROR_TS,
+        "consecutive_failures": 0,
+        "fetched_summaries": 10,
+        "candidate_summaries": 3,
+        "detail_requests": 2,
+        "detail_cache_hits": 1,
+        "detail_error_count": 0,
+        "output_rows": 1,
+        "published_rows": 1,
+        "published_queue": "equipment_first_operator_queue_20260610.csv",
+        "candidate_audit": "chilecompra_equipment_candidate_audit_20260610.csv",
+        "next_recommended_run_at": (_T0 + timedelta(hours=2)).isoformat(),
+        **kwargs,
+    }
+    (active_current / CHILECOMPRA_STATE_FILENAME).write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _healthy_fixture(active_current: Path) -> Path:
@@ -132,6 +161,7 @@ def test_json_output_keys(active_current: Path, capsys: pytest.CaptureFixture[st
         "daily_core",
         "mail_auto_refresh",
         "dashboard_auto_mirror",
+        "chilecompra_equipment_auto_refresh",
         "ndr_pending_review",
         "cron",
         "recommended_action",
@@ -475,3 +505,127 @@ def test_tracked_cron_wrapper_scripts_exist_and_contain_commands() -> None:
     assert "--allow-non-scratch-postgres" in mirror_text
     assert "ORIGENLAB_UV_BIN" in mail_text
     assert "ORIGENLAB_OPERATOR_NAME" in mirror_text
+
+
+def test_healthy_report_includes_chilecompra_section_in_json(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_chilecompra_state(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    chilecompra = report["chilecompra_equipment_auto_refresh"]
+    assert chilecompra["state_exists"] is True
+    assert chilecompra["last_result"] == "refreshed"
+    assert chilecompra["output_rows"] == 1
+    assert chilecompra["next_run_due"] is False
+
+
+def test_text_output_includes_chilecompra_section(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_chilecompra_state(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    text = format_operator_automation_status_text(report)
+    assert "chilecompra_equipment_auto_refresh" in text
+    assert "  last_result=refreshed" in text
+    assert "  output_rows=1" in text
+
+
+def test_malformed_chilecompra_state_blocks(active_current: Path) -> None:
+    _write_manifest(active_current)
+    _write_mail_state(active_current)
+    _write_mirror_state(active_current)
+    (active_current / CHILECOMPRA_STATE_FILENAME).write_text("{not json", encoding="utf-8")
+    report = build_operator_automation_status(
+        reports_dir=active_current.parent.parent,
+        now=_T0,
+    )
+    assert report["verdict"] == "blocked"
+    assert report["recommended_action"] == "inspect_logs"
+    assert report["chilecompra_equipment_auto_refresh"]["parse_error"] == "malformed"
+
+
+def test_chilecompra_consecutive_failures_blocked(active_current: Path) -> None:
+    _write_manifest(active_current)
+    _write_mail_state(active_current)
+    _write_mirror_state(active_current)
+    _write_chilecompra_state(active_current, consecutive_failures=3)
+    report = build_operator_automation_status(
+        reports_dir=active_current.parent.parent,
+        now=_T0,
+    )
+    assert report["verdict"] == "blocked"
+    assert report["recommended_action"] == "inspect_logs"
+
+
+def test_live_chilecompra_lock_gives_attention(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_chilecompra_state(active_current)
+    (active_current / CHILECOMPRA_LOCK_FILENAME).write_text(
+        json.dumps({"pid": 42424, "started_at": _T0.isoformat()}),
+        encoding="utf-8",
+    )
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        process_alive=lambda pid: pid == 42424,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    assert report["verdict"] == "attention"
+    assert report["recommended_action"] == "wait_for_running_chilecompra_refresh"
+    assert report["chilecompra_equipment_auto_refresh"]["lock_live"] is True
+
+
+def test_stale_chilecompra_lock_blocks(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_chilecompra_state(active_current)
+    stale_started = (_T0 - timedelta(seconds=STALE_LOCK_SECONDS + 60)).isoformat()
+    (active_current / CHILECOMPRA_LOCK_FILENAME).write_text(
+        json.dumps({"pid": 42424, "started_at": stale_started}),
+        encoding="utf-8",
+    )
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        process_alive=lambda pid: pid == 42424,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    assert report["verdict"] == "blocked"
+    assert report["recommended_action"] == "clear_stale_lock_after_manual_review"
+    assert "stale_chilecompra_lock_detected" in report["warnings"]
+
+
+def test_due_chilecompra_refresh_recommends_run_without_breaking_mail_mirror(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    _write_chilecompra_state(
+        active_current,
+        next_recommended_run_at=(_T0 - timedelta(minutes=30)).isoformat(),
+    )
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    assert report["verdict"] == "attention"
+    assert report["recommended_action"] == "run_auto_refresh_chilecompra_equipment"
+    assert "chilecompra_refresh_due" in report["warnings"]
+    assert report["mail_auto_refresh"]["dirty"] is False
+    assert report["dashboard_auto_mirror"]["mirror_matches_daily_core"] is True
+    assert report["chilecompra_equipment_auto_refresh"]["next_run_due"] is True
+
+
+def test_missing_chilecompra_state_remains_non_blocking(active_current: Path) -> None:
+    reports = _healthy_fixture(active_current)
+    report = build_operator_automation_status(
+        reports_dir=reports,
+        now=_T0,
+        read_crontab=_healthy_tracked_crontab,
+    )
+    assert report["verdict"] == "healthy"
+    assert report["chilecompra_equipment_auto_refresh"]["state_exists"] is False
+    assert report["chilecompra_equipment_auto_refresh"]["parse_error"] == "missing"

@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from origenlab_email_pipeline.config import load_settings
+from origenlab_email_pipeline.operator_cli.chilecompra_auto_refresh import (
+    ChilecompraEquipmentAutoRefreshState,
+    LOCK_FILENAME as CHILECOMPRA_LOCK_FILENAME,
+    STATE_FILENAME as CHILECOMPRA_STATE_FILENAME,
+)
 from origenlab_email_pipeline.operator_cli.daily_core_manifest import (
     MANIFEST_FILENAME,
     daily_core_run_manifest_path,
@@ -389,10 +394,60 @@ def build_operator_automation_status(
         "parse_error": mirror_error,
     }
 
+    chilecompra_state_path = active_current / CHILECOMPRA_STATE_FILENAME
+    chilecompra_data, chilecompra_error = _safe_load_json(chilecompra_state_path)
+    chilecompra_state = (
+        ChilecompraEquipmentAutoRefreshState.from_dict(chilecompra_data)
+        if chilecompra_data is not None
+        else None
+    )
+    chilecompra_lock_path = active_current / CHILECOMPRA_LOCK_FILENAME
+    chilecompra_lock_live = _lock_is_live(chilecompra_lock_path, process_alive=alive)
+    chilecompra_lock_age = _lock_age_seconds(chilecompra_lock_path, now_dt)
+    chilecompra_last_successful_refresh_at = (
+        chilecompra_state.last_successful_refresh_at if chilecompra_state else None
+    )
+    chilecompra_next_recommended_run_at = (
+        chilecompra_state.next_recommended_run_at if chilecompra_state else None
+    )
+    chilecompra_next_run_due: bool | None = None
+    parsed_next_run = _parse_iso(chilecompra_next_recommended_run_at)
+    if parsed_next_run is not None:
+        chilecompra_next_run_due = parsed_next_run <= now_dt
+
+    chilecompra_section: dict[str, Any] = {
+        "state_exists": chilecompra_data is not None,
+        "lock_live": chilecompra_lock_live,
+        "lock_age_seconds": chilecompra_lock_age,
+        "last_result": chilecompra_state.last_result if chilecompra_state else None,
+        "last_successful_refresh_at": chilecompra_last_successful_refresh_at,
+        "last_successful_publish_at": (
+            chilecompra_state.last_successful_publish_at if chilecompra_state else None
+        ),
+        "last_run_started_at": chilecompra_state.last_run_started_at if chilecompra_state else None,
+        "last_run_finished_at": chilecompra_state.last_run_finished_at if chilecompra_state else None,
+        "next_recommended_run_at": chilecompra_next_recommended_run_at,
+        "freshness_age_seconds": _age_seconds(chilecompra_last_successful_refresh_at, now_dt),
+        "next_run_due": chilecompra_next_run_due,
+        "consecutive_failures": chilecompra_state.consecutive_failures if chilecompra_state else 0,
+        "last_error": chilecompra_state.last_error if chilecompra_state else None,
+        "fetched_summaries": chilecompra_state.fetched_summaries if chilecompra_state else None,
+        "candidate_summaries": chilecompra_state.candidate_summaries if chilecompra_state else None,
+        "detail_requests": chilecompra_state.detail_requests if chilecompra_state else None,
+        "detail_cache_hits": chilecompra_state.detail_cache_hits if chilecompra_state else None,
+        "detail_error_count": chilecompra_state.detail_error_count if chilecompra_state else None,
+        "output_rows": chilecompra_state.output_rows if chilecompra_state else None,
+        "published_rows": chilecompra_state.published_rows if chilecompra_state else None,
+        "published_queue": chilecompra_state.published_queue if chilecompra_state else None,
+        "candidate_audit": chilecompra_state.candidate_audit if chilecompra_state else None,
+        "parse_error": chilecompra_error,
+    }
+
     verdict, recommended_action = _derive_verdict_and_action(
         daily_core=daily_core_section,
         mail=mail_section,
         mirror=mirror_section,
+        chilecompra=chilecompra_section,
         paused=paused,
         mirror_behind=mirror_behind,
         warnings=warnings,
@@ -426,6 +481,7 @@ def build_operator_automation_status(
         "daily_core": daily_core_section,
         "mail_auto_refresh": mail_section,
         "dashboard_auto_mirror": mirror_section,
+        "chilecompra_equipment_auto_refresh": chilecompra_section,
         "ndr_pending_review": ndr_section,
         "cron": cron_section,
         "recommended_action": recommended_action,
@@ -438,12 +494,14 @@ def _derive_verdict_and_action(
     daily_core: dict[str, Any],
     mail: dict[str, Any],
     mirror: dict[str, Any],
+    chilecompra: dict[str, Any],
     paused: bool,
     mirror_behind: bool,
     warnings: list[str],
 ) -> tuple[str, str]:
     mail_failures = int(mail.get("consecutive_failures") or 0)
     mirror_failures = int(mirror.get("consecutive_failures") or 0)
+    chilecompra_failures = int(chilecompra.get("consecutive_failures") or 0)
 
     if daily_core.get("parse_error") == "malformed":
         return VERDICT_BLOCKED, "inspect_logs"
@@ -451,16 +509,22 @@ def _derive_verdict_and_action(
         return VERDICT_BLOCKED, "inspect_logs"
     if mirror.get("parse_error") == "malformed":
         return VERDICT_BLOCKED, "inspect_logs"
+    if chilecompra.get("parse_error") == "malformed":
+        return VERDICT_BLOCKED, "inspect_logs"
 
     if daily_core.get("exists") and (
         daily_core.get("status") != "success" or daily_core.get("returncode") != 0
     ):
         return VERDICT_BLOCKED, "inspect_failed_daily_core"
 
-    if mail_failures >= 3 or mirror_failures >= 3:
+    if mail_failures >= 3 or mirror_failures >= 3 or chilecompra_failures >= 3:
         return VERDICT_BLOCKED, "inspect_logs"
 
-    for section, label in ((mail, "mail"), (mirror, "dashboard")):
+    for section, label in (
+        (mail, "mail"),
+        (mirror, "dashboard"),
+        (chilecompra, "chilecompra"),
+    ):
         if section.get("lock_live") and section.get("lock_age_seconds") is not None:
             if int(section["lock_age_seconds"]) >= STALE_LOCK_SECONDS:
                 warnings.append(f"stale_{label}_lock_detected")
@@ -473,6 +537,8 @@ def _derive_verdict_and_action(
         return VERDICT_ATTENTION, "wait_for_running_mail_refresh"
     if mirror.get("lock_live"):
         return VERDICT_ATTENTION, "wait_for_running_mirror_refresh"
+    if chilecompra.get("lock_live"):
+        return VERDICT_ATTENTION, "wait_for_running_chilecompra_refresh"
 
     if mail.get("dirty"):
         return VERDICT_ATTENTION, "wait_for_mail_quiet_window"
@@ -491,7 +557,7 @@ def _derive_verdict_and_action(
             return VERDICT_ATTENTION, "wait_for_mirror_cooldown"
         return VERDICT_ATTENTION, "run_auto_mirror_dashboard"
 
-    if mail_failures > 0 or mirror_failures > 0:
+    if mail_failures > 0 or mirror_failures > 0 or chilecompra_failures > 0:
         return VERDICT_ATTENTION, "inspect_logs"
 
     healthy_checks = (
@@ -501,11 +567,16 @@ def _derive_verdict_and_action(
         mail.get("pending") is False,
         not mail.get("lock_live"),
         not mirror.get("lock_live"),
+        not chilecompra.get("lock_live"),
         mirror.get("mirror_matches_daily_core") is True,
         mail_failures == 0,
         mirror_failures == 0,
+        chilecompra_failures == 0,
     )
     if all(healthy_checks):
+        if chilecompra.get("next_run_due") is True:
+            warnings.append("chilecompra_refresh_due")
+            return VERDICT_ATTENTION, "run_auto_refresh_chilecompra_equipment"
         return VERDICT_HEALTHY, "none"
 
     return VERDICT_ATTENTION, "inspect_logs"
@@ -570,6 +641,36 @@ def format_operator_automation_status_text(report: dict[str, Any]) -> str:
         "consecutive_failures",
     ):
         lines.append(f"  {key}={_fmt_value(mirror.get(key))}")
+
+    lines.append("")
+    lines.append("chilecompra_equipment_auto_refresh")
+    chilecompra = report.get("chilecompra_equipment_auto_refresh") or {}
+    for key in (
+        "state_exists",
+        "lock_live",
+        "lock_age_seconds",
+        "last_result",
+        "last_successful_refresh_at",
+        "last_successful_publish_at",
+        "last_run_started_at",
+        "last_run_finished_at",
+        "next_recommended_run_at",
+        "freshness_age_seconds",
+        "next_run_due",
+        "consecutive_failures",
+        "last_error",
+        "fetched_summaries",
+        "candidate_summaries",
+        "detail_requests",
+        "detail_cache_hits",
+        "detail_error_count",
+        "output_rows",
+        "published_rows",
+        "published_queue",
+        "candidate_audit",
+        "parse_error",
+    ):
+        lines.append(f"  {key}={_fmt_value(chilecompra.get(key))}")
 
     lines.append("")
     lines.append("ndr_pending_review")
