@@ -38,6 +38,12 @@ export function automationRecommendedActionLabel(action: string): string {
       return "Publicar snapshot o revisar localmente";
     case "clear_stale_lock_after_manual_review":
       return "Revisar lock obsoleto manualmente";
+    case "install_chilecompra_cron":
+      return "Instalar cron de ChileCompra";
+    case "run_auto_refresh_chilecompra_equipment":
+      return "Ejecutar refresh ChileCompra";
+    case "wait_for_running_chilecompra_refresh":
+      return "Esperar refresh ChileCompra en curso";
     default:
       return action;
   }
@@ -166,4 +172,65 @@ export function formatAutomationBool(value: boolean | null | undefined): string 
   if (value === true) return "sí";
   if (value === false) return "no";
   return "—";
+}
+
+export function chilecompraAutomationResultLabel(result: string | null | undefined): string {
+  switch (result) {
+    case "refreshed":
+      return "Actualizado";
+    case "cooldown":
+      return "En cooldown";
+    case "ticket_missing":
+      return "Falta ticket";
+    case "lock_live":
+      return "Refresh en curso";
+    default:
+      return result?.trim() || "—";
+  }
+}
+
+export function formatAutomationTimeShort(ts: string | null | undefined): string {
+  const trimmed = ts?.trim();
+  if (!trimmed) return "—";
+  const parsed = Date.parse(trimmed);
+  if (!Number.isFinite(parsed)) return "—";
+  try {
+    return new Intl.DateTimeFormat("es-CL", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(parsed));
+  } catch {
+    return "—";
+  }
+}
+
+export function buildChilecompraAutomationSummary(
+  status: OperatorAutomationStatus,
+): string | null {
+  const chilecompra = status.chilecompra_equipment_auto_refresh;
+  if (!chilecompra?.state_exists) {
+    return null;
+  }
+  const parts: string[] = ["ChileCompra → Dashboard"];
+  if (chilecompra.published_rows != null) {
+    parts.push(`${chilecompra.published_rows} filas`);
+  }
+  if (chilecompra.next_recommended_run_at) {
+    parts.push(`próximo ${formatAutomationTimeShort(chilecompra.next_recommended_run_at)}`);
+  }
+  if (parts.length === 1) {
+    return null;
+  }
+  return `${parts[0]}: ${parts.slice(1).join(" · ")}`;
+}
+
+export function formatChilecompraApiDetailSummary(
+  status: OperatorAutomationStatus,
+): string {
+  const chilecompra = status.chilecompra_equipment_auto_refresh;
+  if (!chilecompra) {
+    return "— / — / —";
+  }
+  return `${chilecompra.detail_requests ?? "—"} / ${chilecompra.detail_cache_hits ?? "—"} / ${chilecompra.detail_error_count ?? "—"}`;
 }

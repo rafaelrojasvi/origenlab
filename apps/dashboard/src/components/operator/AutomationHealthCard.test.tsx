@@ -43,6 +43,14 @@ const BASE_STATUS: OperatorAutomationStatus = {
     cooldown_remaining_seconds: 0,
     consecutive_failures: 0,
   },
+  chilecompra_equipment_auto_refresh: {
+    state_exists: false,
+    lock_live: false,
+    lock_age_seconds: null,
+    freshness_age_seconds: null,
+    next_run_due: null,
+    consecutive_failures: 0,
+  },
   cron: { note: "not inspected by API" },
   recommended_action: "none",
   warnings: [],
@@ -247,5 +255,72 @@ describe("AutomationHealthCard", () => {
     });
     expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBeforeRefresh);
     expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders ChileCompra automation section in detailed mode", async () => {
+    mockFetch.mockResolvedValue({
+      ...BASE_STATUS,
+      chilecompra_equipment_auto_refresh: {
+        state_exists: true,
+        lock_live: false,
+        lock_age_seconds: null,
+        last_result: "refreshed",
+        last_successful_refresh_at: "2026-06-10T17:12:48+00:00",
+        last_successful_publish_at: "2026-06-10T17:41:00+00:00",
+        next_recommended_run_at: "2026-06-10T20:41:00+00:00",
+        freshness_age_seconds: 4620,
+        next_run_due: false,
+        consecutive_failures: 0,
+        detail_requests: 4,
+        detail_cache_hits: 2,
+        detail_error_count: 0,
+        published_rows: 7,
+      },
+      cron: {
+        chilecompra_entry_present: true,
+        chilecompra_uses_tracked_script: true,
+      },
+    });
+    render(<AutomationHealthCard variant="detailed" />);
+    await waitFor(() => {
+      screen.getByTestId("chilecompra-automation-section");
+    });
+    screen.getByText("ChileCompra equipment auto-refresh");
+    screen.getByText("Actualizado");
+    screen.getByText("7");
+    screen.getByText("4 / 2 / 0");
+    screen.getByText("Cron instalado");
+    screen.getByText("Wrapper correcto");
+  });
+
+  it("shows ChileCompra summary line in summary mode", async () => {
+    mockFetch.mockResolvedValue({
+      ...BASE_STATUS,
+      chilecompra_equipment_auto_refresh: {
+        ...BASE_STATUS.chilecompra_equipment_auto_refresh,
+        state_exists: true,
+        published_rows: 7,
+        next_recommended_run_at: "2026-06-10T17:41:00+00:00",
+      },
+    });
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByText(/ChileCompra → Dashboard: 7 filas/);
+    });
+    expect(screen.getByText(/ChileCompra → Dashboard: 7 filas/).textContent).toMatch(/próximo/i);
+  });
+
+  it("handles missing ChileCompra section defensively", async () => {
+    mockFetch.mockResolvedValue(
+      parseOperatorAutomationStatus({
+        ...BASE_STATUS,
+        chilecompra_equipment_auto_refresh: undefined,
+      }),
+    );
+    render(<AutomationHealthCard variant="detailed" />);
+    await waitFor(() => {
+      screen.getByTestId("chilecompra-automation-section");
+    });
+    expect(screen.getAllByText("no").length).toBeGreaterThan(0);
   });
 });

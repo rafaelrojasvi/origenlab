@@ -91,6 +91,63 @@ describe("operator API client", () => {
     expect(parsed.daily_core_run).toEqual({ exists: false });
   });
 
+  it("parseOperatorAutomationStatus parses ChileCompra equipment auto-refresh fields", () => {
+    const parsed = parseOperatorAutomationStatus({
+      generated_at_utc: "2026-06-11T14:38:18+00:00",
+      active_current_dir: "<local-active-current>",
+      verdict: "healthy",
+      daily_core: { exists: true, status: "success", returncode: 0 },
+      mail_auto_refresh: { state_exists: true, dirty: false, pending: false },
+      dashboard_auto_mirror: { state_exists: true, mirror_matches_daily_core: true },
+      chilecompra_equipment_auto_refresh: {
+        state_exists: true,
+        lock_live: false,
+        lock_age_seconds: 12,
+        last_result: "refreshed",
+        last_successful_refresh_at: "2026-06-11T14:20:00+00:00",
+        last_successful_publish_at: "2026-06-11T14:38:00+00:00",
+        next_recommended_run_at: "2026-06-11T17:41:00+00:00",
+        freshness_age_seconds: 1080,
+        next_run_due: false,
+        consecutive_failures: 0,
+        detail_requests: 4,
+        detail_cache_hits: 2,
+        detail_error_count: 0,
+        published_rows: 7,
+      },
+      cron: {
+        chilecompra_entry_present: true,
+        chilecompra_uses_tracked_script: true,
+        mail_entry_present: true,
+        mirror_entry_present: true,
+      },
+      recommended_action: "none",
+      warnings: [],
+    });
+    expect(parsed.chilecompra_equipment_auto_refresh.state_exists).toBe(true);
+    expect(parsed.chilecompra_equipment_auto_refresh.published_rows).toBe(7);
+    expect(parsed.chilecompra_equipment_auto_refresh.detail_requests).toBe(4);
+    expect(parsed.cron.chilecompra_entry_present).toBe(true);
+    expect(parsed.cron.chilecompra_uses_tracked_script).toBe(true);
+  });
+
+  it("parseOperatorAutomationStatus defaults missing ChileCompra section", () => {
+    const parsed = parseOperatorAutomationStatus({
+      generated_at_utc: "2026-06-11T14:38:18+00:00",
+      active_current_dir: "/tmp",
+      verdict: "healthy",
+      recommended_action: "none",
+    });
+    expect(parsed.chilecompra_equipment_auto_refresh).toEqual({
+      state_exists: false,
+      lock_live: false,
+      lock_age_seconds: null,
+      freshness_age_seconds: null,
+      next_run_due: null,
+      consecutive_failures: 0,
+    });
+  });
+
   it("parseOperatorAutomationStatus preserves postgres snapshot source fields", () => {
     const parsed = parseOperatorAutomationStatus({
       generated_at_utc: "2026-06-11T14:38:18+00:00",
