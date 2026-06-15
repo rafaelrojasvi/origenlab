@@ -18,6 +18,7 @@ from origenlab_email_pipeline.dashboard_postgres_sync import (
     EXPECTED_ALEMBIC_HEAD,
     assert_sqlite_mart_ready_for_mirror_sync,
     build_loader_command,
+    check_alembic_head,
     collect_mirror_counts,
     format_summary_text,
     merge_optional_loader_details,
@@ -926,7 +927,7 @@ def test_alembic_migration_defines_commercial_deal_mirror() -> None:
 
 
 def test_alembic_head_matches_db1_api_read_model_chain() -> None:
-    assert EXPECTED_ALEMBIC_HEAD == "20260607_0023"
+    assert EXPECTED_ALEMBIC_HEAD == "20260614_0024"
     catalog_path = REPO / "alembic" / "versions" / "20260527_0019_catalog_mirror.py"
     assert catalog_path.is_file()
     assert "catalog.product" in catalog_path.read_text(encoding="utf-8")
@@ -943,6 +944,35 @@ def test_alembic_head_matches_db1_api_read_model_chain() -> None:
     assert "role_category" in role_text
     assert "COALESCE(c.role_category, c.category)" in role_text
     assert "supplier_quote_received" in role_text
+    equipment_path = (
+        REPO / "alembic" / "versions" / "20260614_0024_api_v_equipment_opportunity_extra_json.py"
+    )
+    assert equipment_path.is_file()
+    assert "extra_json" in equipment_path.read_text(encoding="utf-8")
+
+
+def test_check_alembic_head_accepts_expected_head() -> None:
+    with patch(
+        "origenlab_email_pipeline.dashboard_postgres_sync.fetch_alembic_version",
+        return_value=EXPECTED_ALEMBIC_HEAD,
+    ):
+        ok, version, msg = check_alembic_head(MagicMock())
+    assert ok is True
+    assert version == EXPECTED_ALEMBIC_HEAD
+    assert msg == ""
+
+
+def test_check_alembic_head_mismatch_message_uses_current_expected_head() -> None:
+    with patch(
+        "origenlab_email_pipeline.dashboard_postgres_sync.fetch_alembic_version",
+        return_value="20260607_0023",
+    ):
+        ok, version, msg = check_alembic_head(MagicMock())
+    assert ok is False
+    assert version == "20260607_0023"
+    assert msg == (
+        "Alembic head mismatch: database='20260607_0023' expected='20260614_0024'"
+    )
 
 
 def test_alembic_migration_defines_warm_case_role_category() -> None:
