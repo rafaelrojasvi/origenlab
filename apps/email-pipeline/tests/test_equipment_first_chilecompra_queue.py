@@ -195,6 +195,49 @@ def test_build_equipment_queue_from_chilecompra_api_mocked(tmp_path: Path) -> No
     assert "mercadopublico.cl" in anexos[0]["url"]
 
 
+def test_summary_prefilter_skips_are_counted_and_audited() -> None:
+    summaries = {
+        "Listado": [
+            {
+                "CodigoExterno": "1051-1-LP26",
+                "Nombre": "Adquisición centrifuga laboratorio",
+                "Descripcion": "Equipos para laboratorio clínico",
+                "Comprador": {"NombreOrganismo": "Hospital Demo", "Region": "RM"},
+                "FechaCierre": "20/06/2026 17:00:00",
+            },
+            {
+                "CodigoExterno": "9000-1-LP26",
+                "Nombre": "Pavimentación vial urbana",
+                "Descripcion": "Obras viales",
+                "Comprador": {"NombreOrganismo": "Municipalidad Demo", "Region": "RM"},
+                "FechaCierre": "21/06/2026 17:00:00",
+            },
+        ]
+    }
+    fetch_list = MagicMock(return_value=summaries)
+    fetch_detail = MagicMock(side_effect=lambda codigo, ticket: _equipment_detail_payload(codigo))
+
+    _rows, manifest, audit_rows = build_equipment_queue_from_chilecompra_api(
+        ticket=_SECRET_TICKET,
+        max_details=10,
+        now=_T0,
+        fetch_licitaciones_fn=fetch_list,
+        fetch_licitacion_by_codigo_fn=fetch_detail,
+    )
+
+    assert manifest["fetched_summaries"] == 2
+    assert manifest["candidate_summaries"] == 1
+    assert manifest["prefilter_skipped_summaries"] == 1
+    fetch_detail.assert_called_once_with("1051-1-LP26", ticket=_SECRET_TICKET)
+
+    by_codigo = {row["codigo"]: row for row in audit_rows}
+    assert by_codigo["1051-1-LP26"]["prefilter_match"] == "true"
+    assert by_codigo["1051-1-LP26"]["detail_requested"] == "true"
+    assert by_codigo["9000-1-LP26"]["prefilter_match"] == "false"
+    assert by_codigo["9000-1-LP26"]["detail_requested"] == "false"
+    assert by_codigo["9000-1-LP26"]["reject_reason"] == "summary_prefilter_no_match"
+
+
 def test_build_equipment_queue_respects_max_details() -> None:
     summaries = {
         "Listado": [
@@ -287,7 +330,8 @@ def test_write_chilecompra_api_queue_outputs_csv_fields(tmp_path: Path) -> None:
     assert manifest_data["by_next_action"]["quote_now"] == 1
 
 
-def test_build_equipment_queue_missing_ticket_raises_clear_error() -> None:
+def test_build_equipment_queue_missing_ticket_raises_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CHILECOMPRA_API_TICKET", raising=False)
     with pytest.raises(ChileCompraTicketMissingError, match="CHILECOMPRA_API_TICKET"):
         build_equipment_queue_from_chilecompra_api(
             fetch_licitaciones_fn=MagicMock(),

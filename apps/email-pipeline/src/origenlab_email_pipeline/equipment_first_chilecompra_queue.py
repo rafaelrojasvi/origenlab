@@ -288,7 +288,12 @@ def write_chilecompra_equipment_queue_csv(rows: list[dict[str, str]], out_path: 
         )
 
 
-def _new_candidate_audit_row(summary: dict[str, str], *, detail_requested: bool) -> dict[str, str]:
+def _new_candidate_audit_row(
+    summary: dict[str, str],
+    *,
+    prefilter_match: bool,
+    detail_requested: bool,
+) -> dict[str, str]:
     codigo = (summary.get("codigo") or "").strip()
     row = {
         "codigo": codigo,
@@ -299,7 +304,7 @@ def _new_candidate_audit_row(summary: dict[str, str], *, detail_requested: bool)
         "chilecompra_status_code": summary.get("chilecompra_status_code", ""),
         "chilecompra_status": summary.get("chilecompra_status", ""),
         "validity_status": "",
-        "prefilter_match": "true",
+        "prefilter_match": "true" if prefilter_match else "false",
         "detail_requested": "true" if detail_requested else "false",
         "detail_cache_hit": "false",
         "normalized_item_count": "0",
@@ -307,7 +312,9 @@ def _new_candidate_audit_row(summary: dict[str, str], *, detail_requested: bool)
         "next_action_summary": "",
         "reject_reason": "",
     }
-    if codigo and not detail_requested:
+    if not prefilter_match:
+        row["reject_reason"] = "summary_prefilter_no_match"
+    elif codigo and not detail_requested:
         row["reject_reason"] = "not_detailed_max_details"
     return row
 
@@ -386,16 +393,26 @@ def build_equipment_queue_from_chilecompra_api(
     for summary in summary_rows:
         codigo = (summary.get("codigo") or "").strip()
         _merge_codigo_metadata(codigo_meta, codigo, summary)
-    candidate_summaries = [row for row in summary_rows if summary_passes_keyword_prefilter(row)]
-    detail_candidates = candidate_summaries[: max(0, max_details)]
-
-    candidate_audit_rows = [
-        _new_candidate_audit_row(
-            summary,
-            detail_requested=index < max(0, max_details),
+    max_detail_count = max(0, max_details)
+    candidate_summaries: list[dict[str, str]] = []
+    candidate_audit_rows: list[dict[str, str]] = []
+    candidate_index = 0
+    for summary in summary_rows:
+        prefilter_match = summary_passes_keyword_prefilter(summary)
+        detail_requested = False
+        if prefilter_match:
+            detail_requested = candidate_index < max_detail_count
+            candidate_summaries.append(summary)
+            candidate_index += 1
+        candidate_audit_rows.append(
+            _new_candidate_audit_row(
+                summary,
+                prefilter_match=prefilter_match,
+                detail_requested=detail_requested,
+            )
         )
-        for index, summary in enumerate(candidate_summaries)
-    ]
+    detail_candidates = candidate_summaries[:max_detail_count]
+    prefilter_skipped_summaries = len(summary_rows) - len(candidate_summaries)
     audit_by_codigo = {
         (row.get("codigo") or "").strip(): row
         for row in candidate_audit_rows
@@ -513,6 +530,7 @@ def build_equipment_queue_from_chilecompra_api(
         "fecha": fecha,
         "fetched_summaries": len(summary_rows),
         "candidate_summaries": len(candidate_summaries),
+        "prefilter_skipped_summaries": prefilter_skipped_summaries,
         "detail_requests": detail_requests,
         "detail_errors": detail_errors,
         "detail_error_count": len(detail_errors),

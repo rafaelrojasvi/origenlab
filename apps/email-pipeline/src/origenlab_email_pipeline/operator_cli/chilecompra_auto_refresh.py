@@ -73,6 +73,7 @@ class ChilecompraEquipmentAutoRefreshState:
     last_error: str | None = None
     fetched_summaries: int | None = None
     candidate_summaries: int | None = None
+    prefilter_skipped_summaries: int | None = None
     detail_requests: int | None = None
     detail_cache_hits: int | None = None
     detail_error_count: int | None = None
@@ -224,6 +225,7 @@ def _update_state_counts_from_manifest(
 ) -> None:
     state.fetched_summaries = int(manifest.get("fetched_summaries") or 0)
     state.candidate_summaries = int(manifest.get("candidate_summaries") or 0)
+    state.prefilter_skipped_summaries = int(manifest.get("prefilter_skipped_summaries") or 0)
     state.detail_requests = int(manifest.get("detail_requests") or 0)
     state.detail_cache_hits = int(manifest.get("detail_cache_hits") or 0)
     state.detail_error_count = int(manifest.get("detail_error_count") or 0)
@@ -411,6 +413,7 @@ def run_chilecompra_equipment_auto_refresh(
                     "detail_error_count": str(state.detail_error_count or 0),
                     "fetched_summaries": str(state.fetched_summaries or 0),
                     "candidate_summaries": str(state.candidate_summaries or 0),
+                    "prefilter_skipped_summaries": str(state.prefilter_skipped_summaries or 0),
                     "published_queue": published_queue,
                     "api_queue": str(api_queue_csv),
                     "coalesced_duplicate_rows": str(publish_stats.get("coalesced_duplicate_rows", 0)),
