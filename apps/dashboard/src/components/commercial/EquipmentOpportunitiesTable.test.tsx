@@ -263,5 +263,54 @@ describe("EquipmentOpportunitiesTable", () => {
     screen.getByText("Mercado Público");
     screen.getByText("Revisión requerida");
   });
+
+  it("formats ISO close date and shows ChileCompra detail", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="postgres"
+        items={[
+          {
+            ...row,
+            codigo_licitacion: "1051-1-LP26",
+            close_date: "2026-06-17T19:00:00",
+            fecha_publicacion: "10/06/2026 08:00:00",
+            mercado_publico_url:
+              "https://www.mercadopublico.cl/BuscarLicitacion?codigoLicitacion=1051-1-LP26",
+            unspsc_code: "41100000",
+            cantidad: "2",
+            unidad: "Unidad",
+            producto: "Centrifuga refrigerada",
+            nivel_1: "Equipamiento",
+            chilecompra_status: "Publicada",
+            validity_status: "open",
+          },
+        ]}
+        meta={{
+          data_source: "postgres_mirror",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    expect(screen.queryByText("2026-06-17T19:00:00")).toBeNull();
+    screen.getByText(/Publicado:/);
+    screen.getByRole("link", { name: "Buscar en Mercado Público" });
+    screen.getByText(/Cantidad: 2/);
+    screen.getByText(/UNSPSC: 41100000/);
+    screen.getByText(/Producto: Centrifuga refrigerada/);
+    expect(screen.getByRole("link", { name: "Buscar en Mercado Público" }).getAttribute("href")).toContain(
+      "1051-1-LP26",
+    );
+    expect(screen.getByRole("link", { name: "Buscar en Mercado Público" }).getAttribute("href")).not.toMatch(
+      /ticket/i,
+    );
+  });
 });
 

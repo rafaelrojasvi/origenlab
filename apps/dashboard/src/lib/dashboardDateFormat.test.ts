@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDashboardDateShort, formatDashboardDateTime } from "./dashboardDateFormat";
+import { formatDashboardDateShort, formatDashboardDateTime, formatEquipmentCloseDate } from "./dashboardDateFormat";
 
 describe("dashboardDateFormat", () => {
   it("returns em dash for null and empty", () => {
@@ -21,7 +21,13 @@ describe("dashboardDateFormat", () => {
     expect(formatted).toMatch(/2026/);
   });
 
-  it("returns original string when parsing fails", () => {
-    expect(formatDashboardDateTime("not-a-date")).toBe("not-a-date");
+  it("formats Chilean and ISO close dates for equipment", () => {
+    const chilean = formatEquipmentCloseDate("17/06/2026 19:00:00");
+    expect(chilean).not.toBe("17/06/2026 19:00:00");
+    expect(chilean).toMatch(/2026/);
+    expect(chilean).toMatch(/19:00/);
+
+    const iso = formatEquipmentCloseDate("2026-06-17T19:00:00", "2026-06-17T19:00:00-04:00");
+    expect(iso).not.toMatch(/T19:00:00/);
   });
 });

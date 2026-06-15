@@ -21,6 +21,9 @@ from origenlab_email_pipeline.chilecompra_api import (
     redact_ticket,
     ticket_from_env,
 )
+from origenlab_email_pipeline.equipment_first_chilecompra_publish import (
+    attach_item_metadata_to_queue_rows,
+)
 from origenlab_email_pipeline.equipment_first_licitacion_queue import (
     build_equipment_queue_rows_from_normalized_rows,
 )
@@ -67,6 +70,17 @@ CHILECOMPRA_QUEUE_FIELDS = (
     "chilecompra_status_code",
     "chilecompra_status",
     "source",
+    "fecha_publicacion",
+    "descripcion",
+    "line_description",
+    "unspsc_code",
+    "unidad",
+    "cantidad",
+    "producto",
+    "nivel_1",
+    "nivel_2",
+    "nivel_3",
+    "mercado_publico_url",
 )
 
 FetchLicitacionesFn = Callable[..., dict[str, Any]]
@@ -423,6 +437,7 @@ def build_equipment_queue_from_chilecompra_api(
         normalized_item_rows,
         now=now_utc,
     )
+    queue_rows = attach_item_metadata_to_queue_rows(queue_rows, normalized_item_rows)
     queue_rows = _annotate_chilecompra_api_source(queue_rows)
     queue_rows = [
         _annotate_chilecompra_queue_validity(

@@ -66,7 +66,7 @@ def file_mtime_utc(path: Path) -> datetime:
 
 
 def parse_close_at(close_date: str | None) -> datetime | None:
-    """Parse Chilean close_date strings to TIMESTAMPTZ (America/Santiago)."""
+    """Parse Chilean and ISO close_date strings to TIMESTAMPTZ (America/Santiago)."""
     text = (close_date or "").strip()
     if not text:
         return None
@@ -76,7 +76,22 @@ def parse_close_at(close_date: str | None) -> datetime | None:
             return naive.replace(tzinfo=_SANTIAGO)
         except ValueError:
             continue
-    return None
+
+    iso_candidate = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(iso_candidate)
+    except ValueError:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"):
+            try:
+                parsed = datetime.strptime(text, fmt)
+                return parsed.replace(tzinfo=_SANTIAGO)
+            except ValueError:
+                continue
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=_SANTIAGO)
+    return parsed.astimezone(_SANTIAGO)
 
 
 def parse_priority_rank(value: str | None) -> int | None:

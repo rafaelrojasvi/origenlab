@@ -84,6 +84,22 @@ export interface EquipmentOpportunityItem {
   contact_status: string;
   contact_email: string;
   operator_note: string;
+  fecha_publicacion?: string;
+  close_at?: string;
+  validity_status?: string;
+  chilecompra_status?: string;
+  chilecompra_status_code?: string;
+  api_checked_at_utc?: string;
+  source?: string;
+  mercado_publico_url?: string;
+  title?: string;
+  unspsc_code?: string;
+  unidad?: string;
+  cantidad?: string;
+  producto?: string;
+  nivel_1?: string;
+  nivel_2?: string;
+  nivel_3?: string;
 }
 
 export interface EquipmentOpportunitiesResponse {

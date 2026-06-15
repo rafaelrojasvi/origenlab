@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 from unittest.mock import patch
 
+from pathlib import Path
+
 import pytest
 
 from origenlab_api.backends.factory import get_repository_bundle
@@ -45,6 +47,32 @@ def test_map_equipment_row_fixture() -> None:
     assert mapped["priority_rank"] == 1
     assert mapped["codigo_licitacion"] == "LP-001"
     assert mapped["close_date"] == "2026-06-01"
+
+
+def test_map_equipment_row_merges_extra_json_detail_fields() -> None:
+    mapped = map_equipment_row(
+        _fixture_row(
+            close_at="2026-06-17T19:00:00-04:00",
+            extra_json={
+                "fecha_publicacion": "10/06/2026",
+                "validity_status": "open",
+                "chilecompra_status": "Publicada",
+                "mercado_publico_url": "https://www.mercadopublico.cl/BuscarLicitacion?codigoLicitacion=LP-001",
+                "unspsc_code": "41100000",
+                "cantidad": "3",
+                "producto": "Centrifuga",
+            },
+        )
+    )
+    assert mapped["close_at"].startswith("2026-06-17")
+    assert mapped["fecha_publicacion"] == "10/06/2026"
+    assert mapped["validity_status"] == "open"
+    assert mapped["chilecompra_status"] == "Publicada"
+    assert "mercadopublico.cl" in mapped["mercado_publico_url"]
+    assert mapped["unspsc_code"] == "41100000"
+    assert mapped["cantidad"] == "3"
+    assert mapped["producto"] == "Centrifuga"
+    assert "ticket" not in mapped["mercado_publico_url"].lower()
 
 
 def test_build_equipment_meta_empty_has_note() -> None:

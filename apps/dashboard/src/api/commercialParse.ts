@@ -113,13 +113,41 @@ export function parseWarmCasesResponse(data: unknown): WarmCasesResponse {
   };
 }
 
+const EQUIPMENT_DETAIL_OPTIONAL_FIELDS = [
+  "fecha_publicacion",
+  "close_at",
+  "validity_status",
+  "chilecompra_status",
+  "chilecompra_status_code",
+  "api_checked_at_utc",
+  "source",
+  "mercado_publico_url",
+  "title",
+  "unspsc_code",
+  "unidad",
+  "cantidad",
+  "producto",
+  "nivel_1",
+  "nivel_2",
+  "nivel_3",
+] as const;
+
+function optionalEquipmentField(
+  r: Record<string, unknown>,
+  field: (typeof EQUIPMENT_DETAIL_OPTIONAL_FIELDS)[number],
+  maxLen: number,
+): string | undefined {
+  const value = safePreviewText(r[field], maxLen);
+  return value || undefined;
+}
+
 export function normalizeEquipmentItem(raw: unknown, index: number): EquipmentOpportunityItem {
   const r = asRecord(raw);
   const rank =
     typeof r.priority_rank === "number" && Number.isFinite(r.priority_rank)
       ? r.priority_rank
       : index + 1;
-  return {
+  const item: EquipmentOpportunityItem = {
     priority_rank: rank,
     codigo_licitacion: safePreviewText(r.codigo_licitacion, 80),
     buyer: safePreviewText(r.buyer, 200),
@@ -134,6 +162,14 @@ export function normalizeEquipmentItem(raw: unknown, index: number): EquipmentOp
     contact_email: safePreviewText(r.contact_email, 200),
     operator_note: safePreviewText(r.operator_note, 200),
   };
+  for (const field of EQUIPMENT_DETAIL_OPTIONAL_FIELDS) {
+    const maxLen = field === "mercado_publico_url" ? 300 : field === "title" ? 200 : 120;
+    const value = optionalEquipmentField(r, field, maxLen);
+    if (value) {
+      item[field] = value;
+    }
+  }
+  return item;
 }
 
 /** UI-safe meta: source_path and other filesystem hints are not exposed. */

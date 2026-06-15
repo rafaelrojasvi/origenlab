@@ -9,6 +9,7 @@ from origenlab_api.repositories.equipment_opportunities import (
     _ACCOUNT_INTEL_ACTIONS,
     _ACCOUNT_INTEL_SAFE,
 )
+from origenlab_api.repositories.equipment_detail_fields import merge_equipment_detail_fields
 from origenlab_api.repositories.postgres.common import postgres_connection, require_psycopg
 from origenlab_api.schemas.opportunities import EquipmentOpportunitiesMeta
 from origenlab_api.settings import Settings
@@ -20,6 +21,7 @@ SELECT
   buyer,
   region,
   close_date,
+  close_at,
   equipment_category,
   item_description,
   next_action,
@@ -27,6 +29,7 @@ SELECT
   supplier_needed,
   contact_status,
   operator_note,
+  extra_json,
   source_path,
   campaign_mode
 FROM api.v_equipment_opportunity
@@ -64,20 +67,23 @@ def map_equipment_row(row: dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError):
         priority_rank = 0
 
-    return {
-        "priority_rank": priority_rank,
-        "codigo_licitacion": _str_field(row.get("codigo_licitacion")),
-        "buyer": _str_field(row.get("buyer")),
-        "region": _str_field(row.get("region")),
-        "close_date": _format_close_date(row.get("close_date")),
-        "equipment_category": _str_field(row.get("equipment_category")),
-        "item_description": _str_field(row.get("item_description")),
-        "next_action": _str_field(row.get("next_action")),
-        "safe_channel": _str_field(row.get("safe_channel")),
-        "supplier_needed": _str_field(row.get("supplier_needed")),
-        "contact_status": _str_field(row.get("contact_status")),
-        "operator_note": _str_field(row.get("operator_note")),
-    }
+    return merge_equipment_detail_fields(
+        {
+            "priority_rank": priority_rank,
+            "codigo_licitacion": _str_field(row.get("codigo_licitacion")),
+            "buyer": _str_field(row.get("buyer")),
+            "region": _str_field(row.get("region")),
+            "close_date": _format_close_date(row.get("close_date")),
+            "equipment_category": _str_field(row.get("equipment_category")),
+            "item_description": _str_field(row.get("item_description")),
+            "next_action": _str_field(row.get("next_action")),
+            "safe_channel": _str_field(row.get("safe_channel")),
+            "supplier_needed": _str_field(row.get("supplier_needed")),
+            "contact_status": _str_field(row.get("contact_status")),
+            "operator_note": _str_field(row.get("operator_note")),
+        },
+        row,
+    )
 
 
 def build_equipment_meta(

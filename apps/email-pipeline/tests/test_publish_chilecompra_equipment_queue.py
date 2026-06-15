@@ -424,3 +424,80 @@ def test_coalesce_does_not_bypass_expired_and_inactive_filtering(tmp_path: Path)
         published = list(csv.DictReader(handle))
     assert published[0]["codigo_licitacion"] == "OPEN-1-LP26"
     assert "homogenizer" in published[0]["equipment_category"]
+
+
+def test_publish_includes_fecha_publicacion_and_item_metadata(tmp_path: Path) -> None:
+    source_csv = tmp_path / "equipment_first_operator_queue_chilecompra_api_20260614.csv"
+    out_csv = tmp_path / "equipment_first_operator_queue_20260614.csv"
+    source = _source_row(codigo="META-1-LP26", next_action="quote_now", fit_score="85")
+    source.update(
+        {
+            "fecha_publicacion": "15/06/2026 10:00:00",
+            "unspsc_code": "41100000",
+            "unidad": "Unidad",
+            "cantidad": "2",
+            "producto": "Centrifuga",
+            "nivel_1": "Equipamiento",
+            "nivel_2": "Laboratorio",
+            "nivel_3": "Centrifugas",
+        }
+    )
+    with source_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(source.keys()))
+        writer.writeheader()
+        writer.writerow(source)
+
+    publish_chilecompra_equipment_queue_for_dashboard(
+        source_csv=source_csv,
+        out_csv=out_csv,
+    )
+
+    with out_csv.open(encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    assert row["fecha_publicacion"] == "15/06/2026 10:00:00"
+    assert row["unspsc_code"] == "41100000"
+    assert row["cantidad"] == "2"
+    assert row["producto"] == "Centrifuga"
+    assert "mercadopublico.cl" in row["mercado_publico_url"]
+    assert "META-1-LP26" in row["mercado_publico_url"]
+    assert _SECRET_TICKET not in row["mercado_publico_url"]
+    assert _SECRET_TICKET not in out_csv.read_text(encoding="utf-8")
+
+
+def test_coalesce_combines_item_metadata_for_same_codigo() -> None:
+    rows = publish_chilecompra_equipment_rows(
+        [
+            {
+                **_source_row(
+                    codigo="1051-1-LP26",
+                    next_action="needs_supplier_quote",
+                    fit_score="70",
+                    equipment_category="centrifuge",
+                ),
+                "unspsc_code": "41100000",
+                "cantidad": "1",
+                "producto": "Centrifuga",
+                "nivel_1": "Equipamiento",
+            },
+            {
+                **_source_row(
+                    codigo="1051-1-LP26",
+                    next_action="account_intelligence_only",
+                    fit_score="60",
+                    equipment_category="homogenizer",
+                ),
+                "unspsc_code": "42200000",
+                "cantidad": "2",
+                "producto": "Homogeneizador",
+                "nivel_2": "Laboratorio",
+            },
+        ]
+    )
+
+    assert len(rows) == 1
+    merged = rows[0]
+    assert "41100000" in merged["unspsc_code"]
+    assert "42200000" in merged["unspsc_code"]
+    assert "Centrifuga" in merged["producto"]
+    assert "Homogeneizador" in merged["producto"]
+    assert merged["cantidad"] == "3"
