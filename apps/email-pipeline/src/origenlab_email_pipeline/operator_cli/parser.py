@@ -8,6 +8,7 @@ from pathlib import Path
 
 from origenlab_email_pipeline.operator_cli.constants import (
     AUTO_MIRROR_DASHBOARD_COMMAND,
+    AUTO_REFRESH_CHILECOMPRA_EQUIPMENT_COMMAND,
     AUTO_REFRESH_MAIL_COMMAND,
     CLI_COMMAND_NAMES,
     NDR_SAFE_AUTO_APPLY_COMMAND,
@@ -20,6 +21,11 @@ from origenlab_email_pipeline.operator_cli.constants import (
     SPECIAL_COMMANDS,
     SUBCOMMAND_HELP,
     SUBCOMMAND_SCRIPTS,
+)
+from origenlab_email_pipeline.operator_cli.chilecompra_auto_refresh import (
+    parse_chilecompra_equipment_auto_refresh_args,
+    print_chilecompra_equipment_auto_refresh_help,
+    run_chilecompra_equipment_auto_refresh,
 )
 from origenlab_email_pipeline.operator_cli.dashboard_auto_mirror import (
     parse_dashboard_auto_mirror_args,
@@ -103,6 +109,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "daily-core: daily operating alias (plan-only default; --apply uses feature-backed mart rebuild). "
             "auto-refresh-mail: debounced mailbox probe (--once; --apply runs daily-core when gates pass). "
             "auto-mirror-dashboard: debounced Postgres publish (--once; separate from mail watcher). "
+            "auto-refresh-chilecompra-equipment: ChileCompra API equipment queue refresh (--once --apply). "
             "operator-automation-status: read-only automation health (--json optional). "
             "ndr-safe-auto-apply: Batch A dry-run plan from ndr_review_queue (--apply not enabled)."
         ),
@@ -352,6 +359,21 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
         try:
             return run_dashboard_auto_mirror(mirror_opts)
+        except ValueError as exc:
+            parser.error(str(exc))
+
+    if command == AUTO_REFRESH_CHILECOMPRA_EQUIPMENT_COMMAND:
+        if _wrapper_help_requested(argv[1:]):
+            print_chilecompra_equipment_auto_refresh_help()
+            return 0
+        try:
+            refresh_opts = parse_chilecompra_equipment_auto_refresh_args(argv[1:])
+        except SystemExit as exc:
+            raise exc
+        except ValueError as exc:
+            parser.error(str(exc))
+        try:
+            return run_chilecompra_equipment_auto_refresh(refresh_opts)
         except ValueError as exc:
             parser.error(str(exc))
 
