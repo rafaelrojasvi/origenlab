@@ -8,6 +8,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from origenlab_email_pipeline.chilecompra_api import (
+    VALIDITY_STATUS_CLOSES_TODAY,
+    VALIDITY_STATUS_MISSING_CLOSE_DATE,
+    VALIDITY_STATUS_OPEN,
+)
 from origenlab_email_pipeline.equipment_first_licitacion_queue import parse_close_date
 from origenlab_email_pipeline.equipment_first_operator_queue import OPERATOR_FIELDS
 
@@ -16,6 +21,15 @@ CHILECOMPRA_REVIEW_NOTE = (
 )
 CHILECOMPRA_SAFE_CHANNEL = "mercado_publico_only"
 CHILECOMPRA_CONTACT_STATUS = "review_required"
+CHILECOMPRA_CONTACT_STATUS_MISSING_CLOSE_DATE = "review_required_missing_close_date"
+
+DASHBOARD_ACTIVE_VALIDITY_STATUSES = frozenset(
+    {
+        VALIDITY_STATUS_OPEN,
+        VALIDITY_STATUS_CLOSES_TODAY,
+        VALIDITY_STATUS_MISSING_CLOSE_DATE,
+    }
+)
 
 NEXT_ACTION_SORT_ORDER: dict[str, int] = {
     "quote_now": 0,
@@ -31,6 +45,11 @@ PUBLISHED_DASHBOARD_FIELDS: tuple[str, ...] = (
     "fit_score",
     "reason",
     "contact_email",
+    "chilecompra_status_code",
+    "chilecompra_status",
+    "validity_status",
+    "api_checked_at_utc",
+    "source",
 )
 
 _CHILECOMPRA_API_QUEUE_PREFIX = "equipment_first_operator_queue_chilecompra_api_"
@@ -68,15 +87,30 @@ def _supplier_needed_value(next_action: str) -> str:
     return "yes" if next_action in ("quote_now", "needs_supplier_quote") else "no"
 
 
+def _contact_status_for_validity(validity_status: str) -> str:
+    if validity_status == VALIDITY_STATUS_MISSING_CLOSE_DATE:
+        return CHILECOMPRA_CONTACT_STATUS_MISSING_CLOSE_DATE
+    return CHILECOMPRA_CONTACT_STATUS
+
+
+def is_dashboard_active_chilecompra_row(row: dict[str, str]) -> bool:
+    validity_status = (row.get("validity_status") or "").strip()
+    return validity_status in DASHBOARD_ACTIVE_VALIDITY_STATUSES
+
+
 def enrich_chilecompra_row_for_dashboard(row: dict[str, str]) -> dict[str, str]:
     """Add dashboard/operator enrichment columns without inventing buyer emails."""
     next_action = (row.get("next_action") or "").strip()
     supplier_needed = _supplier_needed_value(next_action)
+    validity_status = (row.get("validity_status") or "").strip()
+    contact_status = _contact_status_for_validity(validity_status)
     note_parts = [
         CHILECOMPRA_REVIEW_NOTE,
         (row.get("reason") or "").strip(),
         f"fit_score={row.get('fit_score', '').strip()}",
     ]
+    if validity_status == VALIDITY_STATUS_MISSING_CLOSE_DATE:
+        note_parts.append("missing_close_date; revisar fecha de cierre en Mercado Público")
     enriched = {
         "priority_rank": (row.get("priority_rank") or "").strip(),
         "codigo_licitacion": (row.get("codigo_licitacion") or "").strip(),
@@ -86,7 +120,7 @@ def enrich_chilecompra_row_for_dashboard(row: dict[str, str]) -> dict[str, str]:
         "equipment_category": (row.get("equipment_category") or "").strip(),
         "item_description": (row.get("item_description") or "")[:500],
         "next_action": next_action,
-        "contact_status": CHILECOMPRA_CONTACT_STATUS,
+        "contact_status": contact_status,
         "safe_channel": CHILECOMPRA_SAFE_CHANNEL,
         "supplier_needed": supplier_needed,
         "supplier_contact": supplier_needed if supplier_needed == "yes" else "",
@@ -97,6 +131,11 @@ def enrich_chilecompra_row_for_dashboard(row: dict[str, str]) -> dict[str, str]:
         "fit_score": str(row.get("fit_score") or "").strip(),
         "reason": (row.get("reason") or "").strip(),
         "contact_email": "",
+        "chilecompra_status_code": (row.get("chilecompra_status_code") or "").strip(),
+        "chilecompra_status": (row.get("chilecompra_status") or "").strip(),
+        "validity_status": validity_status,
+        "api_checked_at_utc": (row.get("api_checked_at_utc") or "").strip(),
+        "source": (row.get("source") or "chilecompra_api").strip() or "chilecompra_api",
     }
     return enriched
 
@@ -127,7 +166,8 @@ def sort_chilecompra_dashboard_rows(rows: list[dict[str, str]]) -> list[dict[str
 def publish_chilecompra_equipment_rows(
     source_rows: list[dict[str, str]],
 ) -> list[dict[str, str]]:
-    enriched = [enrich_chilecompra_row_for_dashboard(row) for row in source_rows]
+    active_rows = [row for row in source_rows if is_dashboard_active_chilecompra_row(row)]
+    enriched = [enrich_chilecompra_row_for_dashboard(row) for row in active_rows]
     return sort_chilecompra_dashboard_rows(enriched)
 
 
@@ -195,6 +235,7 @@ def publish_chilecompra_equipment_queue_for_dashboard(
     active_current: Path | None = None,
 ) -> dict[str, Any]:
     source_rows = load_chilecompra_source_rows(source_csv)
+    active_input_rows = [row for row in source_rows if is_dashboard_active_chilecompra_row(row)]
     published_rows = publish_chilecompra_equipment_rows(source_rows)
     write_published_dashboard_csv(published_rows, out_csv)
 
@@ -202,7 +243,9 @@ def publish_chilecompra_equipment_queue_for_dashboard(
         "source_csv": str(source_csv),
         "out_csv": str(out_csv),
         "input_rows": len(source_rows),
+        "active_input_rows": len(active_input_rows),
         "output_rows": len(published_rows),
+        "excluded_rows": len(source_rows) - len(active_input_rows),
         "manifest_updated": False,
     }
     if update_manifest:

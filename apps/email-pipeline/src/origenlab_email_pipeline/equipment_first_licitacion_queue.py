@@ -249,6 +249,8 @@ class TenderAccumulator:
             self.region = row.get("region", "")
             self.close_date = row.get("close_date", "")
             self.title = row.get("title", "")
+        elif not self.close_date and (row.get("close_date") or "").strip():
+            self.close_date = row.get("close_date", "")
         for cat, span in detect_equipment_categories(blob):
             self.has_equipment_line = True
             desc = row.get("line_description") or row.get("producto") or span

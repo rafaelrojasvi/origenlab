@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 from origenlab_email_pipeline.chilecompra_api import (
     ChileCompraHttpError,
+    classify_chilecompra_validity_status,
     fetch_licitacion_by_codigo,
     fetch_licitaciones,
     normalize_licitacion_detail_items,
@@ -22,7 +23,6 @@ from origenlab_email_pipeline.chilecompra_api import (
 )
 from origenlab_email_pipeline.equipment_first_licitacion_queue import (
     build_equipment_queue_rows_from_normalized_rows,
-    write_equipment_queue_csv,
 )
 
 SUMMARY_KEYWORD_PREFILTER_RE = re.compile(
@@ -39,6 +39,9 @@ CANDIDATE_AUDIT_FIELDS = (
     "buyer",
     "region",
     "close_date",
+    "chilecompra_status_code",
+    "chilecompra_status",
+    "validity_status",
     "prefilter_match",
     "detail_requested",
     "detail_cache_hit",
@@ -46,6 +49,24 @@ CANDIDATE_AUDIT_FIELDS = (
     "detected_output_rows",
     "next_action_summary",
     "reject_reason",
+)
+
+CHILECOMPRA_QUEUE_FIELDS = (
+    "codigo_licitacion",
+    "buyer",
+    "region",
+    "close_date",
+    "title",
+    "item_description",
+    "equipment_category",
+    "fit_score",
+    "reason",
+    "next_action",
+    "api_checked_at_utc",
+    "validity_status",
+    "chilecompra_status_code",
+    "chilecompra_status",
+    "source",
 )
 
 FetchLicitacionesFn = Callable[..., dict[str, Any]]
@@ -153,6 +174,74 @@ def write_detail_cache(cache_dir: Path, codigo: str, payload: dict[str, Any]) ->
     return path
 
 
+def _metadata_from_normalized_row(row: dict[str, str]) -> dict[str, str]:
+    return {
+        "close_date": (row.get("close_date") or "").strip(),
+        "chilecompra_status_code": (row.get("chilecompra_status_code") or "").strip(),
+        "chilecompra_status": (row.get("chilecompra_status") or "").strip(),
+    }
+
+
+def _merge_codigo_metadata(
+    codigo_meta: dict[str, dict[str, str]],
+    codigo: str,
+    row: dict[str, str],
+) -> None:
+    if not codigo:
+        return
+    incoming = _metadata_from_normalized_row(row)
+    current = codigo_meta.setdefault(
+        codigo,
+        {"close_date": "", "chilecompra_status_code": "", "chilecompra_status": ""},
+    )
+    for key, value in incoming.items():
+        if value:
+            current[key] = value
+
+
+def _annotate_chilecompra_queue_validity(
+    row: dict[str, str],
+    *,
+    codigo_meta: dict[str, dict[str, str]],
+    api_checked_at_utc: str,
+    now: datetime,
+) -> dict[str, str]:
+    updated = dict(row)
+    codigo = (row.get("codigo_licitacion") or "").strip()
+    meta = codigo_meta.get(codigo, {})
+    close_date = (row.get("close_date") or meta.get("close_date") or "").strip()
+    if close_date:
+        updated["close_date"] = close_date
+    status_code = (meta.get("chilecompra_status_code") or "").strip()
+    status_name = (meta.get("chilecompra_status") or "").strip()
+    validity_status = classify_chilecompra_validity_status(
+        chilecompra_status_code=status_code,
+        chilecompra_status=status_name,
+        close_date=close_date,
+        now=now,
+    )
+    updated.update(
+        {
+            "api_checked_at_utc": api_checked_at_utc,
+            "validity_status": validity_status,
+            "chilecompra_status_code": status_code,
+            "chilecompra_status": status_name,
+            "source": "chilecompra_api",
+        }
+    )
+    return updated
+
+
+def write_chilecompra_equipment_queue_csv(rows: list[dict[str, str]], out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(CHILECOMPRA_QUEUE_FIELDS))
+        writer.writeheader()
+        writer.writerows(
+            {field: row.get(field, "") for field in CHILECOMPRA_QUEUE_FIELDS} for row in rows
+        )
+
+
 def _new_candidate_audit_row(summary: dict[str, str], *, detail_requested: bool) -> dict[str, str]:
     codigo = (summary.get("codigo") or "").strip()
     row = {
@@ -161,6 +250,9 @@ def _new_candidate_audit_row(summary: dict[str, str], *, detail_requested: bool)
         "buyer": summary.get("buyer", ""),
         "region": summary.get("region", ""),
         "close_date": summary.get("close_date", ""),
+        "chilecompra_status_code": summary.get("chilecompra_status_code", ""),
+        "chilecompra_status": summary.get("chilecompra_status", ""),
+        "validity_status": "",
         "prefilter_match": "true",
         "detail_requested": "true" if detail_requested else "false",
         "detail_cache_hit": "false",
@@ -229,6 +321,11 @@ def build_equipment_queue_from_chilecompra_api(
     """Fetch summaries, detail rows for keyword candidates, and build equipment queue."""
     resolved_ticket = ticket or ticket_from_env()
     now_utc = now or datetime.now()
+    api_checked_at_utc = (
+        now_utc.replace(tzinfo=timezone.utc).isoformat()
+        if now_utc.tzinfo is None
+        else now_utc.astimezone(timezone.utc).replace(microsecond=0).isoformat()
+    )
     fetch_list = fetch_licitaciones_fn or fetch_licitaciones
     fetch_detail = fetch_licitacion_by_codigo_fn or fetch_licitacion_by_codigo
     pause = sleep_fn or time.sleep
@@ -239,6 +336,10 @@ def build_equipment_queue_from_chilecompra_api(
         fecha=fecha,
     )
     summary_rows = normalize_licitaciones_response(summary_payload)
+    codigo_meta: dict[str, dict[str, str]] = {}
+    for summary in summary_rows:
+        codigo = (summary.get("codigo") or "").strip()
+        _merge_codigo_metadata(codigo_meta, codigo, summary)
     candidate_summaries = [row for row in summary_rows if summary_passes_keyword_prefilter(row)]
     detail_candidates = candidate_summaries[: max(0, max_details)]
 
@@ -309,7 +410,11 @@ def build_equipment_queue_from_chilecompra_api(
             codigo_item_rows.append(summary)
         else:
             for licitacion in licitaciones:
-                codigo_item_rows.extend(normalize_licitacion_detail_items(licitacion))
+                codigo_item_rows.extend(
+                    normalize_licitacion_detail_items(licitacion, summary_fallback=summary)
+                )
+        for item_row in codigo_item_rows:
+            _merge_codigo_metadata(codigo_meta, codigo, item_row)
         normalized_item_rows.extend(codigo_item_rows)
         if audit is not None:
             audit["normalized_item_count"] = str(len(codigo_item_rows))
@@ -319,19 +424,36 @@ def build_equipment_queue_from_chilecompra_api(
         now=now_utc,
     )
     queue_rows = _annotate_chilecompra_api_source(queue_rows)
+    queue_rows = [
+        _annotate_chilecompra_queue_validity(
+            row,
+            codigo_meta=codigo_meta,
+            api_checked_at_utc=api_checked_at_utc,
+            now=now_utc,
+        )
+        for row in queue_rows
+    ]
     candidate_audit_rows = _finalize_candidate_audit_rows(candidate_audit_rows, queue_rows)
+    for audit in candidate_audit_rows:
+        codigo = (audit.get("codigo") or "").strip()
+        meta = codigo_meta.get(codigo, {})
+        close_date = (meta.get("close_date") or audit.get("close_date") or "").strip()
+        audit["validity_status"] = classify_chilecompra_validity_status(
+            chilecompra_status_code=meta.get("chilecompra_status_code", ""),
+            chilecompra_status=meta.get("chilecompra_status", ""),
+            close_date=close_date,
+            now=now_utc,
+        )
 
     by_next_action: dict[str, int] = defaultdict(int)
+    by_validity_status: dict[str, int] = defaultdict(int)
     for row in queue_rows:
         by_next_action[row["next_action"]] += 1
+        by_validity_status[row["validity_status"]] += 1
 
     manifest = {
         "source": "chilecompra_api",
-        "generated_at_utc": (
-            now_utc.replace(tzinfo=timezone.utc).isoformat()
-            if now_utc.tzinfo is None
-            else now_utc.astimezone(timezone.utc).replace(microsecond=0).isoformat()
-        ),
+        "generated_at_utc": api_checked_at_utc,
         "estado": estado,
         "fecha": fecha,
         "fetched_summaries": len(summary_rows),
@@ -347,6 +469,7 @@ def build_equipment_queue_from_chilecompra_api(
         "normalized_item_rows": len(normalized_item_rows),
         "output_rows": len(queue_rows),
         "by_next_action": dict(by_next_action),
+        "by_validity_status": dict(by_validity_status),
         "candidate_audit_rows": len(candidate_audit_rows),
     }
     return queue_rows, manifest, candidate_audit_rows
@@ -360,7 +483,7 @@ def write_chilecompra_api_queue_outputs(
     manifest_path: Path | None = None,
 ) -> dict[str, Any]:
     """Write equipment queue CSV and JSON manifest summary."""
-    write_equipment_queue_csv(rows, out_csv)
+    write_chilecompra_equipment_queue_csv(rows, out_csv)
     manifest_file = manifest_path or default_chilecompra_api_manifest_path(out_csv)
     manifest_file.parent.mkdir(parents=True, exist_ok=True)
     manifest_payload = dict(manifest)

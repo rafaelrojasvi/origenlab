@@ -10,8 +10,14 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from origenlab_email_pipeline.chilecompra_api import ChileCompraHttpError, ChileCompraTicketMissingError
+from origenlab_email_pipeline.chilecompra_api import (
+    ChileCompraHttpError,
+    ChileCompraTicketMissingError,
+    VALIDITY_STATUS_NOT_PUBLICADA,
+    VALIDITY_STATUS_OPEN,
+)
 from origenlab_email_pipeline.equipment_first_chilecompra_queue import (
+    CHILECOMPRA_QUEUE_FIELDS,
     CANDIDATE_AUDIT_FIELDS,
     build_equipment_queue_from_chilecompra_api,
     read_detail_cache,
@@ -50,6 +56,8 @@ def _summary_row(
         "nivel_1": "",
         "nivel_2": "",
         "nivel_3": "",
+        "chilecompra_status_code": "5",
+        "chilecompra_status": "Publicada",
     }
 
 
@@ -121,6 +129,8 @@ def test_build_equipment_queue_from_chilecompra_api_mocked(tmp_path: Path) -> No
                 "Descripcion": "Equipos para laboratorio clínico",
                 "Comprador": {"NombreOrganismo": "Hospital Demo", "Region": "RM"},
                 "FechaCierre": "20/06/2026 17:00:00",
+                "CodigoEstado": "5",
+                "Estado": "Publicada",
             },
             {
                 "CodigoExterno": "9000-1-LP26",
@@ -167,6 +177,9 @@ def test_build_equipment_queue_from_chilecompra_api_mocked(tmp_path: Path) -> No
     fetch_list.assert_called_once()
     fetch_detail.assert_called_once_with("1051-1-LP26", ticket=_SECRET_TICKET)
     assert rows[0]["equipment_category"] == "centrifuge"
+    assert rows[0]["close_date"] == "20/06/2026 17:00:00"
+    assert rows[0]["validity_status"] == VALIDITY_STATUS_OPEN
+    assert rows[0]["chilecompra_status_code"] == "5"
     assert "source:chilecompra_api" in rows[0]["reason"]
 
 
@@ -222,6 +235,11 @@ def test_write_chilecompra_api_queue_outputs_csv_fields(tmp_path: Path) -> None:
             "fit_score": "75",
             "reason": "source:chilecompra_api; equipment:centrifuge",
             "next_action": "quote_now",
+            "api_checked_at_utc": _T0.isoformat(),
+            "validity_status": VALIDITY_STATUS_OPEN,
+            "chilecompra_status_code": "5",
+            "chilecompra_status": "Publicada",
+            "source": "chilecompra_api",
         }
     ]
     out_csv = tmp_path / "equipment_first_operator_queue_chilecompra_api_20260614.csv"
@@ -245,20 +263,11 @@ def test_write_chilecompra_api_queue_outputs_csv_fields(tmp_path: Path) -> None:
     assert Path(stats["manifest_path"]).is_file()
     with out_csv.open(encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        assert reader.fieldnames == [
-            "codigo_licitacion",
-            "buyer",
-            "region",
-            "close_date",
-            "title",
-            "item_description",
-            "equipment_category",
-            "fit_score",
-            "reason",
-            "next_action",
-        ]
+        assert reader.fieldnames == list(CHILECOMPRA_QUEUE_FIELDS)
         row = next(reader)
         assert row["codigo_licitacion"] == "1051-1-LP26"
+        assert row["close_date"] == "20/06/2026 17:00:00"
+        assert row["validity_status"] == VALIDITY_STATUS_OPEN
         assert "source:chilecompra_api" in row["reason"]
 
     manifest_data = json.loads(Path(stats["manifest_path"]).read_text(encoding="utf-8"))
@@ -448,6 +457,8 @@ def test_candidate_audit_includes_matched_and_rejected_rows(tmp_path: Path) -> N
                 "Descripcion": "Equipos laboratorio",
                 "Comprador": {"NombreOrganismo": "Hospital Demo", "Region": "RM"},
                 "FechaCierre": "20/06/2026 17:00:00",
+                "CodigoEstado": "5",
+                "Estado": "Publicada",
             },
             {
                 "CodigoExterno": "2000-1-LP26",
@@ -507,3 +518,88 @@ def test_candidate_audit_includes_matched_and_rejected_rows(tmp_path: Path) -> N
     assert by_codigo["2000-1-LP26"]["reject_reason"] == "no_equipment_match_after_detail"
     assert by_codigo["3000-1-LP26"]["reject_reason"] == "not_detailed_max_details"
     assert manifest["output_rows"] == len(rows)
+
+
+def test_detail_lookup_preserves_summary_close_date_when_detail_missing() -> None:
+    summaries = {
+        "Listado": [
+            {
+                "CodigoExterno": "1051-1-LP26",
+                "Nombre": "Adquisición centrifuga laboratorio",
+                "Descripcion": "Equipos para laboratorio clínico",
+                "Comprador": {"NombreOrganismo": "Hospital Demo", "Region": "RM"},
+                "FechaCierre": "20/06/2026 17:00:00",
+                "CodigoEstado": "5",
+                "Estado": "Publicada",
+            }
+        ]
+    }
+    detail = {
+        "Listado": [
+            {
+                "CodigoExterno": "1051-1-LP26",
+                "Nombre": "Adquisición centrifuga laboratorio",
+                "Comprador": {"NombreOrganismo": "Hospital Demo", "Region": "RM"},
+                "Items": {
+                    "Listado": [
+                        {
+                            "Descripcion": "Centrifuga refrigerada para laboratorio clínico",
+                            "NombreProducto": "Centrifuga",
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+    fetch_list = MagicMock(return_value=summaries)
+    fetch_detail = MagicMock(return_value=detail)
+
+    rows, _manifest, _audit = build_equipment_queue_from_chilecompra_api(
+        ticket=_SECRET_TICKET,
+        max_details=1,
+        now=_T0,
+        fetch_licitaciones_fn=fetch_list,
+        fetch_licitacion_by_codigo_fn=fetch_detail,
+    )
+
+    assert rows[0]["close_date"] == "20/06/2026 17:00:00"
+    assert rows[0]["validity_status"] == VALIDITY_STATUS_OPEN
+
+
+def test_closed_status_gets_validity_not_publicada_in_queue() -> None:
+    summaries = {
+        "Listado": [
+            {
+                "CodigoExterno": "5000-1-LP26",
+                "Nombre": "Adquisición centrifuga laboratorio",
+                "Descripcion": "Equipos laboratorio",
+                "FechaCierre": "20/06/2026 17:00:00",
+                "CodigoEstado": "6",
+                "Estado": "Cerrada",
+            }
+        ]
+    }
+    detail = {
+        "Listado": [
+            {
+                "CodigoExterno": "5000-1-LP26",
+                "Nombre": "Adquisición centrifuga laboratorio",
+                "Items": {
+                    "Descripcion": "Centrifuga refrigerada laboratorio clínico",
+                },
+            }
+        ]
+    }
+    fetch_list = MagicMock(return_value=summaries)
+    fetch_detail = MagicMock(return_value=detail)
+
+    rows, manifest, _audit = build_equipment_queue_from_chilecompra_api(
+        ticket=_SECRET_TICKET,
+        max_details=1,
+        now=_T0,
+        fetch_licitaciones_fn=fetch_list,
+        fetch_licitacion_by_codigo_fn=fetch_detail,
+    )
+
+    assert rows[0]["validity_status"] == VALIDITY_STATUS_NOT_PUBLICADA
+    assert manifest["by_validity_status"][VALIDITY_STATUS_NOT_PUBLICADA] == 1

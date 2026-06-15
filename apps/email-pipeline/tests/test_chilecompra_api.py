@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import datetime
 from typing import Any
 from unittest.mock import MagicMock
 from urllib.error import HTTPError
@@ -11,12 +12,19 @@ from urllib.error import HTTPError
 import pytest
 
 from origenlab_email_pipeline.chilecompra_api import (
+    CHILECOMPRA_NORMALIZED_FIELDS,
     ChileCompraHttpError,
     ChileCompraJsonError,
     ChileCompraTicketMissingError,
+    VALIDITY_STATUS_EXPIRED,
+    VALIDITY_STATUS_MISSING_CLOSE_DATE,
+    VALIDITY_STATUS_NOT_PUBLICADA,
+    VALIDITY_STATUS_OPEN,
     build_licitaciones_url,
+    classify_chilecompra_validity_status,
     fetch_licitacion_by_codigo,
     fetch_licitaciones,
+    is_active_chilecompra_licitacion,
     normalize_licitacion_detail_items,
     normalize_licitacion_summary,
     normalize_licitaciones_response,
@@ -25,7 +33,6 @@ from origenlab_email_pipeline.chilecompra_api import (
     ticket_from_env,
     validate_fecha,
 )
-from origenlab_email_pipeline.equipment_first_licitacion_queue import CSV_COLUMNS
 
 _SECRET_TICKET = "00000000-0000-0000-0000-000000000099"
 
@@ -93,7 +100,9 @@ def test_normalize_summary_from_listado_payload() -> None:
     assert row["region"] == "Región Metropolitana"
     assert row["fecha_publicacion"] == "01/06/2026 10:00:00"
     assert row["close_date"] == "15/06/2026 15:00:00"
-    assert set(row) == set(CSV_COLUMNS)
+    assert row["chilecompra_status_code"] == ""
+    assert row["chilecompra_status"] == ""
+    assert set(row) == set(CHILECOMPRA_NORMALIZED_FIELDS)
 
 
 def test_missing_listado_returns_empty_list() -> None:
@@ -230,3 +239,124 @@ def test_redact_ticket_removes_secret_from_free_form_text() -> None:
     redacted = redact_ticket(text, _SECRET_TICKET)
     assert _SECRET_TICKET not in redacted
     assert "<redacted>" in redacted
+
+
+def test_normalize_summary_preserves_top_level_fecha_cierre_and_status() -> None:
+    row = normalize_licitacion_summary(
+        {
+            "CodigoExterno": "1051-1-LP26",
+            "Nombre": "Centrifuga",
+            "FechaCierre": "20/06/2026 17:00:00",
+            "CodigoEstado": "5",
+            "Estado": "Publicada",
+        }
+    )
+    assert row["close_date"] == "20/06/2026 17:00:00"
+    assert row["chilecompra_status_code"] == "5"
+    assert row["chilecompra_status"] == "Publicada"
+
+
+def test_normalize_summary_reads_nested_fechas_fecha_cierre() -> None:
+    row = normalize_licitacion_summary(
+        {
+            "CodigoExterno": "2000-1-LP26",
+            "Nombre": "Balanza",
+            "Fechas": {"FechaCierre": "21/06/2026 18:00:00"},
+            "CodigoEstado": "5",
+            "Estado": "Publicada",
+        }
+    )
+    assert row["close_date"] == "21/06/2026 18:00:00"
+
+
+def test_normalize_detail_items_keep_summary_close_date_when_detail_missing() -> None:
+    summary_fallback = {
+        "close_date": "20/06/2026 17:00:00",
+        "chilecompra_status_code": "5",
+        "chilecompra_status": "Publicada",
+    }
+    rows = normalize_licitacion_detail_items(
+        {
+            "CodigoExterno": "1051-1-LP26",
+            "Nombre": "Centrifuga",
+            "Items": {
+                "Descripcion": "Centrifuga refrigerada",
+                "CodigoProducto": "41105301",
+            },
+        },
+        summary_fallback=summary_fallback,
+    )
+    assert rows[0]["close_date"] == "20/06/2026 17:00:00"
+    assert rows[0]["chilecompra_status_code"] == "5"
+
+
+def test_normalize_detail_items_reads_nested_fechas_fecha_cierre() -> None:
+    rows = normalize_licitacion_detail_items(
+        {
+            "CodigoExterno": "3000-1-LP26",
+            "Nombre": "Sonicador",
+            "Fechas": {"FechaCierre": "22/06/2026 12:00:00"},
+            "CodigoEstado": "5",
+            "Estado": "Publicada",
+            "Items": {"Descripcion": "Procesador ultrasónico"},
+        }
+    )
+    assert rows[0]["close_date"] == "22/06/2026 12:00:00"
+
+
+def test_codigo_estado_5_maps_to_open_validity() -> None:
+    validity = classify_chilecompra_validity_status(
+        chilecompra_status_code="5",
+        chilecompra_status="Publicada",
+        close_date="20/06/2026 17:00:00",
+        now=datetime(2026, 6, 14, 12, 0, 0),
+    )
+    assert validity == VALIDITY_STATUS_OPEN
+    assert is_active_chilecompra_licitacion(
+        chilecompra_status_code="5",
+        chilecompra_status="Publicada",
+    )
+
+
+@pytest.mark.parametrize(
+    ("status_code", "status_name"),
+    [
+        ("6", "Cerrada"),
+        ("7", "Desierta"),
+        ("8", "Adjudicada"),
+        ("18", "Revocada"),
+        ("19", "Suspendida"),
+    ],
+)
+def test_inactive_status_codes_are_not_active(status_code: str, status_name: str) -> None:
+    assert is_active_chilecompra_licitacion(
+        chilecompra_status_code=status_code,
+        chilecompra_status=status_name,
+    ) is False
+    validity = classify_chilecompra_validity_status(
+        chilecompra_status_code=status_code,
+        chilecompra_status=status_name,
+        close_date="20/06/2026 17:00:00",
+        now=datetime(2026, 6, 14, 12, 0, 0),
+    )
+    assert validity == VALIDITY_STATUS_NOT_PUBLICADA
+
+
+def test_expired_close_date_maps_to_expired_validity() -> None:
+    validity = classify_chilecompra_validity_status(
+        chilecompra_status_code="5",
+        chilecompra_status="Publicada",
+        close_date="10/06/2026 17:00:00",
+        now=datetime(2026, 6, 14, 12, 0, 0),
+    )
+    assert validity == VALIDITY_STATUS_EXPIRED
+
+
+def test_missing_close_date_maps_to_missing_validity() -> None:
+    validity = classify_chilecompra_validity_status(
+        chilecompra_status_code="5",
+        chilecompra_status="Publicada",
+        close_date="",
+        now=datetime(2026, 6, 14, 12, 0, 0),
+    )
+    assert validity == VALIDITY_STATUS_MISSING_CLOSE_DATE
