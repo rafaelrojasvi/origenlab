@@ -90,6 +90,27 @@ def active_current(reports_dir: Path) -> Path:
     return path
 
 
+@pytest.fixture
+def mock_publish_snapshot(monkeypatch: pytest.MonkeyPatch) -> list[tuple[bool, bool, Path | None]]:
+    calls: list[tuple[bool, bool, Path | None]] = []
+
+    def _record(
+        options: DashboardAutoMirrorOptions,
+        reports_dir: Path | None = None,
+    ) -> None:
+        if options.apply and options.allow_non_scratch_postgres:
+            calls.append(
+                (options.apply, options.allow_non_scratch_postgres, reports_dir)
+            )
+
+    monkeypatch.setattr(
+        "origenlab_email_pipeline.operator_cli.dashboard_auto_mirror."
+        "_publish_automation_status_snapshot_if_configured",
+        _record,
+    )
+    return calls
+
+
 def test_missing_daily_core_manifest_no_run(
     reports_dir: Path,
     capsys: pytest.CaptureFixture[str],
@@ -320,3 +341,85 @@ def test_docs_mention_separate_cron() -> None:
     assert "15 minutes" in text.lower() or "15 minute" in text.lower()
     assert "auto-refresh-mail" in text
     assert "not send approval" in text.lower()
+
+
+def test_mail_dirty_skip_publishes_automation_snapshot_when_apply_allowed(
+    active_current: Path,
+    mock_publish_snapshot: list[tuple[bool, bool, Path | None]],
+) -> None:
+    _write_daily_core_manifest(active_current)
+    _write_mail_state(active_current, dirty=True)
+    reports = active_current.parent.parent
+
+    run_dashboard_auto_mirror(
+        _opts(apply=True, allow_non_scratch_postgres=True),
+        reports_dir=reports,
+        now_fn=lambda: _T0,
+    )
+    state = load_state(state_path(reports))
+    assert state.last_result == "mail_dirty"
+    assert mock_publish_snapshot == [(True, True, reports)]
+
+
+def test_cooldown_skip_publishes_automation_snapshot_when_apply_allowed(
+    active_current: Path,
+    mock_publish_snapshot: list[tuple[bool, bool, Path | None]],
+) -> None:
+    _ready_fixture(active_current)
+    mirror_state = DashboardAutoMirrorState(
+        last_successful_mirror_at=(_T0 - timedelta(seconds=60)).isoformat(),
+    )
+    state_file = state_path(active_current.parent.parent)
+    state_file.write_text(json.dumps(mirror_state.to_dict()), encoding="utf-8")
+
+    run_dashboard_auto_mirror(
+        _opts(apply=True, allow_non_scratch_postgres=True),
+        reports_dir=active_current.parent.parent,
+        now_fn=lambda: _T0,
+    )
+    assert mock_publish_snapshot == [(True, True, active_current.parent.parent)]
+
+
+def test_dry_run_does_not_publish_automation_snapshot(
+    active_current: Path,
+    mock_publish_snapshot: list[tuple[bool, bool, Path | None]],
+) -> None:
+    _ready_fixture(active_current)
+    run_dashboard_auto_mirror(
+        _opts(apply=False),
+        reports_dir=active_current.parent.parent,
+        now_fn=lambda: _T0,
+    )
+    assert mock_publish_snapshot == []
+
+
+def test_apply_without_allow_flag_does_not_publish_automation_snapshot(
+    active_current: Path,
+    mock_publish_snapshot: list[tuple[bool, bool, Path | None]],
+) -> None:
+    _write_daily_core_manifest(active_current)
+    _write_mail_state(active_current, dirty=True)
+    run_dashboard_auto_mirror(
+        _opts(apply=True, allow_non_scratch_postgres=False),
+        reports_dir=active_current.parent.parent,
+        now_fn=lambda: _T0,
+    )
+    assert mock_publish_snapshot == []
+
+
+def test_mirror_success_publishes_automation_snapshot_after_state_update(
+    active_current: Path,
+    mock_publish_snapshot: list[tuple[bool, bool, Path | None]],
+) -> None:
+    _ready_fixture(active_current)
+    reports = active_current.parent.parent
+
+    run_dashboard_auto_mirror(
+        _opts(apply=True, allow_non_scratch_postgres=True),
+        reports_dir=reports,
+        run_mirror_fn=lambda: 0,
+        now_fn=lambda: _T0,
+    )
+    state = load_state(state_path(reports))
+    assert state.last_result == "success"
+    assert mock_publish_snapshot == [(True, True, reports)]
