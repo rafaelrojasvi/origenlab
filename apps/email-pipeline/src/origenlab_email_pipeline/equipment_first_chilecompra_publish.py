@@ -87,6 +87,86 @@ def _supplier_needed_value(next_action: str) -> str:
     return "yes" if next_action in ("quote_now", "needs_supplier_quote") else "no"
 
 
+def _row_rank_key(row: dict[str, str]) -> tuple[int, int, float]:
+    next_action = (row.get("next_action") or "").strip()
+    close_dt = parse_close_date(row.get("close_date") or "")
+    close_sort = close_dt.timestamp() if close_dt is not None else float("inf")
+    return (
+        -_parse_fit_score(row.get("fit_score")),
+        NEXT_ACTION_SORT_ORDER.get(next_action, 99),
+        close_sort,
+    )
+
+
+def _best_next_action(rows: list[dict[str, str]]) -> str:
+    actions = [
+        (row.get("next_action") or "").strip()
+        for row in rows
+        if (row.get("next_action") or "").strip()
+    ]
+    if not actions:
+        return ""
+    return min(actions, key=lambda action: NEXT_ACTION_SORT_ORDER.get(action, 99))
+
+
+def _unique_join(values: list[str], separator: str, *, max_len: int) -> str:
+    seen: list[str] = []
+    for value in values:
+        text = (value or "").strip()
+        if text and text not in seen:
+            seen.append(text)
+    return separator.join(seen)[:max_len]
+
+
+def coalesce_dashboard_rows_by_codigo(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Merge multiple dashboard rows for the same codigo_licitacion into one row."""
+    grouped: dict[str, list[dict[str, str]]] = {}
+    uncoded_rows: list[dict[str, str]] = []
+    for row in rows:
+        codigo = (row.get("codigo_licitacion") or "").strip()
+        if not codigo:
+            uncoded_rows.append(dict(row))
+            continue
+        grouped.setdefault(codigo, []).append(dict(row))
+
+    coalesced: list[dict[str, str]] = []
+    for codigo in sorted(grouped):
+        group = grouped[codigo]
+        if len(group) == 1:
+            coalesced.append(group[0])
+            continue
+        base = min(group, key=_row_rank_key)
+        merged = dict(base)
+        merged["equipment_category"] = _unique_join(
+            [row.get("equipment_category", "") for row in group],
+            "; ",
+            max_len=200,
+        )
+        merged["item_description"] = _unique_join(
+            [row.get("item_description", "") for row in group],
+            " || ",
+            max_len=500,
+        )
+        merged["reason"] = _unique_join(
+            [row.get("reason", "") for row in group],
+            "; ",
+            max_len=400,
+        )
+        merged["operator_note"] = _unique_join(
+            [row.get("operator_note", "") for row in group],
+            " | ",
+            max_len=400,
+        )
+        merged["fit_score"] = str(max(_parse_fit_score(row.get("fit_score")) for row in group))
+        merged["next_action"] = _best_next_action(group)
+        supplier_needed = any((row.get("supplier_needed") or "").strip().lower() == "yes" for row in group)
+        merged["supplier_needed"] = "yes" if supplier_needed else "no"
+        merged["supplier_contact"] = "yes" if supplier_needed else ""
+        coalesced.append(merged)
+
+    return coalesced + uncoded_rows
+
+
 def _contact_status_for_validity(validity_status: str) -> str:
     if validity_status == VALIDITY_STATUS_MISSING_CLOSE_DATE:
         return CHILECOMPRA_CONTACT_STATUS_MISSING_CLOSE_DATE
@@ -143,15 +223,17 @@ def enrich_chilecompra_row_for_dashboard(row: dict[str, str]) -> dict[str, str]:
 def sort_chilecompra_dashboard_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     """Sort by fit_score desc, next_action priority, close_date asc."""
 
-    def _sort_key(row: dict[str, str]) -> tuple[int, int, float, str]:
+    def _sort_key(row: dict[str, str]) -> tuple[int, int, int, float, str]:
+        codigo = (row.get("codigo_licitacion") or "").strip()
         next_action = (row.get("next_action") or "").strip()
         close_dt = parse_close_date(row.get("close_date") or "")
         close_sort = close_dt.timestamp() if close_dt is not None else float("inf")
         return (
+            1 if not codigo else 0,
             -_parse_fit_score(row.get("fit_score")),
             NEXT_ACTION_SORT_ORDER.get(next_action, 99),
             close_sort,
-            (row.get("codigo_licitacion") or "").strip(),
+            codigo,
         )
 
     sorted_rows = sorted(rows, key=_sort_key)
@@ -163,12 +245,30 @@ def sort_chilecompra_dashboard_rows(rows: list[dict[str, str]]) -> list[dict[str
     return ranked
 
 
+def _prepare_published_dashboard_rows(
+    source_rows: list[dict[str, str]],
+) -> tuple[list[dict[str, str]], dict[str, int]]:
+    active_rows = [row for row in source_rows if is_dashboard_active_chilecompra_row(row)]
+    enriched = [enrich_chilecompra_row_for_dashboard(row) for row in active_rows]
+    coalesced = coalesce_dashboard_rows_by_codigo(enriched)
+    published = sort_chilecompra_dashboard_rows(coalesced)
+    unique_codigos = {
+        (row.get("codigo_licitacion") or "").strip()
+        for row in coalesced
+        if (row.get("codigo_licitacion") or "").strip()
+    }
+    stats = {
+        "coalesced_duplicate_rows": len(enriched) - len(coalesced),
+        "unique_codigo_count": len(unique_codigos),
+    }
+    return published, stats
+
+
 def publish_chilecompra_equipment_rows(
     source_rows: list[dict[str, str]],
 ) -> list[dict[str, str]]:
-    active_rows = [row for row in source_rows if is_dashboard_active_chilecompra_row(row)]
-    enriched = [enrich_chilecompra_row_for_dashboard(row) for row in active_rows]
-    return sort_chilecompra_dashboard_rows(enriched)
+    published, _stats = _prepare_published_dashboard_rows(source_rows)
+    return published
 
 
 def write_published_dashboard_csv(rows: list[dict[str, str]], out_path: Path) -> None:
@@ -236,7 +336,7 @@ def publish_chilecompra_equipment_queue_for_dashboard(
 ) -> dict[str, Any]:
     source_rows = load_chilecompra_source_rows(source_csv)
     active_input_rows = [row for row in source_rows if is_dashboard_active_chilecompra_row(row)]
-    published_rows = publish_chilecompra_equipment_rows(source_rows)
+    published_rows, publish_stats = _prepare_published_dashboard_rows(source_rows)
     write_published_dashboard_csv(published_rows, out_csv)
 
     result: dict[str, Any] = {
@@ -246,6 +346,8 @@ def publish_chilecompra_equipment_queue_for_dashboard(
         "active_input_rows": len(active_input_rows),
         "output_rows": len(published_rows),
         "excluded_rows": len(source_rows) - len(active_input_rows),
+        "coalesced_duplicate_rows": publish_stats["coalesced_duplicate_rows"],
+        "unique_codigo_count": publish_stats["unique_codigo_count"],
         "manifest_updated": False,
     }
     if update_manifest:

@@ -20,6 +20,7 @@ from origenlab_email_pipeline.equipment_first_chilecompra_publish import (
     CHILECOMPRA_REVIEW_NOTE,
     CHILECOMPRA_SAFE_CHANNEL,
     PUBLISHED_DASHBOARD_FIELDS,
+    coalesce_dashboard_rows_by_codigo,
     enrich_chilecompra_row_for_dashboard,
     is_dashboard_active_chilecompra_row,
     publish_chilecompra_equipment_queue_for_dashboard,
@@ -41,6 +42,9 @@ def _source_row(
     validity_status: str = VALIDITY_STATUS_OPEN,
     chilecompra_status_code: str = "5",
     chilecompra_status: str = "Publicada",
+    equipment_category: str = "centrifuge",
+    item_description: str = "Centrifuga refrigerada",
+    reason: str = "source:chilecompra_api; equipment:centrifuge",
 ) -> dict[str, str]:
     return {
         "codigo_licitacion": codigo,
@@ -48,10 +52,10 @@ def _source_row(
         "region": "RM",
         "close_date": close_date,
         "title": title,
-        "item_description": "Centrifuga refrigerada",
-        "equipment_category": "centrifuge",
+        "item_description": item_description,
+        "equipment_category": equipment_category,
         "fit_score": fit_score,
-        "reason": "source:chilecompra_api; equipment:centrifuge",
+        "reason": reason,
         "next_action": next_action,
         "api_checked_at_utc": "2026-06-14T12:00:00+00:00",
         "validity_status": validity_status,
@@ -286,3 +290,137 @@ def test_iso_future_close_date_does_not_get_missing_close_date_review_status(tmp
     assert row["validity_status"] == VALIDITY_STATUS_OPEN
     assert row["contact_status"] == CHILECOMPRA_CONTACT_STATUS
     assert row["contact_status"] != CHILECOMPRA_CONTACT_STATUS_MISSING_CLOSE_DATE
+
+
+def test_coalesce_same_codigo_with_different_categories_publishes_one_row() -> None:
+    rows = publish_chilecompra_equipment_rows(
+        [
+            _source_row(
+                codigo="1051-1-LP26",
+                next_action="needs_supplier_quote",
+                fit_score="70",
+                equipment_category="centrifuge",
+                item_description="Centrifuga refrigerada",
+                reason="source:chilecompra_api; equipment:centrifuge",
+            ),
+            _source_row(
+                codigo="1051-1-LP26",
+                next_action="account_intelligence_only",
+                fit_score="60",
+                equipment_category="homogenizer",
+                item_description="Homogeneizador ultrasónico",
+                reason="source:chilecompra_api; equipment:homogenizer",
+            ),
+        ]
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["codigo_licitacion"] == "1051-1-LP26"
+    assert "centrifuge" in rows[0]["equipment_category"]
+    assert "homogenizer" in rows[0]["equipment_category"]
+    assert "Centrifuga refrigerada" in rows[0]["item_description"]
+    assert "Homogeneizador ultrasónico" in rows[0]["item_description"]
+    assert "equipment:centrifuge" in rows[0]["reason"]
+    assert "equipment:homogenizer" in rows[0]["reason"]
+
+
+def test_coalesce_highest_priority_next_action_and_supplier_needed_wins() -> None:
+    enriched = coalesce_dashboard_rows_by_codigo(
+        [
+            enrich_chilecompra_row_for_dashboard(
+                _source_row(
+                    codigo="1051-1-LP26",
+                    next_action="account_intelligence_only",
+                    fit_score="90",
+                    equipment_category="homogenizer",
+                )
+            ),
+            enrich_chilecompra_row_for_dashboard(
+                _source_row(
+                    codigo="1051-1-LP26",
+                    next_action="needs_supplier_quote",
+                    fit_score="70",
+                    equipment_category="centrifuge",
+                )
+            ),
+        ]
+    )
+
+    assert len(enriched) == 1
+    assert enriched[0]["next_action"] == "needs_supplier_quote"
+    assert enriched[0]["supplier_needed"] == "yes"
+
+
+def test_publish_output_has_unique_codigo_licitacion(tmp_path: Path) -> None:
+    source_csv = tmp_path / "equipment_first_operator_queue_chilecompra_api_20260614.csv"
+    out_csv = tmp_path / "equipment_first_operator_queue_20260614.csv"
+    rows = [
+        _source_row(
+            codigo="1051-1-LP26",
+            next_action="quote_now",
+            fit_score="85",
+            equipment_category="centrifuge",
+        ),
+        _source_row(
+            codigo="1051-1-LP26",
+            next_action="needs_supplier_quote",
+            fit_score="75",
+            equipment_category="homogenizer",
+            item_description="Homogeneizador",
+            reason="source:chilecompra_api; equipment:homogenizer",
+        ),
+        _source_row(codigo="2000-1-LP26", next_action="quote_now", fit_score="80"),
+    ]
+    with source_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    result = publish_chilecompra_equipment_queue_for_dashboard(
+        source_csv=source_csv,
+        out_csv=out_csv,
+    )
+
+    assert result["output_rows"] == 2
+    assert result["coalesced_duplicate_rows"] == 1
+    assert result["unique_codigo_count"] == 2
+    with out_csv.open(encoding="utf-8") as handle:
+        published = list(csv.DictReader(handle))
+    codigos = [row["codigo_licitacion"] for row in published]
+    assert len(codigos) == len(set(codigos))
+
+
+def test_coalesce_does_not_bypass_expired_and_inactive_filtering(tmp_path: Path) -> None:
+    source_csv = tmp_path / "equipment_first_operator_queue_chilecompra_api_20260614.csv"
+    out_csv = tmp_path / "equipment_first_operator_queue_20260614.csv"
+    rows = [
+        _source_row(codigo="OPEN-1-LP26", next_action="quote_now", fit_score="85"),
+        _source_row(
+            codigo="OPEN-1-LP26",
+            next_action="needs_supplier_quote",
+            fit_score="70",
+            equipment_category="homogenizer",
+        ),
+        _source_row(
+            codigo="EXPIRED-1-LP26",
+            next_action="quote_now",
+            fit_score="90",
+            validity_status=VALIDITY_STATUS_EXPIRED,
+        ),
+    ]
+    with source_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    result = publish_chilecompra_equipment_queue_for_dashboard(
+        source_csv=source_csv,
+        out_csv=out_csv,
+    )
+
+    assert result["output_rows"] == 1
+    assert result["coalesced_duplicate_rows"] == 1
+    with out_csv.open(encoding="utf-8") as handle:
+        published = list(csv.DictReader(handle))
+    assert published[0]["codigo_licitacion"] == "OPEN-1-LP26"
+    assert "homogenizer" in published[0]["equipment_category"]
