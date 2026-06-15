@@ -5,10 +5,13 @@ import {
   AUTOMATION_MISSING_STATE_HELP,
   AUTOMATION_MISSING_STATE_PRIMARY,
   buildAutomationSnapshotSummary,
+  buildChilecompraAutomationSummary,
   automationRecommendedActionLabel,
   automationVerdictLabel,
   automationVerdictTone,
+  chilecompraAutomationResultLabel,
   formatAutomationBool,
+  formatChilecompraApiDetailSummary,
   formatAutomationTimestamp,
   mailLoopStatusLabel,
   mirrorLoopStatusLabel,
@@ -131,13 +134,23 @@ export function AutomationHealthCard({
 
   const tone = automationVerdictTone(status.verdict);
   const mirrorSynced = mirrorLoopStatusLabel(status);
+  const chilecompra = status.chilecompra_equipment_auto_refresh ?? {
+    state_exists: false,
+    lock_live: false,
+    lock_age_seconds: null,
+    freshness_age_seconds: null,
+    next_run_due: null,
+    consecutive_failures: 0,
+  };
   const showLockOrPause =
     status.mail_auto_refresh.lock_live ||
     status.dashboard_auto_mirror.lock_live ||
+    chilecompra.lock_live ||
     status.mail_auto_refresh.paused ||
     status.dashboard_auto_mirror.paused;
   const missingState = operatorAutomationStatePartiallyMissing(status);
   const snapshotSummary = buildAutomationSnapshotSummary(status);
+  const chilecompraSummary = buildChilecompraAutomationSummary(status);
   const cronNote = status.cron.note?.trim();
 
   return (
@@ -257,6 +270,11 @@ export function AutomationHealthCard({
               </span>
             </li>
           ) : null}
+          {chilecompraSummary ? (
+            <li>
+              <span className="font-medium">{chilecompraSummary}</span>
+            </li>
+          ) : null}
         </ul>
       ) : (
         <div className="mt-4 space-y-4 text-sm">
@@ -349,6 +367,65 @@ export function AutomationHealthCard({
             </dl>
           </div>
 
+          <div
+            className="rounded-lg border border-[var(--color-border)] bg-white/60 px-3 py-3"
+            data-testid="chilecompra-automation-section"
+          >
+            <h4 className="font-semibold text-brand-900">ChileCompra equipment auto-refresh</h4>
+            <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+              <DetailRow
+                label="Estado presente"
+                value={formatAutomationBool(chilecompra.state_exists)}
+              />
+              <DetailRow
+                label="Último resultado"
+                value={chilecompraAutomationResultLabel(chilecompra.last_result)}
+              />
+              <DetailRow
+                label="Último refresh exitoso"
+                value={formatAutomationTimestamp(chilecompra.last_successful_refresh_at)}
+              />
+              <DetailRow
+                label="Última publicación exitosa"
+                value={formatAutomationTimestamp(chilecompra.last_successful_publish_at)}
+              />
+              <DetailRow
+                label="Próxima revisión recomendada"
+                value={formatAutomationTimestamp(chilecompra.next_recommended_run_at)}
+              />
+              <DetailRow
+                label="Próxima revisión vencida"
+                value={formatAutomationBool(chilecompra.next_run_due)}
+              />
+              <DetailRow
+                label="Filas publicadas"
+                value={
+                  chilecompra.published_rows != null ? String(chilecompra.published_rows) : "—"
+                }
+              />
+              <DetailRow
+                label="Detalles API / cache hits / errores"
+                value={formatChilecompraApiDetailSummary(status)}
+              />
+              <DetailRow
+                label="Fallas consecutivas"
+                value={String(chilecompra.consecutive_failures)}
+              />
+              {status.cron.chilecompra_entry_present !== undefined ? (
+                <DetailRow
+                  label="Cron instalado"
+                  value={formatAutomationBool(status.cron.chilecompra_entry_present)}
+                />
+              ) : null}
+              {status.cron.chilecompra_uses_tracked_script !== undefined ? (
+                <DetailRow
+                  label="Wrapper correcto"
+                  value={formatAutomationBool(status.cron.chilecompra_uses_tracked_script)}
+                />
+              ) : null}
+            </dl>
+          </div>
+
           {cronNote ? (
             <p className="text-xs text-[var(--color-muted)]">
               <span className="font-medium text-brand-900">Cron:</span> {cronNote}
@@ -363,7 +440,10 @@ export function AutomationHealthCard({
             ? "Pausa activa. "
             : ""}
           {status.mail_auto_refresh.lock_live ? "Refresh Gmail en curso. " : ""}
-          {status.dashboard_auto_mirror.lock_live ? "Publicación espejo en curso." : ""}
+          {status.dashboard_auto_mirror.lock_live ? "Publicación espejo en curso. " : ""}
+          {status.chilecompra_equipment_auto_refresh?.lock_live
+            ? "Refresh ChileCompra en curso."
+            : ""}
         </p>
       ) : null}
     </section>

@@ -82,6 +82,40 @@ export interface DashboardAutoMirrorStatus {
   consecutive_failures: number;
 }
 
+export interface ChileCompraEquipmentAutoRefreshStatus {
+  state_exists: boolean;
+  lock_live: boolean;
+  lock_age_seconds: number | null;
+  last_result?: string | null;
+  last_successful_refresh_at?: string | null;
+  last_successful_publish_at?: string | null;
+  last_run_started_at?: string | null;
+  last_run_finished_at?: string | null;
+  next_recommended_run_at?: string | null;
+  freshness_age_seconds: number | null;
+  next_run_due: boolean | null;
+  consecutive_failures: number;
+  last_error?: string | null;
+  fetched_summaries?: number | null;
+  candidate_summaries?: number | null;
+  detail_requests?: number | null;
+  detail_cache_hits?: number | null;
+  detail_error_count?: number | null;
+  output_rows?: number | null;
+  published_rows?: number | null;
+  published_queue?: string | null;
+  candidate_audit?: string | null;
+  parse_error?: string | null;
+}
+
+export interface OperatorAutomationCronStatus {
+  note?: string;
+  chilecompra_entry_present?: boolean;
+  chilecompra_uses_tracked_script?: boolean;
+  mail_entry_present?: boolean;
+  mirror_entry_present?: boolean;
+}
+
 export interface OperatorAutomationStatus {
   generated_at_utc: string;
   active_current_dir: string;
@@ -89,7 +123,8 @@ export interface OperatorAutomationStatus {
   daily_core: DailyCoreAutomationStatus;
   mail_auto_refresh: MailAutoRefreshStatus;
   dashboard_auto_mirror: DashboardAutoMirrorStatus;
-  cron: { note: string };
+  chilecompra_equipment_auto_refresh: ChileCompraEquipmentAutoRefreshStatus;
+  cron: OperatorAutomationCronStatus;
   recommended_action: string;
   warnings: string[];
   source?: "postgres_snapshot" | "filesystem_active_current" | null;

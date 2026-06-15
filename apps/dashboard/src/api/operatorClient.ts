@@ -16,11 +16,13 @@ import type {
   WarmCasesResponse,
 } from "./commercialTypes";
 import type {
+  ChileCompraEquipmentAutoRefreshStatus,
   DailyCoreRunStatus,
   DashboardAutoMirrorStatus,
   DailyCoreAutomationStatus,
   HealthResponse,
   MailAutoRefreshStatus,
+  OperatorAutomationCronStatus,
   OperatorAutomationStatus,
   OperatorStatusResponse,
   TodayPanelData,
@@ -142,6 +144,81 @@ function optionalBool(value: unknown, defaultValue = false): boolean {
   return Boolean(value);
 }
 
+function optionalBoolOrNull(value: unknown): boolean | null {
+  if (value === null || value === undefined) return null;
+  return Boolean(value);
+}
+
+function defaultChilecompraEquipmentAutoRefreshStatus(): ChileCompraEquipmentAutoRefreshStatus {
+  return {
+    state_exists: false,
+    lock_live: false,
+    lock_age_seconds: null,
+    freshness_age_seconds: null,
+    next_run_due: null,
+    consecutive_failures: 0,
+  };
+}
+
+function parseChilecompraEquipmentAutoRefreshStatus(
+  raw: unknown,
+): ChileCompraEquipmentAutoRefreshStatus {
+  if (!raw || typeof raw !== "object") {
+    return defaultChilecompraEquipmentAutoRefreshStatus();
+  }
+  const row = raw as Record<string, unknown>;
+  return {
+    state_exists: optionalBool(row.state_exists),
+    lock_live: optionalBool(row.lock_live),
+    lock_age_seconds: optionalNumber(row.lock_age_seconds) ?? null,
+    last_result: optionalString(row.last_result) ?? null,
+    last_successful_refresh_at: optionalString(row.last_successful_refresh_at) ?? null,
+    last_successful_publish_at: optionalString(row.last_successful_publish_at) ?? null,
+    last_run_started_at: optionalString(row.last_run_started_at) ?? null,
+    last_run_finished_at: optionalString(row.last_run_finished_at) ?? null,
+    next_recommended_run_at: optionalString(row.next_recommended_run_at) ?? null,
+    freshness_age_seconds: optionalNumber(row.freshness_age_seconds) ?? null,
+    next_run_due: optionalBoolOrNull(row.next_run_due),
+    consecutive_failures: optionalNumber(row.consecutive_failures) ?? 0,
+    last_error: optionalString(row.last_error) ?? null,
+    fetched_summaries: optionalNumber(row.fetched_summaries) ?? null,
+    candidate_summaries: optionalNumber(row.candidate_summaries) ?? null,
+    detail_requests: optionalNumber(row.detail_requests) ?? null,
+    detail_cache_hits: optionalNumber(row.detail_cache_hits) ?? null,
+    detail_error_count: optionalNumber(row.detail_error_count) ?? null,
+    output_rows: optionalNumber(row.output_rows) ?? null,
+    published_rows: optionalNumber(row.published_rows) ?? null,
+    published_queue: optionalString(row.published_queue) ?? null,
+    candidate_audit: optionalString(row.candidate_audit) ?? null,
+    parse_error: optionalString(row.parse_error) ?? null,
+  };
+}
+
+function parseOperatorAutomationCronStatus(raw: unknown): OperatorAutomationCronStatus {
+  if (!raw || typeof raw !== "object") {
+    return {};
+  }
+  const row = raw as Record<string, unknown>;
+  const cron: OperatorAutomationCronStatus = {};
+  const note = optionalString(row.note);
+  if (note) {
+    cron.note = note;
+  }
+  if (row.chilecompra_entry_present !== undefined) {
+    cron.chilecompra_entry_present = optionalBool(row.chilecompra_entry_present);
+  }
+  if (row.chilecompra_uses_tracked_script !== undefined) {
+    cron.chilecompra_uses_tracked_script = optionalBool(row.chilecompra_uses_tracked_script);
+  }
+  if (row.mail_entry_present !== undefined) {
+    cron.mail_entry_present = optionalBool(row.mail_entry_present);
+  }
+  if (row.mirror_entry_present !== undefined) {
+    cron.mirror_entry_present = optionalBool(row.mirror_entry_present);
+  }
+  return cron;
+}
+
 /** Parse automation status JSON (for tests and defensive UI). */
 export function parseOperatorAutomationStatus(data: unknown): OperatorAutomationStatus {
   const row = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
@@ -207,13 +284,10 @@ export function parseOperatorAutomationStatus(data: unknown): OperatorAutomation
     daily_core: dailyCore,
     mail_auto_refresh: mailRefresh,
     dashboard_auto_mirror: mirrorStatus,
-    cron: {
-      note: String(
-        (row.cron && typeof row.cron === "object"
-          ? (row.cron as Record<string, unknown>).note
-          : "") ?? "",
-      ),
-    },
+    chilecompra_equipment_auto_refresh: parseChilecompraEquipmentAutoRefreshStatus(
+      row.chilecompra_equipment_auto_refresh,
+    ),
+    cron: parseOperatorAutomationCronStatus(row.cron),
     recommended_action: String(row.recommended_action ?? "inspect_logs"),
     warnings: Array.isArray(row.warnings) ? row.warnings.map(String) : [],
     source:
