@@ -12,6 +12,7 @@ from origenlab_email_pipeline.chilecompra_api import (
     VALIDITY_STATUS_MISSING_CLOSE_DATE,
     VALIDITY_STATUS_NOT_PUBLICADA,
     VALIDITY_STATUS_OPEN,
+    classify_chilecompra_validity_status,
 )
 from origenlab_email_pipeline.equipment_first_chilecompra_publish import (
     CHILECOMPRA_CONTACT_STATUS,
@@ -248,3 +249,40 @@ def test_missing_close_date_stays_review_only_in_dashboard_publish() -> None:
     assert enriched["contact_status"] == CHILECOMPRA_CONTACT_STATUS_MISSING_CLOSE_DATE
     assert enriched["close_date"] == ""
     assert "missing_close_date" in enriched["operator_note"]
+
+
+def test_iso_future_close_date_does_not_get_missing_close_date_review_status(tmp_path: Path) -> None:
+    iso_close_date = "2026-06-17T19:00:00"
+    validity = classify_chilecompra_validity_status(
+        chilecompra_status_code="5",
+        chilecompra_status="Publicada",
+        close_date=iso_close_date,
+        now=datetime(2026, 6, 14, 12, 0, 0),
+    )
+    assert validity == VALIDITY_STATUS_OPEN
+
+    source_csv = tmp_path / "equipment_first_operator_queue_chilecompra_api_20260614.csv"
+    out_csv = tmp_path / "equipment_first_operator_queue_20260614.csv"
+    source = _source_row(
+        codigo="ISO-1-LP26",
+        next_action="quote_now",
+        fit_score="85",
+        close_date=iso_close_date,
+        validity_status=validity,
+    )
+    with source_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(source.keys()))
+        writer.writeheader()
+        writer.writerow(source)
+
+    publish_chilecompra_equipment_queue_for_dashboard(
+        source_csv=source_csv,
+        out_csv=out_csv,
+    )
+
+    with out_csv.open(encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    assert row["close_date"] == iso_close_date
+    assert row["validity_status"] == VALIDITY_STATUS_OPEN
+    assert row["contact_status"] == CHILECOMPRA_CONTACT_STATUS
+    assert row["contact_status"] != CHILECOMPRA_CONTACT_STATUS_MISSING_CLOSE_DATE

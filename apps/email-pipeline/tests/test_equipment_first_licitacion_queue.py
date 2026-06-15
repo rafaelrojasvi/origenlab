@@ -12,6 +12,7 @@ from origenlab_email_pipeline.equipment_first_licitacion_queue import (
     classify_next_action,
     detect_equipment_categories,
     line_blob,
+    parse_close_date,
 )
 
 
@@ -135,3 +136,19 @@ def test_build_queue_from_minimal_csv(tmp_path: Path) -> None:
     nuble = next(r for r in rows if r["codigo_licitacion"] == "1057898-51-LP26")
     assert nuble["equipment_category"] == "centrifuge"
     assert nuble["next_action"] == "quote_now"
+
+
+def test_parse_close_date_supports_chilean_datetime_formats() -> None:
+    assert parse_close_date("20/06/2026 17:00:00") == datetime(2026, 6, 20, 17, 0, 0)
+    assert parse_close_date("20/06/2026 17:00") == datetime(2026, 6, 20, 17, 0, 0)
+
+
+def test_parse_close_date_supports_iso_datetime_formats() -> None:
+    assert parse_close_date("2026-06-17T19:00:00") == datetime(2026, 6, 17, 19, 0, 0)
+    assert parse_close_date("2026-06-17T19:00") == datetime(2026, 6, 17, 19, 0, 0)
+    assert parse_close_date("2026-06-17 19:00:00") == datetime(2026, 6, 17, 19, 0, 0)
+
+
+def test_parse_close_date_supports_iso_timezone_suffix_as_naive_wall_time() -> None:
+    assert parse_close_date("2026-06-17T19:00:00+00:00") == datetime(2026, 6, 17, 19, 0, 0)
+    assert parse_close_date("2026-06-17T19:00:00Z") == datetime(2026, 6, 17, 19, 0, 0)

@@ -221,11 +221,28 @@ def consumables_exclusion_reason(blob: str) -> str | None:
 
 def parse_close_date(raw: str) -> datetime | None:
     raw = (raw or "").strip()
-    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M"):
+    if not raw:
+        return None
+    for fmt in (
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    ):
         try:
             return datetime.strptime(raw, fmt)
         except ValueError:
             continue
+    if "T" in raw or (len(raw) >= 10 and raw[4:5] == "-" and raw[7:8] == "-"):
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is not None:
+            return parsed.replace(tzinfo=None)
+        return parsed
     return None
 
 
