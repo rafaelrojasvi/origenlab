@@ -12,6 +12,8 @@ from origenlab_email_pipeline.chilecompra_api import ChileCompraTicketMissingErr
 from origenlab_email_pipeline.equipment_first_chilecompra_queue import (
     build_equipment_queue_from_chilecompra_api,
     default_chilecompra_api_queue_csv_path,
+    default_chilecompra_candidate_audit_path,
+    write_candidate_audit_csv,
     write_chilecompra_api_queue_outputs,
 )
 
@@ -50,6 +52,20 @@ def main() -> int:
         help="Abort on the first detail lookup HTTP error instead of recording and continuing",
     )
     parser.add_argument(
+        "--detail-cache-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional directory for per-codigo detail JSON cache "
+            "(e.g. reports/out/active/current/chilecompra_detail_cache)"
+        ),
+    )
+    parser.add_argument(
+        "--write-candidate-audit",
+        action="store_true",
+        help="Write candidate audit CSV for prefilter/detail review",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -67,12 +83,13 @@ def main() -> int:
     out_csv = args.out or default_chilecompra_api_queue_csv_path(args.reports_dir, now=now)
 
     try:
-        rows, manifest = build_equipment_queue_from_chilecompra_api(
+        rows, manifest, audit_rows = build_equipment_queue_from_chilecompra_api(
             estado=args.estado,
             fecha=args.fecha,
             max_details=args.max_details,
             detail_sleep_seconds=args.detail_sleep_seconds,
             continue_on_detail_error=not args.fail_fast_detail_errors,
+            detail_cache_dir=args.detail_cache_dir,
             now=now,
         )
     except ChileCompraTicketMissingError as exc:
@@ -82,10 +99,16 @@ def main() -> int:
     stats = write_chilecompra_api_queue_outputs(rows=rows, manifest=manifest, out_csv=out_csv)
     print(f"Wrote {stats['out_csv']}")
     print(f"Manifest {stats['manifest_path']}")
+    if args.write_candidate_audit:
+        audit_path = default_chilecompra_candidate_audit_path(args.reports_dir, now=now)
+        write_candidate_audit_csv(audit_rows, audit_path)
+        print(f"Candidate audit {audit_path}")
     for key in (
         "fetched_summaries",
         "candidate_summaries",
         "detail_requests",
+        "detail_cache_hits",
+        "detail_cache_writes",
         "detail_error_count",
         "normalized_item_rows",
         "output_rows",
