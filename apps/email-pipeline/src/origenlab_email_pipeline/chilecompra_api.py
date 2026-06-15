@@ -285,15 +285,21 @@ def _fetch_json(url: str, *, ticket: str, timeout: float, urlopen_fn: UrlopenFn 
             status = getattr(response, "status", None) or response.getcode()
             body = response.read()
     except HTTPError as exc:
-        message = redact_ticket(f"HTTP {exc.code} fetching {redact_ticket_in_url(url)}", ticket)
+        message = redact_ticket(
+            f"HTTP {exc.code} while fetching {redact_ticket_in_url(url)}",
+            ticket,
+        )
         raise ChileCompraHttpError(message) from exc
     except URLError as exc:
-        message = redact_ticket(f"Network error fetching {redact_ticket_in_url(url)}: {exc.reason}", ticket)
+        message = redact_ticket(
+            f"Network error while fetching {redact_ticket_in_url(url)}: {exc.reason}",
+            ticket,
+        )
         raise ChileCompraHttpError(message) from exc
 
     if status is not None and int(status) >= 400:
         message = redact_ticket(
-            f"HTTP {status} fetching {redact_ticket_in_url(url)}",
+            f"HTTP {status} while fetching {redact_ticket_in_url(url)}",
             ticket,
         )
         raise ChileCompraHttpError(message)

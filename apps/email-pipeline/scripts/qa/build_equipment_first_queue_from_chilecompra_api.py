@@ -39,6 +39,17 @@ def main() -> int:
         help="Maximum detail lookups after summary keyword prefilter (default: 100)",
     )
     parser.add_argument(
+        "--detail-sleep-seconds",
+        type=float,
+        default=1.0,
+        help="Pause between detail API lookups to reduce rate limiting (default: 1.0)",
+    )
+    parser.add_argument(
+        "--fail-fast-detail-errors",
+        action="store_true",
+        help="Abort on the first detail lookup HTTP error instead of recording and continuing",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -60,6 +71,8 @@ def main() -> int:
             estado=args.estado,
             fecha=args.fecha,
             max_details=args.max_details,
+            detail_sleep_seconds=args.detail_sleep_seconds,
+            continue_on_detail_error=not args.fail_fast_detail_errors,
             now=now,
         )
     except ChileCompraTicketMissingError as exc:
@@ -73,11 +86,14 @@ def main() -> int:
         "fetched_summaries",
         "candidate_summaries",
         "detail_requests",
+        "detail_error_count",
         "normalized_item_rows",
         "output_rows",
         "by_next_action",
     ):
         print(f"{key}: {stats[key]}")
+    if stats.get("detail_error_count"):
+        print(f"detail_error_codes: {stats.get('detail_error_codes', [])}")
     return 0
 
 

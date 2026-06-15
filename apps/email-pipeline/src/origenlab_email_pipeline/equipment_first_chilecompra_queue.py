@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from origenlab_email_pipeline.chilecompra_api import (
+    ChileCompraHttpError,
     fetch_licitacion_by_codigo,
     fetch_licitaciones,
     normalize_licitacion_detail_items,
     normalize_licitaciones_response,
+    redact_ticket,
     ticket_from_env,
 )
 from origenlab_email_pipeline.equipment_first_licitacion_queue import (
@@ -31,6 +34,7 @@ SUMMARY_KEYWORD_PREFILTER_RE = re.compile(
 
 FetchLicitacionesFn = Callable[..., dict[str, Any]]
 FetchLicitacionByCodigoFn = Callable[..., dict[str, Any]]
+SleepFn = Callable[[float], None]
 
 
 def summary_passes_keyword_prefilter(row: dict[str, str]) -> bool:
@@ -99,15 +103,19 @@ def build_equipment_queue_from_chilecompra_api(
     estado: str | None = "activas",
     fecha: str | None = None,
     max_details: int = 100,
+    detail_sleep_seconds: float = 1.0,
+    continue_on_detail_error: bool = True,
     now: datetime | None = None,
     fetch_licitaciones_fn: FetchLicitacionesFn | None = None,
     fetch_licitacion_by_codigo_fn: FetchLicitacionByCodigoFn | None = None,
+    sleep_fn: SleepFn | None = None,
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
     """Fetch summaries, detail rows for keyword candidates, and build equipment queue."""
     resolved_ticket = ticket or ticket_from_env()
     now_utc = now or datetime.now()
     fetch_list = fetch_licitaciones_fn or fetch_licitaciones
     fetch_detail = fetch_licitacion_by_codigo_fn or fetch_licitacion_by_codigo
+    pause = sleep_fn or time.sleep
 
     summary_payload = fetch_list(
         ticket=resolved_ticket,
@@ -116,14 +124,33 @@ def build_equipment_queue_from_chilecompra_api(
     )
     summary_rows = normalize_licitaciones_response(summary_payload)
     candidate_summaries = [row for row in summary_rows if summary_passes_keyword_prefilter(row)]
+    detail_candidates = candidate_summaries[: max(0, max_details)]
 
     normalized_item_rows: list[dict[str, str]] = []
     detail_requests = 0
-    for summary in candidate_summaries[: max(0, max_details)]:
+    detail_errors: list[dict[str, str]] = []
+    detail_error_codes: list[str] = []
+    for index, summary in enumerate(detail_candidates):
+        if index > 0 and detail_sleep_seconds > 0:
+            pause(detail_sleep_seconds)
         codigo = (summary.get("codigo") or "").strip()
         if not codigo:
             continue
-        detail_payload = fetch_detail(codigo, ticket=resolved_ticket)
+        try:
+            detail_payload = fetch_detail(codigo, ticket=resolved_ticket)
+        except ChileCompraHttpError as exc:
+            detail_requests += 1
+            detail_error_codes.append(codigo)
+            detail_errors.append(
+                {
+                    "codigo": codigo,
+                    "error": redact_ticket(str(exc), resolved_ticket),
+                }
+            )
+            if not continue_on_detail_error:
+                raise
+            normalized_item_rows.append(summary)
+            continue
         detail_requests += 1
         licitaciones = _extract_licitaciones_listado(detail_payload)
         if not licitaciones:
@@ -154,6 +181,10 @@ def build_equipment_queue_from_chilecompra_api(
         "fetched_summaries": len(summary_rows),
         "candidate_summaries": len(candidate_summaries),
         "detail_requests": detail_requests,
+        "detail_errors": detail_errors,
+        "detail_error_count": len(detail_errors),
+        "detail_error_codes": detail_error_codes,
+        "detail_sleep_seconds": detail_sleep_seconds,
         "normalized_item_rows": len(normalized_item_rows),
         "output_rows": len(queue_rows),
         "by_next_action": dict(by_next_action),
