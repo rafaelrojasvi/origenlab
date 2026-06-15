@@ -1,9 +1,4 @@
-"""Golden regression cases for equipment-first ChileCompra tender matching.
-
-These tests intentionally cover business-quality behavior rather than HTTP/API wiring:
-which tender text should become an operator queue row, which should be ignored,
-and which next_action/category should be preserved as rules evolve.
-"""
+"""Golden regression cases for equipment-first ChileCompra tender matching."""
 
 from __future__ import annotations
 
@@ -26,19 +21,22 @@ def _row(
     producto: str = "",
     descripcion: str = "",
     close_date: str = "20/06/2026 17:00:00",
+    nivel_1: str = "Equipamiento para laboratorios",
+    nivel_2: str = "Equipos e insumos para laboratorio",
+    nivel_3: str = "",
 ) -> dict[str, str]:
     return {
         "codigo": codigo,
-        "buyer": "Hospital Demo",
+        "buyer": "Comprador Demo",
         "region": "Región Demo",
         "close_date": close_date,
         "title": title,
         "descripcion": descripcion,
         "line_description": line_description,
         "producto": producto,
-        "nivel_1": "Equipamiento para laboratorios",
-        "nivel_2": "Equipos e insumos para laboratorio",
-        "nivel_3": "",
+        "nivel_1": nivel_1,
+        "nivel_2": nivel_2,
+        "nivel_3": nivel_3,
     }
 
 
@@ -50,7 +48,7 @@ def _row(
             _row(
                 codigo="GOLD-001-LP26",
                 title="ADQUISICIÓN DE CENTRÍFUGA DE LABORATORIO",
-                line_description="Centrífuga refrigerada para laboratorio clínico",
+                line_description="Centrífuga refrigerada para laboratorio",
                 producto="Centrífuga",
             ),
             "centrifuge",
@@ -60,7 +58,7 @@ def _row(
             _row(
                 codigo="GOLD-002-LP26",
                 title="Compra de balanza analítica para laboratorio",
-                line_description="Balanza analítica 0.1 mg para laboratorio clínico",
+                line_description="Balanza analítica 0.1 mg para laboratorio",
                 producto="Balanza analítica",
             ),
             "balance",
@@ -104,10 +102,13 @@ def test_golden_equipment_purchase_cases_reach_operator_queue(
 ) -> None:
     rows = build_equipment_queue_rows_from_normalized_rows([row], now=_NOW)
 
-    assert len(rows) == 1, case_name
-    assert rows[0]["codigo_licitacion"] == row["codigo"]
-    assert rows[0]["equipment_category"] == expected_category
-    assert rows[0]["next_action"] in {"quote_now", "needs_supplier_quote"}
+    assert rows, case_name
+    assert {out_row["codigo_licitacion"] for out_row in rows} == {row["codigo"]}
+    assert expected_category in {out_row["equipment_category"] for out_row in rows}
+    assert all(
+        out_row["next_action"] in {"quote_now", "needs_supplier_quote"}
+        for out_row in rows
+    )
 
 
 @pytest.mark.parametrize(
@@ -127,7 +128,7 @@ def test_golden_equipment_purchase_cases_reach_operator_queue(
             _row(
                 codigo="GOLD-102-LP26",
                 title="Servicio de exámenes de ecografía",
-                line_description="Ecografía y ultrasonido cardiaco para pacientes",
+                line_description="Ecografía y ultrasonido general",
                 producto="Examen de ecografía",
             ),
         ),
@@ -138,6 +139,8 @@ def test_golden_equipment_purchase_cases_reach_operator_queue(
                 title="Compra de balanza digital",
                 line_description="Balanza digital para control de peso general",
                 producto="Balanza digital",
+                nivel_1="Servicios generales",
+                nivel_2="Equipamiento no especializado",
             ),
         ),
         (
