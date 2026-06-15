@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from dataclasses import asdict, dataclass, field
@@ -33,6 +34,9 @@ LOCK_FILENAME = "dashboard_auto_mirror.lock"
 PAUSE_FILENAME = "dashboard_auto_mirror_paused"
 STATE_SCHEMA_VERSION = 1
 STALE_LOCK_SECONDS = 2 * 60 * 60
+ACTIVE_MANIFEST_FILENAME = "manifest.json"
+EQUIPMENT_OPERATOR_QUEUE_GLOB = "equipment_first_operator_queue_*.csv"
+MAX_DASHBOARD_INPUT_CONTENT_HASH_BYTES = 256 * 1024
 
 DEFAULT_COOLDOWN_SECONDS = 900
 DEFAULT_OPERATOR = "rafael"
@@ -58,6 +62,7 @@ class DashboardAutoMirrorState:
     schema_version: int = STATE_SCHEMA_VERSION
     last_successful_mirror_at: str | None = None
     last_mirrored_daily_core_generated_at: str | None = None
+    last_mirrored_dashboard_input_fingerprint: str | None = None
     last_run_started_at: str | None = None
     last_run_finished_at: str | None = None
     last_result: str | None = None
@@ -82,6 +87,8 @@ class DashboardAutoMirrorResult:
     mail_dirty: bool
     mail_pending: bool
     last_mirrored_daily_core_generated_at: str | None
+    last_mirrored_dashboard_input_fingerprint: str | None
+    dashboard_input_fingerprint: str | None
     last_successful_mirror_at: str | None
     cooldown_seconds: int
     should_run: bool
@@ -100,6 +107,8 @@ class DashboardAutoMirrorResult:
             f"mail_dirty={'true' if self.mail_dirty else 'false'}",
             f"mail_pending={'true' if self.mail_pending else 'false'}",
             f"last_mirrored_daily_core_generated_at={self.last_mirrored_daily_core_generated_at or ''}",
+            f"last_mirrored_dashboard_input_fingerprint={self.last_mirrored_dashboard_input_fingerprint or ''}",
+            f"dashboard_input_fingerprint={self.dashboard_input_fingerprint or ''}",
             f"last_successful_mirror_at={self.last_successful_mirror_at or ''}",
             f"cooldown_seconds={self.cooldown_seconds}",
             f"should_run={'true' if self.should_run else 'false'}",
@@ -182,7 +191,7 @@ def _mail_pending(mail_state: MailAutoRefreshState) -> bool:
     )
 
 
-def _already_mirrored(
+def _already_mirrored_daily_core(
     *,
     last_mirrored_at: str | None,
     daily_core_generated_at: str,
@@ -194,6 +203,62 @@ def _already_mirrored(
     if mirrored is None or generated is None:
         return last_mirrored_at == daily_core_generated_at
     return mirrored >= generated
+
+
+def _resolve_dashboard_input_files(active_current: Path) -> list[Path]:
+    files: list[Path] = []
+    manifest_path = active_current / ACTIVE_MANIFEST_FILENAME
+    if manifest_path.is_file():
+        files.append(manifest_path)
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            manifest = {}
+        for name in manifest.get("canonical_files") or []:
+            rel = str(name).strip()
+            if not rel:
+                continue
+            candidate = active_current / rel
+            if candidate.is_file() and candidate not in files:
+                files.append(candidate)
+        return sorted(files, key=lambda path: path.name)
+    for path in sorted(active_current.glob(EQUIPMENT_OPERATOR_QUEUE_GLOB)):
+        if path.is_file():
+            files.append(path)
+    return files
+
+
+def _dashboard_input_file_entry(path: Path) -> str:
+    stat = path.stat()
+    content_hash = ""
+    if stat.st_size <= MAX_DASHBOARD_INPUT_CONTENT_HASH_BYTES:
+        content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    return f"{path.name}|{stat.st_size}|{stat.st_mtime_ns}|{content_hash}"
+
+
+def compute_dashboard_input_fingerprint(reports_dir: Path | None = None) -> str:
+    """Hash stable metadata/content for dashboard-visible active/current inputs."""
+    active_current = active_current_dir(reports_dir)
+    entries = [_dashboard_input_file_entry(path) for path in _resolve_dashboard_input_files(active_current)]
+    payload = "\n".join(entries) if entries else "no_dashboard_inputs"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _already_mirrored(
+    *,
+    last_mirrored_at: str | None,
+    daily_core_generated_at: str,
+    last_dashboard_input_fingerprint: str | None,
+    current_dashboard_input_fingerprint: str,
+) -> bool:
+    if not _already_mirrored_daily_core(
+        last_mirrored_at=last_mirrored_at,
+        daily_core_generated_at=daily_core_generated_at,
+    ):
+        return False
+    if not last_dashboard_input_fingerprint:
+        return False
+    return last_dashboard_input_fingerprint == current_dashboard_input_fingerprint
 
 
 def _base_result_fields(
@@ -213,6 +278,8 @@ def _base_result_fields(
         "mail_dirty": mail_dirty,
         "mail_pending": mail_pending,
         "last_mirrored_daily_core_generated_at": mirror_state.last_mirrored_daily_core_generated_at,
+        "last_mirrored_dashboard_input_fingerprint": mirror_state.last_mirrored_dashboard_input_fingerprint,
+        "dashboard_input_fingerprint": None,
         "last_successful_mirror_at": mirror_state.last_successful_mirror_at,
         "cooldown_seconds": options.cooldown_seconds,
         "allow_non_scratch_postgres": options.allow_non_scratch_postgres,
@@ -228,6 +295,7 @@ def evaluate_dashboard_auto_mirror(
     manifest: dict[str, Any] | None,
     mail_state: MailAutoRefreshState | None,
     now: datetime,
+    dashboard_input_fingerprint: str,
 ) -> DashboardAutoMirrorResult:
     base = _base_result_fields(
         options=options,
@@ -235,6 +303,7 @@ def evaluate_dashboard_auto_mirror(
         manifest=manifest,
         mail_state=mail_state,
     )
+    base["dashboard_input_fingerprint"] = dashboard_input_fingerprint
 
     if manifest is None:
         return DashboardAutoMirrorResult(reason="daily_core_manifest_missing", should_run=False, **base)
@@ -261,6 +330,8 @@ def evaluate_dashboard_auto_mirror(
     if _already_mirrored(
         last_mirrored_at=mirror_state.last_mirrored_daily_core_generated_at,
         daily_core_generated_at=generated_at,
+        last_dashboard_input_fingerprint=mirror_state.last_mirrored_dashboard_input_fingerprint,
+        current_dashboard_input_fingerprint=dashboard_input_fingerprint,
     ):
         return DashboardAutoMirrorResult(reason="already_mirrored", should_run=False, **base)
 
@@ -345,6 +416,8 @@ def run_dashboard_auto_mirror(
             mail_dirty=False,
             mail_pending=False,
             last_mirrored_daily_core_generated_at=None,
+            last_mirrored_dashboard_input_fingerprint=None,
+            dashboard_input_fingerprint=None,
             last_successful_mirror_at=None,
             cooldown_seconds=options.cooldown_seconds,
             should_run=False,
@@ -365,6 +438,8 @@ def run_dashboard_auto_mirror(
             mail_dirty=False,
             mail_pending=False,
             last_mirrored_daily_core_generated_at=None,
+            last_mirrored_dashboard_input_fingerprint=None,
+            dashboard_input_fingerprint=None,
             last_successful_mirror_at=None,
             cooldown_seconds=options.cooldown_seconds,
             should_run=False,
@@ -386,6 +461,8 @@ def run_dashboard_auto_mirror(
             mail_dirty=False,
             mail_pending=False,
             last_mirrored_daily_core_generated_at=None,
+            last_mirrored_dashboard_input_fingerprint=None,
+            dashboard_input_fingerprint=None,
             last_successful_mirror_at=None,
             cooldown_seconds=options.cooldown_seconds,
             should_run=False,
@@ -407,6 +484,8 @@ def run_dashboard_auto_mirror(
             mail_dirty=False,
             mail_pending=False,
             last_mirrored_daily_core_generated_at=None,
+            last_mirrored_dashboard_input_fingerprint=None,
+            dashboard_input_fingerprint=None,
             last_successful_mirror_at=None,
             cooldown_seconds=options.cooldown_seconds,
             should_run=False,
@@ -429,6 +508,7 @@ def run_dashboard_auto_mirror(
             if mail_state_path.is_file()
             else None
         )
+        dashboard_input_fingerprint = compute_dashboard_input_fingerprint(reports_dir)
 
         result = evaluate_dashboard_auto_mirror(
             options=options,
@@ -436,6 +516,7 @@ def run_dashboard_auto_mirror(
             manifest=manifest,
             mail_state=mail_state,
             now=now,
+            dashboard_input_fingerprint=dashboard_input_fingerprint,
         )
 
         mirror_rc: int | None = None
@@ -453,11 +534,15 @@ def run_dashboard_auto_mirror(
             if mirror_rc == 0 and generated_at:
                 mirror_state.last_successful_mirror_at = mirror_state.last_run_finished_at
                 mirror_state.last_mirrored_daily_core_generated_at = generated_at
+                mirror_state.last_mirrored_dashboard_input_fingerprint = dashboard_input_fingerprint
                 mirror_state.consecutive_failures = 0
                 mirror_state.last_result = "success"
                 result.last_successful_mirror_at = mirror_state.last_successful_mirror_at
                 result.last_mirrored_daily_core_generated_at = (
                     mirror_state.last_mirrored_daily_core_generated_at
+                )
+                result.last_mirrored_dashboard_input_fingerprint = (
+                    mirror_state.last_mirrored_dashboard_input_fingerprint
                 )
                 result.reason = "mirrored"
             else:
