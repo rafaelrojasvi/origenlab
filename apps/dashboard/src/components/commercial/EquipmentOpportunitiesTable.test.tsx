@@ -229,5 +229,39 @@ describe("EquipmentOpportunitiesTable", () => {
     screen.getByText("No hay oportunidades de equipos en la cola actual.");
     expect(screen.queryByTestId("equipment-feed-unavailable")).toBeNull();
   });
+
+  it("renders ChileCompra equipment labels in Spanish", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="postgres"
+        items={[
+          {
+            ...row,
+            codigo_licitacion: "1051-1-LP26",
+            equipment_category: "centrifuge; homogenizer",
+            next_action: "contact_after_close",
+            safe_channel: "mercado_publico_only",
+            contact_status: "review_required",
+          },
+        ]}
+        meta={{
+          data_source: "postgres_mirror",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    screen.getByText("Centrífuga; Homogeneizador / agitador");
+    screen.getByText("Revisar después del cierre");
+    screen.getByText("Mercado Público");
+    screen.getByText("Revisión requerida");
+  });
 });
 
