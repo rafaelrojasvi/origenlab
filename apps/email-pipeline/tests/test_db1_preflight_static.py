@@ -78,6 +78,19 @@ def test_db1_v_equipment_opportunity_joins_source_id_not_date_suffix() -> None:
     assert "join latest_source ls on src.id = ls.id" in views
 
 
+def test_0024_v_equipment_opportunity_appends_extra_json_at_end() -> None:
+    """CREATE OR REPLACE VIEW cannot insert columns before existing view columns."""
+    migration = (
+        _ALEMBIC_VERSIONS / "20260614_0024_api_v_equipment_opportunity_extra_json.py"
+    ).read_text(encoding="utf-8")
+    upgrade_start = migration.index("def upgrade()")
+    downgrade_start = migration.index("def downgrade()")
+    upgrade_block = migration[upgrade_start:downgrade_start]
+    assert "eo.operator_note,\n          eo.extra_json," not in upgrade_block
+    assert upgrade_block.index("source_path") < upgrade_block.index("extra_json")
+    assert upgrade_block.index("is_canonical_source") < upgrade_block.index("extra_json")
+
+
 def test_db1_v_contact_profile_has_no_with_params_cte() -> None:
     views = (_ALEMBIC_VERSIONS / "20260519_0014_api_read_model_views.py").read_text(encoding="utf-8").lower()
     start = views.find("create or replace view api.v_contact_profile")
