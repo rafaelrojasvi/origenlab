@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from origenlab_email_pipeline.config import load_settings
 from origenlab_email_pipeline.operator_cli.daily_core_manifest import daily_core_run_manifest_path
 from origenlab_email_pipeline.operator_cli.mail_auto_refresh import (
     MailAutoRefreshState,
@@ -24,6 +24,7 @@ from origenlab_email_pipeline.operator_cli.mail_auto_refresh import (
 )
 from origenlab_email_pipeline.operator_cli.mirror import (
     build_live_dashboard_passthrough,
+    postgres_url_configured,
     run_mirror_dashboard,
 )
 
@@ -284,6 +285,39 @@ def build_mirror_passthrough(options: DashboardAutoMirrorOptions) -> list[str]:
     )
 
 
+def _publish_automation_status_snapshot_if_configured(
+    options: DashboardAutoMirrorOptions,
+    reports_dir: Path | None,
+) -> None:
+    """Publish operator automation status to Postgres after local state is saved."""
+    if not options.apply or not options.allow_non_scratch_postgres:
+        return
+    if not postgres_url_configured():
+        return
+    try:
+        from origenlab_email_pipeline.dashboard_snapshot_publish import (
+            OPERATOR_AUTOMATION_STATUS_SNAPSHOT_KV_KEY,
+            build_operator_automation_status_snapshot,
+            upsert_pipeline_kv_snapshot,
+        )
+        from origenlab_email_pipeline.mart_core_postgres_migrate import resolve_postgres_url
+
+        pg_url = resolve_postgres_url(None)
+        active = active_current_dir(reports_dir)
+        snapshot = build_operator_automation_status_snapshot(
+            active,
+            mirror_cooldown_seconds=options.cooldown_seconds,
+        )
+        upsert_pipeline_kv_snapshot(
+            pg_url,
+            OPERATOR_AUTOMATION_STATUS_SNAPSHOT_KV_KEY,
+            snapshot,
+            dry_run=False,
+        )
+    except Exception as exc:  # pragma: no cover - exercised via mock in unit tests
+        print(f"automation_status_snapshot_publish_failed={exc}", file=sys.stderr)
+
+
 def run_dashboard_auto_mirror(
     options: DashboardAutoMirrorOptions,
     *,
@@ -437,6 +471,7 @@ def run_dashboard_auto_mirror(
             mirror_state.last_result = result.reason
 
         save_state(state_file, mirror_state)
+        _publish_automation_status_snapshot_if_configured(options, reports_dir)
         for line in result.output_lines():
             print(line)
         if mirror_rc is not None and mirror_rc != 0:
