@@ -60,7 +60,7 @@ def test_package_json_must_not_expose_smoke_legacy() -> None:
 
 
 def test_mirror_routes_still_exist_phase6b() -> None:
-    paths = {getattr(r, "path", "") or "" for r in create_app().routes}
+    paths = set(create_app().openapi()["paths"])
     for required in REQUIRED_MIRROR_OPENAPI_PATHS:
         assert required in paths
 

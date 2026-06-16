@@ -71,7 +71,7 @@ def test_active_dashboard_unchanged_phase6() -> None:
 
 
 def test_mirror_routes_still_registered_phase6() -> None:
-    paths = {getattr(r, "path", "") or "" for r in create_app().routes}
+    paths = set(create_app().openapi()["paths"])
     for required in REQUIRED_MIRROR_OPENAPI_PATHS:
         assert required in paths
 
