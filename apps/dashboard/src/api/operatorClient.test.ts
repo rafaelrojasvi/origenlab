@@ -182,6 +182,83 @@ describe("operator API client", () => {
     expect(parsed.snapshot_stale).toBeNull();
   });
 
+  it("parseOperatorAutomationStatus parses redacted path companion fields", () => {
+    const parsed = parseOperatorAutomationStatus({
+      generated_at_utc: "2026-06-16T12:00:00+00:00",
+      active_current_dir: "/home/ops/reports/out/active/current",
+      active_current_dir_info: {
+        redacted: true,
+        basename: "current",
+        kind: "directory",
+      },
+      path_redaction_applied: true,
+      verdict: "healthy",
+      daily_core: { exists: true, status: "success", returncode: 0 },
+      mail_auto_refresh: { state_exists: true, dirty: false, pending: false },
+      dashboard_auto_mirror: { state_exists: true, mirror_matches_daily_core: true },
+      chilecompra_equipment_auto_refresh: {
+        state_exists: true,
+        published_queue:
+          "/home/ops/reports/out/active/current/equipment_first_operator_queue_20260616.csv",
+        candidate_audit:
+          "/home/ops/reports/out/active/current/chilecompra_equipment_candidate_audit_20260616.csv",
+        path_info: {
+          published_queue: {
+            redacted: true,
+            basename: "equipment_first_operator_queue_20260616.csv",
+            kind: "file",
+          },
+          candidate_audit: {
+            redacted: true,
+            basename: "chilecompra_equipment_candidate_audit_20260616.csv",
+            kind: "file",
+          },
+        },
+      },
+      cron: { note: "not inspected by API" },
+      recommended_action: "none",
+      warnings: [],
+    });
+
+    expect(parsed.active_current_dir).toBe("/home/ops/reports/out/active/current");
+    expect(parsed.active_current_dir_info).toEqual({
+      redacted: true,
+      basename: "current",
+      kind: "directory",
+    });
+    expect(parsed.path_redaction_applied).toBe(true);
+    expect(parsed.chilecompra_equipment_auto_refresh.published_queue).toBe(
+      "/home/ops/reports/out/active/current/equipment_first_operator_queue_20260616.csv",
+    );
+    expect(parsed.chilecompra_equipment_auto_refresh.path_info?.published_queue.basename).toBe(
+      "equipment_first_operator_queue_20260616.csv",
+    );
+    expect(parsed.chilecompra_equipment_auto_refresh.path_info?.candidate_audit.kind).toBe(
+      "file",
+    );
+  });
+
+  it("parseOperatorAutomationStatus tolerates malformed path_info", () => {
+    const parsed = parseOperatorAutomationStatus({
+      generated_at_utc: "2026-06-16T12:00:00+00:00",
+      active_current_dir: "/tmp/active/current",
+      active_current_dir_info: "not-an-object",
+      verdict: "healthy",
+      chilecompra_equipment_auto_refresh: {
+        state_exists: true,
+        path_info: {
+          published_queue: { basename: 123, kind: "file" },
+          candidate_audit: null,
+        },
+      },
+      recommended_action: "none",
+    });
+
+    expect(parsed.active_current_dir).toBe("/tmp/active/current");
+    expect(parsed.active_current_dir_info).toBeNull();
+    expect(parsed.chilecompra_equipment_auto_refresh.path_info).toEqual({});
+  });
+
   it("parseDailyCoreRunStatus parses valid summary fields", () => {
     const parsed = parseDailyCoreRunStatus({
       path: "/reports/active/current/daily_core_run_manifest.json",
