@@ -379,12 +379,12 @@ def test_timestamp_conversion() -> None:
 
 
 def _postgres_test_url() -> str | None:
-    return (os.environ.get("ORIGENLAB_POSTGRES_TEST_URL") or os.environ.get("ORIGENLAB_POSTGRES_URL") or "").strip() or None
+    return (os.environ.get("ORIGENLAB_POSTGRES_TEST_URL") or "").strip() or None
 
 
 @pytest.mark.skipif(
     _postgres_test_url() is None,
-    reason="Set ORIGENLAB_POSTGRES_TEST_URL or ORIGENLAB_POSTGRES_URL for integration tests.",
+    reason="Set ORIGENLAB_POSTGRES_TEST_URL for integration tests.",
 )
 def test_dry_run_integration(tmp_path: Path) -> None:
     db = tmp_path / "mart.sqlite"
@@ -410,7 +410,7 @@ def test_dry_run_integration(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(
     _postgres_test_url() is None,
-    reason="Set ORIGENLAB_POSTGRES_TEST_URL or ORIGENLAB_POSTGRES_URL for integration tests.",
+    reason="Set ORIGENLAB_POSTGRES_TEST_URL for integration tests.",
 )
 def test_replace_loads_opportunity_signals_jsonb(tmp_path: Path) -> None:
     """Regression: details_json must use psycopg Json, not raw dict."""
@@ -481,7 +481,7 @@ def test_replace_loads_opportunity_signals_jsonb(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(
     _postgres_test_url() is None,
-    reason="Set ORIGENLAB_POSTGRES_TEST_URL or ORIGENLAB_POSTGRES_URL for integration tests.",
+    reason="Set ORIGENLAB_POSTGRES_TEST_URL for integration tests.",
 )
 def test_tables_canonical_only_loads_canonical_targets(tmp_path: Path) -> None:
     db = tmp_path / "canonical_pg.sqlite"
