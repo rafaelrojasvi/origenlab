@@ -249,6 +249,39 @@ def test_unhandled_exception_returns_internal_error_without_secrets(tmp_path: Pa
     assert body["error"]["message"] == "An unexpected error occurred"
 
 
+def test_http_exception_nested_details_are_sanitized(tmp_path: Path) -> None:
+    from fastapi import HTTPException
+
+    app = create_app()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        sqlite_path=tmp_path / "missing.sqlite",
+        active_current=tmp_path / "current",
+    )
+
+    @app.get("/__contract_test_nested_error")
+    def _nested_error() -> None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Mirror unavailable",
+                "db": {
+                    "url": "postgresql://user:password@127.0.0.1:5432/db",
+                    "password": "secret-value",
+                },
+            },
+        )
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/__contract_test_nested_error")
+    assert response.status_code == 503
+    body = _assert_json_object(response.json())
+    _assert_error_envelope(body, code="mirror_not_configured")
+    text = json.dumps(body)
+    assert "postgresql://" not in text
+    assert "secret-value" not in text
+    assert "<redacted-database-url>" in text or "<redacted>" in text
+
+
 def test_host_allowlist_rejection_is_safe_json_object(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

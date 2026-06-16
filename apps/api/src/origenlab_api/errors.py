@@ -18,6 +18,10 @@ _ENV_SECRET_RE = re.compile(
     re.IGNORECASE,
 )
 _PASSWORD_KV_RE = re.compile(r"(password|passwd|pwd)\s*[:=]\s*\S+", re.IGNORECASE)
+_SENSITIVE_DETAIL_KEY_RE = re.compile(
+    r"(password|passwd|pwd|token|secret|api[_-]?key|postgres_url|database_url)",
+    re.IGNORECASE,
+)
 
 _FORBIDDEN_SUBSTRINGS = (
     "traceback",
@@ -37,6 +41,35 @@ def sanitize_text(text: str) -> str:
         if needle in cleaned:
             return "An error occurred"
     return cleaned
+
+
+
+def _safe_detail_key(key: Any) -> str:
+    """Return a safe JSON object key for error details."""
+    raw = sanitize_text(str(key))
+    if _SENSITIVE_DETAIL_KEY_RE.search(raw):
+        return "redacted"
+    return raw
+
+
+def sanitize_value(value: Any) -> Any:
+    """Recursively redact unsafe strings in JSON-compatible error details."""
+    if isinstance(value, str):
+        return sanitize_text(value)
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            safe_key = _safe_detail_key(key)
+            if safe_key == "redacted":
+                sanitized[safe_key] = "<redacted>"
+            else:
+                sanitized[safe_key] = sanitize_value(item)
+        return sanitized
+    if isinstance(value, list):
+        return [sanitize_value(v) for v in value]
+    if isinstance(value, tuple):
+        return [sanitize_value(v) for v in value]
+    return value
 
 
 def _error_payload(
@@ -119,7 +152,7 @@ def _details_for_http_exception(exc: StarletteHTTPException, message: str) -> di
             details["hint"] = sanitize_text(message.split("allowed:", 1)[1].strip())
     detail = exc.detail
     if isinstance(detail, dict):
-        details.update({k: sanitize_text(str(v)) if isinstance(v, str) else v for k, v in detail.items()})
+        details.update(sanitize_value(detail))
     return details
 
 
