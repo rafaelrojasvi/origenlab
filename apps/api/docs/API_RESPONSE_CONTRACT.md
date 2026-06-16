@@ -245,11 +245,21 @@ Besides `meta` + `items`, includes `total_returned`, `days_window`, `scope_note`
 
 ### 4. Some operator status fields still expose local filesystem paths
 
-`GET /operator/automation-status` currently includes fields such as `active_current_dir` and nested queue/report paths inherited from local operator state.
+`GET /operator/automation-status` still includes legacy fields such as `active_current_dir` and nested queue/report paths inherited from local operator state (for example `published_queue`, `candidate_audit`).
 
-These are useful for local debugging, but they are not ideal for a public/stable client contract.
+These raw paths remain for **dashboard compatibility** until a follow-up migration PR removes them.
 
-**TODO:** Add redacted/public path fields or move local paths behind a debug-only option before treating filesystem-path redaction as fully enforced.
+**Additive redaction (2026-06):** The same response now includes safe companion fields:
+
+| Field | Location | Shape |
+|-------|----------|-------|
+| `active_current_dir_info` | top-level | `{ redacted: true, basename, kind }` — basename only; no parent directories |
+| `path_redaction_applied` | top-level | `true` when redaction helpers ran |
+| `path_info` | nested automation sections (e.g. `chilecompra_equipment_auto_refresh`) | map of path-like keys → `{ redacted, basename, kind }` |
+
+Legacy raw path strings are unchanged. New clients SHOULD prefer `active_current_dir_info` and section `path_info` over absolute paths.
+
+**TODO:** Remove legacy path fields after dashboard clients migrate to redacted companions.
 
 ---
 
@@ -257,6 +267,7 @@ These are useful for local debugging, but they are not ideal for a public/stable
 
 | Date | Change |
 |------|--------|
+| 2026-06 | `GET /operator/automation-status`: additive `active_current_dir_info`, `path_redaction_applied`, and nested `path_info` redacted path companions; legacy absolute path fields retained for dashboard compatibility. |
 | 2026-06 | `X-Request-ID` middleware: header on all responses; `error.request_id` populated on errors. |
 | 2026-06 | Unified `error` envelope via `origenlab_api.errors` handlers; replaced FastAPI `detail` responses for HTTP 4xx/5xx, validation errors, and host allowlist 403. |
 

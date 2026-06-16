@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from origenlab_api.path_redaction import enrich_automation_status_paths
 from origenlab_api.repositories.automation_status_fs import get_automation_status_from_active_current
 from origenlab_api.repositories.postgres import dashboard_snapshots as snapshot_repo
 from origenlab_api.schemas.operator_automation import OperatorAutomationStatusResponse
@@ -22,12 +23,14 @@ def build_operator_automation_status_response(
             updated_at,
             max_age_seconds=snapshot_max_age_seconds,
         )
-        enriched = {
-            **snapshot,
-            "source": "postgres_snapshot",
-            "snapshot_updated_at": updated_at,
-            "snapshot_stale": stale,
-        }
+        enriched = enrich_automation_status_paths(
+            {
+                **snapshot,
+                "source": "postgres_snapshot",
+                "snapshot_updated_at": updated_at,
+                "snapshot_stale": stale,
+            }
+        )
         return OperatorAutomationStatusResponse.model_validate(enriched)
 
     data = get_automation_status_from_active_current(
@@ -37,4 +40,4 @@ def build_operator_automation_status_response(
     data["source"] = "filesystem_active_current"
     data["snapshot_updated_at"] = None
     data["snapshot_stale"] = None
-    return OperatorAutomationStatusResponse.model_validate(data)
+    return OperatorAutomationStatusResponse.model_validate(enrich_automation_status_paths(data))
