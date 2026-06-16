@@ -131,7 +131,7 @@ uv sync --group ml --group dev   # installs default deps + pinned ML (CUDA torch
 Lockfile **`uv.lock`** is the canonical reproducible snapshot. To save a flat list (e.g. for diffing):
 
 ```bash
-uv pip freeze > requirements-lock.txt
+uv.lock is the canonical lockfile for this app. Do not maintain a separate requirements-lock.txt flat freeze.
 ```
 
 ### Real embedding smoke test (GPU)
