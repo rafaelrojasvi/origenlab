@@ -129,6 +129,17 @@ def _assert_safe_error_payload(payload: Any) -> None:
         assert needle not in text, f"error body leaked forbidden substring: {needle!r}"
 
 
+def _assert_error_envelope(body: dict[str, Any], *, code: str) -> None:
+    assert "error" in body
+    assert "detail" not in body
+    error = body["error"]
+    assert error["code"] == code
+    assert isinstance(error["message"], str) and error["message"].strip()
+    assert isinstance(error["details"], dict)
+    assert error["request_id"] is None
+    _assert_safe_error_payload(body)
+
+
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     return _sqlite_client(tmp_path)
@@ -185,41 +196,90 @@ def test_contact_detail_success_is_object_with_meta_and_contact(tmp_path: Path) 
     assert isinstance(data["contact"], dict)
 
 
-def test_cases_warm_invalid_category_returns_structured_fastapi_detail(client: TestClient) -> None:
-    """TODO(contract): normalize to error.code=invalid_query_param — see API_RESPONSE_CONTRACT.md."""
+def test_cases_warm_invalid_category_returns_unified_error_envelope(client: TestClient) -> None:
     response = client.get("/cases/warm?category=not_a_real_category")
     assert response.status_code == 422
     body = _assert_json_object(response.json())
-    assert "detail" in body
-    assert "error" not in body  # target contract not implemented yet
-    detail = body["detail"]
-    assert isinstance(detail, str)
-    assert "Invalid category" in detail
-    assert "not_a_real_category" in detail
-    _assert_safe_error_payload(body)
+    _assert_error_envelope(body, code="invalid_query_param")
+    assert "Invalid category" in body["error"]["message"]
+    assert "not_a_real_category" in body["error"]["message"]
 
 
-def test_query_validation_error_is_json_object_without_secrets(client: TestClient) -> None:
+def test_query_validation_error_returns_unified_error_envelope(client: TestClient) -> None:
     response = client.get("/cases/warm?limit=0")
     assert response.status_code == 422
     body = _assert_json_object(response.json())
-    assert "detail" in body
-    assert isinstance(body["detail"], list)
-    _assert_safe_error_payload(body)
+    _assert_error_envelope(body, code="validation_error")
+    errors = body["error"]["details"]["validation_errors"]
+    assert isinstance(errors, list)
+    assert errors
+    assert any("limit" in ".".join(err.get("loc", [])) for err in errors)
 
 
-def test_unknown_route_404_is_safe_json_object(client: TestClient) -> None:
+def test_unknown_route_404_returns_not_found_envelope(client: TestClient) -> None:
     response = client.get("/this-route-does-not-exist")
     assert response.status_code == 404
     body = _assert_json_object(response.json())
-    _assert_safe_error_payload(body)
+    _assert_error_envelope(body, code="not_found")
 
 
-def test_contact_invalid_email_422_is_safe(client: TestClient) -> None:
+def test_contact_invalid_email_422_returns_validation_error(client: TestClient) -> None:
     response = client.get("/contacts/not-an-email")
     assert response.status_code == 422
     body = _assert_json_object(response.json())
-    _assert_safe_error_payload(body)
+    _assert_error_envelope(body, code="validation_error")
+
+
+def test_unhandled_exception_returns_internal_error_without_secrets(tmp_path: Path) -> None:
+    app = create_app()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        sqlite_path=tmp_path / "missing.sqlite",
+        active_current=tmp_path / "current",
+    )
+
+    @app.get("/__contract_test_internal_error")
+    def _boom() -> None:
+        raise RuntimeError("postgres://user:password@127.0.0.1:5432/db traceback in message")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/__contract_test_internal_error")
+    assert response.status_code == 500
+    body = _assert_json_object(response.json())
+    _assert_error_envelope(body, code="internal_error")
+    assert body["error"]["message"] == "An unexpected error occurred"
+
+
+def test_http_exception_nested_details_are_sanitized(tmp_path: Path) -> None:
+    from fastapi import HTTPException
+
+    app = create_app()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        sqlite_path=tmp_path / "missing.sqlite",
+        active_current=tmp_path / "current",
+    )
+
+    @app.get("/__contract_test_nested_error")
+    def _nested_error() -> None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Mirror unavailable",
+                "db": {
+                    "url": "postgresql://user:password@127.0.0.1:5432/db",
+                    "password": "secret-value",
+                },
+            },
+        )
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/__contract_test_nested_error")
+    assert response.status_code == 503
+    body = _assert_json_object(response.json())
+    _assert_error_envelope(body, code="mirror_not_configured")
+    text = json.dumps(body)
+    assert "postgresql://" not in text
+    assert "secret-value" not in text
+    assert "<redacted-database-url>" in text or "<redacted>" in text
 
 
 def test_host_allowlist_rejection_is_safe_json_object(
@@ -236,4 +296,4 @@ def test_host_allowlist_rejection_is_safe_json_object(
     response = client.get("/health", headers={"Host": "evil.example"})
     assert response.status_code == 403
     body = _assert_json_object(response.json())
-    _assert_safe_error_payload(body)
+    _assert_error_envelope(body, code="forbidden")
