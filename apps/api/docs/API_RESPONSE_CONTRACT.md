@@ -2,7 +2,7 @@
 
 **Audience:** Dashboard, operator tooling, and any HTTP client of `apps/api` (port **8001**).
 
-**Scope:** Read-only operator API (`origenlab_api`). This document defines the **target contract** clients should rely on, documents **stable shapes already shipped**, and lists **known gaps** where behavior still follows FastAPI defaults.
+**Scope:** Read-only operator API (`origenlab_api`). This document defines the contract clients should rely on, documents **stable shapes already shipped**, and lists **remaining gaps**.
 
 **Non-goals (this doc):** Route refactors, error-handler rewrites, or breaking response renames. Those require a dedicated migration PR with client + test updates.
 
@@ -13,7 +13,7 @@
 | Principle | Rule |
 |-----------|------|
 | Predictable | Success and error bodies use documented top-level keys. |
-| Consistent | List endpoints share `meta` + `items`; errors share one machine-readable envelope (target). |
+| Consistent | List endpoints share `meta` + `items`; errors share the unified `error` envelope. |
 | Machine-readable | Stable string `code` values for errors; typed OpenAPI `response_model` on public routes. |
 | Human-debuggable | Short `message` for operators; optional safe `details` for UI hints. |
 | Safe | No stack traces, secrets, raw env vars, DSNs, Gmail tokens, or full email bodies. |
@@ -101,9 +101,9 @@ Keys on these endpoints must not change casually; update `tests/test_health.py` 
 
 ## Error responses
 
-### Target contract (all routes)
+### Contract (all routes)
 
-Errors SHOULD converge on:
+Errors use a unified envelope:
 
 ```json
 {
@@ -115,6 +115,8 @@ Errors SHOULD converge on:
   }
 }
 ```
+
+Implemented via centralized handlers in `origenlab_api.errors` (registered from `create_app()`). Host allowlist rejections in `http_security` use the same shape.
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -129,11 +131,20 @@ Errors SHOULD converge on:
 |--------|------|------|
 | `invalid_query_param` | 422 | Unknown enum/filter (e.g. invalid warm `category`). |
 | `validation_error` | 422 | FastAPI/Pydantic query or path validation. |
-| `not_found` | 404 | Resource missing. |
+| `not_found` | 404 | Resource missing or unknown path. |
 | `forbidden` | 403 | Host allowlist or policy rejection. |
-| `backend_unavailable` | 503 | Postgres mirror not configured or DB unreachable. |
+| `backend_unavailable` | 503 | Postgres mirror unreachable. |
 | `mirror_not_configured` | 503 | Mirror route without `ORIGENLAB_POSTGRES_URL`. |
 | `internal_error` | 500 | Unexpected failure (no traceback in body). |
+
+**Examples (shipped):**
+
+- `GET /cases/warm?category=not_a_real_category` → **422**, `error.code`: `invalid_query_param`.
+- `GET /cases/warm?limit=0` → **422**, `error.code`: `validation_error`, `details.validation_errors`.
+- `GET /contacts/not-an-email` → **422**, `error.code`: `validation_error`.
+- `GET /mirror/...` 404 → **404**, `error.code`: `not_found`.
+- Unknown path → **404**, `error.code`: `not_found`.
+- Host allowlist reject → **403**, `error.code`: `forbidden`.
 
 ### Safety rules for errors
 
@@ -203,51 +214,26 @@ Postgres mirror (`/mirror/*`, read-only reporting):
 
 ## Current gaps
 
-These are **known** deviations from the target contract. Clients must tolerate them until a migration PR lands.
+These are **known** remaining deviations or follow-ups. Clients should not depend on undocumented behavior.
 
-### 1. Error envelope uses FastAPI `detail` (not `error`)
+### 1. No `request_id` on errors yet
 
-Today, `HTTPException` and Starlette validation errors return:
+Correlation ids are not attached to JSON error bodies (`request_id` is always `null` today).
 
-```json
-{ "detail": "…" }
-```
-
-or for query validation:
-
-```json
-{ "detail": [ { "type": "…", "loc": […], "msg": "…" } ] }
-```
-
-**Examples:**
-
-- `GET /cases/warm?category=not_a_real_category` → **422**, `detail` string listing allowed categories.
-- `GET /cases/warm?limit=0` → **422**, `detail` array (Pydantic `ge=1` violation).
-- `GET /contacts/not-an-email` → **422**, `detail` string from `ValueError`.
-- `GET /mirror/...` 404 → **404**, `detail` short string (e.g. `"catalog product not found"`).
-- Unknown path → **404**, `detail`: `"Not Found"`.
-- Host allowlist reject → **403**, `detail`: `"Forbidden"`.
-
-**TODO:** Global exception handlers to normalize into `error.code` / `error.message` / `error.details` without breaking dashboard parsers in one step.
-
-### 2. No `request_id` on errors yet
-
-Correlation ids are not attached to JSON error bodies.
-
-### 3. Legacy resource key names
+### 2. Legacy resource key names
 
 - `GET /contacts/{email}` uses `contact`, not `item` — **stable; do not rename casually**.
 
-### 4. Health / operator status omit `meta`
+### 3. Health / operator status omit `meta`
 
 Flat objects are intentional for liveness and operator verdict routes (see table above).
 
-### 5. `EmailsRecentResponse` extra top-level fields
+### 4. `EmailsRecentResponse` extra top-level fields
 
 Besides `meta` + `items`, includes `total_returned`, `days_window`, `scope_note`, etc. Documented in `schemas/emails.py`; clients should treat unknown keys as optional.
 
 
-### 6. Some operator status fields still expose local filesystem paths
+### 5. Some operator status fields still expose local filesystem paths
 
 `GET /operator/automation-status` currently includes fields such as `active_current_dir` and nested queue/report paths inherited from local operator state.
 
@@ -257,11 +243,19 @@ These are useful for local debugging, but they are not ideal for a public/stable
 
 ---
 
+## Resolved (changelog)
+
+| Date | Change |
+|------|--------|
+| 2026-06 | Unified `error` envelope via `origenlab_api.errors` handlers; replaced FastAPI `detail` responses for HTTP 4xx/5xx, validation errors, and host allowlist 403. |
+
+---
+
 ## Client checklist
 
 - [ ] Parse success bodies as objects; never assume a top-level array.
 - [ ] For lists, read `meta.count` and `items`.
-- [ ] Branch on HTTP status first; then `error.code` (future) or `detail` (today).
+- [ ] Branch on HTTP status first; then `error.code`.
 - [ ] Treat unknown JSON keys as optional (forward-compatible).
 - [ ] Do not log full error bodies in production if they might contain user input; our API should not echo secrets.
 

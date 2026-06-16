@@ -6,14 +6,13 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from origenlab_api.errors import json_error_response
 from origenlab_api.settings import Settings
 
 _OPERATOR_CACHE_CONTROL = "no-store, private"
 _HOST_REJECT_STATUS = 403
-_HOST_REJECT_BODY = b'{"detail":"Forbidden"}'
 _SECURITY_RESPONSE_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -63,11 +62,13 @@ class AllowedHostMiddleware(BaseHTTPMiddleware):
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         if not request_host_allowed(request, self._settings):
-            return JSONResponse(
-                status_code=_HOST_REJECT_STATUS,
-                content={"detail": "Forbidden"},
-                headers={"Cache-Control": _OPERATOR_CACHE_CONTROL},
+            response = json_error_response(
+                _HOST_REJECT_STATUS,
+                code="forbidden",
+                message="Forbidden",
             )
+            response.headers["Cache-Control"] = _OPERATOR_CACHE_CONTROL
+            return response
         return await call_next(request)
 
 

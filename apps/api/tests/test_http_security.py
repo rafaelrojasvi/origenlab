@@ -181,7 +181,9 @@ def test_production_render_host_rejected(monkeypatch: pytest.MonkeyPatch) -> Non
     client = _production_client(monkeypatch)
     r = client.get("/health", headers={"Host": "origenlab.onrender.com"})
     assert r.status_code == 403
-    assert r.json() == {"detail": "Forbidden"}
+    body = r.json()
+    assert body["error"]["code"] == "forbidden"
+    assert body["error"]["message"] == "Forbidden"
 
 
 def test_production_missing_host_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

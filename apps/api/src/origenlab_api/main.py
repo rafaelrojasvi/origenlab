@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from origenlab_api.backends.factory import validate_api_settings
+from origenlab_api.errors import register_exception_handlers
 from origenlab_api.http_security import configure_http_security, openapi_docs_enabled
 from origenlab_api.mirror import router as mirror_router
 from origenlab_api.routes import cases, contacts, emails, health, operator, opportunities
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if docs_on else None,
     )
     configure_http_security(app, settings)
+    register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(operator.router)
     app.include_router(emails.router)
