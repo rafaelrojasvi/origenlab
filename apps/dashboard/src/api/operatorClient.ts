@@ -24,7 +24,9 @@ import type {
   MailAutoRefreshStatus,
   OperatorAutomationCronStatus,
   OperatorAutomationStatus,
+  OperatorPathInfoMap,
   OperatorStatusResponse,
+  RedactedPathInfo,
   TodayPanelData,
 } from "./operatorTypes";
 
@@ -160,6 +162,43 @@ function defaultChilecompraEquipmentAutoRefreshStatus(): ChileCompraEquipmentAut
   };
 }
 
+/** Parse a single redacted path companion object (basename + kind only). */
+export function parseRedactedPathInfo(raw: unknown): RedactedPathInfo | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const row = raw as Record<string, unknown>;
+  if (typeof row.basename !== "string") {
+    return null;
+  }
+  if (typeof row.kind !== "string") {
+    return null;
+  }
+  return {
+    redacted: Boolean(row.redacted),
+    basename: row.basename,
+    kind: row.kind,
+  };
+}
+
+/** Parse a section path_info map; skips invalid entries. */
+export function parsePathInfoMap(raw: unknown): OperatorPathInfoMap | null {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const out: OperatorPathInfoMap = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const info = parseRedactedPathInfo(value);
+    if (info) {
+      out[key] = info;
+    }
+  }
+  return out;
+}
+
 function parseChilecompraEquipmentAutoRefreshStatus(
   raw: unknown,
 ): ChileCompraEquipmentAutoRefreshStatus {
@@ -190,6 +229,7 @@ function parseChilecompraEquipmentAutoRefreshStatus(
     published_rows: optionalNumber(row.published_rows) ?? null,
     published_queue: optionalString(row.published_queue) ?? null,
     candidate_audit: optionalString(row.candidate_audit) ?? null,
+    path_info: parsePathInfoMap(row.path_info),
     parse_error: optionalString(row.parse_error) ?? null,
   };
 }
@@ -280,6 +320,11 @@ export function parseOperatorAutomationStatus(data: unknown): OperatorAutomation
   return {
     generated_at_utc: String(row.generated_at_utc ?? ""),
     active_current_dir: String(row.active_current_dir ?? ""),
+    active_current_dir_info: parseRedactedPathInfo(row.active_current_dir_info),
+    path_redaction_applied:
+      row.path_redaction_applied === undefined || row.path_redaction_applied === null
+        ? undefined
+        : Boolean(row.path_redaction_applied),
     verdict: String(row.verdict ?? "unknown"),
     daily_core: dailyCore,
     mail_auto_refresh: mailRefresh,

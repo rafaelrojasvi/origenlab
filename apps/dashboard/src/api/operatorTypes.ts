@@ -82,6 +82,14 @@ export interface DashboardAutoMirrorStatus {
   consecutive_failures: number;
 }
 
+export interface RedactedPathInfo {
+  redacted: boolean;
+  basename: string;
+  kind: "file" | "directory" | string;
+}
+
+export type OperatorPathInfoMap = Record<string, RedactedPathInfo>;
+
 export interface ChileCompraEquipmentAutoRefreshStatus {
   state_exists: boolean;
   lock_live: boolean;
@@ -105,6 +113,7 @@ export interface ChileCompraEquipmentAutoRefreshStatus {
   published_rows?: number | null;
   published_queue?: string | null;
   candidate_audit?: string | null;
+  path_info?: OperatorPathInfoMap | null;
   parse_error?: string | null;
 }
 
@@ -119,6 +128,8 @@ export interface OperatorAutomationCronStatus {
 export interface OperatorAutomationStatus {
   generated_at_utc: string;
   active_current_dir: string;
+  active_current_dir_info?: RedactedPathInfo | null;
+  path_redaction_applied?: boolean;
   verdict: string;
   daily_core: DailyCoreAutomationStatus;
   mail_auto_refresh: MailAutoRefreshStatus;
