@@ -27,7 +27,7 @@
 
 1. Every **successful** response MUST be a **JSON object** (never a bare array or string).
 2. Public routes SHOULD declare a Pydantic `response_model` (see OpenAPI `/openapi.json` in dev).
-3. Do **not** expose: stack traces, `postgres://…` URLs, raw `ORIGENLAB_*` secrets, Gmail OAuth tokens, full MIME bodies, or unredacted filesystem paths in operator-facing fields.
+3. Target: do **not** expose stack traces, `postgres://…` URLs, raw `ORIGENLAB_*` secrets, Gmail OAuth tokens, full MIME bodies, or unredacted filesystem paths in operator-facing fields. Legacy exceptions are documented under **Current gaps**.
 
 ### List endpoints (`meta` + `items`)
 
@@ -245,6 +245,15 @@ Flat objects are intentional for liveness and operator verdict routes (see table
 ### 5. `EmailsRecentResponse` extra top-level fields
 
 Besides `meta` + `items`, includes `total_returned`, `days_window`, `scope_note`, etc. Documented in `schemas/emails.py`; clients should treat unknown keys as optional.
+
+
+### 6. Some operator status fields still expose local filesystem paths
+
+`GET /operator/automation-status` currently includes fields such as `active_current_dir` and nested queue/report paths inherited from local operator state.
+
+These are useful for local debugging, but they are not ideal for a public/stable client contract.
+
+**TODO:** Add redacted/public path fields or move local paths behind a debug-only option before treating filesystem-path redaction as fully enforced.
 
 ---
 
