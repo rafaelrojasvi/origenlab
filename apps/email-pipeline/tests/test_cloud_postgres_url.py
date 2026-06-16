@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -99,7 +100,7 @@ for key, value in dotenv_values(".env").items():
 
 def test_cli_prepare_subprocess() -> None:
     env = {
-        **dict(__import__("os").environ),
+        **dict(os.environ),
         "ORIGENLAB_CLOUD_POSTGRES_URL": (
             "postgresql://u:p@dpg-test.oregon-postgres.render.com/origenlab_dashboard_prod"
         ),
@@ -127,9 +128,12 @@ def test_cli_prepare_subprocess() -> None:
     ],
 )
 def test_cli_validate_fails(url: str) -> None:
+    env = dict(os.environ)
+    env.pop("ORIGENLAB_CLOUD_POSTGRES_URL", None)
     cp = subprocess.run(
         [sys.executable, str(CLI), "validate", *(["--url", url] if url else [])],
         cwd=REPO,
+        env=env,
         capture_output=True,
         text=True,
         check=False,

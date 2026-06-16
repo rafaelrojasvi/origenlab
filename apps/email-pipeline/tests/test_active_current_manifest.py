@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +32,8 @@ class ActiveWorkspace:
 
 
 def _resolve_active_workspace() -> ActiveWorkspace:
-    if MANIFEST_PATH.is_file():
+    use_repo_active_current = os.environ.get("ORIGENLAB_TEST_USE_REPO_ACTIVE_CURRENT") == "1"
+    if use_repo_active_current and MANIFEST_PATH.is_file():
         return ActiveWorkspace(
             current=ACTIVE_CURRENT,
             root=ACTIVE_ROOT,

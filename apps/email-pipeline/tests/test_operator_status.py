@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -243,8 +244,9 @@ def test_operator_status_surfaces_corrected_fastlab_not_stale_contacted(tmp_path
 
 
 @pytest.mark.skipif(
-    not (Path(__file__).resolve().parents[1] / "reports/out/active/current/manifest.json").is_file(),
-    reason="workspace manifest not present",
+    os.environ.get("ORIGENLAB_TEST_USE_REPO_ACTIVE_CURRENT") != "1"
+    or not (Path(__file__).resolve().parents[1] / "reports/out/active/current/manifest.json").is_file(),
+    reason="live repo active/current manifest validation is opt-in; set ORIGENLAB_TEST_USE_REPO_ACTIVE_CURRENT=1",
 )
 def test_operator_status_against_repo_manifest() -> None:
     repo = Path(__file__).resolve().parents[1]
