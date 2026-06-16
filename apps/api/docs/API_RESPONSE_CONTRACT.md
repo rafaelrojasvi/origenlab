@@ -123,7 +123,21 @@ Implemented via centralized handlers in `origenlab_api.errors` (registered from 
 | `code` | string | Stable machine code for client branching. |
 | `message` | string | Operator-facing summary (no secrets). |
 | `details` | object | Safe structured context (field names, allowed values). |
-| `request_id` | string \| null | Correlation id when middleware provides one. |
+| `request_id` | string \| null | Correlation id; matches the `X-Request-ID` response header on errors. |
+
+### Request correlation (`X-Request-ID`)
+
+Every API response includes an **`X-Request-ID`** header.
+
+| Behavior | Rule |
+|----------|------|
+| Incoming header | If `X-Request-ID` is present and **safe** (letters, digits, `_`, `-`, `.`, `:`, max 128 chars), it is reused. |
+| Missing / unsafe | A new `uuid4().hex` value is generated. Unsafe values (URLs, secrets, spaces, etc.) are **never echoed**. |
+| Storage | Resolved id is stored on `request.state.request_id`. |
+| Errors | `error.request_id` matches the response `X-Request-ID` header. |
+| Success | Header is set; success JSON bodies do not duplicate the id (use the header). |
+
+Implemented in `origenlab_api.request_id.RequestIdMiddleware` (outermost middleware). Host allowlist 403 responses also resolve the id before returning.
 
 ### Standard `code` values
 
@@ -216,24 +230,20 @@ Postgres mirror (`/mirror/*`, read-only reporting):
 
 These are **known** remaining deviations or follow-ups. Clients should not depend on undocumented behavior.
 
-### 1. No `request_id` on errors yet
-
-Correlation ids are not attached to JSON error bodies (`request_id` is always `null` today).
-
-### 2. Legacy resource key names
+### 1. Legacy resource key names
 
 - `GET /contacts/{email}` uses `contact`, not `item` — **stable; do not rename casually**.
 
-### 3. Health / operator status omit `meta`
+### 2. Health / operator status omit `meta`
 
 Flat objects are intentional for liveness and operator verdict routes (see table above).
 
-### 4. `EmailsRecentResponse` extra top-level fields
+### 3. `EmailsRecentResponse` extra top-level fields
 
 Besides `meta` + `items`, includes `total_returned`, `days_window`, `scope_note`, etc. Documented in `schemas/emails.py`; clients should treat unknown keys as optional.
 
 
-### 5. Some operator status fields still expose local filesystem paths
+### 4. Some operator status fields still expose local filesystem paths
 
 `GET /operator/automation-status` currently includes fields such as `active_current_dir` and nested queue/report paths inherited from local operator state.
 
@@ -247,6 +257,7 @@ These are useful for local debugging, but they are not ideal for a public/stable
 
 | Date | Change |
 |------|--------|
+| 2026-06 | `X-Request-ID` middleware: header on all responses; `error.request_id` populated on errors. |
 | 2026-06 | Unified `error` envelope via `origenlab_api.errors` handlers; replaced FastAPI `detail` responses for HTTP 4xx/5xx, validation errors, and host allowlist 403. |
 
 ---
@@ -255,7 +266,7 @@ These are useful for local debugging, but they are not ideal for a public/stable
 
 - [ ] Parse success bodies as objects; never assume a top-level array.
 - [ ] For lists, read `meta.count` and `items`.
-- [ ] Branch on HTTP status first; then `error.code`.
+- [ ] Branch on HTTP status first; then `error.code`; use `error.request_id` / `X-Request-ID` for support correlation.
 - [ ] Treat unknown JSON keys as optional (forward-compatible).
 - [ ] Do not log full error bodies in production if they might contain user input; our API should not echo secrets.
 

@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from origenlab_api.schemas.errors import ApiErrorBody, ApiErrorResponse
+from origenlab_api.request_id import attach_request_id_header, get_request_id
 
 _POSTGRES_URL_RE = re.compile(r"postgres(?:ql)?://[^\s\"']+", re.IGNORECASE)
 _ENV_SECRET_RE = re.compile(
@@ -98,7 +99,7 @@ def json_error_response(
     details: dict[str, Any] | None = None,
     request_id: str | None = None,
 ) -> JSONResponse:
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status_code,
         content=_error_payload(
             code=code,
@@ -107,6 +108,8 @@ def json_error_response(
             request_id=request_id,
         ),
     )
+    attach_request_id_header(response, request_id)
+    return response
 
 
 def _string_detail(exc: StarletteHTTPException) -> str:
@@ -182,6 +185,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             code=code,
             message=message,
             details=_details_for_http_exception(exc, message),
+            request_id=get_request_id(request),
         )
 
     @app.exception_handler(RequestValidationError)
@@ -194,6 +198,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             code="validation_error",
             message="Request validation failed",
             details=_validation_details(exc),
+            request_id=get_request_id(request),
         )
 
     @app.exception_handler(Exception)
@@ -206,4 +211,5 @@ def register_exception_handlers(app: FastAPI) -> None:
             code="internal_error",
             message="An unexpected error occurred",
             details={},
+            request_id=get_request_id(request),
         )

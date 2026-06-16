@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from origenlab_api.errors import json_error_response
+from origenlab_api.request_id import get_request_id, resolve_request_id
 from origenlab_api.settings import Settings
 
 _OPERATOR_CACHE_CONTROL = "no-store, private"
@@ -61,11 +62,14 @@ class AllowedHostMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
+        resolve_request_id(request)
         if not request_host_allowed(request, self._settings):
+            request_id = get_request_id(request)
             response = json_error_response(
                 _HOST_REJECT_STATUS,
                 code="forbidden",
                 message="Forbidden",
+                request_id=request_id,
             )
             response.headers["Cache-Control"] = _OPERATOR_CACHE_CONTROL
             return response
