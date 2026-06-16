@@ -129,15 +129,24 @@ def _assert_safe_error_payload(payload: Any) -> None:
         assert needle not in text, f"error body leaked forbidden substring: {needle!r}"
 
 
-def _assert_error_envelope(body: dict[str, Any], *, code: str) -> None:
+def _assert_error_envelope(
+    body: dict[str, Any],
+    *,
+    code: str,
+    response: Any | None = None,
+) -> str:
     assert "error" in body
     assert "detail" not in body
     error = body["error"]
     assert error["code"] == code
     assert isinstance(error["message"], str) and error["message"].strip()
     assert isinstance(error["details"], dict)
-    assert error["request_id"] is None
+    request_id = error["request_id"]
+    assert isinstance(request_id, str) and request_id
+    if response is not None:
+        assert response.headers.get("X-Request-ID") == request_id
     _assert_safe_error_payload(body)
+    return request_id
 
 
 @pytest.fixture
@@ -200,7 +209,7 @@ def test_cases_warm_invalid_category_returns_unified_error_envelope(client: Test
     response = client.get("/cases/warm?category=not_a_real_category")
     assert response.status_code == 422
     body = _assert_json_object(response.json())
-    _assert_error_envelope(body, code="invalid_query_param")
+    _assert_error_envelope(body, code="invalid_query_param", response=response)
     assert "Invalid category" in body["error"]["message"]
     assert "not_a_real_category" in body["error"]["message"]
 
@@ -209,7 +218,7 @@ def test_query_validation_error_returns_unified_error_envelope(client: TestClien
     response = client.get("/cases/warm?limit=0")
     assert response.status_code == 422
     body = _assert_json_object(response.json())
-    _assert_error_envelope(body, code="validation_error")
+    _assert_error_envelope(body, code="validation_error", response=response)
     errors = body["error"]["details"]["validation_errors"]
     assert isinstance(errors, list)
     assert errors
@@ -220,14 +229,14 @@ def test_unknown_route_404_returns_not_found_envelope(client: TestClient) -> Non
     response = client.get("/this-route-does-not-exist")
     assert response.status_code == 404
     body = _assert_json_object(response.json())
-    _assert_error_envelope(body, code="not_found")
+    _assert_error_envelope(body, code="not_found", response=response)
 
 
 def test_contact_invalid_email_422_returns_validation_error(client: TestClient) -> None:
     response = client.get("/contacts/not-an-email")
     assert response.status_code == 422
     body = _assert_json_object(response.json())
-    _assert_error_envelope(body, code="validation_error")
+    _assert_error_envelope(body, code="validation_error", response=response)
 
 
 def test_unhandled_exception_returns_internal_error_without_secrets(tmp_path: Path) -> None:
@@ -245,7 +254,7 @@ def test_unhandled_exception_returns_internal_error_without_secrets(tmp_path: Pa
     response = client.get("/__contract_test_internal_error")
     assert response.status_code == 500
     body = _assert_json_object(response.json())
-    _assert_error_envelope(body, code="internal_error")
+    _assert_error_envelope(body, code="internal_error", response=response)
     assert body["error"]["message"] == "An unexpected error occurred"
 
 
@@ -275,7 +284,7 @@ def test_http_exception_nested_details_are_sanitized(tmp_path: Path) -> None:
     response = client.get("/__contract_test_nested_error")
     assert response.status_code == 503
     body = _assert_json_object(response.json())
-    _assert_error_envelope(body, code="mirror_not_configured")
+    _assert_error_envelope(body, code="mirror_not_configured", response=response)
     text = json.dumps(body)
     assert "postgresql://" not in text
     assert "secret-value" not in text
@@ -296,4 +305,4 @@ def test_host_allowlist_rejection_is_safe_json_object(
     response = client.get("/health", headers={"Host": "evil.example"})
     assert response.status_code == 403
     body = _assert_json_object(response.json())
-    _assert_error_envelope(body, code="forbidden")
+    _assert_error_envelope(body, code="forbidden", response=response)
