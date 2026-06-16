@@ -18,6 +18,8 @@ AUTOMATION_STATUS_KEYS = frozenset(
     {
         "generated_at_utc",
         "active_current_dir",
+        "active_current_dir_info",
+        "path_redaction_applied",
         "verdict",
         "daily_core",
         "mail_auto_refresh",
@@ -31,6 +33,20 @@ AUTOMATION_STATUS_KEYS = frozenset(
         "snapshot_stale",
     }
 )
+
+_FORBIDDEN_IN_REDACTED_PATHS = (
+    "/home/",
+    "/mnt/",
+    "\\",
+    "postgres://",
+    "ORIGENLAB_",
+)
+
+
+def _assert_redacted_paths_safe(payload: object) -> None:
+    blob = json.dumps(payload)
+    for forbidden in _FORBIDDEN_IN_REDACTED_PATHS:
+        assert forbidden not in blob
 
 DAILY_CORE_MANIFEST_NAME = "daily_core_run_manifest.json"
 MAIL_STATE_NAME = "mail_auto_refresh_state.json"
@@ -265,3 +281,91 @@ def test_mirror_behind_attention(tmp_path: Path) -> None:
     data = _client_with_active_current(active).get("/operator/automation-status").json()
     assert data["verdict"] == "attention"
     assert data["recommended_action"] == "run_auto_mirror_dashboard"
+
+
+def test_automation_status_includes_redacted_path_companions(tmp_path: Path) -> None:
+    active = _healthy_fixture(tmp_path)
+    queue_path = str(active / "equipment_first_operator_queue_20260616.csv")
+    audit_path = str(active / "chilecompra_equipment_candidate_audit_20260616.csv")
+    _write_chilecompra_state(
+        active,
+        published_queue=queue_path,
+        candidate_audit=audit_path,
+    )
+    data = _client_with_active_current(active).get("/operator/automation-status").json()
+
+    assert data["path_redaction_applied"] is True
+    assert data["active_current_dir"] == str(active)
+    assert data["active_current_dir_info"] == {
+        "redacted": True,
+        "basename": "current",
+        "kind": "directory",
+    }
+    _assert_redacted_paths_safe(data["active_current_dir_info"])
+
+    chilecompra = data["chilecompra_equipment_auto_refresh"]
+    assert chilecompra["published_queue"] == queue_path
+    assert chilecompra["candidate_audit"] == audit_path
+    path_info = chilecompra["path_info"]
+    assert path_info["published_queue"]["basename"] == "equipment_first_operator_queue_20260616.csv"
+    assert path_info["candidate_audit"]["basename"] == "chilecompra_equipment_candidate_audit_20260616.csv"
+    _assert_redacted_paths_safe(path_info)
+
+
+def test_postgres_snapshot_includes_redacted_active_current_dir_info(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 6, 11, 12, 0, 0, tzinfo=timezone.utc)
+    pg_snapshot = {
+        "updated_at": now.isoformat(),
+        "snapshot": {
+            "generated_at_utc": now.isoformat(),
+            "active_current_dir": "<local-active-current>",
+            "verdict": "healthy",
+            "daily_core": {"exists": True, "status": "success", "returncode": 0},
+            "mail_auto_refresh": {"state_exists": True, "dirty": False, "pending": False},
+            "dashboard_auto_mirror": {
+                "state_exists": True,
+                "mirror_matches_daily_core": True,
+            },
+            "chilecompra_equipment_auto_refresh": {
+                "state_exists": True,
+                "published_queue": "/home/ops/reports/out/active/current/equipment_first_operator_queue_20260616.csv",
+                "candidate_audit": "/home/ops/reports/out/active/current/chilecompra_equipment_candidate_audit_20260616.csv",
+            },
+            "cron": {"note": "not inspected by API"},
+            "recommended_action": "none",
+            "warnings": [],
+        },
+    }
+
+    monkeypatch.setattr(
+        "origenlab_api.services.operator_automation_status_service.snapshot_repo.get_operator_automation_status_snapshot",
+        lambda _settings: pg_snapshot,
+    )
+    get_settings = __import__(
+        "origenlab_api.settings", fromlist=["get_settings"]
+    ).get_settings
+    get_settings.cache_clear()
+    settings = Settings(active_current=_healthy_fixture(tmp_path))
+    app = create_app()
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_settings] = lambda: settings
+    client = TestClient(app)
+    data = client.get("/operator/automation-status").json()
+
+    assert data["path_redaction_applied"] is True
+    assert data["active_current_dir"] == "<local-active-current>"
+    assert data["active_current_dir_info"]["basename"] == "current"
+    path_info = data["chilecompra_equipment_auto_refresh"]["path_info"]
+    assert path_info["published_queue"]["kind"] == "file"
+    _assert_redacted_paths_safe(
+        {
+            "active_current_dir_info": data["active_current_dir_info"],
+            "path_info": path_info,
+        }
+    )
+    get_settings.cache_clear()
