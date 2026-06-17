@@ -10,6 +10,8 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2",
     "pydantic-settings>=2",
+    # Imported at app startup by /mirror route dependencies.
+    "psycopg[binary]>=3.2",
 ]
 
 [dependency-groups]
@@ -19,7 +21,6 @@ dev = [
     { include-group = "postgres" },
 ]
 postgres = ["psycopg[binary]>=3.2"]
-
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.2"]
 
