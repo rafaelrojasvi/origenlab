@@ -124,6 +124,16 @@ uv run python scripts/audit_response_contract.py
 
 The audit fails on contract violations including forbidden secret/path leaks (`/home/`, `/mnt/`, database URLs, etc.) anywhere in audited JSON responses. See [docs/API_RESPONSE_CONTRACT.md](docs/API_RESPONSE_CONTRACT.md).
 
+Authenticated remote production audit (live API behind Cloudflare Access; skips with exit 0 when service token env vars are unset):
+
+```bash
+cd apps/api
+CF_ACCESS_CLIENT_ID=... CF_ACCESS_CLIENT_SECRET=... \
+  uv run python scripts/remote_response_audit.py
+```
+
+Uses the same response contract checks as the local audit (`x-request-id`, JSON envelopes, list `meta`/`items`, forbidden path/secret leaks). Not part of `./scripts/validate.sh` (requires network + secrets).
+
 GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/api.yml) runs `./scripts/validate.sh` for `apps/api` changes and `apps/email-pipeline` dependency changes.
 
 ### Render (native runtime)
