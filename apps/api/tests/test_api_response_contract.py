@@ -15,42 +15,11 @@ from fastapi.testclient import TestClient
 
 from origenlab_api.main import create_app
 from origenlab_api.settings import Settings, get_settings
+from test_response_model_coverage import EXPECTED_PUBLIC_GET_PATHS
 
 _CONTACTO_INBOX = "gmail:contacto@origenlab.cl/INBOX"
 
-# Frozen inventory — update API_RESPONSE_CONTRACT.md when adding/removing public GET routes.
-EXPECTED_PUBLIC_GET_PATHS: frozenset[str] = frozenset(
-    {
-        "/health",
-        "/operator/status",
-        "/operator/automation-status",
-        "/emails/recent",
-        "/cases/warm",
-        "/opportunities/equipment",
-        "/contacts/{email}",
-        "/mirror/health/dependencies",
-        "/mirror/meta/dashboard-sync",
-        "/mirror/audits/gmail-interactions",
-        "/mirror/dashboard/summary",
-        "/mirror/classification/summary",
-        "/mirror/classification/recent",
-        "/mirror/classification/actions",
-        "/mirror/commercial/purchase-events",
-        "/mirror/commercial/purchase-events/{event_id}",
-        "/mirror/commercial/deals",
-        "/mirror/commercial/deals/{deal_key}",
-        "/mirror/catalog/products",
-        "/mirror/catalog/products/{product_key}",
-        "/mirror/leads/prospects",
-        "/mirror/leads/prospects/{prospect_key}",
-        "/mirror/leads/summary",
-        "/mirror/contacts",
-        "/mirror/organizations",
-        "/mirror/outbound/suppressions/emails",
-        "/mirror/outbound/contact-state",
-        "/mirror/outbound/readiness",
-    }
-)
+# Route inventory canonical list: tests/test_response_model_coverage.py (mirrors API_RESPONSE_CONTRACT.md).
 
 SECRET_FORBIDDEN_SUBSTRINGS: tuple[str, ...] = (
     "postgres://",

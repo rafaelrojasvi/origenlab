@@ -179,7 +179,7 @@ Redacted placeholders (`<redacted>`, `<unset>`) are OK when explicitly documente
 
 - **Dev:** `/openapi.json`, `/docs`, `/redoc` when docs are enabled (disabled in production by default).
 - Every public route MUST have a `response_model` OR a documented exception in this file.
-- If a response shape changes, update **tests** (`tests/test_api_response_contract.py` + route-specific tests) and this doc in the **same PR**.
+- If a response shape changes, update **tests** (`tests/test_api_response_contract.py`, `tests/test_response_model_coverage.py` + route-specific tests) and this doc in the **same PR**.
 - Prefer **additive** fields. Deprecate before removing.
 
 ---
