@@ -100,6 +100,8 @@ cd apps/api
 ./scripts/validate.sh
 ```
 
+`./scripts/validate.sh` first runs a **Render-style no-dev runtime import smoke** (`uv sync --frozen --no-dev`, then imports `psycopg` and `origenlab_api.main` without Postgres or network). That catches missing runtime dependencies before production deploy. It then restores dev deps and runs the full pytest suite.
+
 Targeted pytest is fine while developing; run `./scripts/validate.sh` before opening or merging API PRs. The validate script keeps both sync and test execution frozen so local validation does not rewrite `uv.lock`. `./scripts/validate.sh` runs tests in a deterministic SQLite-only mode, even if local `apps/api/.env` contains `ORIGENLAB_POSTGRES_URL` for mirror-page smoke testing.
 
 ```bash
@@ -107,7 +109,17 @@ cd apps/api
 uv run pytest tests -q
 ```
 
-GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/api.yml) runs `uv sync --group dev --frozen` and `uv run pytest tests -q` for `apps/api` changes and `apps/email-pipeline` dependency changes.
+GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/api.yml) runs `./scripts/validate.sh` for `apps/api` changes and `apps/email-pipeline` dependency changes.
+
+### Render (native runtime)
+
+| Setting | Value |
+|---------|-------|
+| `PYTHON_VERSION` | `3.12.11` |
+| Build command | `uv sync --frozen --no-dev` |
+| Start command | `uv run --no-sync uvicorn origenlab_api.main:app --host 0.0.0.0 --port ${PORT:-10000}` |
+
+CI `./scripts/validate.sh` mirrors the build step with a no-dev import smoke before pytest.
 
 ## Dashboard v1–v2 backend matrix
 
