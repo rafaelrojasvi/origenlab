@@ -121,6 +121,49 @@ GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/a
 
 CI `./scripts/validate.sh` mirrors the build step with a no-dev import smoke before pytest.
 
+### Remote production smoke
+
+`./scripts/remote_smoke.sh` checks a deployed API (default `https://api.origenlab.cl`) behind Cloudflare Access.
+
+Unauthenticated `GET /health` often returns **HTTP 302** to `cloudflareaccess.com` when Access is enabled — that is expected protection, not an API outage. Authenticated checks use Cloudflare **service tokens** (`CF-Access-Client-Id` / `CF-Access-Client-Secret` headers). Configure a **Service Auth** policy in Cloudflare Access for the token used by this script.
+
+```bash
+cd apps/api
+./scripts/remote_smoke.sh
+```
+
+Protection-only (no production secrets; exits 0 after Check A):
+
+```bash
+cd apps/api
+./scripts/remote_smoke.sh
+```
+
+Authenticated health (requires service token env vars):
+
+```bash
+cd apps/api
+CF_ACCESS_CLIENT_ID=... \
+CF_ACCESS_CLIENT_SECRET=... \
+./scripts/remote_smoke.sh
+```
+
+Optional operator route (still read-only; adds `GET /operator/status`):
+
+```bash
+cd apps/api
+ORIGENLAB_REMOTE_SMOKE_OPERATOR=1 \
+CF_ACCESS_CLIENT_ID=... \
+CF_ACCESS_CLIENT_SECRET=... \
+./scripts/remote_smoke.sh
+```
+
+Override base URL for staging or local smoke:
+
+```bash
+ORIGENLAB_API_BASE_URL=http://127.0.0.1:8001 ./scripts/remote_smoke.sh
+```
+
 ## Dashboard v1–v2 backend matrix
 
 Dashboard v1 + **Dashboard-2 contact drilldown** use **this app only** (`apps/api` on port **8001**).
