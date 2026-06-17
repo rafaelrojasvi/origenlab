@@ -18,6 +18,7 @@ OPERATOR_STATUS_KEYS = frozenset(
     {
         "verdict",
         "sqlite_path",
+        "sqlite_path_info",
         "campaign_mode",
         "operator_focus",
         "outbound_readiness",
@@ -133,7 +134,13 @@ def test_operator_status_read_only_minimal_sqlite(tmp_path: Path) -> None:
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["verdict"] in ("READY", "CAUTION", "BLOCKED")
-    assert data["sqlite_path"] == str(db.resolve())
+    assert data["sqlite_path"] == db.name
+    assert "/home/" not in data["sqlite_path"]
+    assert data["sqlite_path_info"] == {
+        "redacted": True,
+        "basename": db.name,
+        "kind": "file",
+    }
     assert data["campaign_mode"] == "equipment_first"
     assert data["operator_focus"] == "test focus"
     assert isinstance(data["outbound_readiness"], str)
@@ -201,7 +208,9 @@ def test_operator_status_missing_sqlite_graceful(tmp_path: Path) -> None:
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["verdict"] == "BLOCKED"
-    assert data["sqlite_path"] == str(missing.resolve())
+    assert data["sqlite_path"] == missing.name
+    assert "/home/" not in json.dumps(data)
+    assert data["sqlite_path_info"]["basename"] == missing.name
     assert data["outbound_readiness"] == "not_ready"
     assert data["daily_core_run"]["exists"] is False
 

@@ -19,7 +19,6 @@ require_json_object = _audit.require_json_object
 require_meta_items = _audit.require_meta_items
 require_error_envelope = _audit.require_error_envelope
 scan_forbidden_leaks = _audit.scan_forbidden_leaks
-mask_known_legacy_paths_for_scan = _audit.mask_known_legacy_paths_for_scan
 
 
 class _FakeResponse:
@@ -76,16 +75,12 @@ def test_scan_forbidden_leaks_empty_when_safe() -> None:
     assert scan_forbidden_leaks({"ok": True, "meta": {"read_only": True}}) == []
 
 
-def test_mask_known_legacy_paths_for_scan_masks_absolute_paths_only() -> None:
-    payload = {
-        "active_current_dir": "/home/ops/reports/out/active/current",
-        "active_current_dir_info": {"redacted": True, "basename": "current", "kind": "directory"},
-        "nested": {"candidate_audit": "/mnt/data/audit.csv"},
-        "not_path": "torch is optional",
-    }
-    masked = mask_known_legacy_paths_for_scan(payload)
-    assert masked["active_current_dir"] == "<masked-legacy-path>"
-    assert masked["nested"]["candidate_audit"] == "<masked-legacy-path>"
-    assert masked["active_current_dir_info"]["basename"] == "current"
-    assert masked["not_path"] == "torch is optional"
+def test_scan_forbidden_leaks_detects_home_in_legacy_path_field() -> None:
+    hits = scan_forbidden_leaks(
+        {
+            "sqlite_path": "emails.sqlite",
+            "active_current_dir": "/home/ops/reports/out/active/current",
+        }
+    )
+    assert "/home/" in hits
 

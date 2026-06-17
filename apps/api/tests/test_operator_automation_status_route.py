@@ -295,17 +295,18 @@ def test_automation_status_includes_redacted_path_companions(tmp_path: Path) -> 
     data = _client_with_active_current(active).get("/operator/automation-status").json()
 
     assert data["path_redaction_applied"] is True
-    assert data["active_current_dir"] == str(active)
+    assert data["active_current_dir"] == active.name
+    assert "/home/" not in json.dumps(data)
     assert data["active_current_dir_info"] == {
         "redacted": True,
-        "basename": "current",
+        "basename": active.name,
         "kind": "directory",
     }
     _assert_redacted_paths_safe(data["active_current_dir_info"])
 
     chilecompra = data["chilecompra_equipment_auto_refresh"]
-    assert chilecompra["published_queue"] == queue_path
-    assert chilecompra["candidate_audit"] == audit_path
+    assert chilecompra["published_queue"] == "equipment_first_operator_queue_20260616.csv"
+    assert chilecompra["candidate_audit"] == "chilecompra_equipment_candidate_audit_20260616.csv"
     path_info = chilecompra["path_info"]
     assert path_info["published_queue"]["basename"] == "equipment_first_operator_queue_20260616.csv"
     assert path_info["candidate_audit"]["basename"] == "chilecompra_equipment_candidate_audit_20260616.csv"
@@ -358,14 +359,12 @@ def test_postgres_snapshot_includes_redacted_active_current_dir_info(
     data = client.get("/operator/automation-status").json()
 
     assert data["path_redaction_applied"] is True
-    assert data["active_current_dir"] == "<local-active-current>"
+    assert data["active_current_dir"] == "current"
     assert data["active_current_dir_info"]["basename"] == "current"
     path_info = data["chilecompra_equipment_auto_refresh"]["path_info"]
     assert path_info["published_queue"]["kind"] == "file"
-    _assert_redacted_paths_safe(
-        {
-            "active_current_dir_info": data["active_current_dir_info"],
-            "path_info": path_info,
-        }
+    assert data["chilecompra_equipment_auto_refresh"]["published_queue"] == (
+        "equipment_first_operator_queue_20260616.csv"
     )
+    assert "/home/" not in json.dumps(data)
     get_settings.cache_clear()

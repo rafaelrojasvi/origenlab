@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class OperatorStatusResponse(BaseModel):
     verdict: str
     sqlite_path: str
+    sqlite_path_info: dict[str, Any] | None = None
     campaign_mode: str | None = None
     operator_focus: str | None = None
     outbound_readiness: str

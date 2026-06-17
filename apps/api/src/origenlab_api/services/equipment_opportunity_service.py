@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from origenlab_api.backends.factory import RepositoryBundle, get_repository_bundle
-from origenlab_api.schemas.opportunities import EquipmentOpportunitiesResponse, EquipmentOpportunityItem
+from origenlab_api.path_redaction import enrich_equipment_meta_paths
+from origenlab_api.schemas.opportunities import (
+    EquipmentOpportunitiesMeta,
+    EquipmentOpportunitiesResponse,
+    EquipmentOpportunityItem,
+)
 from origenlab_api.settings import Settings
 
 
@@ -26,6 +31,6 @@ def build_equipment_opportunities_response(
         include_account_intelligence=include_account_intelligence,
     )
     return EquipmentOpportunitiesResponse(
-        meta=meta,
+        meta=EquipmentOpportunitiesMeta.model_validate(enrich_equipment_meta_paths(meta.model_dump())),
         items=[EquipmentOpportunityItem.model_validate(r) for r in rows],
     )

@@ -74,7 +74,13 @@ def test_opportunities_equipment_returns_200(tmp_path: Path) -> None:
     assert data["meta"]["read_only"] is True
     assert data["meta"]["reduced_mode"] is False
     assert data["meta"]["campaign_mode"] == "equipment_first"
-    assert "equipment_first_operator_queue" in data["meta"]["source_path"]
+    assert data["meta"]["source_path"] == "equipment_first_operator_queue_20260518.csv"
+    assert "/home/" not in data["meta"]["source_path"]
+    assert data["meta"]["source_path_info"] == {
+        "redacted": True,
+        "basename": "equipment_first_operator_queue_20260518.csv",
+        "kind": "file",
+    }
     assert data["meta"]["count"] == 3
     assert data["items"][0]["priority_rank"] == 1
     assert data["items"][0]["codigo_licitacion"] == "LP-001"
