@@ -7,6 +7,12 @@ import { SystemPage } from "./SystemPage";
 const BASE_AUTOMATION_STATUS = {
   generated_at_utc: "2026-06-10T18:30:00+00:00",
   active_current_dir: "/hidden/active/current",
+  active_current_dir_info: {
+    redacted: true,
+    basename: "current",
+    kind: "directory",
+  },
+  path_redaction_applied: true,
   verdict: "healthy",
   daily_core: {
     exists: true,
