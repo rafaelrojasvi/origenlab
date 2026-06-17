@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,7 @@ class EquipmentOpportunitiesMeta(BaseModel):
     read_only: bool = True
     count: int = 0
     source_path: str = ""
+    source_path_info: dict[str, Any] | None = None
     campaign_mode: str | None = None
     reduced_mode: bool = False
     note: str = ""

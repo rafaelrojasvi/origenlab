@@ -243,23 +243,17 @@ Flat objects are intentional for liveness and operator verdict routes (see table
 Besides `meta` + `items`, includes `total_returned`, `days_window`, `scope_note`, etc. Documented in `schemas/emails.py`; clients should treat unknown keys as optional.
 
 
-### 4. Some operator status fields still expose local filesystem paths
+### 4. Operator-facing filesystem paths are basename-only
 
-`GET /operator/automation-status` still includes legacy fields such as `active_current_dir` and nested queue/report paths inherited from local operator state (for example `published_queue`, `candidate_audit`).
+`GET /operator/status`, `GET /operator/automation-status`, and `GET /opportunities/equipment` expose filesystem locations using **basename-only** legacy string fields for dashboard compatibility, plus structured `*_info` / `path_info` companions.
 
-These raw paths remain for **dashboard compatibility** until a follow-up migration PR removes them.
+| Endpoint | Legacy field (basename only) | Companion metadata |
+|----------|------------------------------|--------------------|
+| `GET /operator/status` | `sqlite_path` | `sqlite_path_info` → `{ redacted, basename, kind }` |
+| `GET /operator/automation-status` | `active_current_dir`, nested queue/audit paths | `active_current_dir_info`, section `path_info` |
+| `GET /opportunities/equipment` | `meta.source_path` | `meta.source_path_info` |
 
-**Additive redaction (2026-06):** The same response now includes safe companion fields:
-
-| Field | Location | Shape |
-|-------|----------|-------|
-| `active_current_dir_info` | top-level | `{ redacted: true, basename, kind }` — basename only; no parent directories |
-| `path_redaction_applied` | top-level | `true` when redaction helpers ran |
-| `path_info` | nested automation sections (e.g. `chilecompra_equipment_auto_refresh`) | map of path-like keys → `{ redacted, basename, kind }` |
-
-Legacy raw path strings are unchanged. New clients SHOULD prefer `active_current_dir_info` and section `path_info` over absolute paths.
-
-**TODO:** Remove legacy path fields after dashboard clients migrate to redacted companions.
+Raw absolute paths (`/home/…`, `/mnt/…`, parent directories) must **not** appear in JSON responses. `scripts/audit_response_contract.py` fails on `/home/` and `/mnt/` anywhere in audited payloads.
 
 ---
 
@@ -267,6 +261,7 @@ Legacy raw path strings are unchanged. New clients SHOULD prefer `active_current
 
 | Date | Change |
 |------|--------|
+| 2026-06 | Operator responses redact filesystem paths: legacy fields are basename-only; `sqlite_path_info`, `source_path_info`, `active_current_dir_info`, and nested `path_info` carry `{ redacted, basename, kind }`. Contract audit fails on `/home/` and `/mnt/` in JSON. |
 | 2026-06 | `GET /operator/automation-status`: additive `active_current_dir_info`, `path_redaction_applied`, and nested `path_info` redacted path companions; legacy absolute path fields retained for dashboard compatibility. |
 | 2026-06 | `X-Request-ID` middleware: header on all responses; `error.request_id` populated on errors. |
 | 2026-06 | Unified `error` envelope via `origenlab_api.errors` handlers; replaced FastAPI `detail` responses for HTTP 4xx/5xx, validation errors, and host allowlist 403. |

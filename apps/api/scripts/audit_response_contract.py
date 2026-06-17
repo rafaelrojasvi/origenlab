@@ -46,22 +46,6 @@ LIST_ENDPOINT_PREFIXES: tuple[str, ...] = (
     "/opportunities/equipment",
 )
 
-_LEGACY_PATH_LIKE_KEYS: frozenset[str] = frozenset(
-    {
-        "active_current_dir",
-        "queue_dir",
-        "published_queue",
-        "candidate_audit",
-        "api_queue",
-        "audit_path",
-        "allowlist_path",
-        "out_dir",
-        "sqlite_path",
-        "path",
-    }
-)
-_LEGACY_PATH_KEY_SUFFIXES: tuple[str, ...] = ("_path", "_dir", "_queue", "_audit", "_file")
-
 
 class ContractAuditError(AssertionError):
     pass
@@ -78,37 +62,6 @@ def scan_forbidden_leaks(payload: Any) -> list[str]:
         if needle in text:
             hits.append(needle)
     return hits
-
-
-def _looks_like_absolute_path(value: str) -> bool:
-    text = (value or "").strip()
-    return bool(text) and (
-        text.startswith(("/", "~")) or (len(text) > 2 and text[1] == ":" and text[2] in ("/", "\\"))
-    )
-
-
-def mask_known_legacy_paths_for_scan(payload: Any) -> Any:
-    """Mask legacy local path strings so the audit can focus on public/redacted fields.
-
-    This is intentionally narrow: it only masks values that look like absolute paths under
-    keys that are documented as legacy path fields (e.g. operator automation status raw paths).
-    """
-
-    if isinstance(payload, dict):
-        masked: dict[str, Any] = {}
-        for key, value in payload.items():
-            if (
-                isinstance(value, str)
-                and (key in _LEGACY_PATH_LIKE_KEYS or key.endswith(_LEGACY_PATH_KEY_SUFFIXES))
-                and _looks_like_absolute_path(value)
-            ):
-                masked[key] = "<masked-legacy-path>"
-            else:
-                masked[key] = mask_known_legacy_paths_for_scan(value)
-        return masked
-    if isinstance(payload, list):
-        return [mask_known_legacy_paths_for_scan(item) for item in payload]
-    return payload
 
 
 def require_request_id_header(response: httpx.Response) -> str:
@@ -283,10 +236,7 @@ def audit_response(label: str, response: httpx.Response, *, expect_success: bool
     request_id = require_request_id_header(response)
     body = require_json_object(response.json())
 
-    scan_payload: Any = body
-    if response.request.url.path == "/operator/automation-status":
-        scan_payload = mask_known_legacy_paths_for_scan(body)
-    leak_hits = scan_forbidden_leaks(scan_payload)
+    leak_hits = scan_forbidden_leaks(body)
     if leak_hits:
         raise ContractAuditError(f"forbidden leak substrings in response: {sorted(leak_hits)}")
 

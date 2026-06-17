@@ -122,6 +122,8 @@ cd apps/api
 uv run python scripts/audit_response_contract.py
 ```
 
+The audit fails on contract violations including forbidden secret/path leaks (`/home/`, `/mnt/`, database URLs, etc.) anywhere in audited JSON responses. See [docs/API_RESPONSE_CONTRACT.md](docs/API_RESPONSE_CONTRACT.md).
+
 GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/api.yml) runs `./scripts/validate.sh` for `apps/api` changes and `apps/email-pipeline` dependency changes.
 
 ### Render (native runtime)
