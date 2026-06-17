@@ -113,6 +113,15 @@ cd apps/api
 uv run pytest tests -q
 ```
 
+### Inspect response shapes
+
+For a human-readable snapshot of real `TestClient` responses against a minimal local fixture (no live server), run:
+
+```bash
+cd apps/api
+uv run python scripts/audit_response_contract.py
+```
+
 GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/api.yml) runs `./scripts/validate.sh` for `apps/api` changes and `apps/email-pipeline` dependency changes.
 
 ### Render (native runtime)
