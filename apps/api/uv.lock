@@ -278,6 +278,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "origenlab-email-pipeline" },
+    { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "uvicorn", extra = ["standard"] },
@@ -302,6 +303,7 @@ postgres = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "origenlab-email-pipeline", editable = "../email-pipeline" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings", specifier = ">=2" },

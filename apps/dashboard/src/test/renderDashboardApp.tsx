@@ -1,4 +1,5 @@
-import { render, screen, waitFor, type RenderOptions, type RenderResult } from "@testing-library/react";
+import { render, type RenderOptions, type RenderResult } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/dom";
 import { DashboardApp } from "../pages/DashboardApp";
 
 /** Waits until DashboardDataProvider initial parallel loads have settled. */
