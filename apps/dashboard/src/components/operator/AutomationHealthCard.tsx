@@ -17,6 +17,10 @@ import {
   mirrorLoopStatusLabel,
   operatorAutomationStatePartiallyMissing,
 } from "../../lib/automationHealthLabels";
+import {
+  formatOperatorPathDisplay,
+  formatSectionPathDisplay,
+} from "../../lib/operatorPathDisplay";
 
 export interface AutomationHealthCardProps {
   variant?: "summary" | "detailed";
@@ -152,6 +156,20 @@ export function AutomationHealthCard({
   const snapshotSummary = buildAutomationSnapshotSummary(status);
   const chilecompraSummary = buildChilecompraAutomationSummary(status);
   const cronNote = status.cron.note?.trim();
+  const activeCurrentDisplay = formatOperatorPathDisplay(
+    status.active_current_dir,
+    status.active_current_dir_info,
+  );
+  const publishedQueueDisplay = formatSectionPathDisplay(
+    "published_queue",
+    chilecompra.published_queue,
+    chilecompra.path_info,
+  );
+  const candidateAuditDisplay = formatSectionPathDisplay(
+    "candidate_audit",
+    chilecompra.candidate_audit,
+    chilecompra.path_info,
+  );
 
   return (
     <section
@@ -288,6 +306,9 @@ export function AutomationHealthCard({
               label="Acción recomendada"
               value={automationRecommendedActionLabel(status.recommended_action)}
             />
+            {activeCurrentDisplay ? (
+              <DetailRow label="Directorio activo" value={activeCurrentDisplay} />
+            ) : null}
           </dl>
 
           <div className="rounded-lg border border-[var(--color-border)] bg-white/60 px-3 py-3">
@@ -411,6 +432,12 @@ export function AutomationHealthCard({
                 label="Fallas consecutivas"
                 value={String(chilecompra.consecutive_failures)}
               />
+              {publishedQueueDisplay ? (
+                <DetailRow label="Cola publicada" value={publishedQueueDisplay} />
+              ) : null}
+              {candidateAuditDisplay ? (
+                <DetailRow label="Auditoría de candidatos" value={candidateAuditDisplay} />
+              ) : null}
               {status.cron.chilecompra_entry_present !== undefined ? (
                 <DetailRow
                   label="Cron instalado"

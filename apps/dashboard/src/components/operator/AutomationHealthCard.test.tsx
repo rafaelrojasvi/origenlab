@@ -10,6 +10,12 @@ import { AutomationHealthCard } from "./AutomationHealthCard";
 const BASE_STATUS: OperatorAutomationStatus = {
   generated_at_utc: "2026-06-10T18:30:00+00:00",
   active_current_dir: "/hidden/active/current",
+  active_current_dir_info: {
+    redacted: true,
+    basename: "current",
+    kind: "directory",
+  },
+  path_redaction_applied: true,
   verdict: "healthy",
   daily_core: {
     exists: true,
@@ -171,7 +177,9 @@ describe("AutomationHealthCard", () => {
     screen.getByText("Dashboard auto-mirror");
     screen.getByText("no_change");
     screen.getByText(/not inspected by API/);
+    screen.getByText("current (directory, redacted)");
     expect(screen.queryByText(/hidden\/active\/current/)).toBeNull();
+    expect(screen.queryByText(/\/home\//)).toBeNull();
   });
 
   it("shows postgres snapshot source when published to mirror", async () => {
@@ -322,5 +330,79 @@ describe("AutomationHealthCard", () => {
       screen.getByTestId("chilecompra-automation-section");
     });
     expect(screen.getAllByText("no").length).toBeGreaterThan(0);
+  });
+
+  it("renders redacted active_current_dir_info basename in detailed mode", async () => {
+    mockFetch.mockResolvedValue({
+      ...BASE_STATUS,
+      active_current_dir:
+        "/home/rafael/dev/freelance/origenlab/apps/email-pipeline/reports/out/active/current",
+      active_current_dir_info: {
+        redacted: true,
+        basename: "current",
+        kind: "directory",
+      },
+      path_redaction_applied: true,
+    });
+    render(<AutomationHealthCard variant="detailed" />);
+    await waitFor(() => {
+      screen.getByText("Directorio activo");
+    });
+    screen.getByText("current (directory, redacted)");
+    expect(screen.queryByText(/\/home\//)).toBeNull();
+    expect(screen.queryByText(/email-pipeline/)).toBeNull();
+  });
+
+  it("falls back to legacy raw path when redacted info is absent", async () => {
+    mockFetch.mockResolvedValue({
+      ...BASE_STATUS,
+      active_current_dir: "/legacy/path/to/current",
+      active_current_dir_info: null,
+      path_redaction_applied: undefined,
+    });
+    render(<AutomationHealthCard variant="detailed" />);
+    await waitFor(() => {
+      screen.getByText("Directorio activo");
+    });
+    screen.getByText("/legacy/path/to/current");
+  });
+
+  it("renders ChileCompra path_info basenames instead of raw queue paths", async () => {
+    mockFetch.mockResolvedValue({
+      ...BASE_STATUS,
+      chilecompra_equipment_auto_refresh: {
+        state_exists: true,
+        lock_live: false,
+        lock_age_seconds: null,
+        last_result: "refreshed",
+        freshness_age_seconds: 4620,
+        next_run_due: false,
+        consecutive_failures: 0,
+        published_rows: 7,
+        published_queue:
+          "/home/ops/reports/out/active/current/equipment_first_operator_queue_20260616.csv",
+        candidate_audit:
+          "/home/ops/reports/out/active/current/chilecompra_equipment_candidate_audit_20260616.csv",
+        path_info: {
+          published_queue: {
+            redacted: true,
+            basename: "equipment_first_operator_queue_20260616.csv",
+            kind: "file",
+          },
+          candidate_audit: {
+            redacted: true,
+            basename: "chilecompra_equipment_candidate_audit_20260616.csv",
+            kind: "file",
+          },
+        },
+      },
+    });
+    render(<AutomationHealthCard variant="detailed" />);
+    await waitFor(() => {
+      screen.getByText("Cola publicada");
+    });
+    screen.getByText("equipment_first_operator_queue_20260616.csv (file, redacted)");
+    screen.getByText("chilecompra_equipment_candidate_audit_20260616.csv (file, redacted)");
+    expect(screen.queryByText(/\/home\//)).toBeNull();
   });
 });
