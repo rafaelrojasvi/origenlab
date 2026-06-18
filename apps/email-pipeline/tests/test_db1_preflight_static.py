@@ -127,14 +127,17 @@ def test_0027_equipment_opportunity_key_column_index_and_backfill() -> None:
     assert "alter column opportunity_key set not null" in migration
 
 
-def test_0028_v_equipment_opportunity_exposes_opportunity_key_near_ids() -> None:
+def test_0028_v_equipment_opportunity_appends_opportunity_key_after_canonical_reason() -> None:
     migration = (
         _ALEMBIC_VERSIONS / "20260617_0028_api_v_equipment_opportunity_key.py"
     ).read_text(encoding="utf-8")
-    select_start = migration.index("eo.id AS opportunity_id")
-    select_block = migration[select_start : migration.index("FROM commercial.equipment_opportunity", select_start)]
-    assert select_block.index("eo.opportunity_key") < select_block.index("eo.source_id")
-    assert select_block.index("eo.source_id") < select_block.index("eo.priority_rank")
+    upgrade_block = migration.split("_VIEW_DOWNGRADE", 1)[0]
+    select_start = upgrade_block.index("eo.id AS opportunity_id")
+    select_block = upgrade_block[select_start : upgrade_block.index("FROM commercial.equipment_opportunity", select_start)]
+    assert "eo.opportunity_key" in select_block
+    assert select_block.index("ls.canonical_reason") < select_block.index("eo.opportunity_key")
+    assert select_block.index("eo.source_id") < select_block.index("eo.opportunity_key")
+    assert "eo.opportunity_key" not in select_block.split("eo.source_id", 1)[0]
 
 
 def test_db1_v_contact_profile_has_no_with_params_cte() -> None:

@@ -37,7 +37,6 @@ WITH latest_source AS (
 )
 SELECT
   eo.id AS opportunity_id,
-  eo.opportunity_key,
   eo.source_id,
   eo.priority_rank,
   eo.codigo_licitacion,
@@ -59,7 +58,8 @@ SELECT
   eo.extra_json,
   ls.source_kind,
   ls.artifact_basename,
-  ls.canonical_reason
+  ls.canonical_reason,
+  eo.opportunity_key
 FROM commercial.equipment_opportunity eo
 JOIN commercial.equipment_opportunity_source src ON src.id = eo.source_id
 JOIN latest_source ls ON src.id = ls.id
