@@ -82,6 +82,25 @@ typed Postgres read model (commercial.* / api.*)
 
 ---
 
+## Correlation audit before uniqueness
+
+`opportunity_key` is **indexed but intentionally not unique** during the CSV bridge phase. The same stable key may appear on multiple `commercial.equipment_opportunity` rows when a new source load re-ingests the same `codigo_licitacion` or when canonical and non-canonical sources both contain the opportunity.
+
+**Audit views** (read-only; no public HTTP endpoint yet):
+
+| View | Schema | Purpose |
+|------|--------|---------|
+| `v_equipment_opportunity_key_audit` | `commercial` | Correlation report grouped by `opportunity_key` |
+| `v_equipment_opportunity_key_audit` | `api` | Same data for API-role / tooling queries |
+
+Columns include `row_count`, `source_count`, `canonical_row_count`, `has_canonical`, sync/close time ranges, sample buyer/title/category, and distinct `source_artifacts` / `canonical_reasons`.
+
+CLI: `scripts/audit_equipment_opportunity_keys.py` lists repeated keys (`row_count > 1`) from `api.v_equipment_opportunity_key_audit`.
+
+Use this evidence before introducing snapshot/history tables or a uniqueness constraint on `opportunity_key`. Repeated keys are **expected** until the bridge loader is retired.
+
+---
+
 ## Source artifact metadata
 
 `commercial.equipment_opportunity_source` stores both **internal path provenance** and **semantic source metadata**:
