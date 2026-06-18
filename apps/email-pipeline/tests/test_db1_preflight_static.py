@@ -115,6 +115,28 @@ def test_0025_equipment_source_artifact_metadata_backfill() -> None:
     assert "regexp_replace(csv_path" in migration
 
 
+def test_0027_equipment_opportunity_key_column_index_and_backfill() -> None:
+    migration = (
+        _ALEMBIC_VERSIONS / "20260617_0027_equipment_opportunity_key.py"
+    ).read_text(encoding="utf-8").lower()
+    assert "opportunity_key" in migration
+    assert "idx_equipment_opportunity_key" in migration
+    assert "equipment:" in migration
+    assert "equipment_queue" in migration
+    assert "stable business/correlation key" in migration
+    assert "alter column opportunity_key set not null" in migration
+
+
+def test_0028_v_equipment_opportunity_exposes_opportunity_key_near_ids() -> None:
+    migration = (
+        _ALEMBIC_VERSIONS / "20260617_0028_api_v_equipment_opportunity_key.py"
+    ).read_text(encoding="utf-8")
+    select_start = migration.index("eo.id AS opportunity_id")
+    select_block = migration[select_start : migration.index("FROM commercial.equipment_opportunity", select_start)]
+    assert select_block.index("eo.opportunity_key") < select_block.index("eo.source_id")
+    assert select_block.index("eo.source_id") < select_block.index("eo.priority_rank")
+
+
 def test_db1_v_contact_profile_has_no_with_params_cte() -> None:
     views = (_ALEMBIC_VERSIONS / "20260519_0014_api_read_model_views.py").read_text(encoding="utf-8").lower()
     start = views.find("create or replace view api.v_contact_profile")

@@ -62,8 +62,23 @@ typed Postgres read model (commercial.* / api.*)
         └──► CSV export / audit artifact (generated from read model, not identity source)
 ```
 
-- **Identity** for an equipment opportunity row: `codigo_licitacion` plus source/detail semantics in Postgres (`extra_json`, ChileCompra fields), **not** the queue CSV filename.
+- **Identity** for an equipment opportunity row: **`opportunity_key`** (`equipment:<source_slug>:<codigo_licitacion>`) for cross-source correlation; `codigo_licitacion` plus ChileCompra/detail fields remain display semantics — not the queue CSV filename.
 - **`meta.source_path` / `source_path_info`** in API responses: audit/metadata about which mirror artifact row came from — basename-only in JSON; not a stable business key.
+
+---
+
+## Stable opportunity key
+
+`commercial.equipment_opportunity.opportunity_key` is the **cross-source correlation key** for equipment opportunities:
+
+| Property | Rule |
+|----------|------|
+| Format | `equipment:<source_slug>:<codigo_licitacion_lower>` |
+| `source_slug` | From row/`extra_json` `source` when present (normalized); else `equipment_queue` |
+| Uniqueness | **Not** unique yet — bridge snapshots may repeat the same opportunity across `source_id` loads |
+| Provenance | `source_id`, `csv_path`, and `source_path` remain load/artifact provenance, not business identity |
+
+`api.v_equipment_opportunity` and `GET /opportunities/equipment` expose `opportunity_key` additively on each item.
 
 ---
 

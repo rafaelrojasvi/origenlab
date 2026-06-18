@@ -39,6 +39,7 @@ def _fixture_row(**overrides: Any) -> dict[str, Any]:
         "operator_note": "fit=90",
         "source_path": "/data/equipment_first_operator_queue_20260518.csv",
         "campaign_mode": "equipment_first",
+        "opportunity_key": "equipment:equipment_queue:lp-001",
     }
     base.update(overrides)
     return base
@@ -49,6 +50,7 @@ def test_map_equipment_row_fixture() -> None:
     assert mapped["priority_rank"] == 1
     assert mapped["codigo_licitacion"] == "LP-001"
     assert mapped["close_date"] == "2026-06-01"
+    assert mapped["opportunity_key"] == "equipment:equipment_queue:lp-001"
 
 
 def test_map_equipment_row_merges_extra_json_detail_fields() -> None:
@@ -200,6 +202,7 @@ def test_postgres_equipment_queries_canonical_view() -> None:
     assert cur is not None
     sql_lower = cur.last_sql.lower()
     assert "api.v_equipment_opportunity" in sql_lower
+    assert "opportunity_key" in sql_lower
     assert "is_canonical_source = true" in sql_lower
     assert "active_current" not in sql_lower
     assert "equipment_first_operator_queue" not in sql_lower

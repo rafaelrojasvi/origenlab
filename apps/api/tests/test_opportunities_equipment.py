@@ -90,6 +90,7 @@ def test_opportunities_equipment_returns_200(tmp_path: Path) -> None:
     assert data["meta"]["count"] == 3
     assert data["items"][0]["priority_rank"] == 1
     assert data["items"][0]["codigo_licitacion"] == "LP-001"
+    assert data["items"][0]["opportunity_key"] == "equipment:equipment_queue:lp-001"
 
 
 def test_opportunities_equipment_reads_manifest_canonical_path(tmp_path: Path) -> None:
@@ -152,6 +153,7 @@ def test_opportunities_equipment_postgres_backend_uses_read_model_not_csv(
 
     row = map_equipment_row(
         {
+            "opportunity_key": "equipment:equipment_queue:lp-pg",
             "priority_rank": 1,
             "codigo_licitacion": "LP-PG",
             "buyer": "Postgres Buyer",
@@ -205,3 +207,4 @@ def test_opportunities_equipment_postgres_backend_uses_read_model_not_csv(
     assert data["meta"]["count"] == 1
     assert data["items"][0]["codigo_licitacion"] == "LP-PG"
     assert data["items"][0]["buyer"] == "Postgres Buyer"
+    assert data["items"][0]["opportunity_key"] == "equipment:equipment_queue:lp-pg"

@@ -34,6 +34,9 @@ _SANTIAGO = ZoneInfo("America/Santiago")
 _FORBIDDEN_PATH_FRAGMENT = "buyer_opportunity_crosscheck"
 
 _EXTRA_OPERATOR_KEYS = frozenset({"supplier_contact", "gmail_prior_thread", "outreach_state"})
+_DEFAULT_SOURCE_SLUG = "equipment_queue"
+_SOURCE_SLUG_RE = re.compile(r"[^a-z0-9_:-]+")
+_SOURCE_SLUG_TRIM_RE = re.compile(r"^_+|_+$")
 
 
 def _require_psycopg() -> None:
@@ -128,11 +131,33 @@ def build_extra_json(row: dict[str, str]) -> dict[str, str]:
     return extra
 
 
+def normalize_source_slug(raw: str | None) -> str:
+    text = (raw or "").strip().lower()
+    if not text:
+        return _DEFAULT_SOURCE_SLUG
+    slug = _SOURCE_SLUG_RE.sub("_", text)
+    slug = _SOURCE_SLUG_TRIM_RE.sub("", slug)
+    return slug or _DEFAULT_SOURCE_SLUG
+
+
+def derive_opportunity_key(row: dict[str, str]) -> str:
+    """Stable business/correlation key: equipment:<source_slug>:<codigo_lower>."""
+    codigo = (row.get("codigo_licitacion") or "").strip()
+    if not codigo:
+        raise ValueError("codigo_licitacion required for opportunity_key")
+    extra = build_extra_json(row)
+    source_raw = (row.get("source") or extra.get("source") or "").strip()
+    source_slug = normalize_source_slug(source_raw)
+    return f"equipment:{source_slug}:{codigo.lower()}"
+
+
 def row_to_opportunity_values(row: dict[str, str]) -> dict[str, Any]:
     close_date = (row.get("close_date") or "").strip() or None
+    codigo = (row.get("codigo_licitacion") or "").strip()
+    extra_json = build_extra_json(row)
     return {
         "priority_rank": parse_priority_rank(row.get("priority_rank")),
-        "codigo_licitacion": (row.get("codigo_licitacion") or "").strip(),
+        "codigo_licitacion": codigo,
         "buyer": (row.get("buyer") or "").strip() or None,
         "region": (row.get("region") or "").strip() or None,
         "close_date": close_date,
@@ -145,7 +170,8 @@ def row_to_opportunity_values(row: dict[str, str]) -> dict[str, Any]:
         "contact_status": (row.get("contact_status") or "").strip() or None,
         "operator_note": (row.get("operator_note") or "").strip() or None,
         "dnr_flags": (row.get("dnr_flags") or "").strip() or None,
-        "extra_json": build_extra_json(row),
+        "extra_json": extra_json,
+        "opportunity_key": derive_opportunity_key(row) if codigo else None,
     }
 
 
@@ -372,16 +398,17 @@ def _insert_opportunity_rows(
         cur.execute(
             """
             INSERT INTO commercial.equipment_opportunity (
-              source_id, priority_rank, codigo_licitacion, buyer, region,
+              source_id, opportunity_key, priority_rank, codigo_licitacion, buyer, region,
               close_date, close_at, equipment_category, item_description,
               next_action, safe_channel, supplier_needed, contact_status,
               operator_note, dnr_flags, extra_json
             ) VALUES (
-              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """,
             (
                 source_id,
+                values["opportunity_key"],
                 values["priority_rank"],
                 codigo,
                 values["buyer"],

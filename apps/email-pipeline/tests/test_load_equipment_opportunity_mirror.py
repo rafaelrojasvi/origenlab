@@ -115,6 +115,26 @@ def test_parse_priority_rank_empty_is_null() -> None:
     assert mirror.parse_priority_rank("3") == 3
 
 
+def test_derive_opportunity_key_uses_source_and_codigo() -> None:
+    row = {"codigo_licitacion": "2777-10-LE26", "source": "chilecompra_api"}
+    assert mirror.derive_opportunity_key(row) == "equipment:chilecompra_api:2777-10-le26"
+
+
+def test_derive_opportunity_key_normalizes_source_slug() -> None:
+    row = {"codigo_licitacion": "LP-1", "source": " ChileCompra API "}
+    assert mirror.derive_opportunity_key(row) == "equipment:chilecompra_api:lp-1"
+
+
+def test_derive_opportunity_key_missing_source_uses_equipment_queue() -> None:
+    row = {"codigo_licitacion": "LP-001"}
+    assert mirror.derive_opportunity_key(row) == "equipment:equipment_queue:lp-001"
+
+
+def test_row_to_opportunity_values_includes_opportunity_key() -> None:
+    values = mirror.row_to_opportunity_values({"codigo_licitacion": "LP-9", "source": "chilecompra_api"})
+    assert values["opportunity_key"] == "equipment:chilecompra_api:lp-9"
+
+
 def test_extra_json_contains_non_operator_fields() -> None:
     row = {
         "priority_rank": "1",
@@ -459,6 +479,13 @@ def test_apply_writes_source_and_rows(active_workspace: Path, monkeypatch: pytes
     assert insert_params[-2] == "equipment_first_operator_queue_20260518.csv"
     assert insert_params[-1] == "manifest_canonical"
     assert any("INSERT INTO commercial.equipment_opportunity" in s for s in sqls)
+    opp_insert_params = [
+        p
+        for s, p in conn.cur.statements
+        if "INSERT INTO commercial.equipment_opportunity (" in s
+    ]
+    assert opp_insert_params
+    assert opp_insert_params[0][1] == "equipment:equipment_queue:code-a"
 
 
 def test_empty_manifest_still_promotes_resolved_active_queue(active_workspace: Path) -> None:
@@ -575,20 +602,25 @@ def test_apply_and_view_on_disposable_postgres(active_workspace: Path) -> None:
             assert int(cur.fetchone()[0]) == 1
             cur.execute(
                 """
-                SELECT is_canonical, source_kind, artifact_basename, canonical_reason
-                FROM commercial.equipment_opportunity_source
-                WHERE id = %s
+                SELECT is_canonical, source_kind, artifact_basename, canonical_reason, opportunity_key
+                FROM commercial.equipment_opportunity_source eos
+                JOIN commercial.equipment_opportunity eo ON eo.source_id = eos.id
+                WHERE eos.id = %s
+                LIMIT 1
                 """,
                 (summary["source_id"],),
             )
-            is_canonical, source_kind, artifact_basename, canonical_reason = cur.fetchone()
+            row = cur.fetchone()
+            assert row is not None
+            is_canonical, source_kind, artifact_basename, canonical_reason, opportunity_key = row
             assert is_canonical is True
             assert source_kind == "csv_artifact"
             assert artifact_basename == "equipment_first_operator_queue_20260518.csv"
             assert canonical_reason == "manifest_canonical"
+            assert opportunity_key == "equipment:equipment_queue:code-a"
             cur.execute(
                 """
-                SELECT source_kind, artifact_basename, canonical_reason
+                SELECT opportunity_key, source_kind, artifact_basename, canonical_reason
                 FROM api.v_equipment_opportunity
                 WHERE codigo_licitacion = %s
                 LIMIT 1
@@ -597,9 +629,10 @@ def test_apply_and_view_on_disposable_postgres(active_workspace: Path) -> None:
             )
             view_row = cur.fetchone()
             if view_row is not None:
-                assert view_row[0] == "csv_artifact"
-                assert view_row[1] == "equipment_first_operator_queue_20260518.csv"
-                assert view_row[2] == "manifest_canonical"
+                assert view_row[0] == "equipment:equipment_queue:code-a"
+                assert view_row[1] == "csv_artifact"
+                assert view_row[2] == "equipment_first_operator_queue_20260518.csv"
+                assert view_row[3] == "manifest_canonical"
 
     reapply = mirror.apply_load(
         pg_url,
