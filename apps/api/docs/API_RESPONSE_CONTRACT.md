@@ -60,6 +60,11 @@ Routes may add **documented** meta fields (e.g. `reduced_mode`, `campaign_mode`,
 |-------|----------------|
 | `GET /cases/warm` | `WarmCasesResponse` — `meta` + `items` |
 | `GET /opportunities/equipment` | `EquipmentOpportunitiesResponse` — `meta` + `items` |
+
+`EquipmentOpportunityItem` includes **`opportunity_key`** (stable cross-source correlation id: `equipment:<source_slug>:<codigo>`). Additive; clients may ignore until needed.
+
+| Route | Response model |
+|-------|----------------|
 | `GET /emails/recent` | `EmailsRecentResponse` — `meta` + `items` (+ extra top-level counters documented in schema) |
 | `GET /mirror/*` list routes | Pipeline mirror schemas — `meta` + `items` (or paginated variants) |
 

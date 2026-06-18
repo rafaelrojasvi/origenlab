@@ -28,6 +28,7 @@ class EquipmentAnexoItem(BaseModel):
 
 
 class EquipmentOpportunityItem(BaseModel):
+    opportunity_key: str = ""
     priority_rank: int
     codigo_licitacion: str = ""
     buyer: str = ""

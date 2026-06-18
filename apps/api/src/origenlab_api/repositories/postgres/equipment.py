@@ -16,6 +16,7 @@ from origenlab_api.settings import Settings
 
 _EQUIPMENT_SQL = """
 SELECT
+  opportunity_key,
   priority_rank,
   codigo_licitacion,
   buyer,
@@ -69,6 +70,7 @@ def map_equipment_row(row: dict[str, Any]) -> dict[str, Any]:
 
     return merge_equipment_detail_fields(
         {
+            "opportunity_key": _str_field(row.get("opportunity_key")),
             "priority_rank": priority_rank,
             "codigo_licitacion": _str_field(row.get("codigo_licitacion")),
             "buyer": _str_field(row.get("buyer")),

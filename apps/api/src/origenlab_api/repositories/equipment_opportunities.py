@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from origenlab_email_pipeline.equipment_first_operator_queue import _load_csv
+from origenlab_email_pipeline.equipment_opportunity_mirror import derive_opportunity_key
 
 from origenlab_api.repositories.equipment_detail_fields import merge_equipment_detail_fields
 from origenlab_api.schemas.opportunities import EquipmentOpportunitiesMeta
@@ -73,10 +74,12 @@ def _parse_priority(value: str | None) -> int:
 
 
 def row_to_equipment_item(row: dict[str, str]) -> dict[str, Any]:
-    return merge_equipment_detail_fields(
+    codigo = (row.get("codigo_licitacion") or "").strip()
+    base = merge_equipment_detail_fields(
         {
+            "opportunity_key": derive_opportunity_key(row) if codigo else "",
             "priority_rank": _parse_priority(row.get("priority_rank")),
-            "codigo_licitacion": (row.get("codigo_licitacion") or "").strip(),
+            "codigo_licitacion": codigo,
             "buyer": (row.get("buyer") or "").strip(),
             "region": (row.get("region") or "").strip(),
             "close_date": (row.get("close_date") or "").strip(),
@@ -91,6 +94,7 @@ def row_to_equipment_item(row: dict[str, str]) -> dict[str, Any]:
         },
         row,
     )
+    return base
 
 
 def fetch_equipment_opportunities(
