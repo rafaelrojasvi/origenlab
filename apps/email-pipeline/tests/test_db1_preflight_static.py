@@ -140,6 +140,19 @@ def test_0028_v_equipment_opportunity_appends_opportunity_key_after_canonical_re
     assert "eo.opportunity_key" not in select_block.split("eo.source_id", 1)[0]
 
 
+def test_0030_v_equipment_opportunity_current_dedupes_by_opportunity_key() -> None:
+    migration = (
+        _ALEMBIC_VERSIONS / "20260617_0030_api_v_equipment_opportunity_current.py"
+    ).read_text(encoding="utf-8").lower()
+    assert "api.v_equipment_opportunity_current" in migration
+    assert "partition by opportunity_key" in migration
+    assert "is_canonical_source = true" in migration
+    assert "row_number()" in migration
+    assert "where rn = 1" in migration
+    assert "create unique" not in migration
+    assert "unique (" not in migration
+
+
 def test_db1_v_contact_profile_has_no_with_params_cte() -> None:
     views = (_ALEMBIC_VERSIONS / "20260519_0014_api_read_model_views.py").read_text(encoding="utf-8").lower()
     start = views.find("create or replace view api.v_contact_profile")

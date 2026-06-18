@@ -19,7 +19,7 @@
 | **Postgres (`api.*` views)** | Typed **read model** for API and dashboard in production |
 | **CSV queue files** | Export, audit, and operator artifacts — **not** the public HTTP contract |
 
-Production **`GET /opportunities/equipment`** must read **`api.v_equipment_opportunity`** via `ORIGENLAB_API_BACKEND=postgres`. The SQLite/active-current CSV path is **dev/local only**.
+Production **`GET /opportunities/equipment`** must read **`api.v_equipment_opportunity_current`** via `ORIGENLAB_API_BACKEND=postgres`. The SQLite/active-current CSV path is **dev/local only**.
 
 ---
 
@@ -36,7 +36,10 @@ commercial.equipment_opportunity_source
 commercial.equipment_opportunity
         │
         ▼
-api.v_equipment_opportunity   (is_canonical_source = TRUE)
+api.v_equipment_opportunity   (canonical source base rows)
+        │
+        ▼
+api.v_equipment_opportunity_current   (one row per opportunity_key)
         │
         ▼
 apps/api  PostgresEquipmentOpportunityRepository
@@ -101,6 +104,24 @@ Use this evidence before introducing snapshot/history tables or a uniqueness con
 
 ---
 
+## Current read model
+
+| View | Role |
+|------|------|
+| `api.v_equipment_opportunity` | **Base** read model: rows from the current canonical `equipment_opportunity_source` load |
+| `api.v_equipment_opportunity_current` | **Current** API/dashboard view: canonical rows deduplicated to **one row per `opportunity_key`** |
+
+Selection rules for `api.v_equipment_opportunity_current`:
+
+1. Include only rows where `is_canonical_source = TRUE` (from the base view).
+2. When multiple canonical rows share an `opportunity_key`, keep one row via `row_number()` ordered by `priority_rank`, `close_at`, `synced_at`, `opportunity_id`.
+
+Historical or stale keys that appear only on non-canonical sources remain visible in **`v_equipment_opportunity_key_audit`**, not in the current API view. **`opportunity_key` is still not unique** at the table level; current selection is view-level read-model logic only.
+
+Production **`GET /opportunities/equipment`** queries `api.v_equipment_opportunity_current`.
+
+---
+
 ## Source artifact metadata
 
 `commercial.equipment_opportunity_source` stores both **internal path provenance** and **semantic source metadata**:
@@ -122,12 +143,12 @@ Use this evidence before introducing snapshot/history tables or a uniqueness con
 
 | Environment | `ORIGENLAB_API_BACKEND` | Equipment data source |
 |-------------|-------------------------|------------------------|
-| **Production** (`ORIGENLAB_ENV=production`) | **must be `postgres`** | `api.v_equipment_opportunity` only |
+| **Production** (`ORIGENLAB_ENV=production`) | **must be `postgres`** | `api.v_equipment_opportunity_current` only |
 | **Local / CI dev** | `sqlite` (default) or `postgres` | CSV fallback allowed only when backend is `sqlite` |
 
 `apps/api` tests lock this contract:
 
-- Postgres repository SQL references `api.v_equipment_opportunity` and `is_canonical_source = TRUE`.
+- Postgres repository SQL references `api.v_equipment_opportunity_current` (not CSV/active_current).
 - Postgres repository does not call `fetch_equipment_opportunities` or read `active_current` CSV.
 - `ORIGENLAB_ENV=production` + `ORIGENLAB_API_BACKEND=sqlite` fails at settings validation.
 - Route tests prove `api_backend=postgres` serves `meta.data_source=postgres_mirror` without CSV fallback.

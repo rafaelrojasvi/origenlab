@@ -1,4 +1,4 @@
-"""Postgres equipment opportunities (read-only ``api.v_equipment_opportunity``)."""
+"""Postgres equipment opportunities (read-only ``api.v_equipment_opportunity_current``)."""
 
 from __future__ import annotations
 
@@ -33,9 +33,8 @@ SELECT
   extra_json,
   source_path,
   campaign_mode
-FROM api.v_equipment_opportunity
-WHERE is_canonical_source = TRUE
-  AND (%(priority)s::int IS NULL OR priority_rank = %(priority)s)
+FROM api.v_equipment_opportunity_current
+WHERE (%(priority)s::int IS NULL OR priority_rank = %(priority)s)
   AND (
     %(next_action)s::text IS NULL
     OR lower(trim(COALESCE(next_action, ''))) = %(next_action)s
