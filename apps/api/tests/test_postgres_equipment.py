@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 from contextlib import contextmanager
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from origenlab_api.backends.factory import get_repository_bundle
+from origenlab_api.backends.factory import get_repository_bundle, validate_api_settings
 from origenlab_api.repositories.postgres.equipment import (
     PostgresEquipmentOpportunityRepository,
     build_equipment_meta,
@@ -197,14 +198,44 @@ def test_postgres_equipment_queries_canonical_view() -> None:
         items, meta = repo.list_equipment(limit=10, priority=2, safe_channel="mercado_publico_bid")
         cur = conn.last_cursor
     assert cur is not None
-    assert "api.v_equipment_opportunity" in cur.last_sql
-    assert "is_canonical_source = TRUE" in cur.last_sql
+    sql_lower = cur.last_sql.lower()
+    assert "api.v_equipment_opportunity" in sql_lower
+    assert "is_canonical_source = true" in sql_lower
+    assert "active_current" not in sql_lower
+    assert "equipment_first_operator_queue" not in sql_lower
     assert cur.last_params["priority"] == 2
     assert cur.last_params["safe_channel"] == "mercado_publico_bid"
     assert cur.last_params["limit"] == 10
     assert len(items) == 1
     assert meta.data_source == "postgres_mirror"
     assert meta.source_path.endswith(".csv")
+
+
+def test_postgres_equipment_repository_does_not_use_csv_fallback() -> None:
+    import origenlab_api.repositories.postgres.equipment as pg_equipment
+
+    source = inspect.getsource(pg_equipment)
+    forbidden = (
+        "fetch_equipment_opportunities",
+        "resolved_active_current",
+        "equipment_first_operator_queue",
+        "active_current",
+    )
+    for token in forbidden:
+        assert token not in source
+
+
+def test_production_env_rejects_sqlite_backend_before_csv_equipment_repo() -> None:
+    settings = Settings(
+        env="production",
+        api_backend="sqlite",
+        postgres_url="postgresql://127.0.0.1:5432/db",
+        api_cors_origins="https://dashboard.origenlab.cl",
+    )
+    with pytest.raises(ValueError, match="ORIGENLAB_ENV=production requires ORIGENLAB_API_BACKEND=postgres"):
+        validate_api_settings(settings)
+    with pytest.raises(ValueError, match="ORIGENLAB_API_BACKEND=postgres"):
+        get_repository_bundle(settings)
 
 
 def test_postgres_equipment_no_rows_graceful() -> None:

@@ -68,7 +68,9 @@ CORS middleware allows **GET, HEAD, OPTIONS** only. See [`../email-pipeline/docs
 | GET | `/operator/automation-status` | API-0 | Read-only automation health (mail auto-refresh + dashboard auto-mirror local state) |
 | GET | `/emails/recent` | API-1 | Recent canonical Gmail rows (previews only; no body) |
 | GET | `/cases/warm` | API-1.1 | Warm commercial case queue (previews; heuristic categories) |
-| GET | `/opportunities/equipment` | API-1.2 | Canonical `equipment_first_operator_queue_*.csv` (manifest; no regenerate) |
+| GET | `/opportunities/equipment` | API-1.2 | Equipment-first operator queue (**Postgres read model** in production; SQLite/CSV fallback dev-only) |
+
+**Equipment read-model boundary:** production serves `api.v_equipment_opportunity` when `ORIGENLAB_API_BACKEND=postgres`. See [`../email-pipeline/docs/architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md`](../email-pipeline/docs/architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md).
 | GET | `/contacts/{email}` | API-1.3 / **Dashboard-2** | Read-only contact profile (SQLite or postgres mirror); used by Today side panel |
 
 OpenAPI: `/docs` when the server is running.
