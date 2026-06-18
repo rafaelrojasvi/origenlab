@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -11,6 +12,11 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from origenlab_api.main import create_app
+from origenlab_api.repositories.postgres.equipment import (
+    PostgresEquipmentOpportunityRepository,
+    map_equipment_row,
+)
+from origenlab_api.schemas.opportunities import EquipmentOpportunitiesMeta
 from origenlab_api.settings import Settings
 
 _OPERATOR_HEADER = (
@@ -134,3 +140,68 @@ def test_opportunities_equipment_no_extra_columns(tmp_path: Path) -> None:
     item = client.get("/opportunities/equipment?limit=1").json()["items"][0]
     assert "supplier_contact" not in item
     assert "gmail_prior_thread" not in item
+
+
+def test_opportunities_equipment_postgres_backend_uses_read_model_not_csv(
+    tmp_path: Path,
+) -> None:
+    """Production path: Postgres repository only; active/current CSV must not be read."""
+    active = tmp_path / "current"
+    active.mkdir(parents=True)
+    _fixture_csv(active)
+
+    row = map_equipment_row(
+        {
+            "priority_rank": 1,
+            "codigo_licitacion": "LP-PG",
+            "buyer": "Postgres Buyer",
+            "region": "RM",
+            "close_date": "2026-06-01",
+            "equipment_category": "centrifuge",
+            "item_description": "From read model",
+            "next_action": "quote_now",
+            "safe_channel": "mercado_publico_bid",
+            "supplier_needed": "yes",
+            "contact_status": "no_verified_buyer_email",
+            "operator_note": "mirror",
+        }
+    )
+    meta = EquipmentOpportunitiesMeta(
+        data_source="postgres_mirror",
+        read_only=True,
+        count=1,
+        source_path="equipment_first_operator_queue_20260518.csv",
+        campaign_mode="equipment_first",
+        reduced_mode=False,
+        note="",
+    )
+
+    def _postgres_list_equipment(self, **kwargs):  # noqa: ANN001, ARG001
+        return ([row], meta)
+
+    app = create_app()
+    from origenlab_api.settings import get_settings
+
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        api_backend="postgres",
+        postgres_url="postgresql://127.0.0.1:5432/test",
+        active_current=active,
+    )
+
+    with patch.object(
+        PostgresEquipmentOpportunityRepository,
+        "list_equipment",
+        _postgres_list_equipment,
+    ):
+        with patch(
+            "origenlab_api.repositories.equipment_opportunities.fetch_equipment_opportunities",
+            side_effect=AssertionError(
+                "SQLite/CSV equipment repository must not run when ORIGENLAB_API_BACKEND=postgres"
+            ),
+        ):
+            data = TestClient(app).get("/opportunities/equipment").json()
+
+    assert data["meta"]["data_source"] == "postgres_mirror"
+    assert data["meta"]["count"] == 1
+    assert data["items"][0]["codigo_licitacion"] == "LP-PG"
+    assert data["items"][0]["buyer"] == "Postgres Buyer"
