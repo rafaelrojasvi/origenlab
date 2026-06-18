@@ -91,6 +91,30 @@ def test_0024_v_equipment_opportunity_appends_extra_json_at_end() -> None:
     assert upgrade_block.index("is_canonical_source") < upgrade_block.index("extra_json")
 
 
+def test_0026_v_equipment_opportunity_appends_source_metadata_at_end() -> None:
+    migration = (
+        _ALEMBIC_VERSIONS / "20260617_0026_api_v_equipment_opportunity_source_metadata.py"
+    ).read_text(encoding="utf-8")
+    upgrade_start = migration.index("def upgrade()")
+    downgrade_start = migration.index("def downgrade()")
+    upgrade_block = migration[upgrade_start:downgrade_start]
+    select_start = upgrade_block.index("eo.id AS opportunity_id")
+    select_block = upgrade_block[select_start:]
+    assert select_block.index("eo.extra_json") < select_block.index("ls.source_kind")
+    assert select_block.index("ls.source_kind") < select_block.index("ls.artifact_basename")
+    assert select_block.index("ls.artifact_basename") < select_block.index("ls.canonical_reason")
+
+
+def test_0025_equipment_source_artifact_metadata_backfill() -> None:
+    migration = (
+        _ALEMBIC_VERSIONS / "20260617_0025_equipment_source_artifact_metadata.py"
+    ).read_text(encoding="utf-8").lower()
+    assert "source_kind" in migration
+    assert "artifact_basename" in migration
+    assert "existing_canonical_source" in migration
+    assert "regexp_replace(csv_path" in migration
+
+
 def test_db1_v_contact_profile_has_no_with_params_cte() -> None:
     views = (_ALEMBIC_VERSIONS / "20260519_0014_api_read_model_views.py").read_text(encoding="utf-8").lower()
     start = views.find("create or replace view api.v_contact_profile")

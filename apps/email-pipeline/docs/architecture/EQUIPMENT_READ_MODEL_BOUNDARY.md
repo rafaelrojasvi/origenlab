@@ -67,6 +67,23 @@ typed Postgres read model (commercial.* / api.*)
 
 ---
 
+## Source artifact metadata
+
+`commercial.equipment_opportunity_source` stores both **internal path provenance** and **semantic source metadata**:
+
+| Column | Role |
+|--------|------|
+| `csv_path`, `manifest_path`, `file_sha256`, `file_mtime` | Internal provenance for bridge loads and audit (paths remain in Postgres, not in public API JSON) |
+| `source_kind` | Kind of source artifact (bridge loads: `csv_artifact`) |
+| `artifact_basename` | Safe basename only — no parent directories |
+| `canonical_reason` | Why this source was promoted (`manifest_canonical`, `resolved_active_current_queue`, etc.) |
+
+`api.v_equipment_opportunity` exposes `source_kind`, `artifact_basename`, and `canonical_reason` alongside legacy `source_path` for compatibility.
+
+**Contract guidance:** future API and read-model work should prefer `source_kind` + `artifact_basename` + `canonical_reason` over raw `csv_path` / filesystem paths. `source_path` in HTTP responses remains basename-redacted audit metadata, not business identity.
+
+---
+
 ## Enforcement
 
 | Environment | `ORIGENLAB_API_BACKEND` | Equipment data source |
