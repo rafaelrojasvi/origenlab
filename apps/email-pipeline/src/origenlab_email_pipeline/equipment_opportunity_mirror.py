@@ -181,6 +181,25 @@ def should_promote_equipment_source_as_canonical(
     return resolved is not None and resolved.resolve() == csv_path.resolve()
 
 
+def derive_source_artifact_metadata(
+    manifest: dict[str, Any],
+    csv_path: Path,
+    active_current: Path,
+) -> dict[str, str | None]:
+    """Semantic source metadata for commercial.equipment_opportunity_source (bridge CSV loads)."""
+    canonical_reason: str | None = None
+    if should_promote_equipment_source_as_canonical(manifest, csv_path, active_current):
+        if is_manifest_canonical_queue(manifest, csv_path, active_current):
+            canonical_reason = "manifest_canonical"
+        else:
+            canonical_reason = "resolved_active_current_queue"
+    return {
+        "source_kind": "csv_artifact",
+        "artifact_basename": csv_path.name,
+        "canonical_reason": canonical_reason,
+    }
+
+
 def resolve_load_context(
     active_current: Path,
     *,
@@ -231,12 +250,14 @@ def _base_summary_fields(
     date_suffix: str,
     rows: list[dict[str, str]],
     dry_run: bool,
+    active_current: Path,
 ) -> dict[str, Any]:
     campaign_mode = manifest.get("campaign_mode")
     if isinstance(campaign_mode, str):
         campaign_mode = campaign_mode.strip() or None
     else:
         campaign_mode = None
+    artifact = derive_source_artifact_metadata(manifest, resolved, active_current)
     return {
         "dry_run": dry_run,
         "applied": False,
@@ -248,6 +269,7 @@ def _base_summary_fields(
         "row_count": len(rows),
         "campaign_mode": campaign_mode,
         "duplicate_codigos": find_duplicate_codigos(rows),
+        **artifact,
     }
 
 
@@ -289,6 +311,7 @@ def preview_load(
         date_suffix=date_suffix,
         rows=rows,
         dry_run=True,
+        active_current=active_current,
     )
     summary["is_manifest_canonical"] = is_manifest_canonical_queue(manifest, resolved, active_current)
     summary["should_promote_canonical"] = should_promote_equipment_source_as_canonical(
@@ -404,6 +427,7 @@ def apply_load(
         date_suffix=date_suffix,
         rows=rows,
         dry_run=False,
+        active_current=active_current,
     )
     summary.update(
         {
@@ -428,6 +452,7 @@ def apply_load(
     sha = summary["file_sha256"]
     mtime = file_mtime_utc(resolved)
     promote_canonical = should_promote_equipment_source_as_canonical(manifest, resolved, active_current)
+    artifact = derive_source_artifact_metadata(manifest, resolved, active_current)
     csv_path_str = str(resolved)
     pg_url_norm = normalize_postgres_url(pg_url)
 
@@ -463,7 +488,10 @@ def apply_load(
                         synced_at = now(),
                         sync_run_id = %s,
                         loader_version = %s,
-                        is_canonical = %s
+                        is_canonical = %s,
+                        source_kind = %s,
+                        artifact_basename = %s,
+                        canonical_reason = %s
                     WHERE id = %s
                     """,
                     (
@@ -475,6 +503,9 @@ def apply_load(
                         sync_run_id,
                         LOADER_VERSION,
                         promote_canonical,
+                        artifact["source_kind"],
+                        artifact["artifact_basename"],
+                        artifact["canonical_reason"],
                         source_id,
                     ),
                 )
@@ -483,8 +514,9 @@ def apply_load(
                     """
                     INSERT INTO commercial.equipment_opportunity_source (
                       manifest_path, csv_path, date_suffix, campaign_mode, row_count,
-                      file_sha256, file_mtime, is_canonical, sync_run_id, loader_version
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                      file_sha256, file_mtime, is_canonical, sync_run_id, loader_version,
+                      source_kind, artifact_basename, canonical_reason
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -498,6 +530,9 @@ def apply_load(
                         promote_canonical,
                         sync_run_id,
                         LOADER_VERSION,
+                        artifact["source_kind"],
+                        artifact["artifact_basename"],
+                        artifact["canonical_reason"],
                     ),
                 )
                 source_id = int(cur.fetchone()[0])

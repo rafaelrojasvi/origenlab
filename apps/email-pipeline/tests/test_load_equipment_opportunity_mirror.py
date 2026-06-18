@@ -167,7 +167,36 @@ def test_preview_dry_run_does_not_connect_postgres(active_workspace: Path, monke
     assert summary["dry_run"] is True
     assert summary["applied"] is False
     assert summary["row_count"] == 2
+    assert summary["source_kind"] == "csv_artifact"
+    assert summary["artifact_basename"] == "equipment_first_operator_queue_20260518.csv"
+    assert "/" not in summary["artifact_basename"]
+    assert summary["canonical_reason"] == "manifest_canonical"
     assert called["connect"] is False
+
+
+def test_derive_source_artifact_metadata_resolved_active_queue(tmp_path: Path) -> None:
+    active = tmp_path / "current"
+    active.mkdir()
+    _write_queue_csv(
+        active / "equipment_first_operator_queue_20260518.csv",
+        ["1,CODE-A,B,RM,,c,d,quote_now,x,s,y,,,,n\n"],
+    )
+    manifest: dict[str, Any] = {}
+    resolved = active / "equipment_first_operator_queue_20260518.csv"
+    meta = mirror.derive_source_artifact_metadata(manifest, resolved, active)
+    assert meta["source_kind"] == "csv_artifact"
+    assert meta["artifact_basename"] == "equipment_first_operator_queue_20260518.csv"
+    assert meta["canonical_reason"] == "resolved_active_current_queue"
+
+
+def test_derive_source_artifact_metadata_non_canonical_source(active_workspace: Path) -> None:
+    other_csv = active_workspace / "equipment_first_operator_queue_20260501.csv"
+    _write_queue_csv(other_csv, ["1,OLD-1,B,RM,,c,d,quote_now,x,s,y,,,,n\n"])
+    manifest = json.loads((active_workspace / "manifest.json").read_text(encoding="utf-8"))
+    meta = mirror.derive_source_artifact_metadata(manifest, other_csv, active_workspace)
+    assert meta["source_kind"] == "csv_artifact"
+    assert meta["artifact_basename"] == "equipment_first_operator_queue_20260501.csv"
+    assert meta["canonical_reason"] is None
 
 
 def test_duplicate_codigo_aborts_apply(active_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -415,9 +444,20 @@ def test_apply_writes_source_and_rows(active_workspace: Path, monkeypatch: pytes
     assert summary["is_canonical"] is True
     assert summary["source_id"] == 99
     assert summary["rows_inserted"] == 2
+    assert summary["source_kind"] == "csv_artifact"
+    assert summary["artifact_basename"] == "equipment_first_operator_queue_20260518.csv"
+    assert summary["canonical_reason"] == "manifest_canonical"
     assert conn.committed is True
     sqls = [s for s, _ in conn.cur.statements]
     assert any("INSERT INTO commercial.equipment_opportunity_source" in s for s in sqls)
+    insert_params = [
+        p
+        for s, p in conn.cur.statements
+        if "INSERT INTO commercial.equipment_opportunity_source" in s
+    ][0]
+    assert insert_params[-3] == "csv_artifact"
+    assert insert_params[-2] == "equipment_first_operator_queue_20260518.csv"
+    assert insert_params[-1] == "manifest_canonical"
     assert any("INSERT INTO commercial.equipment_opportunity" in s for s in sqls)
 
 
@@ -534,10 +574,32 @@ def test_apply_and_view_on_disposable_postgres(active_workspace: Path) -> None:
             cur.execute("SELECT COUNT(*) FROM api.v_equipment_opportunity WHERE codigo_licitacion = %s", ("CODE-A",))
             assert int(cur.fetchone()[0]) == 1
             cur.execute(
-                "SELECT is_canonical FROM commercial.equipment_opportunity_source WHERE id = %s",
+                """
+                SELECT is_canonical, source_kind, artifact_basename, canonical_reason
+                FROM commercial.equipment_opportunity_source
+                WHERE id = %s
+                """,
                 (summary["source_id"],),
             )
-            assert cur.fetchone()[0] is True
+            is_canonical, source_kind, artifact_basename, canonical_reason = cur.fetchone()
+            assert is_canonical is True
+            assert source_kind == "csv_artifact"
+            assert artifact_basename == "equipment_first_operator_queue_20260518.csv"
+            assert canonical_reason == "manifest_canonical"
+            cur.execute(
+                """
+                SELECT source_kind, artifact_basename, canonical_reason
+                FROM api.v_equipment_opportunity
+                WHERE codigo_licitacion = %s
+                LIMIT 1
+                """,
+                ("CODE-A",),
+            )
+            view_row = cur.fetchone()
+            if view_row is not None:
+                assert view_row[0] == "csv_artifact"
+                assert view_row[1] == "equipment_first_operator_queue_20260518.csv"
+                assert view_row[2] == "manifest_canonical"
 
     reapply = mirror.apply_load(
         pg_url,
