@@ -5,7 +5,9 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import urllib.error
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -21,11 +23,49 @@ RemoteResponse = _remote.RemoteResponse
 SKIP_MESSAGE = _remote.SKIP_MESSAGE
 audit_response = _remote.audit_response
 cf_credentials_from_env = _remote.cf_credentials_from_env
+fetch_get = _remote.fetch_get
 main = _remote.main
+require_equipment_current_contract = _remote.require_equipment_current_contract
 require_error_envelope = _remote.require_error_envelope
 require_meta_items = _remote.require_meta_items
 require_request_id_header = _remote.require_request_id_header
+request_timeout_seconds = _remote.request_timeout_seconds
 scan_forbidden_leaks_in_text = _remote.scan_forbidden_leaks_in_text
+
+
+def _valid_equipment_body(*, duplicate_key: bool = False, **overrides: object) -> dict[str, object]:
+    items = [
+        {
+            "opportunity_key": "equipment:equipment_queue:lp-001",
+            "priority_rank": 1,
+            "codigo_licitacion": "LP-001",
+        },
+        {
+            "opportunity_key": "equipment:equipment_queue:lp-001"
+            if duplicate_key
+            else "equipment:equipment_queue:lp-002",
+            "priority_rank": 2,
+            "codigo_licitacion": "LP-002",
+        },
+    ]
+    body: dict[str, object] = {
+        "meta": {
+            "data_source": "postgres_mirror",
+            "read_only": True,
+            "count": len(items),
+            "source_path": "equipment_first_operator_queue_20260518.csv",
+            "source_path_info": {
+                "redacted": True,
+                "basename": "equipment_first_operator_queue_20260518.csv",
+                "kind": "file",
+            },
+            "reduced_mode": False,
+            "note": "",
+        },
+        "items": items,
+    }
+    body.update(overrides)
+    return body
 
 
 def test_require_request_id_header_missing_fails() -> None:
@@ -61,6 +101,86 @@ def test_require_meta_items_requires_meta_and_items() -> None:
 
 def test_require_meta_items_accepts_valid_list_shape() -> None:
     require_meta_items({"meta": {"read_only": True}, "items": []})
+
+
+def test_require_equipment_current_contract_accepts_valid_response() -> None:
+    require_equipment_current_contract(_valid_equipment_body())  # type: ignore[arg-type]
+
+
+def test_require_equipment_current_contract_missing_opportunity_key_fails() -> None:
+    body = _valid_equipment_body()
+    body["items"][0].pop("opportunity_key")  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="opportunity_key"):
+        require_equipment_current_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_equipment_current_contract_duplicate_opportunity_key_fails() -> None:
+    with pytest.raises(RemoteAuditError, match="duplicate opportunity_key"):
+        require_equipment_current_contract(_valid_equipment_body(duplicate_key=True))  # type: ignore[arg-type]
+
+
+def test_require_equipment_current_contract_meta_count_mismatch_fails() -> None:
+    body = _valid_equipment_body()
+    body["meta"]["count"] = 99  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="meta.count"):
+        require_equipment_current_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_equipment_current_contract_source_path_info_redacted_false_fails() -> None:
+    body = _valid_equipment_body()
+    body["meta"]["source_path_info"]["redacted"] = False  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="redacted"):
+        require_equipment_current_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_equipment_current_contract_item_source_path_fails() -> None:
+    body = _valid_equipment_body()
+    body["items"][0]["source_path"] = "equipment_first_operator_queue_20260518.csv"  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="source_path"):
+        require_equipment_current_contract(body)  # type: ignore[arg-type]
+
+
+def test_audit_response_equipment_current_contract() -> None:
+    body = _valid_equipment_body()
+    response = RemoteResponse(
+        status=200,
+        headers={"x-request-id": "rid-1"},
+        body_text=json.dumps(body),
+    )
+    audit_response(
+        "GET /opportunities/equipment?limit=3",
+        response,
+        "/opportunities/equipment?limit=3",
+        expect_success=True,
+    )
+
+
+def test_fetch_get_timeout_raises_remote_audit_error_without_traceback() -> None:
+    def _timeout(*_args: object, **_kwargs: object) -> None:
+        raise TimeoutError("timed out")
+
+    with patch("urllib.request.urlopen", side_effect=_timeout):
+        with pytest.raises(RemoteAuditError, match="timed out") as exc_info:
+            fetch_get("https://api.origenlab.cl/opportunities/equipment?limit=3", {})
+    assert "Traceback" not in str(exc_info.value)
+
+
+def test_fetch_get_urlerror_raises_remote_audit_error() -> None:
+    def _url_error(*_args: object, **_kwargs: object) -> None:
+        raise urllib.error.URLError("connection refused")
+
+    with patch("urllib.request.urlopen", side_effect=_url_error):
+        with pytest.raises(RemoteAuditError, match="connection refused"):
+            fetch_get("https://api.origenlab.cl/health", {})
+
+
+def test_request_timeout_seconds_reads_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_TIMEOUT_SECONDS", "45")
+    assert request_timeout_seconds() == 45
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_TIMEOUT_SECONDS", "not-a-number")
+    assert request_timeout_seconds() == _remote.REQUEST_TIMEOUT_SECONDS
 
 
 def test_require_error_envelope_requires_request_id_matching_header() -> None:
