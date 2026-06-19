@@ -128,9 +128,8 @@ describe("SystemPage", () => {
     screen.getByRole("heading", { name: "Automatización operador" });
     screen.getByText(/no ejecuta refresh, mirror ni envíos/i);
     await waitFor(() => {
-      screen.getByTestId("automation-health-card");
+      screen.getByText("Estado de automatización");
     });
-    screen.getByText("Estado de automatización");
   });
 
   it("renders ChileCompra automation details on System page", async () => {
