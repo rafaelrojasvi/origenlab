@@ -307,6 +307,100 @@ def test_dashboard_mirror_sync_none_when_helper_returns_none(
     _assert_redacted_paths_safe(res.json())
 
 
+def test_dashboard_mirror_sync_uses_mirror_resolver_without_direct_postgres_url(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+    from datetime import datetime, timezone
+    from typing import Any, Generator
+
+    class _MirrorSyncFakeCursor:
+        def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
+            self._rows = rows or []
+
+        def fetchone(self) -> dict[str, Any] | None:
+            return self._rows[0] if self._rows else None
+
+        def fetchall(self) -> list[dict[str, Any]]:
+            return list(self._rows)
+
+    class _MirrorSyncFakeConn:
+        def __init__(self, sync_row: dict[str, Any]) -> None:
+            self._sync_row = sync_row
+
+        def execute(self, sql: str, params: Any = None) -> _MirrorSyncFakeCursor:
+            s = " ".join(sql.split()).lower()
+            if "information_schema.tables" in s:
+                schema = params[0]
+                table = params[1]
+                ok = schema == "reporting" and table == "dashboard_sync_run"
+                return _MirrorSyncFakeCursor([{"?": 1}] if ok else [])
+            if "select 1" in s and "information_schema" not in s:
+                return _MirrorSyncFakeCursor([{"?": 1}])
+            if "from reporting.dashboard_sync_run" in s:
+                return _MirrorSyncFakeCursor([self._sync_row])
+            return _MirrorSyncFakeCursor([])
+
+    started = datetime(2026, 6, 19, 18, 55, 0, tzinfo=timezone.utc)
+    finished = datetime(2026, 6, 19, 18, 59, 56, tzinfo=timezone.utc)
+    fake = _MirrorSyncFakeConn(
+        {
+            "id": 135,
+            "started_at": started,
+            "finished_at": finished,
+            "status": "success",
+            "canonical_contact_count": 2318,
+            "canonical_organization_count": 1015,
+            "canonical_opportunity_signal_count": 983,
+            "archive_contact_count": 27225,
+            "archive_organization_count": 10701,
+            "archive_opportunity_signal_count": 2702,
+            "email_suppression_count": 363,
+            "domain_suppression_count": 91,
+            "outreach_state_count": 1450,
+            "error_message": None,
+        }
+    )
+
+    @contextmanager
+    def _fake_mirror_pg(_url: str) -> Generator[_MirrorSyncFakeConn, None, None]:
+        assert _url == "postgresql://mirror-fallback/scratch"
+        yield fake
+
+    monkeypatch.delenv("ORIGENLAB_POSTGRES_URL", raising=False)
+    monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
+    monkeypatch.setattr(
+        "origenlab_api.mirror.deps.resolve_postgres_url",
+        lambda *args, **kwargs: "postgresql://mirror-fallback/scratch",
+    )
+    monkeypatch.setattr(
+        "origenlab_api.repositories.postgres.dashboard_snapshots.mirror_postgres_connection",
+        _fake_mirror_pg,
+    )
+
+    get_settings = __import__(
+        "origenlab_api.settings", fromlist=["get_settings"]
+    ).get_settings
+    get_settings.cache_clear()
+    settings = Settings(active_current=_healthy_fixture(tmp_path), postgres_url=None)
+    app = create_app()
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_settings] = lambda: settings
+    client = TestClient(app)
+    res = client.get("/operator/automation-status")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["source"] == "filesystem_active_current"
+    mirror_sync = data["dashboard_mirror_sync"]
+    assert mirror_sync is not None
+    assert mirror_sync["status"] == "success"
+    assert mirror_sync["latest_sync_id"] == 135
+    assert mirror_sync["finished_at"] == finished.isoformat()
+    _assert_redacted_paths_safe(data)
+    get_settings.cache_clear()
+
+
 def test_filesystem_includes_chilecompra_equipment_auto_refresh(tmp_path: Path) -> None:
     active = _healthy_fixture(tmp_path)
     _write_chilecompra_state(active)
