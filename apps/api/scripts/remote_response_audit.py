@@ -162,6 +162,71 @@ def require_error_envelope(body: dict[str, Any], *, request_id_header: str) -> s
     return request_id
 
 
+def require_equipment_current_contract(body: dict[str, Any]) -> None:
+    """Assert production current-view shape for GET /opportunities/equipment."""
+    require_meta_items(body)
+    meta = body["meta"]
+    items = body["items"]
+
+    if meta.get("data_source") != "postgres_mirror":
+        raise RemoteAuditError(
+            f"meta.data_source must be postgres_mirror, got {meta.get('data_source')!r}"
+        )
+
+    count = meta.get("count")
+    if not isinstance(count, int):
+        raise RemoteAuditError("meta.count must be an int")
+    if count != len(items):
+        raise RemoteAuditError(
+            f"meta.count ({count}) must equal len(items) ({len(items)})"
+        )
+
+    seen_keys: set[str] = set()
+    for index, item in enumerate(items):
+        if not isinstance(item, dict) or isinstance(item, list):
+            raise RemoteAuditError(f"items[{index}] must be an object")
+        opportunity_key = item.get("opportunity_key")
+        if not isinstance(opportunity_key, str) or not opportunity_key.strip():
+            raise RemoteAuditError(f"items[{index}].opportunity_key must be a non-empty string")
+        if opportunity_key in seen_keys:
+            raise RemoteAuditError(
+                f"duplicate opportunity_key in response page: {opportunity_key}"
+            )
+        seen_keys.add(opportunity_key)
+        if "source_path" in item:
+            raise RemoteAuditError(f"items[{index}] must not include top-level source_path")
+
+    source_path = meta.get("source_path", "")
+    source_path_text = source_path.strip() if isinstance(source_path, str) else ""
+    source_path_info = meta.get("source_path_info")
+    if source_path_text:
+        if not isinstance(source_path_info, dict):
+            raise RemoteAuditError(
+                "meta.source_path_info must be an object when meta.source_path is non-empty"
+            )
+    if isinstance(source_path_info, dict):
+        if source_path_info.get("redacted") is not True:
+            raise RemoteAuditError("meta.source_path_info.redacted must be true")
+        if source_path_text:
+            basename = source_path_info.get("basename")
+            if not isinstance(basename, str) or not basename.strip():
+                raise RemoteAuditError("meta.source_path_info.basename must be a non-empty string")
+            if basename != source_path_text:
+                raise RemoteAuditError(
+                    "meta.source_path_info.basename must equal meta.source_path"
+                )
+
+
+def request_timeout_seconds() -> int:
+    raw = os.environ.get("ORIGENLAB_REMOTE_AUDIT_TIMEOUT_SECONDS", "").strip()
+    if not raw:
+        return REQUEST_TIMEOUT_SECONDS
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return REQUEST_TIMEOUT_SECONDS
+
+
 def build_request_headers(client_id: str, client_secret: str) -> dict[str, str]:
     return {
         "CF-Access-Client-Id": client_id,
@@ -173,8 +238,9 @@ def build_request_headers(client_id: str, client_secret: str) -> dict[str, str]:
 
 def fetch_get(url: str, headers: dict[str, str]) -> RemoteResponse:
     request = urllib.request.Request(url, headers=headers, method="GET")
+    timeout = request_timeout_seconds()
     try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             body_text = response.read().decode("utf-8", errors="replace")
             return RemoteResponse(
                 status=int(response.status),
@@ -188,6 +254,13 @@ def fetch_get(url: str, headers: dict[str, str]) -> RemoteResponse:
             headers=normalize_headers(exc.headers),
             body_text=body_text,
         )
+    except TimeoutError as exc:
+        raise RemoteAuditError(f"request timed out after {timeout}s: {url}") from exc
+    except urllib.error.URLError as exc:
+        reason = exc.reason if exc.reason is not None else exc
+        raise RemoteAuditError(f"request failed for {url}: {reason}") from exc
+    except OSError as exc:
+        raise RemoteAuditError(f"request failed for {url}: {exc}") from exc
 
 
 def audit_response(
@@ -213,7 +286,10 @@ def audit_response(
         if response.status != 200:
             raise RemoteAuditError(f"expected HTTP 200, got {response.status}")
         if is_list_endpoint(request_path):
-            require_meta_items(body)
+            if path_only(request_path) == "/opportunities/equipment":
+                require_equipment_current_contract(body)
+            else:
+                require_meta_items(body)
         print(f"✓ {label} {response.status} request_id={request_id}")
         keys = ", ".join(sorted(body.keys()))
         print(f"  body keys: {keys}")
