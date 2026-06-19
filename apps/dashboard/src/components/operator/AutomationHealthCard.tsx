@@ -21,6 +21,10 @@ import {
   formatOperatorPathDisplay,
   formatSectionPathDisplay,
 } from "../../lib/operatorPathDisplay";
+import {
+  AUTOMATION_FRESHNESS_TONE_CLASS,
+  buildAutomationFreshnessSummary,
+} from "../../lib/automationFreshness";
 
 export interface AutomationHealthCardProps {
   variant?: "summary" | "detailed";
@@ -170,6 +174,7 @@ export function AutomationHealthCard({
     chilecompra.candidate_audit,
     chilecompra.path_info,
   );
+  const freshnessSummary = buildAutomationFreshnessSummary(status);
 
   return (
     <section
@@ -234,6 +239,34 @@ export function AutomationHealthCard({
         >
           {snapshotSummary}
         </p>
+      ) : null}
+
+      {variant === "summary" ? (
+        <div
+          className={`mt-3 rounded-md border px-3 py-2 ${AUTOMATION_FRESHNESS_TONE_CLASS[freshnessSummary.tone]}`}
+          data-testid="automation-freshness-panel"
+        >
+          <p className="text-sm font-semibold" data-testid="automation-freshness-title">
+            {freshnessSummary.title}
+          </p>
+          <p className="mt-1 text-xs">{freshnessSummary.detail}</p>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-current/20 bg-white/50 px-2 py-0.5">
+              Gmail/SQLite: {freshnessSummary.gmailAgeLabel}
+            </span>
+            <span className="rounded-full border border-current/20 bg-white/50 px-2 py-0.5">
+              Espejo dashboard: {freshnessSummary.mirrorAgeLabel}
+            </span>
+            <span className="rounded-full border border-current/20 bg-white/50 px-2 py-0.5">
+              Snapshot API: {freshnessSummary.snapshotAgeLabel}
+            </span>
+          </div>
+          {freshnessSummary.warning ? (
+            <p className="mt-2 text-xs font-medium" data-testid="automation-freshness-warning">
+              {freshnessSummary.warning}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {variant === "summary" ? (

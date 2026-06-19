@@ -57,7 +57,7 @@ Production builds **throw at runtime** if `VITE_ORIGENLAB_API_BASE_URL` is missi
 ## Read-only scope
 
 - **GET only** — no write/send/draft/archive actions.
-- **Today** includes an **Automatización operador** card (`AutomationHealthCard`) fed by `GET /operator/automation-status` — local automation state only, no trigger buttons.
+- **Today** includes an **Automatización operador** card (`AutomationHealthCard`) fed by `GET /operator/automation-status` — local automation state only, no trigger buttons. The card surfaces freshness for Gmail/SQLite, the dashboard mirror, and the API snapshot using existing read-only automation status fields.
 - **Send/outreach truth** remains in the SQLite pipeline and operator scripts; Postgres mirror reads are not send approval.
 - **No raw email bodies** or filesystem paths in the UI (API snippet/subject previews only).
 

@@ -77,13 +77,44 @@ import {
 
 const mockFetch = vi.mocked(fetchOperatorAutomationStatus);
 
+function minutesAgoIso(minutes: number): string {
+  return new Date(Date.now() - minutes * 60 * 1000).toISOString();
+}
+
+function freshnessStatus(
+  offsets: {
+    gmailMinutesAgo?: number;
+    mirrorMinutesAgo?: number;
+    snapshotMinutesAgo?: number;
+  } = {},
+  overrides: Partial<OperatorAutomationStatus> = {},
+): OperatorAutomationStatus {
+  const gmailMinutesAgo = offsets.gmailMinutesAgo ?? 5;
+  const mirrorMinutesAgo = offsets.mirrorMinutesAgo ?? 5;
+  const snapshotMinutesAgo = offsets.snapshotMinutesAgo ?? 5;
+  return {
+    ...BASE_STATUS,
+    generated_at_utc: minutesAgoIso(snapshotMinutesAgo),
+    snapshot_updated_at: minutesAgoIso(snapshotMinutesAgo),
+    mail_auto_refresh: {
+      ...BASE_STATUS.mail_auto_refresh,
+      last_successful_refresh_at: minutesAgoIso(gmailMinutesAgo),
+    },
+    dashboard_auto_mirror: {
+      ...BASE_STATUS.dashboard_auto_mirror,
+      last_successful_mirror_at: minutesAgoIso(mirrorMinutesAgo),
+    },
+    ...overrides,
+  };
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
 
 describe("AutomationHealthCard", () => {
   it("renders healthy state in summary mode", async () => {
-    mockFetch.mockResolvedValue(BASE_STATUS);
+    mockFetch.mockResolvedValue(freshnessStatus());
     render(<AutomationHealthCard />);
     await waitFor(() => {
       screen.getByText("Automatización al día");
@@ -98,6 +129,8 @@ describe("AutomationHealthCard", () => {
       /mirror visible/i,
     );
     screen.getByText("Sin acción requerida");
+    screen.getByText("Datos frescos");
+    screen.getByTestId("automation-freshness-panel");
     screen.getByText(/Gmail → SQLite:/);
     screen.getByText(/limpio/);
     screen.getByText(/sincronizado/);
@@ -365,6 +398,72 @@ describe("AutomationHealthCard", () => {
       screen.getByText("Directorio activo");
     });
     screen.getByText("/legacy/path/to/current");
+  });
+
+  it("shows freshness warning when snapshot_stale is true", async () => {
+    mockFetch.mockResolvedValue(
+      parseOperatorAutomationStatus(
+        freshnessStatus({}, {
+          source: "postgres_snapshot",
+          snapshot_stale: true,
+        }),
+      ),
+    );
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByTestId("automation-freshness-warning");
+    });
+    screen.getByText("Dashboard puede estar desactualizado.");
+  });
+
+  it("shows Gmail stale warning when mail refresh is old", async () => {
+    mockFetch.mockResolvedValue(
+      freshnessStatus({
+        gmailMinutesAgo: 15,
+        mirrorMinutesAgo: 5,
+      }),
+    );
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByText("Gmail/SQLite con retraso");
+    });
+    expect(screen.getByTestId("automation-freshness-panel").textContent).toMatch(/Gmail → SQLite/i);
+  });
+
+  it("shows mirror stale warning when dashboard mirror is old", async () => {
+    mockFetch.mockResolvedValue(
+      freshnessStatus({
+        gmailMinutesAgo: 5,
+        mirrorMinutesAgo: 25,
+      }),
+    );
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByText("Espejo dashboard desactualizado");
+    });
+    expect(screen.getByTestId("automation-freshness-panel").textContent).toMatch(/SQLite → Dashboard/i);
+  });
+
+  it('shows "sin dato" when freshness timestamps are missing', async () => {
+    mockFetch.mockResolvedValue({
+      ...BASE_STATUS,
+      generated_at_utc: "",
+      snapshot_updated_at: null,
+      mail_auto_refresh: {
+        ...BASE_STATUS.mail_auto_refresh,
+        last_successful_refresh_at: null,
+      },
+      dashboard_auto_mirror: {
+        ...BASE_STATUS.dashboard_auto_mirror,
+        last_successful_mirror_at: null,
+      },
+    });
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByText("Frescura desconocida");
+    });
+    expect(screen.getByTestId("automation-freshness-panel").textContent).toMatch(/sin dato/);
+    screen.getByText("No se pudo confirmar frescura completa.");
   });
 
   it("renders ChileCompra path_info basenames instead of raw queue paths", async () => {
