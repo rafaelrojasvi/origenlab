@@ -61,6 +61,21 @@ Routes may add **documented** meta fields (e.g. `reduced_mode`, `campaign_mode`,
 | `GET /cases/warm` | `WarmCasesResponse` — `meta` + `items` |
 | `GET /opportunities/equipment` | `EquipmentOpportunitiesResponse` — `meta` + `items` |
 
+**`GET /cases/warm` (production Postgres read model):**
+
+| Rule | Requirement |
+|------|-------------|
+| `meta.data_source` | `postgres_mirror` when `ORIGENLAB_API_BACKEND=postgres` |
+| `meta.read_only` | `true` |
+| `meta.enrichment_available` | `true` |
+| `meta.count` | Integer equal to `len(items)` |
+| Item identity | Each item has non-empty string `case_id` |
+| Item typing | `last_email_id` is int; `category` and `status` are non-empty strings |
+| Internal fields | Must **not** appear in JSON: `body_snippet`, `source_file`, `recipients_preview`, `sender_preview` (schema `exclude=True`; audit enforces absence) |
+| Path leaks | Raw `/home/` or `/mnt/` paths forbidden anywhere in the response body |
+
+SQLite dev fallback may return `meta.data_source: "sqlite"` locally; production contract is locked via `PostgresWarmCaseRepository` → `api.v_warm_case` and `scripts/remote_response_audit.py` (`require_warm_cases_contract`).
+
 `EquipmentOpportunityItem` includes **`opportunity_key`** (stable cross-source correlation id: `equipment:<source_slug>:<codigo>`). Additive; clients may ignore until needed.
 
 | Route | Response model |

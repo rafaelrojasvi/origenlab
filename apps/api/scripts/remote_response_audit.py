@@ -170,6 +170,64 @@ def require_error_envelope(body: dict[str, Any], *, request_id_header: str) -> s
     return request_id
 
 
+WARM_CASE_INTERNAL_FIELDS: frozenset[str] = frozenset(
+    {
+        "body_snippet",
+        "source_file",
+        "recipients_preview",
+        "sender_preview",
+    }
+)
+
+
+def require_warm_cases_contract(body: dict[str, Any]) -> None:
+    """Assert production read-model shape for GET /cases/warm."""
+    require_meta_items(body)
+    meta = body["meta"]
+    items = body["items"]
+
+    if meta.get("data_source") != "postgres_mirror":
+        raise RemoteAuditError(
+            f"meta.data_source must be postgres_mirror, got {meta.get('data_source')!r}"
+        )
+    if meta.get("read_only") is not True:
+        raise RemoteAuditError("meta.read_only must be true")
+    if meta.get("enrichment_available") is not True:
+        raise RemoteAuditError("meta.enrichment_available must be true")
+
+    count = meta.get("count")
+    if not isinstance(count, int):
+        raise RemoteAuditError("meta.count must be an int")
+    if count != len(items):
+        raise RemoteAuditError(
+            f"meta.count ({count}) must equal len(items) ({len(items)})"
+        )
+
+    for index, item in enumerate(items):
+        if not isinstance(item, dict) or isinstance(item, list):
+            raise RemoteAuditError(f"items[{index}] must be an object")
+        case_id = item.get("case_id")
+        if not isinstance(case_id, str) or not case_id.strip():
+            raise RemoteAuditError(f"items[{index}].case_id must be a non-empty string")
+        last_email_id = item.get("last_email_id")
+        if not isinstance(last_email_id, int):
+            raise RemoteAuditError(f"items[{index}].last_email_id must be an int")
+        category = item.get("category")
+        if not isinstance(category, str) or not category.strip():
+            raise RemoteAuditError(f"items[{index}].category must be a non-empty string")
+        status = item.get("status")
+        if not isinstance(status, str) or not status.strip():
+            raise RemoteAuditError(f"items[{index}].status must be a non-empty string")
+        for field in WARM_CASE_INTERNAL_FIELDS:
+            if field in item:
+                raise RemoteAuditError(f"items[{index}] must not include top-level {field}")
+
+    leak_hits = scan_forbidden_leaks_in_text(json.dumps(body, ensure_ascii=False))
+    path_leaks = [hit for hit in leak_hits if hit in ("/home/", "/mnt/")]
+    if path_leaks:
+        raise RemoteAuditError(f"forbidden path leak substrings in warm cases body: {sorted(path_leaks)}")
+
+
 def require_equipment_current_contract(body: dict[str, Any]) -> None:
     """Assert production current-view shape for GET /opportunities/equipment."""
     require_meta_items(body)
@@ -357,8 +415,11 @@ def audit_response(
         if response.status != 200:
             raise RemoteAuditError(f"expected HTTP 200, got {response.status}")
         if is_list_endpoint(request_path):
-            if path_only(request_path) == "/opportunities/equipment":
+            endpoint = path_only(request_path)
+            if endpoint == "/opportunities/equipment":
                 require_equipment_current_contract(body)
+            elif endpoint == "/cases/warm":
+                require_warm_cases_contract(body)
             else:
                 require_meta_items(body)
         print(f"✓ {label} {response.status} request_id={request_id}")

@@ -26,6 +26,7 @@ cf_credentials_from_env = _remote.cf_credentials_from_env
 fetch_get = _remote.fetch_get
 main = _remote.main
 require_equipment_current_contract = _remote.require_equipment_current_contract
+require_warm_cases_contract = _remote.require_warm_cases_contract
 require_error_envelope = _remote.require_error_envelope
 require_meta_items = _remote.require_meta_items
 require_request_id_header = _remote.require_request_id_header
@@ -33,6 +34,31 @@ request_retries = _remote.request_retries
 request_retry_backoff_seconds = _remote.request_retry_backoff_seconds
 request_timeout_seconds = _remote.request_timeout_seconds
 scan_forbidden_leaks_in_text = _remote.scan_forbidden_leaks_in_text
+
+
+def _valid_warm_body(**overrides: object) -> dict[str, object]:
+    items = [
+        {
+            "case_id": "case:42",
+            "last_email_id": 1001,
+            "category": "client_response",
+            "status": "open",
+            "subject": "Need quote",
+        }
+    ]
+    body: dict[str, object] = {
+        "meta": {
+            "data_source": "postgres_mirror",
+            "read_only": True,
+            "reduced_mode": False,
+            "count": len(items),
+            "enrichment_available": True,
+            "note": "",
+        },
+        "items": items,
+    }
+    body.update(overrides)
+    return body
 
 
 def _valid_equipment_body(*, duplicate_key: bool = False, **overrides: object) -> dict[str, object]:
@@ -103,6 +129,45 @@ def test_require_meta_items_requires_meta_and_items() -> None:
 
 def test_require_meta_items_accepts_valid_list_shape() -> None:
     require_meta_items({"meta": {"read_only": True}, "items": []})
+
+
+def test_require_warm_cases_contract_accepts_valid_response() -> None:
+    require_warm_cases_contract(_valid_warm_body())  # type: ignore[arg-type]
+
+
+def test_require_warm_cases_contract_wrong_data_source_fails() -> None:
+    body = _valid_warm_body()
+    body["meta"]["data_source"] = "sqlite"  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="postgres_mirror"):
+        require_warm_cases_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_warm_cases_contract_meta_count_mismatch_fails() -> None:
+    body = _valid_warm_body()
+    body["meta"]["count"] = 99  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="meta.count"):
+        require_warm_cases_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_warm_cases_contract_missing_case_id_fails() -> None:
+    body = _valid_warm_body()
+    body["items"][0].pop("case_id")  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="case_id"):
+        require_warm_cases_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_warm_cases_contract_internal_source_file_field_fails() -> None:
+    body = _valid_warm_body()
+    body["items"][0]["source_file"] = "/secret/thread.json"  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="source_file"):
+        require_warm_cases_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_warm_cases_contract_raw_filesystem_path_fails() -> None:
+    body = _valid_warm_body()
+    body["items"][0]["subject"] = "see /home/ops/thread.json"  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="/home/"):
+        require_warm_cases_contract(body)  # type: ignore[arg-type]
 
 
 def test_require_equipment_current_contract_accepts_valid_response() -> None:
@@ -331,11 +396,27 @@ def test_require_error_envelope_accepts_matching_request_id() -> None:
 
 
 def test_audit_response_success_list_shape() -> None:
-    body = {"meta": {"count": 0}, "items": []}
+    body = _valid_warm_body(items=[])
+    body["meta"]["count"] = 0  # type: ignore[index]
+    body["meta"]["reduced_mode"] = True  # type: ignore[index]
     response = RemoteResponse(
         status=200,
         headers={"x-request-id": "rid-1"},
         body_text=json.dumps(body),
+    )
+    audit_response(
+        "GET /cases/warm?limit=3",
+        response,
+        "/cases/warm?limit=3",
+        expect_success=True,
+    )
+
+
+def test_audit_response_warm_cases_contract() -> None:
+    response = RemoteResponse(
+        status=200,
+        headers={"x-request-id": "rid-1"},
+        body_text=json.dumps(_valid_warm_body()),
     )
     audit_response(
         "GET /cases/warm?limit=3",
