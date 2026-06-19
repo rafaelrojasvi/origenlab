@@ -93,6 +93,8 @@ export interface EquipmentOpportunityItem {
   contact_status: string;
   contact_email: string;
   operator_note: string;
+  /** Stable cross-source id from Postgres current view (optional). */
+  opportunity_key?: string;
   fecha_publicacion?: string;
   close_at?: string;
   validity_status?: string;

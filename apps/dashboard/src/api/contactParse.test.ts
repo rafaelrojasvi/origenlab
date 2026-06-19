@@ -53,4 +53,30 @@ describe("contactParse", () => {
       assertNoForbiddenContactKeys({ ...SAMPLE, sqlite_path: "/tmp/x.sqlite" }),
     ).toThrow(/forbidden field/);
   });
+
+  it("tolerates missing optional contact and outreach fields", () => {
+    const parsed = parseContactDetailResponse({
+      meta: { data_source: "postgres_mirror", read_only: true, reduced_mode: false, note: "" },
+      contact: {
+        email: "sparse@cliente.cl",
+        normalized_email: "sparse@cliente.cl",
+      },
+      outreach: {},
+      sent_history: {},
+      warnings: [],
+    });
+    expect(parsed.contact.normalized_email).toBe("sparse@cliente.cl");
+    expect(parsed.contact.name).toBe("");
+    expect(parsed.outreach.state).toBeNull();
+    expect(parsed.sent_history.sent_count).toBe(0);
+    expect(parsed.meta.data_source).toBe("postgres_mirror");
+  });
+
+  it("does not expose raw body or source_path fields in parsed profile", () => {
+    const parsed = parseContactDetailResponse(SAMPLE);
+    expect("body" in parsed.contact).toBe(false);
+    expect("source_path" in parsed.contact).toBe(false);
+    expect("source_file" in parsed.contact).toBe(false);
+    expect(JSON.stringify(parsed)).not.toContain("body_preview");
+  });
 });
