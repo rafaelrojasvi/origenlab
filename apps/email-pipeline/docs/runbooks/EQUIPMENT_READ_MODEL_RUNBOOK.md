@@ -1,0 +1,251 @@
+# Equipment opportunities — Postgres read model (operator runbook)
+
+**Status:** canonical operator workflow (2026-06)  
+**Audience:** operators and developers verifying equipment mirror + API read path  
+**Related:** [`../architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md`](../architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md) · [`../pipeline/POSTGRES_MIRROR_REFRESH.md`](../pipeline/POSTGRES_MIRROR_REFRESH.md) · [`../../../api/README.md`](../../../api/README.md)
+
+---
+
+## Purpose
+
+Give operators a single checklist to verify that:
+
+1. Postgres schema/migrations for the equipment read model are at head (`20260617_0030`).
+2. `api.v_equipment_opportunity_current` has **one row per `opportunity_key`**.
+3. Production **`GET /opportunities/equipment`** reads the current view with redacted paths and stable keys.
+4. Repeated keys in the bridge layer are understood (audit) but do not leak into the current API view.
+
+This runbook is **read-only verification**. It does not approve sends, mutate Gmail, or change SQLite operational truth.
+
+---
+
+## Data flow
+
+```
+equipment_first_operator_queue_*.csv   (active/current artifact — provenance input)
+        │
+        ▼
+load_equipment_opportunity_mirror.py
+        │
+        ▼
+commercial.equipment_opportunity_source   (source load + artifact metadata)
+commercial.equipment_opportunity          (rows; opportunity_key indexed, not unique)
+        │
+        ▼
+api.v_equipment_opportunity               (canonical base rows from current source)
+api.v_equipment_opportunity_key_audit     (correlation: repeated keys across loads)
+        │
+        ▼
+api.v_equipment_opportunity_current       (one row per opportunity_key — API truth)
+        │
+        ▼
+apps/api  PostgresEquipmentOpportunityRepository
+        │
+        ▼
+GET /opportunities/equipment  (production: meta.data_source = postgres_mirror)
+```
+
+---
+
+## Source/provenance vs current API truth
+
+| Layer | What it is | Used by public API? |
+|-------|------------|---------------------|
+| CSV queue file under `reports/out/active/current` | Operator artifact + mirror **input** | **No** (dev/SQLite fallback only) |
+| `commercial.equipment_opportunity_source` | Load provenance (`csv_path`, `file_sha256`, `source_kind`, `artifact_basename`, `canonical_reason`) | Indirectly via views |
+| `commercial.equipment_opportunity` | All mirrored rows; same `opportunity_key` may repeat across `source_id` loads | **No** (base table) |
+| `api.v_equipment_opportunity` | Canonical-source rows from the current load | Internal base view |
+| `api.v_equipment_opportunity_key_audit` | Repeated-key diagnostic (`row_count > 1`) | **No** (operator CLI only) |
+| **`api.v_equipment_opportunity_current`** | **Current** deduplicated read model | **Yes** — production API + dashboard |
+
+**Identity for correlation:** `opportunity_key` (`equipment:<source_slug>:<codigo_licitacion_lower>`).  
+**Provenance fields** (`source_id`, internal `csv_path`, `source_path` in Postgres) must not appear as raw filesystem paths in public JSON.
+
+---
+
+## Required environment variables
+
+Load from `apps/email-pipeline/.env` when working locally (`set -a && source .env && set +a`). **Never paste values into chat, tickets, or CI logs.**
+
+| Variable | Used for |
+|----------|----------|
+| `ORIGENLAB_POSTGRES_URL` | Mirror loaders, audits, direct `psycopg` checks |
+| `ALEMBIC_DATABASE_URL` | Alembic migrations (`alembic upgrade head`) — usually same target as `ORIGENLAB_POSTGRES_URL` |
+| `CF_ACCESS_CLIENT_ID` | Remote API audit / manual curl behind Cloudflare Access |
+| `CF_ACCESS_CLIENT_SECRET` | Remote API audit / manual curl behind Cloudflare Access |
+| `ORIGENLAB_REMOTE_AUDIT_TIMEOUT_SECONDS` | Per-request timeout for `remote_response_audit.py` (default `30`; use `90` on cold Render) |
+| `ORIGENLAB_REMOTE_AUDIT_RETRIES` | Network retries only (default `2`) |
+| `ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS` | Sleep between network retries (default `2.0`) |
+
+Production API also requires `ORIGENLAB_API_BACKEND=postgres` and `ORIGENLAB_ENV=production` on Render — see [`../../../api/README.md`](../../../api/README.md).
+
+---
+
+## 1. Confirm migrations at head
+
+```bash
+cd apps/email-pipeline
+export ALEMBIC_DATABASE_URL="$ORIGENLAB_POSTGRES_URL"
+
+uv run alembic current
+uv run alembic heads
+uv run alembic upgrade head
+```
+
+**Healthy:** `alembic current` shows revision **`20260617_0030`** (or later head that includes `api.v_equipment_opportunity_current`).
+
+Key migrations on this path:
+
+| Revision | Adds |
+|----------|------|
+| `20260617_0025` | Source artifact metadata on `equipment_opportunity_source` |
+| `20260617_0026` | `source_kind`, `artifact_basename`, `canonical_reason` on base view |
+| `20260617_0027` | `opportunity_key` column + index |
+| `20260617_0028` | `opportunity_key` on `api.v_equipment_opportunity` |
+| `20260617_0029` | `api.v_equipment_opportunity_key_audit` |
+| `20260617_0030` | **`api.v_equipment_opportunity_current`** |
+
+---
+
+## 2. Audit repeated keys (bridge layer)
+
+Repeated `opportunity_key` values are **expected** while the CSV bridge is active. This audit lists keys with `row_count > 1` in the correlation view — it does **not** mean the current API is wrong.
+
+```bash
+cd apps/email-pipeline
+uv run python scripts/audit_equipment_opportunity_keys.py --limit 25
+```
+
+**Healthy signals:**
+
+- **No rows printed** — no repeated keys in audit view (fine).
+- **Rows with `canonical_row_count >= 1`** — bridge history; current API still dedupes via `api.v_equipment_opportunity_current`.
+- **`canonical_row_count = 0`** — stale/non-canonical only; should **not** appear in `/opportunities/equipment`.
+
+---
+
+## 3. Verify current view in Postgres
+
+`psycopg.connect()` expects `postgresql://`, not SQLAlchemy's `postgresql+psycopg://`. Normalize the URL in one-off scripts:
+
+```bash
+cd apps/email-pipeline
+uv run python - <<'PY'
+import os
+import psycopg
+
+raw = os.environ["ORIGENLAB_POSTGRES_URL"]
+url = raw.replace("postgresql+psycopg://", "postgresql://", 1)
+
+with psycopg.connect(url) as conn:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select count(*) as total_rows,
+                   count(distinct opportunity_key) as distinct_keys
+            from api.v_equipment_opportunity_current
+            """
+        )
+        total_rows, distinct_keys = cur.fetchone()
+        print(f"total_rows={total_rows} distinct_keys={distinct_keys}")
+        if total_rows != distinct_keys:
+            raise SystemExit("UNHEALTHY: current view has duplicate opportunity_key")
+        print("ok: one row per opportunity_key")
+PY
+```
+
+**Healthy:** `total_rows == distinct_keys`.
+
+---
+
+## 4. Remote API audit (authenticated)
+
+```bash
+cd apps/api
+CF_ACCESS_CLIENT_ID=... CF_ACCESS_CLIENT_SECRET=... \
+  uv run python scripts/remote_response_audit.py
+```
+
+Cold Render / Cloudflare start (longer per-request timeout):
+
+```bash
+cd apps/api
+ORIGENLAB_REMOTE_AUDIT_TIMEOUT_SECONDS=90 \
+  CF_ACCESS_CLIENT_ID=... CF_ACCESS_CLIENT_SECRET=... \
+  uv run python scripts/remote_response_audit.py
+```
+
+The script retries **network** failures (`TimeoutError`, `URLError`, `OSError`) only. Contract failures are **not** retried.
+
+**Healthy:** exits `0` with `ok: remote production responses passed response audit`. Equipment check validates:
+
+- `meta.data_source == postgres_mirror`
+- `meta.count == len(items)`
+- each item has non-empty `opportunity_key` (unique within the response page)
+- `meta.source_path_info.redacted == true` when path metadata is present
+- no item-level `source_path` or `/home` / `/mnt` leaks
+
+Skips with exit `0` when Cloudflare credentials are unset (CI without secrets).
+
+---
+
+## 5. Manual curl — `/opportunities/equipment`
+
+```bash
+curl -sS \
+  -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID}" \
+  -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET}" \
+  -H "Accept: application/json" \
+  "https://api.origenlab.cl/opportunities/equipment?limit=10"
+```
+
+Pipe through `jq` locally if installed. Inspect:
+
+- `meta.data_source` → `"postgres_mirror"`
+- `meta.count` matches `items` length
+- each `items[].opportunity_key` is a non-empty string
+- `meta.source_path_info.redacted` is `true` when `source_path_info` is present
+- response JSON contains **no** `/home/` or `/mnt/` substrings
+
+---
+
+## Expected healthy signals (summary)
+
+| Check | Expected |
+|-------|----------|
+| `api.v_equipment_opportunity_current` | `count(*) == count(distinct opportunity_key)` |
+| `GET /opportunities/equipment` | `meta.data_source == "postgres_mirror"` |
+| Response items | each has non-empty `opportunity_key` |
+| Path redaction | `source_path_info.redacted == true`; no raw `/home` or `/mnt` in JSON |
+| Key audit CLI | no rows, or repeated keys with canonical history only |
+| Current API | stale keys with `canonical_row_count = 0` in audit **absent** from API items |
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `UndefinedTable: api.v_equipment_opportunity_key_audit` | Migrations not applied | `uv run alembic upgrade head` (see §1) |
+| `InvalidTableDefinition: cannot change name of view column "source_id"` on upgrade | Migration `0028` inserted `opportunity_key` before existing view columns | Ensure `20260617_0028` **appends** `opportunity_key` after `canonical_reason`; re-run migrations from fixed revision |
+| `psycopg` error: `invalid connection option` / missing `=` after `postgresql+psycopg://` | SQLAlchemy URL passed directly to `psycopg.connect` | Replace scheme: `.replace("postgresql+psycopg://", "postgresql://", 1)` |
+| `remote_response_audit.py` timeout on `/health` | Cold Render instance | `ORIGENLAB_REMOTE_AUDIT_TIMEOUT_SECONDS=90` and/or rely on default network retries |
+| Audit shows repeated keys | Bridge re-ingest of same `codigo_licitacion` | **Okay** during CSV bridge — verify current view still dedupes (§3) |
+| Repeated key with `canonical_row_count = 0` | Non-canonical stale rows only | Should **not** appear in current API; if it does, inspect view definition and canonical flags |
+| `meta.data_source` not `postgres_mirror` | API not on Postgres backend | Check Render env: `ORIGENLAB_API_BACKEND=postgres`, `ORIGENLAB_ENV=production` |
+
+---
+
+## Security
+
+- **Never** paste `ORIGENLAB_POSTGRES_URL`, `ALEMBIC_DATABASE_URL`, or Cloudflare service token values into chat, screenshots, or public logs.
+- If a database URL or Access secret is exposed, **rotate** Render Postgres credentials and regenerate the Cloudflare Access service token.
+- Public API responses must keep filesystem paths **basename-only** with `source_path_info.redacted == true` — see [`../../../api/docs/API_RESPONSE_CONTRACT.md`](../../../api/docs/API_RESPONSE_CONTRACT.md).
+
+---
+
+## Related docs
+
+- Architecture contract: [`../architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md`](../architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md)
+- Mirror refresh (loads data into Postgres): [`../pipeline/POSTGRES_MIRROR_REFRESH.md`](../pipeline/POSTGRES_MIRROR_REFRESH.md)
+- API response shapes: [`../../../api/docs/API_RESPONSE_CONTRACT.md`](../../../api/docs/API_RESPONSE_CONTRACT.md)
