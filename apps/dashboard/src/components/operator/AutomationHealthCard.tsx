@@ -255,12 +255,20 @@ export function AutomationHealthCard({
               Gmail/SQLite: {freshnessSummary.gmailAgeLabel}
             </span>
             <span className="rounded-full border border-current/20 bg-white/50 px-2 py-0.5">
-              Espejo dashboard: {freshnessSummary.mirrorAgeLabel}
+              {freshnessSummary.mirrorSourceLabel}: {freshnessSummary.mirrorAgeLabel}
             </span>
             <span className="rounded-full border border-current/20 bg-white/50 px-2 py-0.5">
               Snapshot API: {freshnessSummary.snapshotAgeLabel}
             </span>
           </div>
+          {freshnessSummary.loopWarning ? (
+            <p
+              className="mt-2 text-xs text-amber-900"
+              data-testid="automation-freshness-loop-warning"
+            >
+              {freshnessSummary.loopWarning}
+            </p>
+          ) : null}
           {freshnessSummary.warning ? (
             <p className="mt-2 text-xs font-medium" data-testid="automation-freshness-warning">
               {freshnessSummary.warning}

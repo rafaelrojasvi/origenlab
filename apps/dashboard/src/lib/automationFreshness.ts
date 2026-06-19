@@ -2,14 +2,18 @@ import type { OperatorAutomationStatus } from "../api/operatorTypes";
 
 export type FreshnessTone = "fresh" | "warning" | "stale" | "unknown";
 
+export type MirrorSourceLabel = "Espejo Postgres" | "Loop auto-mirror";
+
 export type AutomationFreshnessSummary = {
   tone: FreshnessTone;
   title: string;
   detail: string;
   gmailAgeLabel: string;
   mirrorAgeLabel: string;
+  mirrorSourceLabel: MirrorSourceLabel;
   snapshotAgeLabel: string;
   warning: string | null;
+  loopWarning: string | null;
 };
 
 export const AUTOMATION_FRESHNESS_TONE_CLASS: Record<FreshnessTone, string> = {
@@ -51,6 +55,45 @@ function resolveSnapshotTimestamp(status: OperatorAutomationStatus): number | nu
   );
 }
 
+function resolveMirrorTimestamp(status: OperatorAutomationStatus): {
+  ts: number | null;
+  source: MirrorSourceLabel;
+} {
+  const sync = status.dashboard_mirror_sync;
+  if (sync?.status === "success") {
+    const finishedAt = parseTimestamp(sync.finished_at);
+    if (finishedAt != null) {
+      return { ts: finishedAt, source: "Espejo Postgres" };
+    }
+  }
+  return {
+    ts: parseTimestamp(status.dashboard_auto_mirror.last_successful_mirror_at),
+    source: "Loop auto-mirror",
+  };
+}
+
+function buildLoopWarning(
+  status: OperatorAutomationStatus,
+  mirrorSource: MirrorSourceLabel,
+  mirrorFresh: boolean,
+): string | null {
+  if (mirrorSource !== "Espejo Postgres" || !mirrorFresh) {
+    return null;
+  }
+  const loop = status.dashboard_auto_mirror;
+  const hints: string[] = [];
+  if (loop.last_result === "mail_dirty") {
+    hints.push("El loop auto-mirror está esperando cambios de correo");
+  }
+  if (loop.mirror_matches_daily_core === false) {
+    hints.push("el loop auto-mirror no coincide con daily-core");
+  }
+  if (!hints.length) {
+    return null;
+  }
+  return `${hints.join("; ")}; el espejo Postgres ya fue actualizado manualmente.`;
+}
+
 export function buildAutomationFreshnessSummary(
   status: OperatorAutomationStatus,
   options?: { now?: Date },
@@ -58,7 +101,7 @@ export function buildAutomationFreshnessSummary(
   const nowMs = (options?.now ?? new Date()).getTime();
 
   const gmailTs = parseTimestamp(status.mail_auto_refresh.last_successful_refresh_at);
-  const mirrorTs = parseTimestamp(status.dashboard_auto_mirror.last_successful_mirror_at);
+  const { ts: mirrorTs, source: mirrorSourceLabel } = resolveMirrorTimestamp(status);
   const snapshotTs = resolveSnapshotTimestamp(status);
 
   const gmailAgeMs = gmailTs != null ? nowMs - gmailTs : null;
@@ -72,6 +115,7 @@ export function buildAutomationFreshnessSummary(
   const base = {
     gmailAgeLabel,
     mirrorAgeLabel,
+    mirrorSourceLabel,
     snapshotAgeLabel,
   };
 
@@ -83,12 +127,14 @@ export function buildAutomationFreshnessSummary(
       title: "Frescura desconocida",
       detail: "Faltan marcas de tiempo para confirmar si los datos están al día.",
       warning: "No se pudo confirmar frescura completa.",
+      loopWarning: null,
     };
   }
 
   const gmailFresh = gmailAgeMs! <= GMAIL_FRESH_MS;
   const mirrorFresh = mirrorAgeMs! <= MIRROR_FRESH_MS;
   const snapshotFresh = snapshotAgeMs! <= SNAPSHOT_FRESH_MS;
+  const loopWarning = buildLoopWarning(status, mirrorSourceLabel, mirrorFresh);
 
   if (status.snapshot_stale === true) {
     return {
@@ -97,16 +143,26 @@ export function buildAutomationFreshnessSummary(
       title: "Datos desactualizados",
       detail: "El snapshot del API indica datos viejos para el dashboard.",
       warning: "Dashboard puede estar desactualizado.",
+      loopWarning,
     };
   }
 
   if (!mirrorFresh) {
+    const staleTitle =
+      mirrorSourceLabel === "Espejo Postgres"
+        ? "Espejo Postgres desactualizado"
+        : "Loop auto-mirror desactualizado";
+    const staleDetail =
+      mirrorSourceLabel === "Espejo Postgres"
+        ? "El último sync exitoso del espejo Postgres supera el umbral de frescura."
+        : "El loop SQLite → Dashboard no se ha actualizado recientemente.";
     return {
       ...base,
       tone: "stale",
-      title: "Espejo dashboard desactualizado",
-      detail: "El espejo SQLite → Dashboard no se ha actualizado recientemente.",
+      title: staleTitle,
+      detail: staleDetail,
       warning: null,
+      loopWarning: null,
     };
   }
 
@@ -116,8 +172,11 @@ export function buildAutomationFreshnessSummary(
       tone: "warning",
       title: "Gmail/SQLite con retraso",
       detail:
-        "Gmail → SQLite lleva más tiempo sin refresh exitoso, aunque el espejo dashboard sigue reciente.",
+        mirrorSourceLabel === "Espejo Postgres"
+          ? "Gmail → SQLite lleva más tiempo sin refresh exitoso, aunque el espejo Postgres sigue reciente."
+          : "Gmail → SQLite lleva más tiempo sin refresh exitoso, aunque el loop auto-mirror sigue reciente.",
       warning: null,
+      loopWarning,
     };
   }
 
@@ -128,6 +187,7 @@ export function buildAutomationFreshnessSummary(
       title: "Snapshot API con retraso",
       detail: "El snapshot del API supera el umbral de frescura esperado.",
       warning: "Dashboard puede estar desactualizado.",
+      loopWarning,
     };
   }
 
@@ -136,7 +196,10 @@ export function buildAutomationFreshnessSummary(
     tone: "fresh",
     title: "Datos frescos",
     detail:
-      "Gmail/SQLite, espejo dashboard y snapshot API están dentro de los umbrales esperados.",
+      mirrorSourceLabel === "Espejo Postgres"
+        ? "Gmail/SQLite, espejo Postgres y snapshot API están dentro de los umbrales esperados."
+        : "Gmail/SQLite, loop auto-mirror y snapshot API están dentro de los umbrales esperados.",
     warning: null,
+    loopWarning,
   };
 }

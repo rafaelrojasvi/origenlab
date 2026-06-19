@@ -125,6 +125,25 @@ export interface OperatorAutomationCronStatus {
   mirror_entry_present?: boolean;
 }
 
+export interface DashboardMirrorSync {
+  table_available?: boolean;
+  status?: string;
+  latest_sync_id?: number | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  elapsed_seconds?: number | null;
+  canonical_contact_count?: number | null;
+  canonical_organization_count?: number | null;
+  canonical_opportunity_signal_count?: number | null;
+  archive_contact_count?: number | null;
+  archive_organization_count?: number | null;
+  archive_opportunity_signal_count?: number | null;
+  email_suppression_count?: number | null;
+  domain_suppression_count?: number | null;
+  outreach_state_count?: number | null;
+  error_message?: string | null;
+}
+
 export interface OperatorAutomationStatus {
   generated_at_utc: string;
   active_current_dir: string;
@@ -141,4 +160,5 @@ export interface OperatorAutomationStatus {
   source?: "postgres_snapshot" | "filesystem_active_current" | null;
   snapshot_updated_at?: string | null;
   snapshot_stale?: boolean | null;
+  dashboard_mirror_sync?: DashboardMirrorSync | null;
 }

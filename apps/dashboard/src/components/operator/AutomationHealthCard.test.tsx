@@ -131,6 +131,7 @@ describe("AutomationHealthCard", () => {
     screen.getByText("Sin acción requerida");
     screen.getByText("Datos frescos");
     screen.getByTestId("automation-freshness-panel");
+    screen.getByText(/Loop auto-mirror:/);
     screen.getByText(/Gmail → SQLite:/);
     screen.getByText(/limpio/);
     screen.getByText(/sincronizado/);
@@ -439,9 +440,66 @@ describe("AutomationHealthCard", () => {
     );
     render(<AutomationHealthCard />);
     await waitFor(() => {
-      screen.getByText("Espejo dashboard desactualizado");
+      screen.getByText("Loop auto-mirror desactualizado");
     });
-    expect(screen.getByTestId("automation-freshness-panel").textContent).toMatch(/SQLite → Dashboard/i);
+    expect(screen.getByTestId("automation-freshness-panel").textContent).toMatch(/loop SQLite → Dashboard/i);
+  });
+
+  it("renders fresh mirror from dashboard_mirror_sync.finished_at", async () => {
+    mockFetch.mockResolvedValue(
+      freshnessStatus(
+        {
+          gmailMinutesAgo: 5,
+          mirrorMinutesAgo: 60 * 24,
+          snapshotMinutesAgo: 5,
+        },
+        {
+          dashboard_auto_mirror: {
+            ...BASE_STATUS.dashboard_auto_mirror,
+            last_successful_mirror_at: minutesAgoIso(60 * 24),
+            last_result: "mail_dirty",
+            mirror_matches_daily_core: false,
+          },
+          dashboard_mirror_sync: {
+            status: "success",
+            finished_at: minutesAgoIso(5),
+            latest_sync_id: 135,
+          },
+        },
+      ),
+    );
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByText("Datos frescos");
+    });
+    expect(screen.getByTestId("automation-freshness-panel").textContent).toMatch(/Espejo Postgres:/);
+    expect(screen.queryByTestId("automation-freshness-warning")).toBeNull();
+    screen.getByTestId("automation-freshness-loop-warning");
+  });
+
+  it("still renders auto-mirror loop details when postgres sync is fresh", async () => {
+    mockFetch.mockResolvedValue(
+      freshnessStatus(
+        { gmailMinutesAgo: 5, mirrorMinutesAgo: 60, snapshotMinutesAgo: 5 },
+        {
+          dashboard_auto_mirror: {
+            ...BASE_STATUS.dashboard_auto_mirror,
+            last_result: "mail_dirty",
+            mirror_matches_daily_core: false,
+          },
+          dashboard_mirror_sync: {
+            status: "success",
+            finished_at: minutesAgoIso(5),
+          },
+        },
+      ),
+    );
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByText("Datos frescos");
+    });
+    expect(screen.getByTestId("automation-freshness-panel").textContent).toMatch(/Espejo Postgres:/);
+    screen.getByText(/atrás/);
   });
 
   it('shows "sin dato" when freshness timestamps are missing', async () => {
