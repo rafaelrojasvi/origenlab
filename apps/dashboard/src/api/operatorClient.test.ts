@@ -12,6 +12,8 @@ import {
   parseOperatorAutomationStatus,
   parseOperatorStatusResponse,
   parseDailyCoreRunStatus,
+  parsePathInfoMap,
+  parseRedactedPathInfo,
 } from "./operatorClient";
 
 describe("operator API client", () => {
@@ -257,6 +259,48 @@ describe("operator API client", () => {
     expect(parsed.active_current_dir).toBe("/tmp/active/current");
     expect(parsed.active_current_dir_info).toBeNull();
     expect(parsed.chilecompra_equipment_auto_refresh.path_info).toEqual({});
+  });
+
+  it("parseRedactedPathInfo accepts redacted companion objects", () => {
+    expect(
+      parseRedactedPathInfo({ redacted: true, basename: "current", kind: "directory" }),
+    ).toEqual({
+      redacted: true,
+      basename: "current",
+      kind: "directory",
+    });
+  });
+
+  it("parseRedactedPathInfo rejects raw strings and invalid objects", () => {
+    expect(parseRedactedPathInfo("/home/ops/reports/out/active/current")).toBeNull();
+    expect(parseRedactedPathInfo({ basename: 123, kind: "file" })).toBeNull();
+    expect(parseRedactedPathInfo({ basename: "queue.csv", kind: null })).toBeNull();
+    expect(parseRedactedPathInfo(null)).toBeNull();
+  });
+
+  it("parsePathInfoMap skips invalid entries and keeps basename-only companions", () => {
+    const parsed = parsePathInfoMap({
+      published_queue: {
+        redacted: true,
+        basename: "equipment_first_operator_queue_20260616.csv",
+        kind: "file",
+      },
+      candidate_audit: "/home/ops/reports/out/active/current/audit.csv",
+      broken: { basename: 1, kind: "file" },
+    });
+    expect(parsed).toEqual({
+      published_queue: {
+        redacted: true,
+        basename: "equipment_first_operator_queue_20260616.csv",
+        kind: "file",
+      },
+    });
+    expect(JSON.stringify(parsed)).not.toContain("/home/ops");
+  });
+
+  it("parsePathInfoMap returns null for non-object input", () => {
+    expect(parsePathInfoMap("not-a-map")).toBeNull();
+    expect(parsePathInfoMap(undefined)).toBeNull();
   });
 
   it("parseDailyCoreRunStatus parses valid summary fields", () => {

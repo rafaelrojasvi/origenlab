@@ -194,6 +194,10 @@ export function normalizeEquipmentItem(raw: unknown, index: number): EquipmentOp
     contact_email: safePreviewText(r.contact_email, 200),
     operator_note: safePreviewText(r.operator_note, 200),
   };
+  const opportunityKey = safePreviewText(r.opportunity_key, 160);
+  if (opportunityKey) {
+    item.opportunity_key = opportunityKey;
+  }
   for (const field of EQUIPMENT_DETAIL_OPTIONAL_FIELDS) {
     const maxLen = field === "mercado_publico_url" ? 300 : field === "title" ? 200 : 120;
     const value = optionalEquipmentField(r, field, maxLen);
