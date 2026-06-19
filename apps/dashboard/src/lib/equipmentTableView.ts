@@ -1,6 +1,7 @@
 import type { EquipmentOpportunityItem } from "../api/commercialTypes";
 import type { EquipmentTriageBadgeKey } from "./equipmentTriage";
 import { getEquipmentTriageBadges } from "./equipmentTriage";
+import { getEquipmentWatchlistKey } from "./equipmentWatchlist";
 import { matchesSearch, normalizeSearchQuery, parseSortableTimestamp } from "./clientTableView";
 
 export type EquipmentSortKey =
@@ -12,21 +13,25 @@ export type EquipmentSortKey =
   | "buyer";
 
 export type EquipmentTriageFilter = EquipmentTriageBadgeKey | "all";
+export type EquipmentWatchlistFilter = "all" | "saved";
 
 export interface EquipmentTableFilters {
   search: string;
   sort: EquipmentSortKey;
   triage: EquipmentTriageFilter;
+  watchlist: EquipmentWatchlistFilter;
 }
 
 export const DEFAULT_EQUIPMENT_FILTERS: EquipmentTableFilters = {
   search: "",
   sort: "rank_asc",
   triage: "all",
+  watchlist: "all",
 };
 
 export interface EquipmentTableViewOptions {
   now?: Date;
+  savedKeys?: Set<string>;
 }
 
 export function equipmentSearchHaystack(row: EquipmentOpportunityItem): string {
@@ -56,6 +61,17 @@ function matchesTriageFilter(
   return getEquipmentTriageBadges(row, { now }).some((badge) => badge.key === triage);
 }
 
+function matchesWatchlistFilter(
+  row: EquipmentOpportunityItem,
+  watchlist: EquipmentWatchlistFilter,
+  savedKeys?: Set<string>,
+): boolean {
+  if (watchlist === "all") {
+    return true;
+  }
+  return (savedKeys ?? new Set()).has(getEquipmentWatchlistKey(row));
+}
+
 export function filterEquipment(
   items: EquipmentOpportunityItem[],
   filters: EquipmentTableFilters,
@@ -66,7 +82,10 @@ export function filterEquipment(
     if (q && !matchesSearch(equipmentSearchHaystack(row), q)) {
       return false;
     }
-    return matchesTriageFilter(row, filters.triage, options?.now);
+    if (!matchesTriageFilter(row, filters.triage, options?.now)) {
+      return false;
+    }
+    return matchesWatchlistFilter(row, filters.watchlist, options?.savedKeys);
   });
 }
 
@@ -102,5 +121,9 @@ export function applyEquipmentTableView(
 }
 
 export function equipmentFiltersActive(filters: EquipmentTableFilters): boolean {
-  return Boolean(filters.search.trim()) || filters.triage !== "all";
+  return (
+    Boolean(filters.search.trim()) ||
+    filters.triage !== "all" ||
+    filters.watchlist !== "all"
+  );
 }

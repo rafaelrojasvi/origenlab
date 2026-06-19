@@ -1,7 +1,32 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EquipmentOpportunityItem } from "../../api/commercialTypes";
+import { EQUIPMENT_WATCHLIST_STORAGE_KEY } from "../../lib/equipmentWatchlist";
 import { EquipmentOpportunitiesTable } from "./EquipmentOpportunitiesTable";
+
+function createMemoryStorage(): Storage {
+  const data = new Map<string, string>();
+  return {
+    get length() {
+      return data.size;
+    },
+    clear() {
+      data.clear();
+    },
+    getItem(key: string) {
+      return data.get(key) ?? null;
+    },
+    key(index: number) {
+      return [...data.keys()][index] ?? null;
+    },
+    removeItem(key: string) {
+      data.delete(key);
+    },
+    setItem(key: string, value: string) {
+      data.set(key, value);
+    },
+  };
+}
 
 const row: EquipmentOpportunityItem = {
   priority_rank: 1,
@@ -20,6 +45,17 @@ const row: EquipmentOpportunityItem = {
 };
 
 describe("EquipmentOpportunitiesTable", () => {
+  let memoryStorage: Storage;
+
+  beforeEach(() => {
+    memoryStorage = createMemoryStorage();
+    vi.stubGlobal("localStorage", memoryStorage);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("renders safe columns only", () => {
     render(
       <EquipmentOpportunitiesTable
@@ -179,6 +215,175 @@ describe("EquipmentOpportunitiesTable", () => {
       />,
     );
     expect(screen.getAllByTestId("equipment-triage-badge")).toHaveLength(3);
+  });
+
+  it("renders save button for each row", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Guardar oportunidad: Universidad Ejemplo/ })).toBeTruthy();
+  });
+
+  it("clicking save does not open the detail drawer", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Guardar oportunidad: Universidad Ejemplo/ }));
+    expect(screen.queryByTestId("equipment-opportunity-detail-drawer")).toBeNull();
+    screen.getByRole("button", { name: /Quitar de guardadas: Universidad Ejemplo/ });
+  });
+
+  it("filters saved items with Solo guardadas", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[
+          row,
+          {
+            ...row,
+            codigo_licitacion: "LP-002",
+            buyer: "Hospital Monitor",
+            next_action: "monitor",
+          },
+        ]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 2,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Guardar oportunidad: Universidad Ejemplo/ }));
+    fireEvent.change(screen.getByLabelText("Filter equipment opportunities by watchlist"), {
+      target: { value: "saved" },
+    });
+
+    screen.getByText("Universidad Ejemplo");
+    expect(screen.queryByText("Hospital Monitor")).toBeNull();
+  });
+
+  it("clear filters resets watchlist filter but keeps saved state", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[
+          row,
+          {
+            ...row,
+            codigo_licitacion: "LP-002",
+            buyer: "Hospital Monitor",
+            next_action: "monitor",
+          },
+        ]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 2,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Guardar oportunidad: Universidad Ejemplo/ }));
+    fireEvent.change(screen.getByLabelText("Filter equipment opportunities by watchlist"), {
+      target: { value: "saved" },
+    });
+    fireEvent.change(screen.getByLabelText("Search equipment opportunities"), {
+      target: { value: "zzznomatch" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+
+    screen.getByRole("button", { name: /Quitar de guardadas: Universidad Ejemplo/ });
+    screen.getByText("Hospital Monitor");
+    expect(
+      (screen.getByLabelText("Filter equipment opportunities by watchlist") as HTMLSelectElement).value,
+    ).toBe("all");
+  });
+
+  it("persists saved state through rerender via localStorage", () => {
+    const { unmount } = render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Guardar oportunidad: Universidad Ejemplo/ }));
+    expect(memoryStorage.getItem(EQUIPMENT_WATCHLIST_STORAGE_KEY)).toContain("eq-1-LP-001");
+
+    unmount();
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    screen.getByRole("button", { name: /Quitar de guardadas: Universidad Ejemplo/ });
   });
 
   it("opens contact drilldown when contact email is present", () => {

@@ -48,4 +48,15 @@ describe("getEquipmentFilterEmptyMessage", () => {
       }),
     ).toBe("Ninguna oportunidad coincide con la búsqueda actual.");
   });
+
+  it("returns watchlist copy when saved filter is active", () => {
+    expect(
+      getEquipmentFilterEmptyMessage({
+        ...DEFAULT_EQUIPMENT_FILTERS,
+        watchlist: "saved",
+      }),
+    ).toBe(
+      "No hay oportunidades guardadas con los filtros actuales. Guarda oportunidades para revisarlas después o limpia los filtros.",
+    );
+  });
 });

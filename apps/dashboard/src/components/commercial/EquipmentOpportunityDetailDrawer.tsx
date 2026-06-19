@@ -7,6 +7,7 @@ import {
 } from "../../lib/dashboardDateFormat";
 import { TokenLabel } from "../operator/TokenLabel";
 import { EquipmentTriageBadges } from "./EquipmentTriageBadges";
+import { EquipmentWatchlistButton } from "./EquipmentWatchlistButton";
 
 export function isSafeMercadoPublicoUrl(url: string): boolean {
   const trimmed = url.trim();
@@ -194,11 +195,15 @@ export function EquipmentOpportunityDetailDrawer({
   open,
   layout = "responsive",
   onClose,
+  watchlistSaved,
+  onToggleWatchlist,
 }: {
   item: EquipmentOpportunityItem | null;
   open: boolean;
   layout?: "overlay" | "inline" | "responsive";
   onClose: () => void;
+  watchlistSaved?: boolean;
+  onToggleWatchlist?: () => void;
 }) {
   if (!open || !item) return null;
 
@@ -227,6 +232,13 @@ export function EquipmentOpportunityDetailDrawer({
           </h2>
           <p className="font-mono text-sm text-slate-700">{item.codigo_licitacion || "—"}</p>
           {item.title ? <p className="text-sm text-slate-800">{item.title}</p> : null}
+          {onToggleWatchlist ? (
+            <EquipmentWatchlistButton
+              item={item}
+              saved={Boolean(watchlistSaved)}
+              onToggle={onToggleWatchlist}
+            />
+          ) : null}
           <EquipmentTriageBadges item={item} />
           <div className="flex flex-wrap gap-2">
             {item.chilecompra_status ? (
