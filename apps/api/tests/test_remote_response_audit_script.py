@@ -7,7 +7,7 @@ import json
 import sys
 import urllib.error
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -29,6 +29,8 @@ require_equipment_current_contract = _remote.require_equipment_current_contract
 require_error_envelope = _remote.require_error_envelope
 require_meta_items = _remote.require_meta_items
 require_request_id_header = _remote.require_request_id_header
+request_retries = _remote.request_retries
+request_retry_backoff_seconds = _remote.request_retry_backoff_seconds
 request_timeout_seconds = _remote.request_timeout_seconds
 scan_forbidden_leaks_in_text = _remote.scan_forbidden_leaks_in_text
 
@@ -155,7 +157,11 @@ def test_audit_response_equipment_current_contract() -> None:
     )
 
 
-def test_fetch_get_timeout_raises_remote_audit_error_without_traceback() -> None:
+def test_fetch_get_timeout_raises_remote_audit_error_without_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRIES", "0")
+
     def _timeout(*_args: object, **_kwargs: object) -> None:
         raise TimeoutError("timed out")
 
@@ -163,15 +169,127 @@ def test_fetch_get_timeout_raises_remote_audit_error_without_traceback() -> None
         with pytest.raises(RemoteAuditError, match="timed out") as exc_info:
             fetch_get("https://api.origenlab.cl/opportunities/equipment?limit=3", {})
     assert "Traceback" not in str(exc_info.value)
+    assert "after 1 attempt(s)" in str(exc_info.value)
 
 
-def test_fetch_get_urlerror_raises_remote_audit_error() -> None:
+def test_fetch_get_urlerror_raises_remote_audit_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRIES", "0")
+
     def _url_error(*_args: object, **_kwargs: object) -> None:
         raise urllib.error.URLError("connection refused")
 
     with patch("urllib.request.urlopen", side_effect=_url_error):
         with pytest.raises(RemoteAuditError, match="connection refused"):
             fetch_get("https://api.origenlab.cl/health", {})
+
+
+def test_fetch_get_retries_after_timeout_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRIES", "2")
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS", "0")
+
+    response = MagicMock()
+    response.status = 200
+    response.headers = {"x-request-id": "rid-1"}
+    response.read.return_value = b'{"ok":true}'
+    response.__enter__.return_value = response
+    response.__exit__.return_value = False
+
+    with patch(
+        "urllib.request.urlopen",
+        side_effect=[TimeoutError("timed out"), response],
+    ) as urlopen_mock:
+        result = fetch_get("https://api.origenlab.cl/health", {}, label="GET /health")
+
+    assert result.status == 200
+    assert urlopen_mock.call_count == 2
+    captured = capsys.readouterr()
+    assert "warning: GET /health timed out after" in captured.err
+    assert "retrying 1/2" in captured.err
+
+
+def test_fetch_get_stops_after_configured_max_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRIES", "1")
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS", "0")
+
+    def _timeout(*_args: object, **_kwargs: object) -> None:
+        raise TimeoutError("timed out")
+
+    with patch("urllib.request.urlopen", side_effect=_timeout) as urlopen_mock:
+        with pytest.raises(RemoteAuditError, match="after 2 attempt\\(s\\)"):
+            fetch_get("https://api.origenlab.cl/health", {}, label="GET /health")
+
+    assert urlopen_mock.call_count == 2
+    captured = capsys.readouterr()
+    assert captured.err.count("retrying") == 1
+
+
+def test_fetch_get_retries_urlerror_then_raises_cleanly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRIES", "1")
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS", "0")
+
+    def _url_error(*_args: object, **_kwargs: object) -> None:
+        raise urllib.error.URLError("connection refused")
+
+    with patch("urllib.request.urlopen", side_effect=_url_error) as urlopen_mock:
+        with pytest.raises(RemoteAuditError, match="connection refused"):
+            fetch_get("https://api.origenlab.cl/health", {}, label="GET /health")
+
+    assert urlopen_mock.call_count == 2
+
+
+def test_contract_validation_errors_are_not_retried(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CF_ACCESS_CLIENT_ID", "client-id")
+    monkeypatch.setenv("CF_ACCESS_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRIES", "2")
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS", "0")
+
+    bad_equipment_body = _valid_equipment_body()
+    bad_equipment_body["items"][0].pop("opportunity_key")  # type: ignore[index]
+
+    response = MagicMock()
+    response.status = 200
+    response.headers = {"x-request-id": "rid-1"}
+    response.read.return_value = json.dumps(bad_equipment_body).encode()
+    response.__enter__.return_value = response
+    response.__exit__.return_value = False
+
+    equipment_check = next(
+        check for check in _remote.SUCCESS_CHECKS if "/opportunities/equipment" in check.path
+    )
+
+    with patch.object(_remote, "SUCCESS_CHECKS", (equipment_check,)):
+        with patch.object(_remote, "ERROR_CHECKS", ()):
+            with patch("urllib.request.urlopen", return_value=response) as urlopen_mock:
+                with pytest.raises(RemoteAuditError, match="opportunity_key"):
+                    main()
+
+    assert urlopen_mock.call_count == 1
+
+
+def test_request_retries_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRIES", "5")
+    assert request_retries() == 5
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRIES", "not-a-number")
+    assert request_retries() == _remote.REQUEST_RETRIES
+
+
+def test_request_retry_backoff_seconds_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS", "3.5")
+    assert request_retry_backoff_seconds() == 3.5
+    monkeypatch.setenv("ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS", "bad")
+    assert request_retry_backoff_seconds() == _remote.REQUEST_RETRY_BACKOFF_SECONDS
 
 
 def test_request_timeout_seconds_reads_env(

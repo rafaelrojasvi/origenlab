@@ -134,7 +134,15 @@ CF_ACCESS_CLIENT_ID=... CF_ACCESS_CLIENT_SECRET=... \
   uv run python scripts/remote_response_audit.py
 ```
 
-Uses the same response contract checks as the local audit (`x-request-id`, JSON envelopes, list `meta`/`items`, forbidden path/secret leaks). Not part of `./scripts/validate.sh` (requires network + secrets).
+Optional env for cold Render / Cloudflare starts (network timeouts and connection errors are retried; contract failures are not):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ORIGENLAB_REMOTE_AUDIT_TIMEOUT_SECONDS` | `30` | Per-request timeout; use `90` on cold instances if needed |
+| `ORIGENLAB_REMOTE_AUDIT_RETRIES` | `2` | Retries after `TimeoutError` / `URLError` / `OSError` only |
+| `ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS` | `2.0` | Sleep between network retries |
+
+Uses the same response contract checks as the local audit (`x-request-id`, JSON envelopes, list `meta`/`items`, equipment current-view contract, forbidden path/secret leaks). Not part of `./scripts/validate.sh` (requires network + secrets).
 
 GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/api.yml) runs `./scripts/validate.sh` for `apps/api` changes and `apps/email-pipeline` dependency changes.
 
