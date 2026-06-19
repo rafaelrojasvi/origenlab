@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WarmCaseItem } from "../../api/commercialTypes";
-import { applyWarmCaseTableView } from "../../lib/warmCaseTableView";
+import { applyWarmCaseTableView, DEFAULT_WARM_FILTERS } from "../../lib/warmCaseTableView";
 
 function row(partial: Partial<WarmCaseItem> & Pick<WarmCaseItem, "contact_email" | "category">): WarmCaseItem {
   return {
@@ -44,11 +44,7 @@ const ITEMS: WarmCaseItem[] = [
 describe("WarmCasesTable preset chips (applyWarmCaseTableView)", () => {
   it("Pagos/admin shows BancoChile row", () => {
     const visible = applyWarmCaseTableView(ITEMS, {
-      search: "",
-      status: "",
-      category: "",
-      sort: "last_seen_desc",
-      hideInternalContacts: true,
+      ...DEFAULT_WARM_FILTERS,
       preset: "pagos_admin",
     });
     expect(visible.map((r) => r.contact_email)).toEqual([
@@ -58,11 +54,7 @@ describe("WarmCasesTable preset chips (applyWarmCaseTableView)", () => {
 
   it("Logística shows DHL row", () => {
     const visible = applyWarmCaseTableView(ITEMS, {
-      search: "",
-      status: "",
-      category: "",
-      sort: "last_seen_desc",
-      hideInternalContacts: true,
+      ...DEFAULT_WARM_FILTERS,
       preset: "logistica",
     });
     expect(visible.map((r) => r.contact_email)).toEqual(["monica.silva@dhl.com"]);
@@ -70,11 +62,7 @@ describe("WarmCasesTable preset chips (applyWarmCaseTableView)", () => {
 
   it("Clientes reales shows CEAF and excludes contacto@origenlab.cl", () => {
     const visible = applyWarmCaseTableView(ITEMS, {
-      search: "",
-      status: "",
-      category: "",
-      sort: "last_seen_desc",
-      hideInternalContacts: true,
+      ...DEFAULT_WARM_FILTERS,
       preset: "clientes_reales",
     });
     expect(visible.map((r) => r.contact_email)).toEqual(["cgaray@ceaf.cl"]);

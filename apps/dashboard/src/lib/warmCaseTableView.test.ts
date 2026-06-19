@@ -146,4 +146,14 @@ describe("warmCaseTableView", () => {
     expect(hidden.map((r) => r.contact_email)).not.toContain("contacto@origenlab.cl");
     expect(hidden.map((r) => r.contact_email)).toContain("buyer@acme.cl");
   });
+
+  it("filters by local review label", () => {
+    const filtered = filterWarmCases(
+      rows,
+      { ...DEFAULT_WARM_FILTERS, preset: "todo", review: "util" },
+      { reviewLabels: { a: "util" } },
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].case_id).toBe("a");
+  });
 });

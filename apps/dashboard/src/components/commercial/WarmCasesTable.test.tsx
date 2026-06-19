@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { normalizeWarmCaseItem } from "../../api/commercialParse";
 import type { WarmCaseItem } from "../../api/commercialTypes";
 import { WarmCasesTable } from "./WarmCasesTable";
@@ -591,5 +591,120 @@ describe("WarmCasesTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Todo" }));
     screen.getByText("CRTOP — Reactor OLT-HP-5L ×6");
     expect(screen.queryByText(/6 correos/)).toBeNull();
+  });
+
+  describe("local review labels", () => {
+    const WARM_CASE_REVIEW_LABELS_STORAGE_KEY = "origenlab.dashboard.warmCaseReviewLabels.v1";
+
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("renders review label control in each row", () => {
+      render(
+        <WarmCasesTable
+          backend="sqlite"
+          items={[row]}
+          meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 1 }}
+          loading={false}
+          error={null}
+          onRetry={() => {}}
+          onContactSelect={() => {}}
+        />,
+      );
+      const select = screen.getByLabelText(
+        "Etiqueta de revisión para buyer@acme.cl",
+      ) as HTMLSelectElement;
+      expect(select.value).toBe("");
+      expect(select.textContent).toContain("Sin revisar");
+      expect(select.textContent).toContain("Útil");
+    });
+
+    it("persists selected label in localStorage", () => {
+      render(
+        <WarmCasesTable
+          backend="sqlite"
+          items={[row]}
+          meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 1 }}
+          loading={false}
+          error={null}
+          onRetry={() => {}}
+          onContactSelect={() => {}}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("Etiqueta de revisión para buyer@acme.cl"), {
+        target: { value: "util" },
+      });
+      const stored = JSON.parse(
+        window.localStorage.getItem(WARM_CASE_REVIEW_LABELS_STORAGE_KEY) ?? "{}",
+      );
+      expect(stored[row.case_id]).toBe("util");
+    });
+
+    it("does not open detail drawer when selecting a review label", () => {
+      render(
+        <WarmCasesTable
+          backend="sqlite"
+          items={[row]}
+          meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 1 }}
+          loading={false}
+          error={null}
+          onRetry={() => {}}
+          onContactSelect={() => {}}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("Etiqueta de revisión para buyer@acme.cl"), {
+        target: { value: "util" },
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("shows reviewed count after labeling a case", () => {
+      render(
+        <WarmCasesTable
+          backend="sqlite"
+          items={[row, { ...row, case_id: "other", contact_email: "other@elsewhere.cl" }]}
+          meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 2 }}
+          loading={false}
+          error={null}
+          onRetry={() => {}}
+          onContactSelect={() => {}}
+        />,
+      );
+      expect(screen.queryByTestId("warm-case-review-count")).toBeNull();
+      fireEvent.change(screen.getByLabelText("Etiqueta de revisión para buyer@acme.cl"), {
+        target: { value: "util" },
+      });
+      expect(screen.getByTestId("warm-case-review-count").textContent).toMatch(
+        /1 revisado en este navegador/,
+      );
+    });
+
+    it("filters rows by local review label", () => {
+      window.localStorage.setItem(
+        WARM_CASE_REVIEW_LABELS_STORAGE_KEY,
+        JSON.stringify({ [row.case_id]: "util", other: "no_util" }),
+      );
+      render(
+        <WarmCasesTable
+          backend="sqlite"
+          items={[
+            row,
+            { ...row, case_id: "other", contact_email: "other@elsewhere.cl", account_name: "Elsewhere" },
+          ]}
+          meta={{ data_source: "sqlite", reduced_mode: false, note: "", count: 2 }}
+          loading={false}
+          error={null}
+          onRetry={() => {}}
+          onContactSelect={() => {}}
+          initialFilters={{ preset: "todo", hideInternalContacts: false }}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("Filtrar por etiqueta de revisión local"), {
+        target: { value: "util" },
+      });
+      screen.getByText("buyer@acme.cl");
+      expect(screen.queryByText("other@elsewhere.cl")).toBeNull();
+    });
   });
 });
