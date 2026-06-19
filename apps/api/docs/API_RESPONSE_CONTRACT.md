@@ -76,6 +76,22 @@ Routes may add **documented** meta fields (e.g. `reduced_mode`, `campaign_mode`,
 
 SQLite dev fallback may return `meta.data_source: "sqlite"` locally; production contract is locked via `PostgresWarmCaseRepository` → `api.v_warm_case` and `scripts/remote_response_audit.py` (`require_warm_cases_contract`).
 
+**`GET /emails/recent` (production Postgres read model):**
+
+| Rule | Requirement |
+|------|-------------|
+| `meta.data_source` | `postgres_mirror` when `ORIGENLAB_API_BACKEND=postgres` |
+| `total_returned` | Integer equal to `len(items)` |
+| `enrichment_available` | Boolean |
+| `reduced_mode` | Boolean |
+| `days_window` | Integer (echo of `days` query param) |
+| Item identity | Each item has int `email_id` |
+| Internal fields | Must **not** appear in JSON items: `source_file`, `body`, `raw_body`, `headers`, `recipients_raw` |
+| Item values | Public fields are JSON-safe scalars (no nested objects in item payloads) |
+| Path leaks | Raw `/home/` or `/mnt/` paths forbidden anywhere in the response body |
+
+Production reads `api.v_recent_email` through `PostgresEmailRecentRepository` when Postgres is configured. Remote contract: `scripts/remote_response_audit.py` (`require_recent_emails_contract`).
+
 `EquipmentOpportunityItem` includes **`opportunity_key`** (stable cross-source correlation id: `equipment:<source_slug>:<codigo>`). Additive; clients may ignore until needed.
 
 | Route | Response model |

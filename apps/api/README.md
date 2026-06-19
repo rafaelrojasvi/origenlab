@@ -66,11 +66,13 @@ CORS middleware allows **GET, HEAD, OPTIONS** only. See [`../email-pipeline/docs
 | GET | `/health` | API-0 | Liveness + `operator-sqlite-readonly` mode |
 | GET | `/operator/status` | API-0 | Operator verdict (delegates to `operator_status_report`) |
 | GET | `/operator/automation-status` | API-0 | Read-only automation health (mail auto-refresh + dashboard auto-mirror local state) |
-| GET | `/emails/recent` | API-1 | Recent canonical Gmail rows (previews only; no body) |
+| GET | `/emails/recent` | API-1 | Recent canonical Gmail rows (**Postgres read model** `api.v_recent_email` in production; SQLite fallback dev-only) |
 | GET | `/cases/warm` | API-1.1 | Warm commercial case queue (**Postgres read model** `api.v_warm_case` in production; SQLite fallback dev-only) |
 | GET | `/opportunities/equipment` | API-1.2 | Equipment-first operator queue (**Postgres read model** in production; SQLite/CSV fallback dev-only) |
 
 **Warm cases read-model boundary:** production serves `api.v_warm_case` through `PostgresWarmCaseRepository` when `ORIGENLAB_API_BACKEND=postgres`. Remote contract checks live in `scripts/remote_response_audit.py` (`require_warm_cases_contract`).
+
+**Recent emails read-model boundary:** production serves `api.v_recent_email` through `PostgresEmailRecentRepository` when `ORIGENLAB_API_BACKEND=postgres`. Remote contract checks live in `scripts/remote_response_audit.py` (`require_recent_emails_contract`).
 
 **Equipment read-model boundary:** production serves `api.v_equipment_opportunity_current` when `ORIGENLAB_API_BACKEND=postgres`. See [`../email-pipeline/docs/architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md`](../email-pipeline/docs/architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md) and the operator runbook [`../email-pipeline/docs/runbooks/EQUIPMENT_READ_MODEL_RUNBOOK.md`](../email-pipeline/docs/runbooks/EQUIPMENT_READ_MODEL_RUNBOOK.md).
 | GET | `/contacts/{email}` | API-1.3 / **Dashboard-2** | Read-only contact profile (SQLite or postgres mirror); used by Today side panel |
@@ -144,7 +146,7 @@ Optional env for cold Render / Cloudflare starts (network timeouts and connectio
 | `ORIGENLAB_REMOTE_AUDIT_RETRIES` | `2` | Retries after `TimeoutError` / `URLError` / `OSError` only |
 | `ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS` | `2.0` | Sleep between network retries |
 
-Uses the same response contract checks as the local audit (`x-request-id`, JSON envelopes, list `meta`/`items`, warm-cases and equipment current-view contracts, forbidden path/secret leaks). Not part of `./scripts/validate.sh` (requires network + secrets).
+Uses the same response contract checks as the local audit (`x-request-id`, JSON envelopes, list `meta`/`items`, warm-cases, recent-emails, and equipment current-view contracts, forbidden path/secret leaks). Not part of `./scripts/validate.sh` (requires network + secrets).
 
 GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/api.yml) runs `./scripts/validate.sh` for `apps/api` changes and `apps/email-pipeline` dependency changes.
 

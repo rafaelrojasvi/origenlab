@@ -26,6 +26,7 @@ cf_credentials_from_env = _remote.cf_credentials_from_env
 fetch_get = _remote.fetch_get
 main = _remote.main
 require_equipment_current_contract = _remote.require_equipment_current_contract
+require_recent_emails_contract = _remote.require_recent_emails_contract
 require_warm_cases_contract = _remote.require_warm_cases_contract
 require_error_envelope = _remote.require_error_envelope
 require_meta_items = _remote.require_meta_items
@@ -34,6 +35,34 @@ request_retries = _remote.request_retries
 request_retry_backoff_seconds = _remote.request_retry_backoff_seconds
 request_timeout_seconds = _remote.request_timeout_seconds
 scan_forbidden_leaks_in_text = _remote.scan_forbidden_leaks_in_text
+
+
+def _valid_recent_emails_body(**overrides: object) -> dict[str, object]:
+    items = [
+        {
+            "email_id": 42,
+            "date_iso": "2026-05-19T10:00:00-04:00",
+            "subject_preview": "Cotización equipo",
+            "sender_preview": "client@example.cl",
+            "folder_hint": "[Gmail]/Enviados",
+            "has_positive_signal": True,
+            "has_suppression_signal": False,
+        }
+    ]
+    body: dict[str, object] = {
+        "meta": {
+            "data_source": "postgres_mirror",
+            "read_only": True,
+        },
+        "items": items,
+        "total_returned": len(items),
+        "days_window": 7,
+        "scope_note": "",
+        "enrichment_available": True,
+        "reduced_mode": False,
+    }
+    body.update(overrides)
+    return body
 
 
 def _valid_warm_body(**overrides: object) -> dict[str, object]:
@@ -129,6 +158,66 @@ def test_require_meta_items_requires_meta_and_items() -> None:
 
 def test_require_meta_items_accepts_valid_list_shape() -> None:
     require_meta_items({"meta": {"read_only": True}, "items": []})
+
+
+def test_require_recent_emails_contract_accepts_valid_response() -> None:
+    require_recent_emails_contract(_valid_recent_emails_body())  # type: ignore[arg-type]
+
+
+def test_require_recent_emails_contract_total_returned_mismatch_fails() -> None:
+    body = _valid_recent_emails_body()
+    body["total_returned"] = 99  # type: ignore[assignment]
+    with pytest.raises(RemoteAuditError, match="total_returned"):
+        require_recent_emails_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_recent_emails_contract_enrichment_available_wrong_type_fails() -> None:
+    body = _valid_recent_emails_body()
+    body["enrichment_available"] = "yes"  # type: ignore[assignment]
+    with pytest.raises(RemoteAuditError, match="enrichment_available"):
+        require_recent_emails_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_recent_emails_contract_reduced_mode_wrong_type_fails() -> None:
+    body = _valid_recent_emails_body()
+    body["reduced_mode"] = 0  # type: ignore[assignment]
+    with pytest.raises(RemoteAuditError, match="reduced_mode"):
+        require_recent_emails_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_recent_emails_contract_internal_source_file_field_fails() -> None:
+    body = _valid_recent_emails_body()
+    body["items"][0]["source_file"] = "/secret/mailbox.json"  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="source_file"):
+        require_recent_emails_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_recent_emails_contract_internal_raw_body_field_fails() -> None:
+    body = _valid_recent_emails_body()
+    body["items"][0]["raw_body"] = "MIME body"  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="raw_body"):
+        require_recent_emails_contract(body)  # type: ignore[arg-type]
+
+
+def test_require_recent_emails_contract_raw_filesystem_path_fails() -> None:
+    body = _valid_recent_emails_body()
+    body["items"][0]["subject_preview"] = "see /mnt/data/mailbox"  # type: ignore[index]
+    with pytest.raises(RemoteAuditError, match="/mnt/"):
+        require_recent_emails_contract(body)  # type: ignore[arg-type]
+
+
+def test_audit_response_recent_emails_contract() -> None:
+    response = RemoteResponse(
+        status=200,
+        headers={"x-request-id": "rid-1"},
+        body_text=json.dumps(_valid_recent_emails_body()),
+    )
+    audit_response(
+        "GET /emails/recent?limit=3",
+        response,
+        "/emails/recent?limit=3",
+        expect_success=True,
+    )
 
 
 def test_require_warm_cases_contract_accepts_valid_response() -> None:
