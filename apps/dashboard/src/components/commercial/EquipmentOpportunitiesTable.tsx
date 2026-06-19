@@ -21,6 +21,7 @@ import {
   formatEquipmentCloseDate,
   formatEquipmentPublicationDate,
 } from "../../lib/dashboardDateFormat";
+import { getEquipmentFilterEmptyMessage } from "../../lib/equipmentEmptyState";
 import { truncate } from "../../lib/safeText";
 import { TokenLabel } from "../operator/TokenLabel";
 import { ContactEmailButton } from "./ContactEmailButton";
@@ -190,7 +191,7 @@ export function EquipmentOpportunitiesTable({
       empty={showZeroEmpty}
       emptyMessage="No hay oportunidades de equipos en la cola actual."
       filterEmpty={!loading && !error && loadedCount > 0 && visibleRows.length === 0}
-      filterEmptyMessage="Ninguna oportunidad coincide con la búsqueda actual."
+      filterEmptyMessage={getEquipmentFilterEmptyMessage(filters)}
       reducedNote={!feedUnavailable && meta?.note ? meta.note : undefined}
       toolbar={loadedCount > 0 && !feedUnavailable ? toolbar : undefined}
     >
