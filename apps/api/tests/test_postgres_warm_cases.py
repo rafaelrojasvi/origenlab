@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import inspect
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Iterator
 from unittest.mock import patch
 
@@ -49,6 +51,27 @@ def test_map_warm_case_row_fixture() -> None:
     assert "2026-05-19" in item.last_seen_at
 
 
+def test_map_warm_case_row_invalid_last_email_id_defaults_to_zero() -> None:
+    assert map_warm_case_row(_fixture_row(last_email_id="not-a-number")).last_email_id == 0
+    assert map_warm_case_row(_fixture_row(last_email_id=None)).last_email_id == 0
+
+
+def test_map_warm_case_row_formats_last_seen_at_utc_without_microseconds() -> None:
+    seen = datetime(2026, 5, 19, 14, 30, 45, 123456, tzinfo=timezone.utc)
+    item = map_warm_case_row(_fixture_row(last_seen_at=seen))
+    assert item.last_seen_at == "2026-05-19T14:30:45+00:00"
+
+
+def test_map_warm_case_row_blank_gmail_url_becomes_none() -> None:
+    assert map_warm_case_row(_fixture_row(gmail_url="   ")).gmail_url is None
+
+
+def test_map_warm_case_row_defaults_empty_category_and_status() -> None:
+    item = map_warm_case_row(_fixture_row(category="", status=""))
+    assert item.category == "opportunity"
+    assert item.status == "open"
+
+
 def test_map_warm_case_row_uses_view_role_category() -> None:
     item = map_warm_case_row(_fixture_row(category="supplier_quote_received"))
     assert item.category == "supplier_quote_received"
@@ -62,16 +85,23 @@ def test_map_warm_case_row_legacy_category_without_role_category() -> None:
 def test_build_warm_cases_meta_empty_has_note() -> None:
     meta = build_warm_cases_meta(items=[])
     assert meta.data_source == "postgres_mirror"
+    assert meta.read_only is True
     assert meta.enrichment_available is True
     assert meta.reduced_mode is True
-    assert "include-warm-cases" in meta.note
+    assert meta.count == 0
+    assert "warm cases" in meta.note.lower()
+    assert "sync" in meta.note.lower()
 
 
 def test_build_warm_cases_meta_with_rows() -> None:
     item = map_warm_case_row(_fixture_row())
     meta = build_warm_cases_meta(items=[item])
+    assert meta.data_source == "postgres_mirror"
+    assert meta.read_only is True
     assert meta.reduced_mode is False
     assert meta.count == 1
+    assert meta.enrichment_available is True
+    assert meta.note == ""
 
 
 def test_repository_bundle_default_uses_sqlite_warm_cases(tmp_path: Path) -> None:
@@ -139,6 +169,20 @@ def _fake_postgres_connection(rows: list[dict[str, Any]]) -> Iterator[Any]:
         yield fake
 
 
+def test_postgres_warm_cases_repository_does_not_use_sqlite_fallback() -> None:
+    import origenlab_api.repositories.postgres.warm_cases as pg_warm_cases
+
+    source = inspect.getsource(pg_warm_cases)
+    forbidden = (
+        "fetch_warm_cases",
+        "resolved_sqlite_path",
+        "sqlite_path",
+        "emails.sqlite",
+    )
+    for token in forbidden:
+        assert token not in source
+
+
 def test_postgres_warm_cases_queries_view() -> None:
     settings = Settings(
         api_backend="postgres",
@@ -158,9 +202,114 @@ def test_postgres_warm_cases_queries_view() -> None:
     assert "last_seen_at >= %(cutoff)s" in cur.last_sql
     assert cur.last_params["include_noise"] is False
     assert "category" not in cur.last_params
+    assert isinstance(cur.last_params["cutoff"], datetime)
     assert cur.last_params["limit"] == 40
     assert len(items) == 1
     assert meta.data_source == "postgres_mirror"
+
+
+def test_postgres_warm_cases_passes_include_noise_and_fetch_limit_to_sql() -> None:
+    settings = Settings(
+        api_backend="postgres",
+        postgres_url="postgresql://127.0.0.1:5432/test",
+    )
+    repo = PostgresWarmCaseRepository(settings)
+    with _fake_postgres_connection([]) as conn:
+        repo.list_warm_cases(limit=60, include_noise=True)
+        cur = conn.last_cursor
+    assert cur is not None
+    assert cur.last_params["include_noise"] is True
+    assert cur.last_params["limit"] == 200
+
+
+def test_postgres_warm_cases_caps_response_limit_to_200() -> None:
+    settings = Settings(
+        api_backend="postgres",
+        postgres_url="postgresql://127.0.0.1:5432/test",
+    )
+    repo = PostgresWarmCaseRepository(settings)
+    rows = [
+        _fixture_row(
+            case_id=f"case:{index}",
+            last_email_id=1000 + index,
+            contact_email=f"user{index}@example.com",
+            subject=f"Subject {index}",
+        )
+        for index in range(250)
+    ]
+    with _fake_postgres_connection(rows):
+        items, meta = repo.list_warm_cases(limit=500)
+    assert len(items) == 200
+    assert meta.count == 200
+
+
+def test_postgres_warm_cases_category_filter_applies_after_normalization() -> None:
+    settings = Settings(
+        api_backend="postgres",
+        postgres_url="postgresql://127.0.0.1:5432/test",
+    )
+    repo = PostgresWarmCaseRepository(settings)
+    rows = [
+        _fixture_row(case_id="case:supplier", category="supplier_reply"),
+        _fixture_row(case_id="case:client", category="client_reply", contact_email="buyer@acme.cl"),
+    ]
+    with _fake_postgres_connection(rows):
+        items, _meta = repo.list_warm_cases(category="supplier_followup", limit=10)
+    assert [item.case_id for item in items] == ["case:supplier"]
+
+
+def test_postgres_warm_cases_positive_signal_only_excludes_noise() -> None:
+    settings = Settings(
+        api_backend="postgres",
+        postgres_url="postgresql://127.0.0.1:5432/test",
+    )
+    repo = PostgresWarmCaseRepository(settings)
+    rows = [
+        _fixture_row(
+            case_id="case:noise",
+            category="system_noise",
+            subject="Automatic reply: out of office",
+            snippet="I am away",
+        ),
+        _fixture_row(
+            case_id="case:client",
+            category="client_reply",
+            contact_email="buyer@acme.cl",
+            subject="Need quote",
+            snippet="Please send pricing",
+        ),
+    ]
+    with _fake_postgres_connection(rows):
+        items, _meta = repo.list_warm_cases(positive_signal_only=True, limit=10)
+    assert [item.case_id for item in items] == ["case:client"]
+
+
+def test_postgres_warm_cases_include_noise_false_hides_noise_after_normalization() -> None:
+    settings = Settings(
+        api_backend="postgres",
+        postgres_url="postgresql://127.0.0.1:5432/test",
+    )
+    repo = PostgresWarmCaseRepository(settings)
+    rows = [
+        _fixture_row(
+            case_id="case:noise",
+            category="system_noise",
+            subject="Automatic reply: out of office",
+            snippet="I am away",
+        ),
+        _fixture_row(
+            case_id="case:client",
+            category="client_reply",
+            contact_email="buyer@acme.cl",
+            subject="Need quote",
+            snippet="Please send pricing",
+        ),
+    ]
+    with _fake_postgres_connection(rows):
+        hidden, _meta = repo.list_warm_cases(include_noise=False, limit=10)
+        visible, _meta = repo.list_warm_cases(include_noise=True, limit=10)
+    assert [item.case_id for item in hidden] == ["case:client"]
+    assert {item.case_id for item in visible} == {"case:noise", "case:client"}
 
 
 def test_postgres_warm_cases_no_rows_graceful() -> None:
