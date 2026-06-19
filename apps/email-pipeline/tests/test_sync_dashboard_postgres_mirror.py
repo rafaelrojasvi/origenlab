@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -32,6 +33,40 @@ from origenlab_email_pipeline.db import init_schema
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "sync" / "sync_dashboard_postgres_mirror.py"
+ALEMBIC_VERSIONS_DIR = REPO / "alembic" / "versions"
+
+_REVISION_RE = re.compile(r'^revision:\s*str\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+_DOWN_REVISION_RE = re.compile(
+    r'^down_revision:\s*Union\[str,\s*Sequence\[str\],\s*None\]\s*=\s*(.+)$',
+    re.MULTILINE,
+)
+
+
+def _parse_down_revision(raw: str) -> list[str]:
+    value = raw.strip()
+    if value == "None":
+        return []
+    if value.startswith(('"', "'")):
+        return [value.strip("\"'")]
+    return re.findall(r'["\']([^"\']+)["\']', value)
+
+
+def compute_alembic_head_from_versions(versions_dir: Path = ALEMBIC_VERSIONS_DIR) -> str:
+    revisions: set[str] = set()
+    referenced: set[str] = set()
+    for path in sorted(versions_dir.glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        rev_match = _REVISION_RE.search(text)
+        if not rev_match:
+            continue
+        revision = rev_match.group(1)
+        revisions.add(revision)
+        down_match = _DOWN_REVISION_RE.search(text)
+        if down_match:
+            referenced.update(_parse_down_revision(down_match.group(1)))
+    heads = revisions - referenced
+    assert len(heads) == 1, f"expected exactly one Alembic head, got {sorted(heads)}"
+    return next(iter(heads))
 
 _PATCH_PG = "origenlab_email_pipeline.dashboard_postgres_sync.preflight_postgres"
 _PATCH_COUNTS = "origenlab_email_pipeline.dashboard_postgres_sync.collect_mirror_counts"
@@ -926,8 +961,11 @@ def test_alembic_migration_defines_commercial_deal_mirror() -> None:
     assert "commercial.deal" in text
 
 
+def test_expected_alembic_head_matches_migration_chain_head() -> None:
+    assert compute_alembic_head_from_versions() == EXPECTED_ALEMBIC_HEAD
+
+
 def test_alembic_head_matches_db1_api_read_model_chain() -> None:
-    assert EXPECTED_ALEMBIC_HEAD == "20260614_0024"
     catalog_path = REPO / "alembic" / "versions" / "20260527_0019_catalog_mirror.py"
     assert catalog_path.is_file()
     assert "catalog.product" in catalog_path.read_text(encoding="utf-8")
@@ -949,6 +987,11 @@ def test_alembic_head_matches_db1_api_read_model_chain() -> None:
     )
     assert equipment_path.is_file()
     assert "extra_json" in equipment_path.read_text(encoding="utf-8")
+    current_path = (
+        REPO / "alembic" / "versions" / "20260617_0030_api_v_equipment_opportunity_current.py"
+    )
+    assert current_path.is_file()
+    assert "api.v_equipment_opportunity_current" in current_path.read_text(encoding="utf-8")
 
 
 def test_check_alembic_head_accepts_expected_head() -> None:
@@ -971,7 +1014,7 @@ def test_check_alembic_head_mismatch_message_uses_current_expected_head() -> Non
     assert ok is False
     assert version == "20260607_0023"
     assert msg == (
-        "Alembic head mismatch: database='20260607_0023' expected='20260614_0024'"
+        f"Alembic head mismatch: database='20260607_0023' expected={EXPECTED_ALEMBIC_HEAD!r}"
     )
 
 
