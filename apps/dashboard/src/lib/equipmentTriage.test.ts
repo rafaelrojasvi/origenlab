@@ -27,6 +27,7 @@ describe("getEquipmentTriageBadges", () => {
   it("adds urgent Cotizar ahora for quote_now", () => {
     const badges = getEquipmentTriageBadges(baseItem({ next_action: "quote_now" }), { now: NOW });
     expect(badges[0]).toEqual({
+      key: "quote_now",
       label: "Cotizar ahora",
       tone: "urgent",
       reason: expect.stringContaining("cotizar"),
@@ -38,7 +39,13 @@ describe("getEquipmentTriageBadges", () => {
       baseItem({ close_at: "2026-06-17T19:00:00-04:00", close_date: "" }),
       { now: NOW },
     );
-    expect(badges.some((badge) => badge.label === "Cierre pronto")).toBe(true);
+    const badge = badges.find((entry) => entry.key === "closing_soon");
+    expect(badge).toEqual({
+      key: "closing_soon",
+      label: "Cierre pronto",
+      tone: "warning",
+      reason: expect.stringContaining("3 días"),
+    });
   });
 
   it("adds Cierre pronto when Chilean close_date is within 3 days", () => {
@@ -46,6 +53,7 @@ describe("getEquipmentTriageBadges", () => {
       baseItem({ close_date: "17/06/2026", close_at: undefined }),
       { now: NOW },
     );
+    expect(badges.some((badge) => badge.key === "closing_soon")).toBe(true);
     expect(badges.some((badge) => badge.label === "Cierre pronto")).toBe(true);
   });
 
@@ -57,6 +65,7 @@ describe("getEquipmentTriageBadges", () => {
       }),
       { now: NOW },
     );
+    expect(badges.some((badge) => badge.key === "missing_contact")).toBe(true);
     expect(badges.some((badge) => badge.label === "Sin contacto")).toBe(true);
   });
 
@@ -68,11 +77,12 @@ describe("getEquipmentTriageBadges", () => {
       }),
       { now: NOW },
     );
-    expect(badges.some((badge) => badge.label === "Sin contacto")).toBe(false);
+    expect(badges.some((badge) => badge.key === "missing_contact")).toBe(false);
   });
 
   it("adds Requiere proveedor for yes-like supplier_needed", () => {
     const badges = getEquipmentTriageBadges(baseItem({ supplier_needed: "yes" }), { now: NOW });
+    expect(badges.some((badge) => badge.key === "supplier_needed")).toBe(true);
     expect(badges.some((badge) => badge.label === "Requiere proveedor")).toBe(true);
   });
 
@@ -81,6 +91,7 @@ describe("getEquipmentTriageBadges", () => {
       baseItem({ safe_channel: "mercado_publico_only" }),
       { now: NOW },
     );
+    expect(badges.some((badge) => badge.key === "mercado_publico_only")).toBe(true);
     expect(badges.some((badge) => badge.label === "Solo Mercado Público")).toBe(true);
   });
 
@@ -97,10 +108,10 @@ describe("getEquipmentTriageBadges", () => {
       { now: NOW },
     );
     expect(badges).toHaveLength(3);
-    expect(badges.map((badge) => badge.label)).toEqual([
-      "Cotizar ahora",
-      "Cierre pronto",
-      "Sin contacto",
+    expect(badges.map((badge) => badge.key)).toEqual([
+      "quote_now",
+      "closing_soon",
+      "missing_contact",
     ]);
   });
 
@@ -115,6 +126,6 @@ describe("getEquipmentTriageBadges", () => {
       baseItem({ close_date: "not-a-date", close_at: "also-bad" }),
       { now: NOW },
     );
-    expect(badges.some((badge) => badge.label === "Cierre pronto")).toBe(false);
+    expect(badges.some((badge) => badge.key === "closing_soon")).toBe(false);
   });
 });

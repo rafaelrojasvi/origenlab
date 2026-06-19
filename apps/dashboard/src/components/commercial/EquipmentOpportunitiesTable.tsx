@@ -91,6 +91,7 @@ export function EquipmentOpportunitiesTable({
   const { pageSize, setPage, setPageSize, pagination } = useClientTablePagination(visibleRows, [
     filters.search,
     filters.sort,
+    filters.triage,
     items.length,
   ]);
   const pagedRows = pagination.slice;
@@ -144,6 +145,26 @@ export function EquipmentOpportunitiesTable({
           <option value="close_date_desc">Close date (latest)</option>
           <option value="category">Equipment category</option>
           <option value="buyer">Buyer</option>
+        </select>
+      </ToolbarField>
+      <ToolbarField label="Triage">
+        <select
+          className={toolbarSelectClass()}
+          value={filters.triage}
+          onChange={(e) =>
+            setFilters((f) => ({
+              ...f,
+              triage: e.target.value as EquipmentTableFilters["triage"],
+            }))
+          }
+          aria-label="Filter equipment opportunities by triage"
+        >
+          <option value="all">Todas</option>
+          <option value="quote_now">Cotizar ahora</option>
+          <option value="closing_soon">Cierre pronto</option>
+          <option value="missing_contact">Sin contacto</option>
+          <option value="supplier_needed">Requiere proveedor</option>
+          <option value="mercado_publico_only">Solo Mercado Público</option>
         </select>
       </ToolbarField>
       {filtersActive ? (

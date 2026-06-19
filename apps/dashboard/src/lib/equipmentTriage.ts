@@ -3,7 +3,15 @@ import { parseSortableTimestamp } from "./clientTableView";
 
 export type EquipmentTriageTone = "urgent" | "warning" | "info" | "ok" | "muted";
 
+export type EquipmentTriageBadgeKey =
+  | "quote_now"
+  | "closing_soon"
+  | "missing_contact"
+  | "supplier_needed"
+  | "mercado_publico_only";
+
 export type EquipmentTriageBadge = {
+  key: EquipmentTriageBadgeKey;
   label: string;
   tone: EquipmentTriageTone;
   reason: string;
@@ -92,6 +100,7 @@ export function getEquipmentTriageBadges(
 
   if (isQuoteNow(item)) {
     badges.push({
+      key: "quote_now",
       label: "Cotizar ahora",
       tone: "urgent",
       reason: "La acción recomendada es cotizar de inmediato.",
@@ -100,6 +109,7 @@ export function getEquipmentTriageBadges(
 
   if (isClosingSoon(item, now)) {
     badges.push({
+      key: "closing_soon",
       label: "Cierre pronto",
       tone: "warning",
       reason: "La fecha de cierre está dentro de los próximos 3 días.",
@@ -108,6 +118,7 @@ export function getEquipmentTriageBadges(
 
   if (!hasContactEmail(item) && suggestsNoVerifiedBuyerEmail(item.contact_status)) {
     badges.push({
+      key: "missing_contact",
       label: "Sin contacto",
       tone: "warning",
       reason: "No hay correo de contacto verificado para el comprador.",
@@ -116,6 +127,7 @@ export function getEquipmentTriageBadges(
 
   if (isSupplierNeeded(item.supplier_needed)) {
     badges.push({
+      key: "supplier_needed",
       label: "Requiere proveedor",
       tone: "info",
       reason: "La oportunidad indica que se necesita proveedor.",
@@ -124,6 +136,7 @@ export function getEquipmentTriageBadges(
 
   if (isMercadoPublicoOnly(item)) {
     badges.push({
+      key: "mercado_publico_only",
       label: "Solo Mercado Público",
       tone: "muted",
       reason: "El canal seguro permite solo Mercado Público.",

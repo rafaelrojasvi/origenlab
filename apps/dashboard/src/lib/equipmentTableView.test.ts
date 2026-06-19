@@ -3,9 +3,12 @@ import type { EquipmentOpportunityItem } from "../api/commercialTypes";
 import {
   DEFAULT_EQUIPMENT_FILTERS,
   applyEquipmentTableView,
+  equipmentFiltersActive,
   filterEquipment,
   sortEquipment,
 } from "./equipmentTableView";
+
+const NOW = new Date("2026-06-15T12:00:00Z");
 
 const rows: EquipmentOpportunityItem[] = [
   {
@@ -38,6 +41,36 @@ const rows: EquipmentOpportunityItem[] = [
     contact_email: "procurement@uni.cl",
     operator_note: "urgent",
   },
+  {
+    priority_rank: 3,
+    codigo_licitacion: "LP-3",
+    buyer: "Clinica Central",
+    region: "RM",
+    close_date: "17/06/2026",
+    equipment_category: "microscope",
+    item_description: "Microscope",
+    next_action: "quote_now",
+    safe_channel: "mercado_publico_bid",
+    supplier_needed: "no",
+    contact_status: "review_required",
+    contact_email: "lab@clinica.cl",
+    operator_note: "quote queue",
+  },
+  {
+    priority_rank: 4,
+    codigo_licitacion: "LP-4",
+    buyer: "Servicio Salud",
+    region: "BioBio",
+    close_date: "01/08/2026",
+    equipment_category: "incubator",
+    item_description: "Incubator",
+    next_action: "monitor",
+    safe_channel: "mercado_publico_only",
+    supplier_needed: "no",
+    contact_status: "no_verified_buyer_email",
+    contact_email: "",
+    operator_note: "no email",
+  },
 ];
 
 describe("equipmentTableView", () => {
@@ -65,5 +98,82 @@ describe("equipmentTableView", () => {
     });
     expect(out).toHaveLength(1);
     expect(out[0].buyer).toBe("Hospital Sur");
+  });
+
+  it("keeps all rows when triage is all", () => {
+    const filtered = filterEquipment(rows, DEFAULT_EQUIPMENT_FILTERS, { now: NOW });
+    expect(filtered).toHaveLength(rows.length);
+  });
+
+  it("filters quote_now rows by triage key", () => {
+    const filtered = filterEquipment(
+      rows,
+      { ...DEFAULT_EQUIPMENT_FILTERS, triage: "quote_now" },
+      { now: NOW },
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].codigo_licitacion).toBe("LP-3");
+  });
+
+  it("filters closing_soon rows with deterministic now", () => {
+    const filtered = filterEquipment(
+      rows,
+      { ...DEFAULT_EQUIPMENT_FILTERS, triage: "closing_soon" },
+      { now: NOW },
+    );
+    expect(filtered.map((row) => row.codigo_licitacion)).toEqual(["LP-3"]);
+  });
+
+  it("filters missing_contact rows by triage key", () => {
+    const filtered = filterEquipment(
+      rows,
+      { ...DEFAULT_EQUIPMENT_FILTERS, triage: "missing_contact" },
+      { now: NOW },
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].codigo_licitacion).toBe("LP-4");
+  });
+
+  it("filters supplier_needed rows by triage key", () => {
+    const filtered = filterEquipment(
+      rows,
+      { ...DEFAULT_EQUIPMENT_FILTERS, triage: "supplier_needed" },
+      { now: NOW },
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].codigo_licitacion).toBe("LP-1");
+  });
+
+  it("filters mercado_publico_only rows by triage key", () => {
+    const filtered = filterEquipment(
+      rows,
+      { ...DEFAULT_EQUIPMENT_FILTERS, triage: "mercado_publico_only" },
+      { now: NOW },
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].codigo_licitacion).toBe("LP-4");
+  });
+
+  it("combines search and triage filters", () => {
+    const filtered = filterEquipment(
+      rows,
+      { ...DEFAULT_EQUIPMENT_FILTERS, search: "clinica", triage: "quote_now" },
+      { now: NOW },
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].buyer).toBe("Clinica Central");
+  });
+
+  it("treats default filters as inactive", () => {
+    expect(equipmentFiltersActive(DEFAULT_EQUIPMENT_FILTERS)).toBe(false);
+  });
+
+  it("treats triage filter as active when not all", () => {
+    expect(
+      equipmentFiltersActive({
+        ...DEFAULT_EQUIPMENT_FILTERS,
+        triage: "supplier_needed",
+      }),
+    ).toBe(true);
   });
 });
