@@ -228,6 +228,102 @@ def require_warm_cases_contract(body: dict[str, Any]) -> None:
         raise RemoteAuditError(f"forbidden path leak substrings in warm cases body: {sorted(path_leaks)}")
 
 
+RECENT_EMAIL_INTERNAL_ITEM_FIELDS: frozenset[str] = frozenset(
+    {
+        "body",
+        "raw_body",
+        "headers",
+        "recipients_raw",
+    }
+)
+
+
+def _require_safe_recent_email_source_file(value: Any, *, index: int) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str):
+        raise RemoteAuditError(f"items[{index}].source_file must be a string or null")
+    text = value.strip()
+    if not text:
+        return
+    if text.startswith("/"):
+        raise RemoteAuditError(
+            f"items[{index}].source_file must not be an absolute filesystem path"
+        )
+    for needle in ("/home/", "/mnt/"):
+        if needle in text:
+            raise RemoteAuditError(
+                f"items[{index}].source_file must not contain raw filesystem path {needle!r}"
+            )
+
+
+def _is_json_safe_value(value: Any) -> bool:
+    if value is None or isinstance(value, (bool, int, str)):
+        return True
+    if isinstance(value, float):
+        return value == value and value not in (float("inf"), float("-inf"))
+    return False
+
+
+def require_recent_emails_contract(body: dict[str, Any]) -> None:
+    """Assert production read-model shape for GET /emails/recent."""
+    require_meta_items(body)
+    items = body["items"]
+
+    total_returned = body.get("total_returned")
+    if not isinstance(total_returned, int):
+        raise RemoteAuditError("total_returned must be an int")
+    if total_returned != len(items):
+        raise RemoteAuditError(
+            f"total_returned ({total_returned}) must equal len(items) ({len(items)})"
+        )
+
+    enrichment_available = body.get("enrichment_available")
+    if not isinstance(enrichment_available, bool):
+        raise RemoteAuditError("enrichment_available must be a bool")
+
+    reduced_mode = body.get("reduced_mode")
+    if not isinstance(reduced_mode, bool):
+        raise RemoteAuditError("reduced_mode must be a bool")
+
+    days_window = body.get("days_window")
+    if not isinstance(days_window, int):
+        raise RemoteAuditError("days_window must be an int")
+
+    meta = body.get("meta")
+    if meta is not None:
+        if not isinstance(meta, dict):
+            raise RemoteAuditError("meta must be an object")
+        if "data_source" in meta and meta.get("data_source") != "postgres_mirror":
+            raise RemoteAuditError(
+                f"meta.data_source must be postgres_mirror, got {meta.get('data_source')!r}"
+            )
+
+    for index, item in enumerate(items):
+        if not isinstance(item, dict) or isinstance(item, list):
+            raise RemoteAuditError(f"items[{index}] must be an object")
+        email_id = item.get("email_id")
+        if not isinstance(email_id, int):
+            raise RemoteAuditError(f"items[{index}].email_id must be an int")
+        for field in RECENT_EMAIL_INTERNAL_ITEM_FIELDS:
+            if field in item:
+                raise RemoteAuditError(f"items[{index}] must not include top-level {field}")
+        if "source_file" in item:
+            _require_safe_recent_email_source_file(item.get("source_file"), index=index)
+        for key, value in item.items():
+            if not _is_json_safe_value(value):
+                raise RemoteAuditError(
+                    f"items[{index}].{key} must be a JSON-safe scalar"
+                )
+
+    leak_hits = scan_forbidden_leaks_in_text(json.dumps(body, ensure_ascii=False))
+    path_leaks = [hit for hit in leak_hits if hit in ("/home/", "/mnt/")]
+    if path_leaks:
+        raise RemoteAuditError(
+            f"forbidden path leak substrings in recent emails body: {sorted(path_leaks)}"
+        )
+
+
 def require_equipment_current_contract(body: dict[str, Any]) -> None:
     """Assert production current-view shape for GET /opportunities/equipment."""
     require_meta_items(body)
@@ -420,6 +516,8 @@ def audit_response(
                 require_equipment_current_contract(body)
             elif endpoint == "/cases/warm":
                 require_warm_cases_contract(body)
+            elif endpoint == "/emails/recent":
+                require_recent_emails_contract(body)
             else:
                 require_meta_items(body)
         print(f"✓ {label} {response.status} request_id={request_id}")
