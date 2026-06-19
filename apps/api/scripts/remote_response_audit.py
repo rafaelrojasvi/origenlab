@@ -6,6 +6,11 @@ Usage:
   CF_ACCESS_CLIENT_ID=... CF_ACCESS_CLIENT_SECRET=... \\
     uv run python scripts/remote_response_audit.py
 
+Optional env (cold Render / Cloudflare starts):
+  ORIGENLAB_REMOTE_AUDIT_TIMEOUT_SECONDS — per-request timeout (default 30; use 90 if needed)
+  ORIGENLAB_REMOTE_AUDIT_RETRIES — network-level retries after timeout/connection errors (default 2)
+  ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS — sleep between retries (default 2.0)
+
 Requires Cloudflare Access service token headers. Exits 0 with a skip message when
 ``CF_ACCESS_CLIENT_ID`` / ``CF_ACCESS_CLIENT_SECRET`` are unset (CI without secrets).
 """
@@ -15,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -23,6 +29,8 @@ from typing import Any
 DEFAULT_BASE_URL = "https://api.origenlab.cl"
 USER_AGENT = "OrigenLab-API-Response-Audit/1.0"
 REQUEST_TIMEOUT_SECONDS = 30
+REQUEST_RETRIES = 2
+REQUEST_RETRY_BACKOFF_SECONDS = 2.0
 
 FORBIDDEN_LEAK_SUBSTRINGS: tuple[str, ...] = (
     "/home/",
@@ -227,6 +235,35 @@ def request_timeout_seconds() -> int:
         return REQUEST_TIMEOUT_SECONDS
 
 
+def request_retries() -> int:
+    raw = os.environ.get("ORIGENLAB_REMOTE_AUDIT_RETRIES", "").strip()
+    if not raw:
+        return REQUEST_RETRIES
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return REQUEST_RETRIES
+
+
+def request_retry_backoff_seconds() -> float:
+    raw = os.environ.get("ORIGENLAB_REMOTE_AUDIT_RETRY_BACKOFF_SECONDS", "").strip()
+    if not raw:
+        return REQUEST_RETRY_BACKOFF_SECONDS
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return REQUEST_RETRY_BACKOFF_SECONDS
+
+
+def _network_error_detail(exc: BaseException) -> str:
+    if isinstance(exc, TimeoutError):
+        return "timed out"
+    if isinstance(exc, urllib.error.URLError):
+        reason = exc.reason if exc.reason is not None else exc
+        return str(reason)
+    return str(exc)
+
+
 def build_request_headers(client_id: str, client_secret: str) -> dict[str, str]:
     return {
         "CF-Access-Client-Id": client_id,
@@ -236,9 +273,8 @@ def build_request_headers(client_id: str, client_secret: str) -> dict[str, str]:
     }
 
 
-def fetch_get(url: str, headers: dict[str, str]) -> RemoteResponse:
+def _fetch_get_once(url: str, headers: dict[str, str], *, timeout: int) -> RemoteResponse:
     request = urllib.request.Request(url, headers=headers, method="GET")
-    timeout = request_timeout_seconds()
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body_text = response.read().decode("utf-8", errors="replace")
@@ -254,13 +290,48 @@ def fetch_get(url: str, headers: dict[str, str]) -> RemoteResponse:
             headers=normalize_headers(exc.headers),
             body_text=body_text,
         )
-    except TimeoutError as exc:
-        raise RemoteAuditError(f"request timed out after {timeout}s: {url}") from exc
-    except urllib.error.URLError as exc:
-        reason = exc.reason if exc.reason is not None else exc
-        raise RemoteAuditError(f"request failed for {url}: {reason}") from exc
-    except OSError as exc:
-        raise RemoteAuditError(f"request failed for {url}: {exc}") from exc
+
+
+def fetch_get(url: str, headers: dict[str, str], *, label: str = "") -> RemoteResponse:
+    timeout = request_timeout_seconds()
+    max_retries = request_retries()
+    backoff = request_retry_backoff_seconds()
+    max_attempts = max_retries + 1
+    display_label = label or url
+
+    for attempt in range(max_attempts):
+        try:
+            return _fetch_get_once(url, headers, timeout=timeout)
+        except (TimeoutError, urllib.error.URLError, OSError) as exc:
+            if attempt < max_retries:
+                retry_num = attempt + 1
+                if isinstance(exc, TimeoutError):
+                    print(
+                        f"warning: {display_label} timed out after {timeout}s; "
+                        f"retrying {retry_num}/{max_retries}",
+                        file=sys.stderr,
+                    )
+                else:
+                    detail = _network_error_detail(exc)
+                    print(
+                        f"warning: {display_label} failed ({detail}); "
+                        f"retrying {retry_num}/{max_retries}",
+                        file=sys.stderr,
+                    )
+                if backoff > 0:
+                    time.sleep(backoff)
+                continue
+
+            if isinstance(exc, TimeoutError):
+                raise RemoteAuditError(
+                    f"request timed out after {timeout}s after {max_attempts} attempt(s): {url}"
+                ) from exc
+            detail = _network_error_detail(exc)
+            raise RemoteAuditError(
+                f"request failed after {max_attempts} attempt(s) for {url}: {detail}"
+            ) from exc
+
+    raise RemoteAuditError(f"request failed after {max_attempts} attempt(s) for {url}")
 
 
 def audit_response(
@@ -315,11 +386,11 @@ def main() -> int:
     print(f"remote response audit: {base_url}")
     for check in SUCCESS_CHECKS:
         url = f"{base_url}{check.path}"
-        response = fetch_get(url, headers)
+        response = fetch_get(url, headers, label=check.label)
         audit_response(check.label, response, check.path, expect_success=check.expect_success)
     for check in ERROR_CHECKS:
         url = f"{base_url}{check.path}"
-        response = fetch_get(url, headers)
+        response = fetch_get(url, headers, label=check.label)
         audit_response(check.label, response, check.path, expect_success=check.expect_success)
 
     print("ok: remote production responses passed response audit")
