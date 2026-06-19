@@ -5,8 +5,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from origenlab_api.mirror.deps import MirrorConfigError, resolve_mirror_postgres_url
 from origenlab_api.repositories.postgres.common import postgres_connection
 from origenlab_api.settings import Settings
+from origenlab_email_pipeline.postgres_dashboard_api.db import PostgresUnavailableError
+from origenlab_email_pipeline.postgres_dashboard_api.db import (
+    postgres_connection as mirror_postgres_connection,
+)
 from origenlab_email_pipeline.postgres_dashboard_api.queries import latest_dashboard_sync
 from origenlab_email_pipeline.postgres_dashboard_api.schemas import DashboardSyncMetaResponse
 
@@ -47,13 +52,15 @@ def _dashboard_sync_meta_to_dict(meta: DashboardSyncMetaResponse) -> dict[str, A
 
 
 def get_latest_dashboard_sync_snapshot(settings: Settings) -> dict[str, Any] | None:
-    """Latest reporting.dashboard_sync_run row, or None when Postgres unavailable."""
-    if not settings.postgres_configured():
+    """Latest reporting.dashboard_sync_run row via mirror DB resolver, or None."""
+    try:
+        url = resolve_mirror_postgres_url(settings)
+    except MirrorConfigError:
         return None
     try:
-        with postgres_connection(settings) as conn:
+        with mirror_postgres_connection(url) as conn:
             meta = latest_dashboard_sync(conn)
-    except Exception:  # noqa: BLE001
+    except (PostgresUnavailableError, Exception):  # noqa: BLE001
         return None
     if meta.status == "missing_table":
         return None
