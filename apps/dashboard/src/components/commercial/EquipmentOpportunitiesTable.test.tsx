@@ -385,6 +385,33 @@ describe("EquipmentOpportunitiesTable", () => {
     expect((screen.getByLabelText("Search equipment opportunities") as HTMLInputElement).value).toBe("");
   });
 
+  it("shows triage-specific empty copy when triage filter has no matches", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter equipment opportunities by triage"), {
+      target: { value: "missing_contact" },
+    });
+
+    screen.getByText(/No hay oportunidades con este filtro de triage/);
+    expect(screen.queryByText("Universidad Ejemplo")).toBeNull();
+  });
+
   it("filters by search and shows no-match message", () => {
     render(
       <EquipmentOpportunitiesTable
