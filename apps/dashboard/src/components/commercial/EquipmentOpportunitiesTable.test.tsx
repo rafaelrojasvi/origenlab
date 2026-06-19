@@ -42,6 +42,9 @@ describe("EquipmentOpportunitiesTable", () => {
     screen.getByText("Universidad Ejemplo");
     screen.getByText("LP-001");
     screen.getByText(/fit=90/);
+    expect(screen.getAllByTestId("equipment-triage-badge").some((el) => el.textContent === "Cotizar ahora")).toBe(
+      true,
+    );
     expect(screen.queryByText(/source_path/)).toBeNull();
     expect(screen.queryByText(/body_preview/)).toBeNull();
   });
@@ -109,6 +112,71 @@ describe("EquipmentOpportunitiesTable", () => {
       />,
     );
     screen.getByText(/No hay oportunidades de equipos en la cola actual/);
+  });
+
+  it("renders Cierre pronto triage badge for close dates within three days", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
+    try {
+      render(
+        <EquipmentOpportunitiesTable
+          backend="postgres"
+          items={[
+            {
+              ...row,
+              next_action: "monitor",
+              close_at: "2026-06-17T19:00:00-04:00",
+              close_date: "",
+            },
+          ]}
+          meta={{
+            data_source: "postgres_mirror",
+            reduced_mode: false,
+            note: "",
+            count: 1,
+            campaign_mode: "equipment_first",
+          }}
+          loading={false}
+          error={null}
+          onRetry={() => {}}
+          onContactSelect={() => {}}
+        />,
+      );
+      screen.getByText("Cierre pronto");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders at most three triage badges per row", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="postgres"
+        items={[
+          {
+            ...row,
+            next_action: "quote_now",
+            close_at: "2026-06-16T12:00:00Z",
+            contact_email: "",
+            contact_status: "no_verified_buyer_email",
+            supplier_needed: "yes",
+            safe_channel: "mercado_publico_only",
+          },
+        ]}
+        meta={{
+          data_source: "postgres_mirror",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.getAllByTestId("equipment-triage-badge")).toHaveLength(3);
   });
 
   it("opens contact drilldown when contact email is present", () => {
@@ -374,6 +442,11 @@ describe("EquipmentOpportunitiesTable", () => {
     const drawer = screen.getByTestId("equipment-opportunity-detail-drawer");
     expect(drawer.textContent).toContain("Universidad Ejemplo");
     expect(drawer.textContent).toContain("1051-1-LP26");
+    expect(
+      within(drawer)
+        .getAllByTestId("equipment-triage-badge")
+        .some((el) => el.textContent === "Cotizar ahora"),
+    ).toBe(true);
     expect(drawer.textContent).toContain("Adquisición centrifuga laboratorio");
     expect(drawer.textContent).toContain(
       "Centrifuga refrigerada de alta velocidad con rotor incluido para laboratorio clínico",

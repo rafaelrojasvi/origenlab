@@ -24,6 +24,7 @@ import {
 import { truncate } from "../../lib/safeText";
 import { TokenLabel } from "../operator/TokenLabel";
 import { ContactEmailButton } from "./ContactEmailButton";
+import { EquipmentTriageBadges } from "./EquipmentTriageBadges";
 import {
   EquipmentOpportunityDetailDrawer,
   MercadoPublicoLink,
@@ -237,6 +238,7 @@ export function EquipmentOpportunitiesTable({
                       {row.buyer || "—"}
                     </div>
                     <div className="text-xs text-[var(--color-muted)]">{row.codigo_licitacion}</div>
+                    <EquipmentTriageBadges item={row} />
                   </button>
                   {row.fecha_publicacion ? (
                     <div className="mt-0.5 text-xs text-slate-600">

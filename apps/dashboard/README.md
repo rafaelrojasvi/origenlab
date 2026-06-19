@@ -70,7 +70,7 @@ npm test          # active src only (excludes src/legacy)
 npm run build
 ```
 
-Use **`npm run validate`** before opening or merging dashboard PRs. Today parser contract tests lock the dashboard boundary for `/cases/warm`, `/opportunities/equipment`, `/operator/status`, `/operator/automation-status`, and `/contacts/{email}`. Targeted Vitest runs (`vitest run path/to/file.test.tsx`) are useful while developing, but full validation should pass before review. This matters especially for Today / operator-status changes because fixtures span multiple test files (`TodaySummaryPage.test.tsx`, `TodayPage.test.tsx`, `DashboardApp.test.tsx`, component tests, etc.).
+Use **`npm run validate`** before opening or merging dashboard PRs. Today parser contract tests lock the dashboard boundary for `/cases/warm`, `/opportunities/equipment`, `/operator/status`, `/operator/automation-status`, and `/contacts/{email}`. Equipment opportunities also show compact triage badges derived client-side from current API fields. Targeted Vitest runs (`vitest run path/to/file.test.tsx`) are useful while developing, but full validation should pass before review. This matters especially for Today / operator-status changes because fixtures span multiple test files (`TodaySummaryPage.test.tsx`, `TodayPage.test.tsx`, `DashboardApp.test.tsx`, component tests, etc.).
 
 GitHub Actions workflow [`.github/workflows/dashboard.yml`](../../.github/workflows/dashboard.yml) runs `npm ci`, `npm test`, and `npm run build` for dashboard changes.
 
