@@ -45,6 +45,7 @@ def _valid_recent_emails_body(**overrides: object) -> dict[str, object]:
             "subject_preview": "Cotización equipo",
             "sender_preview": "client@example.cl",
             "folder_hint": "[Gmail]/Enviados",
+            "source_file": None,
             "has_positive_signal": True,
             "has_suppression_signal": False,
         }
@@ -164,6 +165,12 @@ def test_require_recent_emails_contract_accepts_valid_response() -> None:
     require_recent_emails_contract(_valid_recent_emails_body())  # type: ignore[arg-type]
 
 
+def test_require_recent_emails_contract_accepts_safe_gmail_source_file() -> None:
+    body = _valid_recent_emails_body()
+    body["items"][0]["source_file"] = "gmail:contacto@origenlab.cl/[Gmail]/Enviados"  # type: ignore[index]
+    require_recent_emails_contract(body)  # type: ignore[arg-type]
+
+
 def test_require_recent_emails_contract_total_returned_mismatch_fails() -> None:
     body = _valid_recent_emails_body()
     body["total_returned"] = 99  # type: ignore[assignment]
@@ -185,9 +192,9 @@ def test_require_recent_emails_contract_reduced_mode_wrong_type_fails() -> None:
         require_recent_emails_contract(body)  # type: ignore[arg-type]
 
 
-def test_require_recent_emails_contract_internal_source_file_field_fails() -> None:
+def test_require_recent_emails_contract_unsafe_source_file_path_fails() -> None:
     body = _valid_recent_emails_body()
-    body["items"][0]["source_file"] = "/secret/mailbox.json"  # type: ignore[index]
+    body["items"][0]["source_file"] = "/mnt/data/mailbox.json"  # type: ignore[index]
     with pytest.raises(RemoteAuditError, match="source_file"):
         require_recent_emails_contract(body)  # type: ignore[arg-type]
 

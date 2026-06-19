@@ -86,9 +86,10 @@ SQLite dev fallback may return `meta.data_source: "sqlite"` locally; production 
 | `reduced_mode` | Boolean |
 | `days_window` | Integer (echo of `days` query param) |
 | Item identity | Each item has int `email_id` |
-| Internal fields | Must **not** appear in JSON items: `source_file`, `body`, `raw_body`, `headers`, `recipients_raw` |
+| `source_file` | Optional public field on `EmailRecentRow`: `null` or a safe logical mailbox/source string (e.g. `gmail:…`, `imap:…`); must **not** be an absolute filesystem path |
+| Internal fields | Must **not** appear in JSON items: `body`, `raw_body`, `headers`, `recipients_raw` |
 | Item values | Public fields are JSON-safe scalars (no nested objects in item payloads) |
-| Path leaks | Raw `/home/` or `/mnt/` paths forbidden anywhere in the response body |
+| Path leaks | Raw `/home/` or `/mnt/` paths forbidden anywhere in the response body (including unsafe `source_file` values) |
 
 Production reads `api.v_recent_email` through `PostgresEmailRecentRepository` when Postgres is configured. Remote contract: `scripts/remote_response_audit.py` (`require_recent_emails_contract`).
 

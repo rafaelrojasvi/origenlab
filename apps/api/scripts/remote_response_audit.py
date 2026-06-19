@@ -230,13 +230,31 @@ def require_warm_cases_contract(body: dict[str, Any]) -> None:
 
 RECENT_EMAIL_INTERNAL_ITEM_FIELDS: frozenset[str] = frozenset(
     {
-        "source_file",
         "body",
         "raw_body",
         "headers",
         "recipients_raw",
     }
 )
+
+
+def _require_safe_recent_email_source_file(value: Any, *, index: int) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str):
+        raise RemoteAuditError(f"items[{index}].source_file must be a string or null")
+    text = value.strip()
+    if not text:
+        return
+    if text.startswith("/"):
+        raise RemoteAuditError(
+            f"items[{index}].source_file must not be an absolute filesystem path"
+        )
+    for needle in ("/home/", "/mnt/"):
+        if needle in text:
+            raise RemoteAuditError(
+                f"items[{index}].source_file must not contain raw filesystem path {needle!r}"
+            )
 
 
 def _is_json_safe_value(value: Any) -> bool:
@@ -290,6 +308,8 @@ def require_recent_emails_contract(body: dict[str, Any]) -> None:
         for field in RECENT_EMAIL_INTERNAL_ITEM_FIELDS:
             if field in item:
                 raise RemoteAuditError(f"items[{index}] must not include top-level {field}")
+        if "source_file" in item:
+            _require_safe_recent_email_source_file(item.get("source_file"), index=index)
         for key, value in item.items():
             if not _is_json_safe_value(value):
                 raise RemoteAuditError(
