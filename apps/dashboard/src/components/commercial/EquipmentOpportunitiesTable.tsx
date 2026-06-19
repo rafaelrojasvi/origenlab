@@ -22,10 +22,12 @@ import {
   formatEquipmentPublicationDate,
 } from "../../lib/dashboardDateFormat";
 import { getEquipmentFilterEmptyMessage } from "../../lib/equipmentEmptyState";
+import { useEquipmentWatchlist } from "../../lib/equipmentWatchlist";
 import { truncate } from "../../lib/safeText";
 import { TokenLabel } from "../operator/TokenLabel";
 import { ContactEmailButton } from "./ContactEmailButton";
 import { EquipmentTriageBadges } from "./EquipmentTriageBadges";
+import { EquipmentWatchlistButton } from "./EquipmentWatchlistButton";
 import {
   EquipmentOpportunityDetailDrawer,
   MercadoPublicoLink,
@@ -83,16 +85,22 @@ export function EquipmentOpportunitiesTable({
 }) {
   const [filters, setFilters] = useState<EquipmentTableFilters>(DEFAULT_EQUIPMENT_FILTERS);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const { savedKeys, isSaved, toggleSaved } = useEquipmentWatchlist();
 
   const sourceLabel = meta
     ? equipmentSourceLabel(backend, meta.data_source)
     : equipmentSourceLabel(backend, "active_current_csv");
 
-  const visibleRows = useMemo(() => applyEquipmentTableView(items, filters), [items, filters]);
+  const visibleRows = useMemo(
+    () => applyEquipmentTableView(items, filters, { savedKeys }),
+    [items, filters, savedKeys],
+  );
   const { pageSize, setPage, setPageSize, pagination } = useClientTablePagination(visibleRows, [
     filters.search,
     filters.sort,
     filters.triage,
+    filters.watchlist,
+    savedKeys.size,
     items.length,
   ]);
   const pagedRows = pagination.slice;
@@ -168,6 +176,27 @@ export function EquipmentOpportunitiesTable({
           <option value="mercado_publico_only">Solo Mercado Público</option>
         </select>
       </ToolbarField>
+      <ToolbarField label="Guardadas">
+        <select
+          className={toolbarSelectClass()}
+          value={filters.watchlist}
+          onChange={(e) =>
+            setFilters((f) => ({
+              ...f,
+              watchlist: e.target.value as EquipmentTableFilters["watchlist"],
+            }))
+          }
+          aria-label="Filter equipment opportunities by watchlist"
+        >
+          <option value="all">Todas</option>
+          <option value="saved">Solo guardadas</option>
+        </select>
+      </ToolbarField>
+      {savedKeys.size > 0 ? (
+        <p className="self-center text-xs text-[var(--color-muted)]" data-testid="equipment-watchlist-count">
+          {savedKeys.size} guardada{savedKeys.size === 1 ? "" : "s"} en este navegador
+        </p>
+      ) : null}
       {filtersActive ? (
         <button
           type="button"
@@ -262,6 +291,11 @@ export function EquipmentOpportunitiesTable({
                     <div className="text-xs text-[var(--color-muted)]">{row.codigo_licitacion}</div>
                     <EquipmentTriageBadges item={row} />
                   </button>
+                  <EquipmentWatchlistButton
+                    item={row}
+                    saved={isSaved(row)}
+                    onToggle={() => toggleSaved(row)}
+                  />
                   {row.fecha_publicacion ? (
                     <div className="mt-0.5 text-xs text-slate-600">
                       Publicado: {formatEquipmentPublicationDate(row.fecha_publicacion)}
@@ -363,6 +397,8 @@ export function EquipmentOpportunitiesTable({
           item={selectedRow}
           open
           onClose={() => setSelectedKey(null)}
+          watchlistSaved={isSaved(selectedRow)}
+          onToggleWatchlist={() => toggleSaved(selectedRow)}
         />
       ) : null}
     </TableSection>

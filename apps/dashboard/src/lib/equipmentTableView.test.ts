@@ -7,6 +7,7 @@ import {
   filterEquipment,
   sortEquipment,
 } from "./equipmentTableView";
+import { getEquipmentWatchlistKey } from "./equipmentWatchlist";
 
 const NOW = new Date("2026-06-15T12:00:00Z");
 
@@ -173,6 +174,53 @@ describe("equipmentTableView", () => {
       equipmentFiltersActive({
         ...DEFAULT_EQUIPMENT_FILTERS,
         triage: "supplier_needed",
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps all rows when watchlist is all", () => {
+    const filtered = filterEquipment(rows, DEFAULT_EQUIPMENT_FILTERS, {
+      now: NOW,
+      savedKeys: new Set([getEquipmentWatchlistKey(rows[0])]),
+    });
+    expect(filtered).toHaveLength(rows.length);
+  });
+
+  it("filters saved rows by watchlist key", () => {
+    const savedKeys = new Set([getEquipmentWatchlistKey(rows[2])]);
+    const filtered = filterEquipment(
+      rows,
+      { ...DEFAULT_EQUIPMENT_FILTERS, watchlist: "saved" },
+      { savedKeys },
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].codigo_licitacion).toBe("LP-3");
+  });
+
+  it("combines saved filter with triage and search", () => {
+    const savedKeys = new Set([
+      getEquipmentWatchlistKey(rows[2]),
+      getEquipmentWatchlistKey(rows[3]),
+    ]);
+    const filtered = filterEquipment(
+      rows,
+      {
+        ...DEFAULT_EQUIPMENT_FILTERS,
+        watchlist: "saved",
+        triage: "quote_now",
+        search: "clinica",
+      },
+      { now: NOW, savedKeys },
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].buyer).toBe("Clinica Central");
+  });
+
+  it("treats watchlist filter as active when not all", () => {
+    expect(
+      equipmentFiltersActive({
+        ...DEFAULT_EQUIPMENT_FILTERS,
+        watchlist: "saved",
       }),
     ).toBe(true);
   });
