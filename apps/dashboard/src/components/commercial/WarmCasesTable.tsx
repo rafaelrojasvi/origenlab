@@ -16,6 +16,14 @@ import {
   type WarmCaseSortKey,
   type WarmCaseTableFilters,
 } from "../../lib/warmCaseTableView";
+import {
+  getWarmCaseReviewKey,
+  useWarmCaseReviewLabels,
+  WARM_CASE_REVIEW_FILTER_OPTIONS,
+  WARM_CASE_REVIEW_LABEL_OPTIONS,
+  type WarmCaseReviewFilter,
+  type WarmCaseReviewLabel,
+} from "../../lib/warmCaseReviewLabels";
 import { formatOperatorToken } from "../../lib/operatorLabels";
 import { formatWarmCaseNextAction } from "../../lib/warmCaseDetailStrategy";
 import { formatDashboardDateTime } from "../../lib/dashboardDateFormat";
@@ -73,12 +81,16 @@ export function WarmCasesTable({
     ...initialFilters,
   });
   const [selectedCase, setSelectedCase] = useState<WarmCaseItem | null>(null);
+  const { labels, reviewedCount, getLabel, setLabel } = useWarmCaseReviewLabels();
 
   const sourceLabel = meta
     ? warmCasesSourceLabel(backend, meta.data_source)
     : warmCasesSourceLabel(backend, "sqlite");
 
-  const visibleRows = useMemo(() => applyWarmCaseTableView(items, filters), [items, filters]);
+  const visibleRows = useMemo(
+    () => applyWarmCaseTableView(items, filters, { reviewLabels: labels }),
+    [items, filters, labels],
+  );
   const statusOptions = useMemo(() => uniqueWarmStatuses(items), [items]);
   const categoryOptions = useMemo(() => uniqueWarmCategories(items), [items]);
   const filtersActive = warmFiltersActive(filters);
@@ -91,7 +103,9 @@ export function WarmCasesTable({
     filters.category,
     filters.sort,
     filters.preset,
+    filters.review,
     filters.hideInternalContacts,
+    reviewedCount,
     loadedCount,
   ]);
 
@@ -202,6 +216,33 @@ export function WarmCasesTable({
           <option value="contact">Correo de contacto</option>
         </select>
       </ToolbarField>
+      <ToolbarField label="Revisión">
+        <select
+          className={toolbarSelectClass()}
+          value={filters.review}
+          onChange={(e) =>
+            setFilters((f) => ({
+              ...f,
+              review: e.target.value as WarmCaseReviewFilter,
+            }))
+          }
+          aria-label="Filtrar por etiqueta de revisión local"
+        >
+          {WARM_CASE_REVIEW_FILTER_OPTIONS.map((option) => (
+            <option key={option.value || "all"} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </ToolbarField>
+      {reviewedCount > 0 ? (
+        <p
+          className="self-center text-xs text-[var(--color-muted)]"
+          data-testid="warm-case-review-count"
+        >
+          {reviewedCount} revisado{reviewedCount === 1 ? "" : "s"} en este navegador
+        </p>
+      ) : null}
       <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
         <input
           type="checkbox"
@@ -269,12 +310,13 @@ export function WarmCasesTable({
               <th className="px-3 py-2 font-medium">Equipo</th>
               <th className="px-3 py-2 font-medium">Asunto / vista previa</th>
               <th className="px-3 py-2 font-medium">Próxima acción</th>
+              <th className="px-3 py-2 font-medium">Revisión</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
-            {pagedRows.map((row, index) => (
+            {pagedRows.map((row) => (
               <tr
-                key={row.case_id || `warm-${index}`}
+                key={getWarmCaseReviewKey(row)}
                 className="align-top cursor-pointer hover:bg-brand-50/50 focus-within:bg-brand-50/50"
                 onClick={() => setSelectedCase(row)}
                 onKeyDown={(e) => {
@@ -333,6 +375,23 @@ export function WarmCasesTable({
                 </td>
                 <td className="px-3 py-2">
                   <span className="text-xs text-slate-800">{formatWarmCaseNextAction(row)}</span>
+                </td>
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <select
+                    className="w-full min-w-[9rem] rounded-md border border-[var(--color-border)] bg-white px-2 py-1 text-xs text-slate-800"
+                    value={getLabel(row)}
+                    onChange={(e) => setLabel(row, e.target.value as WarmCaseReviewLabel)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Etiqueta de revisión para ${row.contact_email}`}
+                    data-testid="warm-case-review-select"
+                  >
+                    <option value="">Sin revisar</option>
+                    {WARM_CASE_REVIEW_LABEL_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </td>
               </tr>
             ))}

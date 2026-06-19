@@ -2,6 +2,11 @@ import type { WarmCaseCategory, WarmCaseItem, WarmCaseStatus } from "../api/comm
 import { emailDomain, matchesSearch, normalizeSearchQuery, parseSortableTimestamp } from "./clientTableView";
 import { isInternalOperatorContact } from "./internalContactFilter";
 import {
+  getWarmCaseReviewKey,
+  type WarmCaseReviewFilter,
+  type WarmCaseReviewLabel,
+} from "./warmCaseReviewLabels";
+import {
   DEFAULT_WARM_VIEW_PRESET,
   filterWarmCasesByViewPreset,
   type WarmCaseViewPreset,
@@ -18,6 +23,8 @@ export interface WarmCaseTableFilters {
   hideInternalContacts: boolean;
   /** Queue focus preset (client-side). Default: real client threads. */
   preset: WarmCaseViewPreset;
+  /** Local review label filter (client-side only). */
+  review: WarmCaseReviewFilter;
 }
 
 export const DEFAULT_WARM_FILTERS: WarmCaseTableFilters = {
@@ -27,7 +34,12 @@ export const DEFAULT_WARM_FILTERS: WarmCaseTableFilters = {
   sort: "last_seen_desc",
   hideInternalContacts: true,
   preset: DEFAULT_WARM_VIEW_PRESET,
+  review: "all",
 };
+
+export interface WarmCaseTableViewOptions {
+  reviewLabels?: Record<string, WarmCaseReviewLabel>;
+}
 
 /** Resets search/status/category and view preset to Clientes reales (initial load state). */
 export function clearWarmCaseTableFilters(): WarmCaseTableFilters {
@@ -87,7 +99,26 @@ export function warmCaseSearchHaystack(row: WarmCaseItem): string {
     .toLowerCase();
 }
 
-export function filterWarmCases(items: WarmCaseItem[], filters: WarmCaseTableFilters): WarmCaseItem[] {
+function matchesReviewFilter(
+  row: WarmCaseItem,
+  review: WarmCaseReviewFilter | undefined,
+  reviewLabels?: Record<string, WarmCaseReviewLabel>,
+): boolean {
+  if (!review || review === "all") {
+    return true;
+  }
+  const label = reviewLabels?.[getWarmCaseReviewKey(row)] ?? "";
+  if (review === "unreviewed") {
+    return !label;
+  }
+  return label === review;
+}
+
+export function filterWarmCases(
+  items: WarmCaseItem[],
+  filters: WarmCaseTableFilters,
+  options?: WarmCaseTableViewOptions,
+): WarmCaseItem[] {
   const q = normalizeSearchQuery(filters.search);
   return items.filter((row) => {
     if (filters.hideInternalContacts && isInternalOperatorContact(row.contact_email)) {
@@ -97,6 +128,9 @@ export function filterWarmCases(items: WarmCaseItem[], filters: WarmCaseTableFil
       return false;
     }
     if (filters.category && row.category !== filters.category) {
+      return false;
+    }
+    if (!matchesReviewFilter(row, filters.review, options?.reviewLabels)) {
       return false;
     }
     if (q && !matchesSearch(warmCaseSearchHaystack(row), q)) {
@@ -130,9 +164,10 @@ export function sortWarmCases(items: WarmCaseItem[], sort: WarmCaseSortKey): War
 export function applyWarmCaseTableView(
   items: WarmCaseItem[],
   filters: WarmCaseTableFilters,
+  options?: WarmCaseTableViewOptions,
 ): WarmCaseItem[] {
   const byPreset = filterWarmCasesByViewPreset(items, filters.preset);
-  return sortWarmCases(filterWarmCases(byPreset, filters), filters.sort);
+  return sortWarmCases(filterWarmCases(byPreset, filters, options), filters.sort);
 }
 
 export function warmFiltersActive(filters: WarmCaseTableFilters): boolean {
@@ -140,6 +175,7 @@ export function warmFiltersActive(filters: WarmCaseTableFilters): boolean {
     filters.search.trim() ||
       filters.status ||
       filters.category ||
+      (filters.review && filters.review !== "all") ||
       filters.preset !== DEFAULT_WARM_VIEW_PRESET ||
       !filters.hideInternalContacts,
   );
