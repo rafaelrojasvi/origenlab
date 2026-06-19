@@ -170,6 +170,34 @@ describe("operator API client", () => {
     expect(parsed.snapshot_stale).toBe(false);
   });
 
+  it("parseOperatorAutomationStatus parses dashboard_mirror_sync metadata", () => {
+    const parsed = parseOperatorAutomationStatus({
+      generated_at_utc: "2026-06-19T18:59:56+00:00",
+      active_current_dir: "current",
+      verdict: "attention",
+      daily_core: { exists: true, status: "success", returncode: 0 },
+      mail_auto_refresh: { state_exists: true, dirty: false, pending: false },
+      dashboard_auto_mirror: {
+        state_exists: true,
+        last_result: "mail_dirty",
+        mirror_matches_daily_core: false,
+      },
+      cron: { note: "not inspected by API" },
+      recommended_action: "wait_for_mail_quiet_window",
+      warnings: [],
+      dashboard_mirror_sync: {
+        table_available: true,
+        status: "success",
+        latest_sync_id: 135,
+        finished_at: "2026-06-19T18:59:56+00:00",
+        canonical_contact_count: 2318,
+      },
+    });
+    expect(parsed.dashboard_mirror_sync?.status).toBe("success");
+    expect(parsed.dashboard_mirror_sync?.latest_sync_id).toBe(135);
+    expect(parsed.dashboard_mirror_sync?.canonical_contact_count).toBe(2318);
+  });
+
   it("parseOperatorAutomationStatus nulls unknown source values", () => {
     const parsed = parseOperatorAutomationStatus({
       generated_at_utc: "2026-06-11T14:38:18+00:00",

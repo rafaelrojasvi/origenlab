@@ -19,6 +19,7 @@ import type {
   ChileCompraEquipmentAutoRefreshStatus,
   DailyCoreRunStatus,
   DashboardAutoMirrorStatus,
+  DashboardMirrorSync,
   DailyCoreAutomationStatus,
   HealthResponse,
   MailAutoRefreshStatus,
@@ -259,6 +260,36 @@ function parseOperatorAutomationCronStatus(raw: unknown): OperatorAutomationCron
   return cron;
 }
 
+function parseDashboardMirrorSync(raw: unknown): DashboardMirrorSync | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const row = raw as Record<string, unknown>;
+  return {
+    table_available:
+      row.table_available === undefined || row.table_available === null
+        ? undefined
+        : Boolean(row.table_available),
+    status: optionalString(row.status) ?? undefined,
+    latest_sync_id: optionalNumber(row.latest_sync_id) ?? null,
+    started_at: optionalString(row.started_at) ?? null,
+    finished_at: optionalString(row.finished_at) ?? null,
+    elapsed_seconds: optionalNumber(row.elapsed_seconds) ?? null,
+    canonical_contact_count: optionalNumber(row.canonical_contact_count) ?? null,
+    canonical_organization_count: optionalNumber(row.canonical_organization_count) ?? null,
+    canonical_opportunity_signal_count:
+      optionalNumber(row.canonical_opportunity_signal_count) ?? null,
+    archive_contact_count: optionalNumber(row.archive_contact_count) ?? null,
+    archive_organization_count: optionalNumber(row.archive_organization_count) ?? null,
+    archive_opportunity_signal_count:
+      optionalNumber(row.archive_opportunity_signal_count) ?? null,
+    email_suppression_count: optionalNumber(row.email_suppression_count) ?? null,
+    domain_suppression_count: optionalNumber(row.domain_suppression_count) ?? null,
+    outreach_state_count: optionalNumber(row.outreach_state_count) ?? null,
+    error_message: optionalString(row.error_message) ?? null,
+  };
+}
+
 /** Parse automation status JSON (for tests and defensive UI). */
 export function parseOperatorAutomationStatus(data: unknown): OperatorAutomationStatus {
   const row = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
@@ -344,6 +375,7 @@ export function parseOperatorAutomationStatus(data: unknown): OperatorAutomation
       row.snapshot_stale === null || row.snapshot_stale === undefined
         ? null
         : Boolean(row.snapshot_stale),
+    dashboard_mirror_sync: parseDashboardMirrorSync(row.dashboard_mirror_sync),
   };
 }
 
