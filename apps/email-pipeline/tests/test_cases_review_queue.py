@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date, timedelta
 
 import pytest
 
@@ -11,6 +12,16 @@ from origenlab_email_pipeline.cases_review_queue import (
     fetch_cases_review_queue,
     looks_like_obvious_noise,
 )
+
+# Use relative dates because queue filtering is based on date.today(); fixed dates make CI fail as time passes.
+
+
+def _date_days_ago(days: int) -> str:
+    return (date.today() - timedelta(days=days)).isoformat()
+
+
+def _iso_days_ago(days: int, time: str = "00:00:00Z") -> str:
+    return f"{_date_days_ago(days)}T{time}"
 
 
 def _mk_emails(conn: sqlite3.Connection) -> None:
@@ -42,8 +53,9 @@ def test_fetch_queue_reduced_mode_without_cisf(tmp_path) -> None:
     _mk_emails(conn)
     conn.execute(
         "INSERT INTO emails (id, date_iso, subject, sender, source_file) VALUES "
-        "(1, '2026-03-20', 'Hola', 'a@ext.com', 'gmail:contacto@origenlab.cl/inbox'), "
-        "(2, '2026-03-10', 'Otro', 'b@ext.com', 'imap:contacto@origenlab.cl/inbox')"
+        "(1, ?, 'Hola', 'a@ext.com', 'gmail:contacto@origenlab.cl/inbox'), "
+        "(2, ?, 'Otro', 'b@ext.com', 'imap:contacto@origenlab.cl/inbox')",
+        (_date_days_ago(1), _date_days_ago(2)),
     )
     conn.commit()
     r = fetch_cases_review_queue(conn, days_window=90, exclude_obvious_noise=False, limit=50)
@@ -84,13 +96,15 @@ def test_fetch_queue_with_enrichment(tmp_path) -> None:
     )
     conn.execute(
         "INSERT INTO emails (id, date_iso, subject, sender, source_file) VALUES "
-        "(10, '2026-03-25', 'Cotización', 'c@x.cl', 'gmail:contacto@origenlab.cl/inbox')"
+        "(10, ?, 'Cotización', 'c@x.cl', 'gmail:contacto@origenlab.cl/inbox')",
+        (_date_days_ago(1),),
     )
     conn.execute(
         """INSERT INTO commercial_email_signal_fact (
           email_id, source_file, signal_code, signal_kind, reason_code, reason_text,
           confidence_score, strength_score, rationale_json, created_at
-        ) VALUES (10, 'x', 'q', 'positive', 'r', 't', 0.8, 0.7, '{}', '2026-03-25T00:00:00Z')"""
+        ) VALUES (10, 'x', 'q', 'positive', 'r', 't', 0.8, 0.7, '{}', ?)""",
+        (_iso_days_ago(1),),
     )
     conn.commit()
     r = fetch_cases_review_queue(conn, days_window=90, exclude_obvious_noise=False, limit=50)
@@ -108,7 +122,8 @@ def test_positive_only_requires_cisf(tmp_path) -> None:
     _mk_emails(conn)
     conn.execute(
         "INSERT INTO emails (id, date_iso, subject, sender, source_file) VALUES "
-        "(1, '2026-03-20', 'X', 'a@b.c', 'gmail:contacto@origenlab.cl/x')"
+        "(1, ?, 'X', 'a@b.c', 'gmail:contacto@origenlab.cl/x')",
+        (_date_days_ago(1),),
     )
     conn.commit()
     r = fetch_cases_review_queue(
@@ -124,8 +139,9 @@ def test_noise_exclusion(tmp_path) -> None:
     _mk_emails(conn)
     conn.execute(
         "INSERT INTO emails (id, date_iso, subject, sender, source_file) VALUES "
-        "(1, '2026-03-20', 'ok', 'human@x.cl', 'gmail:contacto@origenlab.cl/x'), "
-        "(2, '2026-03-21', 'Delivery Status', 'mailer-daemon@x', 'gmail:contacto@origenlab.cl/x')"
+        "(1, ?, 'ok', 'human@x.cl', 'gmail:contacto@origenlab.cl/x'), "
+        "(2, ?, 'Delivery Status', 'mailer-daemon@x', 'gmail:contacto@origenlab.cl/x')",
+        (_date_days_ago(1), _date_days_ago(2)),
     )
     conn.commit()
     r = fetch_cases_review_queue(conn, days_window=90, exclude_obvious_noise=True, limit=50)

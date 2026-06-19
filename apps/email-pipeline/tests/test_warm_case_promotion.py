@@ -7,7 +7,7 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -20,6 +20,12 @@ from origenlab_email_pipeline.warm_case_classification import infer_warm_case_ca
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "commercial" / "promote_warm_cases_to_postgres.py"
+
+# Use relative dates because queue filtering is based on date.today(); fixed dates make CI fail as time passes.
+
+
+def _recent_email_iso(days_ago: int = 1, time: str = "10:00:00Z") -> str:
+    return f"{(date.today() - timedelta(days=days_ago)).isoformat()}T{time}"
 
 
 def _postgres_test_url_ready() -> str | None:
@@ -73,12 +79,12 @@ def _queue_row(
     *,
     sender: str = "client@hospital.cl",
     subject: str = "Re: Cotización equipo",
-    date_iso: str = "2026-05-19T10:00:00-04:00",
+    date_iso: str | None = None,
     source_file: str = "gmail:contacto@origenlab.cl/INBOX",
 ) -> dict[str, Any]:
     return {
         "email_id": email_id,
-        "date_iso": date_iso,
+        "date_iso": date_iso or _recent_email_iso(1),
         "subject_preview": subject,
         "sender_preview": sender,
         "source_file": source_file,
@@ -127,7 +133,7 @@ def test_crtop_reactor_thread_hint_links_duplicate_subjects() -> None:
                 20,
                 sender="Ariel <ariel@crtopmachine.com>",
                 subject="Re: Thank you very much for your inquiry about our reactor.",
-                date_iso="2026-05-18T10:00:00Z",
+                date_iso=_recent_email_iso(2),
             ),
             enrichment_available=False,
         ),
@@ -136,7 +142,7 @@ def test_crtop_reactor_thread_hint_links_duplicate_subjects() -> None:
                 21,
                 sender="Ariel <ariel@crtopmachine.com>",
                 subject="Re: Thank you very much for your inquiry about our reactor.",
-                date_iso="2026-05-19T10:00:00Z",
+                date_iso=_recent_email_iso(1),
             ),
             enrichment_available=False,
         ),
@@ -151,11 +157,11 @@ def test_crtop_reactor_thread_hint_links_duplicate_subjects() -> None:
 def test_duplicate_queue_rows_same_case_key_deduped() -> None:
     rows = [
         promo.queue_row_to_promotion_record(
-            _queue_row(1, date_iso="2026-05-18T10:00:00Z"),
+            _queue_row(1, date_iso=_recent_email_iso(2)),
             enrichment_available=False,
         ),
         promo.queue_row_to_promotion_record(
-            _queue_row(2, date_iso="2026-05-19T10:00:00Z"),
+            _queue_row(2, date_iso=_recent_email_iso(1)),
             enrichment_available=False,
         ),
     ]
@@ -170,7 +176,7 @@ def test_dedupe_prefers_supplier_quote_received_over_newer_quote_sent() -> None:
     inbound = promo.queue_row_to_promotion_record(
         {
             "email_id": 10,
-            "date_iso": "2026-05-18T10:00:00Z",
+            "date_iso": _recent_email_iso(2),
             "subject_preview": "RE: Solicitud de cotización",
             "sender_preview": "Carmen Llorente <carmen.llorente@ortoalresa.com>",
             "source_file": "gmail:contacto@origenlab.cl/INBOX",
@@ -180,7 +186,7 @@ def test_dedupe_prefers_supplier_quote_received_over_newer_quote_sent() -> None:
     sent = promo.queue_row_to_promotion_record(
         {
             "email_id": 11,
-            "date_iso": "2026-05-19T10:00:00Z",
+            "date_iso": _recent_email_iso(1),
             "subject_preview": "RE: Solicitud de cotización",
             "sender_preview": "contacto@origenlab.cl",
             "recipients_preview": "carmen.llorente@ortoalresa.com",
@@ -214,7 +220,7 @@ def test_dedupe_same_priority_keeps_latest_activity() -> None:
         next_action="reply",
         equipment_signal=None,
         last_email_id=1,
-        last_activity_at=iso_text_to_datetime("2026-05-18T10:00:00Z") or datetime.now(timezone.utc),
+        last_activity_at=iso_text_to_datetime(_recent_email_iso(2)) or datetime.now(timezone.utc),
     )
     newer = promo.WarmCasePromotionRecord(
         case_key="warm:test",
@@ -228,7 +234,7 @@ def test_dedupe_same_priority_keeps_latest_activity() -> None:
         next_action="reply",
         equipment_signal=None,
         last_email_id=2,
-        last_activity_at=iso_text_to_datetime("2026-05-19T10:00:00Z") or datetime.now(timezone.utc),
+        last_activity_at=iso_text_to_datetime(_recent_email_iso(1)) or datetime.now(timezone.utc),
     )
     picked = promo.dedupe_candidates([older, newer])["warm:test"]
     assert picked.last_email_id == 2
@@ -238,7 +244,7 @@ def test_preview_dry_run_does_not_connect_postgres(tmp_path: Path, monkeypatch: 
     db = tmp_path / "warm.sqlite"
     _mk_sqlite(
         db,
-        [(1, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+        [(1, _recent_email_iso(1), "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
     )
     monkeypatch.setattr(promo, "psycopg", MagicMock(connect=lambda *a, **k: (_ for _ in ()).throw(AssertionError())))
     summary = promo.preview_promotion(db)
@@ -370,7 +376,7 @@ def test_apply_inserts_case_links_email_and_promote_event(
     db = tmp_path / "warm.sqlite"
     _mk_sqlite(
         db,
-        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+        [(5, _recent_email_iso(1), "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
     )
     cur = _PromoCursor()
     conn = _PromoConn(cur)
@@ -396,7 +402,7 @@ def test_apply_same_email_link_idempotent(tmp_path: Path, monkeypatch: pytest.Mo
     db = tmp_path / "warm.sqlite"
     _mk_sqlite(
         db,
-        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+        [(5, _recent_email_iso(1), "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
     )
     candidates, _ = promo.load_candidates_from_sqlite(db)
     key = next(iter(candidates.keys()))
@@ -423,7 +429,7 @@ def test_status_change_writes_status_history(tmp_path: Path, monkeypatch: pytest
     db = tmp_path / "warm.sqlite"
     _mk_sqlite(
         db,
-        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+        [(5, _recent_email_iso(1), "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
     )
     candidates, _ = promo.load_candidates_from_sqlite(db)
     key = next(iter(candidates.keys()))
@@ -449,7 +455,7 @@ def test_apply_close_missing_false_leaves_stale_promoted_rows(
     db = tmp_path / "warm.sqlite"
     _mk_sqlite(
         db,
-        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+        [(5, _recent_email_iso(1), "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
     )
     candidates, _ = promo.load_candidates_from_sqlite(db)
     key = next(iter(candidates.keys()))
@@ -480,7 +486,7 @@ def test_apply_close_missing_true_closes_stale_promoted_rows_only(
     db = tmp_path / "warm.sqlite"
     _mk_sqlite(
         db,
-        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+        [(5, _recent_email_iso(1), "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
     )
     candidates, _ = promo.load_candidates_from_sqlite(db)
     key = next(iter(candidates.keys()))
@@ -516,7 +522,7 @@ def test_apply_reopens_closed_candidate(
     db = tmp_path / "warm.sqlite"
     _mk_sqlite(
         db,
-        [(5, "2026-05-19T10:00:00Z", "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
+        [(5, _recent_email_iso(1), "Re: Equipo", "buyer@udec.cl", "gmail:contacto@origenlab.cl/inbox")],
     )
     candidates, _ = promo.load_candidates_from_sqlite(db)
     key = next(iter(candidates.keys()))
@@ -561,7 +567,7 @@ def test_cli_apply_requires_operator_and_reason(tmp_path: Path) -> None:
     db = tmp_path / "warm.sqlite"
     _mk_sqlite(
         db,
-        [(1, "2026-05-19T10:00:00Z", "Hola", "a@ext.com", "gmail:contacto@origenlab.cl/inbox")],
+        [(1, _recent_email_iso(1), "Hola", "a@ext.com", "gmail:contacto@origenlab.cl/inbox")],
     )
     cli = _load_cli_module()
     code = cli.main(["--sqlite-db", str(db), "--apply", "--postgres-url", "postgresql://u:p@127.0.0.1/db"])
@@ -649,7 +655,7 @@ def test_apply_writes_role_category_on_insert(
         [
             (
                 50,
-                "2026-05-19T12:00:00Z",
+                _recent_email_iso(1, "12:00:00Z"),
                 "RES: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200",
                 '"Bonon Ferreira, Beatriz" <beatriz.bonon@ika.net.br>',
                 "gmail:contacto@origenlab.cl/inbox",
@@ -680,7 +686,7 @@ def test_apply_on_conflict_updates_role_category(
         [
             (
                 50,
-                "2026-05-19T12:00:00Z",
+                _recent_email_iso(1, "12:00:00Z"),
                 "RES: Solicitud de Cotización Tubo Vapor IKA RV10.70 3812200",
                 '"Bonon Ferreira, Beatriz" <beatriz.bonon@ika.net.br>',
                 "gmail:contacto@origenlab.cl/inbox",
@@ -725,7 +731,7 @@ def test_apply_reopened_row_updates_role_category(
         [
             (
                 50,
-                "2026-05-19T12:00:00Z",
+                _recent_email_iso(1, "12:00:00Z"),
                 "PROPUESTA COMERCIAL DHL",
                 "Monica Silva <monica.silva@dhl.com>",
                 "gmail:contacto@origenlab.cl/inbox",
@@ -773,7 +779,7 @@ def test_apply_visible_in_v_warm_case(tmp_path: Path) -> None:
         [
             (
                 50,
-                "2026-05-19T12:00:00Z",
+                _recent_email_iso(1, "12:00:00Z"),
                 "Re: Centrifuga clinica",
                 "compras@hospital.cl",
                 "gmail:contacto@origenlab.cl/inbox",

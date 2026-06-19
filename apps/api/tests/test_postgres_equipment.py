@@ -201,9 +201,9 @@ def test_postgres_equipment_queries_canonical_view() -> None:
         cur = conn.last_cursor
     assert cur is not None
     sql_lower = cur.last_sql.lower()
-    assert "api.v_equipment_opportunity" in sql_lower
+    assert "api.v_equipment_opportunity_current" in sql_lower
     assert "opportunity_key" in sql_lower
-    assert "is_canonical_source = true" in sql_lower
+    assert "is_canonical_source" not in sql_lower
     assert "active_current" not in sql_lower
     assert "equipment_first_operator_queue" not in sql_lower
     assert cur.last_params["priority"] == 2
