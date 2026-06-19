@@ -31,6 +31,7 @@ AUTOMATION_STATUS_KEYS = frozenset(
         "source",
         "snapshot_updated_at",
         "snapshot_stale",
+        "dashboard_mirror_sync",
     }
 )
 
@@ -136,6 +137,7 @@ def test_route_returns_200_and_stable_keys(tmp_path: Path) -> None:
     assert data["verdict"] == "healthy"
     assert data["recommended_action"] == "none"
     assert data["source"] == "filesystem_active_current"
+    assert data["dashboard_mirror_sync"] is None
 
 
 def test_healthy_fixture_verdict(tmp_path: Path) -> None:
@@ -235,9 +237,33 @@ def test_uses_postgres_snapshot_before_filesystem(
     def _fake_pg(_settings: object) -> dict[str, object]:
         return pg_snapshot
 
+    def _fake_mirror_sync(_settings: object) -> dict[str, object]:
+        return {
+            "table_available": True,
+            "status": "success",
+            "latest_sync_id": 135,
+            "started_at": "2026-06-19T18:55:00+00:00",
+            "finished_at": "2026-06-19T18:59:56+00:00",
+            "elapsed_seconds": 296.0,
+            "canonical_contact_count": 2318,
+            "canonical_organization_count": 1015,
+            "canonical_opportunity_signal_count": 983,
+            "archive_contact_count": 27225,
+            "archive_organization_count": 10701,
+            "archive_opportunity_signal_count": 2702,
+            "email_suppression_count": 363,
+            "domain_suppression_count": 91,
+            "outreach_state_count": 1450,
+            "error_message": None,
+        }
+
     monkeypatch.setattr(
         "origenlab_api.services.operator_automation_status_service.snapshot_repo.get_operator_automation_status_snapshot",
         _fake_pg,
+    )
+    monkeypatch.setattr(
+        "origenlab_api.services.operator_automation_status_service.snapshot_repo.get_latest_dashboard_sync_snapshot",
+        _fake_mirror_sync,
     )
     get_settings = __import__(
         "origenlab_api.settings", fromlist=["get_settings"]
@@ -255,7 +281,30 @@ def test_uses_postgres_snapshot_before_filesystem(
     chilecompra = data["chilecompra_equipment_auto_refresh"]
     assert chilecompra["state_exists"] is True
     assert chilecompra["published_rows"] == 7
+    mirror_sync = data["dashboard_mirror_sync"]
+    assert mirror_sync is not None
+    assert mirror_sync["status"] == "success"
+    assert mirror_sync["latest_sync_id"] == 135
     get_settings.cache_clear()
+
+
+def test_dashboard_mirror_sync_none_when_helper_returns_none(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "origenlab_api.services.operator_automation_status_service.snapshot_repo.get_operator_automation_status_snapshot",
+        lambda _settings: None,
+    )
+    monkeypatch.setattr(
+        "origenlab_api.services.operator_automation_status_service.snapshot_repo.get_latest_dashboard_sync_snapshot",
+        lambda _settings: None,
+    )
+    client = _client_with_active_current(_healthy_fixture(tmp_path))
+    res = client.get("/operator/automation-status")
+    assert res.status_code == 200
+    assert res.json()["dashboard_mirror_sync"] is None
+    _assert_redacted_paths_safe(res.json())
 
 
 def test_filesystem_includes_chilecompra_equipment_auto_refresh(tmp_path: Path) -> None:

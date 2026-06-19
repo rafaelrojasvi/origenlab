@@ -15,6 +15,7 @@ def build_operator_automation_status_response(
     mirror_cooldown_seconds: int = 900,
     snapshot_max_age_seconds: int = snapshot_repo.DEFAULT_SNAPSHOT_MAX_AGE_SECONDS,
 ) -> OperatorAutomationStatusResponse:
+    dashboard_mirror_sync = snapshot_repo.get_latest_dashboard_sync_snapshot(settings)
     pg_row = snapshot_repo.get_operator_automation_status_snapshot(settings)
     if pg_row is not None:
         snapshot = pg_row["snapshot"]
@@ -29,6 +30,7 @@ def build_operator_automation_status_response(
                 "source": "postgres_snapshot",
                 "snapshot_updated_at": updated_at,
                 "snapshot_stale": stale,
+                "dashboard_mirror_sync": dashboard_mirror_sync,
             }
         )
         return OperatorAutomationStatusResponse.model_validate(enriched)
@@ -40,4 +42,5 @@ def build_operator_automation_status_response(
     data["source"] = "filesystem_active_current"
     data["snapshot_updated_at"] = None
     data["snapshot_stale"] = None
+    data["dashboard_mirror_sync"] = dashboard_mirror_sync
     return OperatorAutomationStatusResponse.model_validate(enrich_automation_status_paths(data))

@@ -81,13 +81,78 @@ describe("buildAutomationFreshnessSummary", () => {
     expect(summary.detail).toMatch(/Gmail → SQLite/i);
   });
 
-  it("returns stale when mirror is old", () => {
+  it("returns stale when loop auto-mirror is old and no postgres sync is present", () => {
     const summary = buildAutomationFreshnessSummary(baseStatus(), {
       now: new Date("2026-06-10T18:45:00+00:00"),
     });
     expect(summary.tone).toBe("stale");
-    expect(summary.title).toBe("Espejo dashboard desactualizado");
-    expect(summary.detail).toMatch(/SQLite → Dashboard/i);
+    expect(summary.title).toBe("Loop auto-mirror desactualizado");
+    expect(summary.mirrorSourceLabel).toBe("Loop auto-mirror");
+    expect(summary.detail).toMatch(/loop SQLite → Dashboard/i);
+  });
+
+  it("prefers dashboard_mirror_sync finished_at over stale loop timestamp", () => {
+    const summary = buildAutomationFreshnessSummary(
+      baseStatus({
+        dashboard_auto_mirror: {
+          ...baseStatus().dashboard_auto_mirror,
+          last_successful_mirror_at: "2026-06-10T12:00:00+00:00",
+          last_result: "mail_dirty",
+          mirror_matches_daily_core: false,
+        },
+        dashboard_mirror_sync: {
+          status: "success",
+          finished_at: "2026-06-10T18:15:00+00:00",
+          latest_sync_id: 135,
+        },
+      }),
+      { now: NOW },
+    );
+    expect(summary.mirrorSourceLabel).toBe("Espejo Postgres");
+    expect(summary.mirrorAgeLabel).toBe("hace 5 min");
+    expect(summary.tone).not.toBe("stale");
+    expect(summary.loopWarning).toMatch(/loop auto-mirror/i);
+  });
+
+  it("does not mark stale when postgres mirror sync is fresh but loop says mail_dirty", () => {
+    const summary = buildAutomationFreshnessSummary(
+      baseStatus({
+        dashboard_auto_mirror: {
+          ...baseStatus().dashboard_auto_mirror,
+          last_successful_mirror_at: "2026-06-09T12:00:00+00:00",
+          last_result: "mail_dirty",
+          mirror_matches_daily_core: false,
+        },
+        dashboard_mirror_sync: {
+          status: "success",
+          finished_at: "2026-06-10T18:15:00+00:00",
+        },
+      }),
+      { now: NOW },
+    );
+    expect(summary.tone).toBe("fresh");
+    expect(summary.title).toBe("Datos frescos");
+    expect(summary.warning).toBeNull();
+  });
+
+  it("falls back to loop auto-mirror when dashboard_mirror_sync is missing", () => {
+    const summary = buildAutomationFreshnessSummary(baseStatus(), { now: NOW });
+    expect(summary.mirrorSourceLabel).toBe("Loop auto-mirror");
+    expect(summary.mirrorAgeLabel).toBe("hace 1 min");
+  });
+
+  it("falls back to loop auto-mirror when dashboard_mirror_sync failed", () => {
+    const summary = buildAutomationFreshnessSummary(
+      baseStatus({
+        dashboard_mirror_sync: {
+          status: "failed",
+          finished_at: "2026-06-10T18:15:00+00:00",
+        },
+      }),
+      { now: NOW },
+    );
+    expect(summary.mirrorSourceLabel).toBe("Loop auto-mirror");
+    expect(summary.mirrorAgeLabel).toBe("hace 1 min");
   });
 
   it("returns stale with dashboard warning when snapshot_stale is true", () => {

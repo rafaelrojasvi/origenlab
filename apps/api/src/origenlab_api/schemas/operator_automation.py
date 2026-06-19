@@ -27,3 +27,4 @@ class OperatorAutomationStatusResponse(BaseModel):
     source: str | None = None
     snapshot_updated_at: str | None = None
     snapshot_stale: bool | None = None
+    dashboard_mirror_sync: dict[str, Any] | None = None
