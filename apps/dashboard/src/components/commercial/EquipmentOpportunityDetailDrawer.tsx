@@ -6,6 +6,7 @@ import {
   formatEquipmentPublicationDate,
 } from "../../lib/dashboardDateFormat";
 import { TokenLabel } from "../operator/TokenLabel";
+import { EquipmentTriageBadges } from "./EquipmentTriageBadges";
 
 export function isSafeMercadoPublicoUrl(url: string): boolean {
   const trimmed = url.trim();
@@ -226,6 +227,7 @@ export function EquipmentOpportunityDetailDrawer({
           </h2>
           <p className="font-mono text-sm text-slate-700">{item.codigo_licitacion || "—"}</p>
           {item.title ? <p className="text-sm text-slate-800">{item.title}</p> : null}
+          <EquipmentTriageBadges item={item} />
           <div className="flex flex-wrap gap-2">
             {item.chilecompra_status ? (
               <TokenLabel token={item.chilecompra_status} kind="equipment_contact_status" />
