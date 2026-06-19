@@ -142,7 +142,9 @@ describe("EquipmentOpportunitiesTable", () => {
           onContactSelect={() => {}}
         />,
       );
-      screen.getByText("Cierre pronto");
+      expect(
+        screen.getAllByTestId("equipment-triage-badge").some((el) => el.textContent === "Cierre pronto"),
+      ).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -200,6 +202,187 @@ describe("EquipmentOpportunitiesTable", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "buyer@hospital.cl" }));
     expect(onContactSelect).toHaveBeenCalledWith("buyer@hospital.cl");
+  });
+
+  it("renders triage filter select", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[row]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 1,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("Filter equipment opportunities by triage")).toBeTruthy();
+  });
+
+  it("filters rows when Cotizar ahora triage is selected", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[
+          row,
+          {
+            ...row,
+            codigo_licitacion: "LP-002",
+            buyer: "Hospital Monitor",
+            next_action: "monitor",
+          },
+        ]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 2,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter equipment opportunities by triage"), {
+      target: { value: "quote_now" },
+    });
+
+    screen.getByText("Universidad Ejemplo");
+    expect(screen.queryByText("Hospital Monitor")).toBeNull();
+  });
+
+  it("filters rows when Sin contacto triage is selected", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[
+          {
+            ...row,
+            codigo_licitacion: "LP-001",
+            buyer: "Comprador Sin Contacto",
+            contact_email: "",
+            contact_status: "no_verified_buyer_email",
+          },
+          {
+            ...row,
+            codigo_licitacion: "LP-002",
+            buyer: "Hospital Con Email",
+            contact_email: "contacto@hospital.cl",
+            contact_status: "review_required",
+          },
+        ]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 2,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter equipment opportunities by triage"), {
+      target: { value: "missing_contact" },
+    });
+
+    screen.getByText("Comprador Sin Contacto");
+    expect(screen.queryByText("Hospital Con Email")).toBeNull();
+  });
+
+  it("combines search and triage filters", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[
+          row,
+          {
+            ...row,
+            codigo_licitacion: "LP-002",
+            buyer: "Otra Universidad",
+            next_action: "quote_now",
+          },
+        ]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 2,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Search equipment opportunities"), {
+      target: { value: "ejemplo" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter equipment opportunities by triage"), {
+      target: { value: "quote_now" },
+    });
+
+    screen.getByText("Universidad Ejemplo");
+    expect(screen.queryByText("Otra Universidad")).toBeNull();
+  });
+
+  it("clear filters resets search and triage", () => {
+    render(
+      <EquipmentOpportunitiesTable
+        backend="sqlite"
+        items={[
+          row,
+          {
+            ...row,
+            codigo_licitacion: "LP-002",
+            buyer: "Hospital Monitor",
+            next_action: "monitor",
+          },
+        ]}
+        meta={{
+          data_source: "active_current_csv",
+          reduced_mode: false,
+          note: "",
+          count: 2,
+          campaign_mode: "equipment_first",
+        }}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        onContactSelect={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Search equipment opportunities"), {
+      target: { value: "ejemplo" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter equipment opportunities by triage"), {
+      target: { value: "quote_now" },
+    });
+    expect(screen.queryByText("Hospital Monitor")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+
+    screen.getByText("Universidad Ejemplo");
+    screen.getByText("Hospital Monitor");
+    expect(
+      (screen.getByLabelText("Filter equipment opportunities by triage") as HTMLSelectElement).value,
+    ).toBe("all");
+    expect((screen.getByLabelText("Search equipment opportunities") as HTMLInputElement).value).toBe("");
   });
 
   it("filters by search and shows no-match message", () => {

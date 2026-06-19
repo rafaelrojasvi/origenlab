@@ -1,4 +1,6 @@
 import type { EquipmentOpportunityItem } from "../api/commercialTypes";
+import type { EquipmentTriageBadgeKey } from "./equipmentTriage";
+import { getEquipmentTriageBadges } from "./equipmentTriage";
 import { matchesSearch, normalizeSearchQuery, parseSortableTimestamp } from "./clientTableView";
 
 export type EquipmentSortKey =
@@ -9,15 +11,23 @@ export type EquipmentSortKey =
   | "category"
   | "buyer";
 
+export type EquipmentTriageFilter = EquipmentTriageBadgeKey | "all";
+
 export interface EquipmentTableFilters {
   search: string;
   sort: EquipmentSortKey;
+  triage: EquipmentTriageFilter;
 }
 
 export const DEFAULT_EQUIPMENT_FILTERS: EquipmentTableFilters = {
   search: "",
   sort: "rank_asc",
+  triage: "all",
 };
+
+export interface EquipmentTableViewOptions {
+  now?: Date;
+}
 
 export function equipmentSearchHaystack(row: EquipmentOpportunityItem): string {
   return [
@@ -35,15 +45,29 @@ export function equipmentSearchHaystack(row: EquipmentOpportunityItem): string {
     .toLowerCase();
 }
 
+function matchesTriageFilter(
+  row: EquipmentOpportunityItem,
+  triage: EquipmentTriageFilter,
+  now?: Date,
+): boolean {
+  if (triage === "all") {
+    return true;
+  }
+  return getEquipmentTriageBadges(row, { now }).some((badge) => badge.key === triage);
+}
+
 export function filterEquipment(
   items: EquipmentOpportunityItem[],
   filters: EquipmentTableFilters,
+  options?: EquipmentTableViewOptions,
 ): EquipmentOpportunityItem[] {
   const q = normalizeSearchQuery(filters.search);
-  if (!q) {
-    return items;
-  }
-  return items.filter((row) => matchesSearch(equipmentSearchHaystack(row), q));
+  return items.filter((row) => {
+    if (q && !matchesSearch(equipmentSearchHaystack(row), q)) {
+      return false;
+    }
+    return matchesTriageFilter(row, filters.triage, options?.now);
+  });
 }
 
 function compareEquipment(a: EquipmentOpportunityItem, b: EquipmentOpportunityItem, sort: EquipmentSortKey): number {
@@ -72,10 +96,11 @@ export function sortEquipment(items: EquipmentOpportunityItem[], sort: Equipment
 export function applyEquipmentTableView(
   items: EquipmentOpportunityItem[],
   filters: EquipmentTableFilters,
+  options?: EquipmentTableViewOptions,
 ): EquipmentOpportunityItem[] {
-  return sortEquipment(filterEquipment(items, filters), filters.sort);
+  return sortEquipment(filterEquipment(items, filters, options), filters.sort);
 }
 
 export function equipmentFiltersActive(filters: EquipmentTableFilters): boolean {
-  return Boolean(filters.search.trim());
+  return Boolean(filters.search.trim()) || filters.triage !== "all";
 }
