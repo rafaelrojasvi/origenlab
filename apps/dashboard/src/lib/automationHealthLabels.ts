@@ -49,6 +49,41 @@ export function automationRecommendedActionLabel(action: string): string {
   }
 }
 
+const PASSIVE_RECOMMENDED_ACTIONS = new Set([
+  "none",
+  "wait_for_mail_quiet_window",
+  "wait_for_mirror_cooldown",
+  "wait_for_running_mail_refresh",
+  "wait_for_running_mirror_refresh",
+  "wait_for_running_chilecompra_refresh",
+  "resume_or_leave_paused",
+]);
+
+/** Panel-safe wording: operator actions run outside the dashboard (read-only UI). */
+export function formatAutomationRecommendedActionForPanel(action: string): string {
+  if (PASSIVE_RECOMMENDED_ACTIONS.has(action)) {
+    return automationRecommendedActionLabel(action);
+  }
+  switch (action) {
+    case "run_auto_refresh_chilecompra_equipment":
+      return "Recomendado fuera del panel: correr refresh ChileCompra desde terminal";
+    case "run_auto_mirror_dashboard":
+      return "Recomendado fuera del panel: publicar espejo dashboard desde terminal";
+    case "install_chilecompra_cron":
+      return "Recomendado fuera del panel: instalar cron de ChileCompra en el servidor";
+    case "create_missing_state_by_running_dry_run":
+      return "Recomendado fuera del panel: publicar snapshot o revisar estado localmente";
+    case "inspect_failed_daily_core":
+      return "Recomendado fuera del panel: revisar daily-core en logs o terminal";
+    case "inspect_logs":
+      return "Recomendado fuera del panel: revisar logs del operador";
+    case "clear_stale_lock_after_manual_review":
+      return "Recomendado fuera del panel: revisar lock obsoleto manualmente";
+    default:
+      return `Recomendado fuera del panel: ${automationRecommendedActionLabel(action).toLowerCase()}`;
+  }
+}
+
 export function automationVerdictTone(verdict: string): {
   banner: string;
   badge: string;

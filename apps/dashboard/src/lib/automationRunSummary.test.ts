@@ -81,13 +81,14 @@ describe("buildAutomationRunSummary", () => {
     ]);
     expect(rows[0]).toMatchObject({
       label: "Gmail → SQLite",
-      primary: "éxito",
+      primary: "sin cambios",
       tone: "ok",
       finishedAt: "2026-06-10T18:12:48+00:00",
       startedAt: "2026-06-10T18:10:00+00:00",
     });
+    expect(rows[0].secondary).toMatch(/último intento:/);
     expect(rows[1].primary).toBe("éxito");
-    expect(rows[2].primary).toBe("éxito");
+    expect(rows[2].primary).toBe("actualizado");
     expect(rows[2].secondary).toMatch(/7 filas/);
     expect(rows[3]).toMatchObject({
       label: "Espejo Postgres",
@@ -96,6 +97,29 @@ describe("buildAutomationRunSummary", () => {
     });
     expect(rows[3].secondary).toMatch(/sync #135/);
     expect(rows[3].secondary).toMatch(/296s/);
+  });
+
+  it("shows Gmail no_change as sin cambios with último intento timing", () => {
+    const rows = buildAutomationRunSummary(baseStatus(), { now: NOW });
+    expect(rows[0].primary).toBe("sin cambios");
+    expect(rows[0].secondary).toMatch(/último intento: fin .* · hace/);
+  });
+
+  it("shows both último intento and último refresh útil when timestamps differ", () => {
+    const rows = buildAutomationRunSummary(
+      baseStatus({
+        mail_auto_refresh: {
+          ...baseStatus().mail_auto_refresh,
+          last_result: "no_change",
+          last_run_finished_at: "2026-06-10T18:28:00+00:00",
+          last_successful_refresh_at: "2026-06-10T17:00:00+00:00",
+        },
+      }),
+      { now: NOW },
+    );
+    expect(rows[0].primary).toBe("sin cambios");
+    expect(rows[0].secondary).toMatch(/último intento:/);
+    expect(rows[0].secondary).toMatch(/último refresh útil: hace 1 h/);
   });
 
   it("marks lock_live as en curso", () => {
@@ -128,7 +152,7 @@ describe("buildAutomationRunSummary", () => {
     expect(rows[1].secondary).toMatch(/2 fallas/);
   });
 
-  it("shows mirror cooldown in secondary line", () => {
+  it("shows mirror cooldown without failure tone", () => {
     const rows = buildAutomationRunSummary(
       baseStatus({
         dashboard_auto_mirror: {
@@ -140,7 +164,24 @@ describe("buildAutomationRunSummary", () => {
       { now: NOW },
     );
     expect(rows[1].primary).toBe("en cooldown");
+    expect(rows[1].tone).toBe("attention");
     expect(rows[1].secondary).toMatch(/cooldown 120s/);
+    expect(rows[1].secondary).toMatch(/último intento:/);
+  });
+
+  it("renders already_mirrored as ya sincronizado", () => {
+    const rows = buildAutomationRunSummary(
+      baseStatus({
+        dashboard_auto_mirror: {
+          ...baseStatus().dashboard_auto_mirror,
+          last_result: "already_mirrored",
+          cooldown_remaining_seconds: 0,
+        },
+      }),
+      { now: NOW },
+    );
+    expect(rows[1].primary).toBe("ya sincronizado");
+    expect(rows[1].tone).toBe("ok");
   });
 
   it("falls back mirror finished time to last_successful_mirror_at", () => {

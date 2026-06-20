@@ -10,6 +10,7 @@ import {
   automationVerdictLabel,
   automationVerdictTone,
   chilecompraAutomationResultLabel,
+  formatAutomationRecommendedActionForPanel,
   formatAutomationBool,
   formatChilecompraApiDetailSummary,
   formatAutomationTimestamp,
@@ -214,7 +215,7 @@ export function AutomationHealthCard({
           {automationVerdictLabel(status.verdict)}
         </span>
         <span className="text-sm text-[var(--color-muted)]">
-          {automationRecommendedActionLabel(status.recommended_action)}
+          {formatAutomationRecommendedActionForPanel(status.recommended_action)}
         </span>
       </div>
 
