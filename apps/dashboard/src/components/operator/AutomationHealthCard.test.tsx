@@ -131,6 +131,12 @@ describe("AutomationHealthCard", () => {
     screen.getByText("Sin acción requerida");
     screen.getByText("Datos frescos");
     screen.getByTestId("automation-freshness-panel");
+    screen.getByTestId("automation-run-summary");
+    screen.getByText("Últimas ejecuciones");
+    screen.getByTestId("automation-run-row-gmail-sqlite");
+    screen.getByTestId("automation-run-row-sqlite-dashboard");
+    screen.getByTestId("automation-run-row-chilecompra");
+    screen.getByTestId("automation-run-row-postgres-sync");
     screen.getByText(/Loop auto-mirror:/);
     screen.getByText(/Gmail → SQLite:/);
     screen.getByText(/limpio/);
@@ -212,6 +218,7 @@ describe("AutomationHealthCard", () => {
     screen.getByText("no_change");
     screen.getByText(/not inspected by API/);
     screen.getByText("current (directory, redacted)");
+    expect(screen.queryByTestId("automation-run-summary")).toBeNull();
     expect(screen.queryByText(/hidden\/active\/current/)).toBeNull();
     expect(screen.queryByText(/\/home\//)).toBeNull();
   });
@@ -561,5 +568,65 @@ describe("AutomationHealthCard", () => {
     screen.getByText("equipment_first_operator_queue_20260616.csv (file, redacted)");
     screen.getByText("chilecompra_equipment_candidate_audit_20260616.csv (file, redacted)");
     expect(screen.queryByText(/\/home\//)).toBeNull();
+  });
+
+  it("shows últimas ejecuciones rows when automation loops have run data", async () => {
+    mockFetch.mockResolvedValue(
+      freshnessStatus(
+        { gmailMinutesAgo: 5, mirrorMinutesAgo: 5, snapshotMinutesAgo: 5 },
+        {
+          mail_auto_refresh: {
+            ...BASE_STATUS.mail_auto_refresh,
+            last_result: "no_change",
+            last_run_started_at: "2026-06-10T18:10:00+00:00",
+            last_run_finished_at: minutesAgoIso(5),
+          },
+          dashboard_auto_mirror: {
+            ...BASE_STATUS.dashboard_auto_mirror,
+            last_result: "success",
+            last_run_started_at: "2026-06-10T18:15:00+00:00",
+            last_run_finished_at: minutesAgoIso(5),
+          },
+          chilecompra_equipment_auto_refresh: {
+            state_exists: true,
+            lock_live: false,
+            lock_age_seconds: null,
+            last_result: "refreshed",
+            last_run_finished_at: minutesAgoIso(30),
+            published_rows: 7,
+            detail_error_count: 0,
+            freshness_age_seconds: 1800,
+            next_run_due: false,
+            consecutive_failures: 0,
+          },
+          dashboard_mirror_sync: {
+            status: "success",
+            latest_sync_id: 135,
+            started_at: minutesAgoIso(10),
+            finished_at: minutesAgoIso(5),
+            elapsed_seconds: 296,
+          },
+        },
+      ),
+    );
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByTestId("automation-run-summary");
+    });
+    expect(screen.getByTestId("automation-run-row-gmail-sqlite").textContent).toMatch(/éxito/i);
+    expect(screen.getByTestId("automation-run-row-sqlite-dashboard").textContent).toMatch(/éxito/i);
+    expect(screen.getByTestId("automation-run-row-chilecompra").textContent).toMatch(/7 filas/);
+    expect(screen.getByTestId("automation-run-row-postgres-sync").textContent).toMatch(/sync #135/);
+  });
+
+  it("shows postgres sync row as sin dato when dashboard_mirror_sync is missing", async () => {
+    mockFetch.mockResolvedValue(
+      freshnessStatus({}, { dashboard_mirror_sync: null }),
+    );
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByTestId("automation-run-row-postgres-sync");
+    });
+    expect(screen.getByTestId("automation-run-row-postgres-sync").textContent).toMatch(/sin dato/i);
   });
 });

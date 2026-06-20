@@ -25,6 +25,10 @@ import {
   AUTOMATION_FRESHNESS_TONE_CLASS,
   buildAutomationFreshnessSummary,
 } from "../../lib/automationFreshness";
+import {
+  AUTOMATION_RUN_TONE_CLASS,
+  buildAutomationRunSummary,
+} from "../../lib/automationRunSummary";
 
 export interface AutomationHealthCardProps {
   variant?: "summary" | "detailed";
@@ -175,6 +179,7 @@ export function AutomationHealthCard({
     chilecompra.path_info,
   );
   const freshnessSummary = buildAutomationFreshnessSummary(status);
+  const runSummary = buildAutomationRunSummary(status);
 
   return (
     <section
@@ -274,6 +279,34 @@ export function AutomationHealthCard({
               {freshnessSummary.warning}
             </p>
           ) : null}
+        </div>
+      ) : null}
+
+      {variant === "summary" ? (
+        <div
+          className="mt-3 rounded-md border border-[var(--color-border)] bg-white/70 px-3 py-2"
+          data-testid="automation-run-summary"
+        >
+          <p className="text-sm font-semibold text-brand-900">Últimas ejecuciones</p>
+          <ul className="mt-2 space-y-2">
+            {runSummary.map((row) => (
+              <li
+                key={row.id}
+                className={`rounded-md border px-2.5 py-2 text-xs ${AUTOMATION_RUN_TONE_CLASS[row.tone]}`}
+                data-testid={`automation-run-row-${row.id}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{row.label}</span>
+                  <span className="rounded-full border border-current/20 bg-white/60 px-2 py-0.5 font-semibold uppercase tracking-wide">
+                    {row.primary}
+                  </span>
+                </div>
+                {row.secondary ? (
+                  <p className="mt-1 text-[11px] opacity-90">{row.secondary}</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
