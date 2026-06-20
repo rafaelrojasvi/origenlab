@@ -75,6 +75,8 @@ export interface DashboardAutoMirrorStatus {
   lock_live: boolean;
   last_result?: string | null;
   last_successful_mirror_at?: string | null;
+  last_run_started_at?: string | null;
+  last_run_finished_at?: string | null;
   last_mirrored_daily_core_generated_at?: string | null;
   mirror_matches_daily_core: boolean | null;
   cooldown_seconds: number;

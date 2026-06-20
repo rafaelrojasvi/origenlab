@@ -337,6 +337,8 @@ export function parseOperatorAutomationStatus(data: unknown): OperatorAutomation
     lock_live: optionalBool(mirror.lock_live),
     last_result: optionalString(mirror.last_result) ?? null,
     last_successful_mirror_at: optionalString(mirror.last_successful_mirror_at) ?? null,
+    last_run_started_at: optionalString(mirror.last_run_started_at) ?? null,
+    last_run_finished_at: optionalString(mirror.last_run_finished_at) ?? null,
     last_mirrored_daily_core_generated_at:
       optionalString(mirror.last_mirrored_daily_core_generated_at) ?? null,
     mirror_matches_daily_core:
