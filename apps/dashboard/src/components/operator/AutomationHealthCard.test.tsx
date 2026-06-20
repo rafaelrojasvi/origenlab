@@ -160,7 +160,7 @@ describe("AutomationHealthCard", () => {
     await waitFor(() => {
       screen.getByText("Requiere atención");
     });
-    screen.getByText("Publicar espejo dashboard");
+    screen.getByText(/Recomendado fuera del panel: publicar espejo dashboard desde terminal/);
     screen.getByText(/atrás/);
   });
 
@@ -175,7 +175,7 @@ describe("AutomationHealthCard", () => {
     await waitFor(() => {
       screen.getByText("Bloqueado");
     });
-    screen.getByText("Revisar daily-core");
+    screen.getByText(/Recomendado fuera del panel: revisar daily-core en logs o terminal/);
   });
 
   it("renders fetch failure with refresh only (no mutation actions)", async () => {
@@ -300,7 +300,10 @@ describe("AutomationHealthCard", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Actualizar estado/i }));
     await waitFor(() => {
-      expect(screen.getAllByText("Publicar espejo dashboard").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText(/Recomendado fuera del panel: publicar espejo dashboard desde terminal/)
+          .length,
+      ).toBeGreaterThan(0);
     });
     expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBeforeRefresh);
     expect(onRefresh).toHaveBeenCalledTimes(1);
@@ -613,10 +616,30 @@ describe("AutomationHealthCard", () => {
     await waitFor(() => {
       screen.getByTestId("automation-run-summary");
     });
-    expect(screen.getByTestId("automation-run-row-gmail-sqlite").textContent).toMatch(/éxito/i);
+    expect(screen.getByTestId("automation-run-row-gmail-sqlite").textContent).toMatch(/sin cambios/i);
     expect(screen.getByTestId("automation-run-row-sqlite-dashboard").textContent).toMatch(/éxito/i);
     expect(screen.getByTestId("automation-run-row-chilecompra").textContent).toMatch(/7 filas/);
     expect(screen.getByTestId("automation-run-row-postgres-sync").textContent).toMatch(/sync #135/);
+  });
+
+  it("shows recommended ChileCompra action as external/manual, not in-panel", async () => {
+    mockFetch.mockResolvedValue({
+      ...BASE_STATUS,
+      verdict: "attention",
+      recommended_action: "run_auto_refresh_chilecompra_equipment",
+      chilecompra_equipment_auto_refresh: {
+        ...BASE_STATUS.chilecompra_equipment_auto_refresh,
+        state_exists: true,
+        next_run_due: true,
+      },
+    });
+    render(<AutomationHealthCard />);
+    await waitFor(() => {
+      screen.getByText(
+        /Recomendado fuera del panel: correr refresh ChileCompra desde terminal/,
+      );
+    });
+    expect(screen.queryByText(/^Ejecutar refresh ChileCompra$/)).toBeNull();
   });
 
   it("shows postgres sync row as sin dato when dashboard_mirror_sync is missing", async () => {

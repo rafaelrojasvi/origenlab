@@ -24,7 +24,7 @@ export const AUTOMATION_RUN_TONE_CLASS: Record<AutomationRunTone, string> = {
   muted: "border-slate-200 bg-slate-50/80 text-slate-700",
 };
 
-const SUCCESS_RESULTS = new Set(["success", "no_change", "refreshed"]);
+const USEFUL_SUCCESS_RESULTS = new Set(["success", "refreshed"]);
 const FAILURE_RESULTS = new Set([
   "mirror_failed",
   "daily_core_failed",
@@ -60,6 +60,7 @@ function compactResultMeta(
     paused?: boolean;
     consecutiveFailures?: number;
     cooldownRemainingSeconds?: number;
+    kind?: "mail" | "mirror" | "chilecompra" | "generic";
   } = {},
 ): { primary: string; tone: AutomationRunTone } {
   if (options.lockLive) {
@@ -79,14 +80,23 @@ function compactResultMeta(
   if (!normalized) {
     return { primary: "sin dato", tone: "muted" };
   }
-  if (SUCCESS_RESULTS.has(normalized)) {
-    return { primary: "éxito", tone: "ok" };
+  if (normalized === "no_change") {
+    return { primary: "sin cambios", tone: "ok" };
+  }
+  if (normalized === "already_mirrored") {
+    return { primary: "ya sincronizado", tone: "ok" };
   }
   if (normalized === "cooldown") {
     return { primary: "en cooldown", tone: "attention" };
   }
   if (FAILURE_RESULTS.has(normalized) || normalized.includes("fail")) {
     return { primary: "falló", tone: "blocked" };
+  }
+  if (normalized === "refreshed" && options.kind === "chilecompra") {
+    return { primary: "actualizado", tone: "ok" };
+  }
+  if (USEFUL_SUCCESS_RESULTS.has(normalized)) {
+    return { primary: "éxito", tone: "ok" };
   }
   if (normalized === "mail_dirty") {
     return { primary: "pendiente", tone: "attention" };
@@ -97,36 +107,46 @@ function compactResultMeta(
   return { primary: normalized, tone: "attention" };
 }
 
-function formatRunTiming(
-  finishedAt: string | null,
-  startedAt: string | null,
-  nowMs: number,
-): string {
-  if (finishedAt) {
-    const finishedTs = parseTimestamp(finishedAt);
-    const ageLabel = formatAutomationFreshnessAgeLabel(
-      finishedTs != null ? nowMs - finishedTs : null,
-    );
-    const shortTime = formatAutomationTimeShort(finishedAt);
-    if (shortTime !== "—" && ageLabel !== "sin dato") {
-      return `fin ${shortTime} · ${ageLabel}`;
-    }
-    if (ageLabel !== "sin dato") {
-      return `fin ${ageLabel}`;
-    }
+function formatLastAttemptLine(finishedAt: string | null, nowMs: number): string | null {
+  if (!finishedAt?.trim()) {
+    return null;
   }
-  if (startedAt) {
-    const shortTime = formatAutomationTimeShort(startedAt);
-    return shortTime !== "—" ? `inicio ${shortTime}` : "sin dato";
+  const finishedTs = parseTimestamp(finishedAt);
+  const ageLabel = formatAutomationFreshnessAgeLabel(
+    finishedTs != null ? nowMs - finishedTs : null,
+  );
+  const shortTime = formatAutomationTimeShort(finishedAt);
+  if (shortTime !== "—" && ageLabel !== "sin dato") {
+    return `último intento: fin ${shortTime} · ${ageLabel}`;
   }
-  return "sin dato";
+  if (ageLabel !== "sin dato") {
+    return `último intento: ${ageLabel}`;
+  }
+  return null;
 }
 
-function appendFailuresHint(base: string, failures: number): string {
-  if (failures <= 0) {
-    return base;
+function formatUsefulTimestampLine(
+  label: string,
+  timestamp: string | null,
+  nowMs: number,
+): string | null {
+  if (!timestamp?.trim()) {
+    return null;
   }
-  return `${base} · ${failures} falla${failures === 1 ? "" : "s"}`;
+  const ts = parseTimestamp(timestamp);
+  const ageLabel = formatAutomationFreshnessAgeLabel(ts != null ? nowMs - ts : null);
+  if (ageLabel === "sin dato") {
+    return null;
+  }
+  return `${label}: ${ageLabel}`;
+}
+
+function joinSecondaryParts(parts: Array<string | null>, failures: number): string | null {
+  const filtered = parts.filter((part): part is string => Boolean(part));
+  if (failures > 0) {
+    filtered.push(`${failures} falla${failures === 1 ? "" : "s"}`);
+  }
+  return filtered.length ? filtered.join(" · ") : null;
 }
 
 function buildGmailRunRow(
@@ -138,17 +158,30 @@ function buildGmailRunRow(
     lockLive: mail.lock_live,
     paused: mail.paused,
     consecutiveFailures: mail.consecutive_failures,
+    kind: "mail",
   });
-  const finishedAt = pickFinishedAt(mail.last_run_finished_at, mail.last_successful_refresh_at);
+  const attemptFinishedAt = mail.last_run_finished_at?.trim() || null;
+  const usefulRefreshAt = mail.last_successful_refresh_at?.trim() || null;
+  const finishedAt = pickFinishedAt(attemptFinishedAt, usefulRefreshAt);
   const startedAt = mail.last_run_started_at?.trim() || null;
-  const timing = formatRunTiming(finishedAt, startedAt, nowMs);
-  const secondary = appendFailuresHint(timing, mail.consecutive_failures);
+  const secondaryParts: Array<string | null> = [
+    formatLastAttemptLine(attemptFinishedAt, nowMs),
+  ];
+  if (usefulRefreshAt && usefulRefreshAt !== attemptFinishedAt) {
+    secondaryParts.push(
+      formatUsefulTimestampLine("último refresh útil", usefulRefreshAt, nowMs),
+    );
+  } else if (!attemptFinishedAt && usefulRefreshAt) {
+    secondaryParts.push(
+      formatUsefulTimestampLine("último refresh útil", usefulRefreshAt, nowMs),
+    );
+  }
   return {
     id: "gmail-sqlite",
     label: "Gmail → SQLite",
     tone,
     primary,
-    secondary,
+    secondary: joinSecondaryParts(secondaryParts, mail.consecutive_failures),
     finishedAt,
     startedAt,
   };
@@ -164,27 +197,33 @@ function buildMirrorLoopRunRow(
     paused: mirror.paused,
     consecutiveFailures: mirror.consecutive_failures,
     cooldownRemainingSeconds: mirror.cooldown_remaining_seconds,
+    kind: "mirror",
   });
-  const finishedAt = pickFinishedAt(
-    mirror.last_run_finished_at,
-    mirror.last_successful_mirror_at,
-  );
+  const attemptFinishedAt = mirror.last_run_finished_at?.trim() || null;
+  const appliedMirrorAt = mirror.last_successful_mirror_at?.trim() || null;
+  const finishedAt = pickFinishedAt(attemptFinishedAt, appliedMirrorAt);
   const startedAt = mirror.last_run_started_at?.trim() || null;
-  const timing = formatRunTiming(finishedAt, startedAt, nowMs);
-  const cooldownHint =
-    mirror.cooldown_remaining_seconds > 0
-      ? `cooldown ${mirror.cooldown_remaining_seconds}s`
-      : null;
-  const secondary = appendFailuresHint(
-    cooldownHint ? `${timing} · ${cooldownHint}` : timing,
-    mirror.consecutive_failures,
-  );
+  const secondaryParts: Array<string | null> = [
+    formatLastAttemptLine(attemptFinishedAt, nowMs),
+  ];
+  if (appliedMirrorAt && appliedMirrorAt !== attemptFinishedAt) {
+    secondaryParts.push(
+      formatUsefulTimestampLine("último espejo aplicado", appliedMirrorAt, nowMs),
+    );
+  } else if (!attemptFinishedAt && appliedMirrorAt) {
+    secondaryParts.push(
+      formatUsefulTimestampLine("último espejo aplicado", appliedMirrorAt, nowMs),
+    );
+  }
+  if (mirror.cooldown_remaining_seconds > 0) {
+    secondaryParts.push(`cooldown ${mirror.cooldown_remaining_seconds}s`);
+  }
   return {
     id: "sqlite-dashboard",
     label: "SQLite → Dashboard",
     tone,
     primary,
-    secondary,
+    secondary: joinSecondaryParts(secondaryParts, mirror.consecutive_failures),
     finishedAt,
     startedAt,
   };
@@ -209,6 +248,7 @@ function buildChilecompraRunRow(
   const { primary, tone } = compactResultMeta(chilecompra.last_result, {
     lockLive: chilecompra.lock_live,
     consecutiveFailures: chilecompra.consecutive_failures,
+    kind: "chilecompra",
   });
   const finishedAt = pickFinishedAt(
     chilecompra.last_run_finished_at,
@@ -216,8 +256,8 @@ function buildChilecompraRunRow(
     chilecompra.last_successful_publish_at,
   );
   const startedAt = chilecompra.last_run_started_at?.trim() || null;
-  const timing = formatRunTiming(finishedAt, startedAt, nowMs);
-  const detailParts: string[] = [timing];
+  const attemptFinishedAt = chilecompra.last_run_finished_at?.trim() || null;
+  const detailParts: Array<string | null> = [formatLastAttemptLine(attemptFinishedAt, nowMs)];
   const rowCount = chilecompra.published_rows ?? chilecompra.output_rows;
   if (rowCount != null) {
     detailParts.push(`${rowCount} filas`);
@@ -228,7 +268,7 @@ function buildChilecompraRunRow(
   if (chilecompra.last_error?.trim()) {
     detailParts.push("con error");
   }
-  const secondary = appendFailuresHint(detailParts.join(" · "), chilecompra.consecutive_failures);
+  const secondary = joinSecondaryParts(detailParts, chilecompra.consecutive_failures);
   const displayPrimary =
     primary === "sin dato" && chilecompra.last_result
       ? chilecompraAutomationResultLabel(chilecompra.last_result).toLowerCase()
@@ -278,8 +318,7 @@ function buildPostgresSyncRunRow(
   }
   const finishedAt = sync.finished_at?.trim() || null;
   const startedAt = sync.started_at?.trim() || null;
-  const timing = formatRunTiming(finishedAt, startedAt, nowMs);
-  const detailParts: string[] = [timing];
+  const detailParts: Array<string | null> = [formatLastAttemptLine(finishedAt, nowMs)];
   if (sync.latest_sync_id != null) {
     detailParts.push(`sync #${sync.latest_sync_id}`);
   }
@@ -294,7 +333,7 @@ function buildPostgresSyncRunRow(
     label: "Espejo Postgres",
     tone,
     primary,
-    secondary: detailParts.join(" · "),
+    secondary: joinSecondaryParts(detailParts, 0),
     finishedAt,
     startedAt,
   };
