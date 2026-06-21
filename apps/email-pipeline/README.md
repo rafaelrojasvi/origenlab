@@ -222,7 +222,7 @@ Optional: override internal domains:
 uv run python scripts/mart/build_business_mart.py --rebuild --internal-domain labdelivery.cl
 ```
 
-2) **Operator UI (active):** use [`apps/dashboard`](../../dashboard/README.md) + [`apps/api`](../../api/README.md) over the Postgres mirror — not Streamlit. See [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-eprun-dashboard-optional).
+2) **Operator UI (active):** use [`apps/dashboard`](../dashboard/README.md) + [`apps/api`](../api/README.md) over the Postgres mirror — not Streamlit. See [`docs/RUNBOOK.md`](docs/RUNBOOK.md#m-eprun-dashboard-optional).
 
 Docs: `docs/pipeline/BUSINESS_MART.md`
 

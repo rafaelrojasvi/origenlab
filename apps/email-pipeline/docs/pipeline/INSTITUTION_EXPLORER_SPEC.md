@@ -4,7 +4,7 @@ Status: canonical (spec only — not implemented)
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-01
 
-Related: [`INSTITUTION_ALIAS_POLICY.md`](INSTITUTION_ALIAS_POLICY.md) · [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · [`../scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py)
+Related: [`INSTITUTION_ALIAS_POLICY.md`](INSTITUTION_ALIAS_POLICY.md) · [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · [`../../scripts/qa/audit_institution_grouping.py`](../../scripts/qa/audit_institution_grouping.py)
 
 **This document is a spec.** It does not authorize schema changes, UI implementation, or send-path coupling.
 

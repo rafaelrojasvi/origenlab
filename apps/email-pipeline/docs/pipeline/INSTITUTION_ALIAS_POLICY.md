@@ -4,7 +4,7 @@ Status: canonical (decision checkpoint)
 Owner: email-pipeline-maintainers  
 Last reviewed: 2026-06-01
 
-Related: [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`INSTITUTION_EXPLORER_SPEC.md`](INSTITUTION_EXPLORER_SPEC.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · [`../scripts/qa/audit_institution_grouping.py`](../scripts/qa/audit_institution_grouping.py)
+Related: [`SCHEMA_CLASSIFICATION_MODEL.md`](SCHEMA_CLASSIFICATION_MODEL.md) · [`INSTITUTION_EXPLORER_SPEC.md`](INSTITUTION_EXPLORER_SPEC.md) · [`OUTBOUND_SOURCE_OF_TRUTH.md`](../OUTBOUND_SOURCE_OF_TRUTH.md) · [`../../scripts/qa/audit_institution_grouping.py`](../../scripts/qa/audit_institution_grouping.py)
 
 Read-only review artifacts (gitignored, not committed):  
 `reports/out/active/current/institution_alias_seed_review_2026_06_01/`
