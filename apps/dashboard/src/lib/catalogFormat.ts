@@ -504,15 +504,62 @@ export function buildListLinksSummary(detail: CatalogProductDetailUi | null): st
   return summarizeCommercialLinks(detail.commercial_links);
 }
 
-export function catalogWebsiteHref(slug: string | null | undefined): string | null {
-  const s = slug?.trim();
-  if (!s) {
+const CATALOG_WEBSITE_PRODUCT_BASE = "https://origenlab.cl/productos/";
+const SAFE_WEBSITE_SLUG_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+const MAX_WEBSITE_SLUG_LENGTH = 120;
+const UNSAFE_URL_CHARS_RE = /[\u0000-\u001F\u007F\u0085\u2028\u2029\u200E\u200F\u202A-\u202E]/;
+const ABSOLUTE_URL_SCHEME_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+
+function parseSafeHttpsUrl(value: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
     return null;
   }
-  if (s.startsWith("http://") || s.startsWith("https://")) {
-    return s;
+  if (parsed.protocol !== "https:") {
+    return null;
   }
-  return `https://origenlab.cl/productos/${encodeURIComponent(s)}`;
+  if (!parsed.hostname) {
+    return null;
+  }
+  if (parsed.username || parsed.password) {
+    return null;
+  }
+  return parsed.href;
+}
+
+/** Build a safe https product URL from a website slug or absolute https link. */
+export function catalogWebsiteHref(slug: string | null | undefined): string | null {
+  if (slug == null) {
+    return null;
+  }
+  if (typeof slug !== "string") {
+    return null;
+  }
+  if (UNSAFE_URL_CHARS_RE.test(slug)) {
+    return null;
+  }
+  const trimmed = slug.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/\s/.test(trimmed)) {
+    return null;
+  }
+  if (trimmed.startsWith("//")) {
+    return null;
+  }
+  if (ABSOLUTE_URL_SCHEME_RE.test(trimmed)) {
+    return parseSafeHttpsUrl(trimmed);
+  }
+  if (trimmed.length > MAX_WEBSITE_SLUG_LENGTH) {
+    return null;
+  }
+  if (!SAFE_WEBSITE_SLUG_RE.test(trimmed)) {
+    return null;
+  }
+  return `${CATALOG_WEBSITE_PRODUCT_BASE}${encodeURIComponent(trimmed)}`;
 }
 
 /** @deprecated use buildListOfferSummary with detail */
