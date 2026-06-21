@@ -148,6 +148,25 @@ Optional env for cold Render / Cloudflare starts (network timeouts and connectio
 
 Uses the same response contract checks as the local audit (`x-request-id`, JSON envelopes, list `meta`/`items`, warm-cases, recent-emails, and equipment current-view contracts, forbidden path/secret leaks). Not part of `./scripts/validate.sh` (requires network + secrets).
 
+**Remote latency audit** (read-only GET timing; warm-run budgets; skips with exit 0 without CF credentials):
+
+```bash
+cd apps/api
+CF_ACCESS_CLIENT_ID=... CF_ACCESS_CLIENT_SECRET=... \
+  uv run python scripts/remote_latency_audit.py
+```
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ORIGENLAB_REMOTE_LATENCY_RUNS` | `3` | Warm runs after one cold-start probe per endpoint |
+| `ORIGENLAB_REMOTE_LATENCY_TIMEOUT_SECONDS` | `30` | Per-request timeout |
+| `ORIGENLAB_REMOTE_LATENCY_BUDGET_MS` | `2500` | Fail if any warm run exceeds this latency |
+| `ORIGENLAB_REMOTE_LATENCY_COLD_START_BUDGET_MS` | `45000` | Advisory warning only for a successful but slow cold probe |
+
+The first (cold) probe is advisory: timeouts and non-200 responses print a stderr warning and the script continues to warm runs. Warm runs enforce HTTP 200 and the warm latency budget. With `ORIGENLAB_REMOTE_LATENCY_RUNS=0`, only the cold probe runs and must return HTTP 200.
+
+Prints per-endpoint `status`, `first_ms`, warm `min_ms` / `avg_ms` / `max_ms`, and `request_id`. Does not print response bodies except short safe error snippets on failure. Not part of `./scripts/validate.sh`.
+
 GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/api.yml) runs `./scripts/validate.sh` for `apps/api` changes and `apps/email-pipeline` dependency changes.
 
 ### Render (native runtime)
