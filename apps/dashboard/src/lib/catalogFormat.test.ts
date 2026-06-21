@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildListCommercialDataSummary,
   buildListOfferSummary,
+  catalogWebsiteHref,
   formatCommercialHistoryAmount,
   formatCatalogDate,
   formatCatalogMoney,
@@ -78,5 +79,62 @@ describe("catalogFormat", () => {
     expect(summary).toContain("112,00");
     expect(summary).toContain("Moneda pendiente");
     expect(summary).toContain("revisar");
+  });
+
+  describe("catalogWebsiteHref", () => {
+    it("builds origenlab product URLs from safe slugs", () => {
+      expect(catalogWebsiteHref("blueslick-42500")).toBe(
+        "https://origenlab.cl/productos/blueslick-42500",
+      );
+      expect(catalogWebsiteHref("temed-25ml")).toBe("https://origenlab.cl/productos/temed-25ml");
+      expect(catalogWebsiteHref("  blueslick-42500  ")).toBe(
+        "https://origenlab.cl/productos/blueslick-42500",
+      );
+    });
+
+    it("allows validated absolute https URLs", () => {
+      expect(catalogWebsiteHref("https://origenlab.cl/productos/blueslick-42500")).toBe(
+        "https://origenlab.cl/productos/blueslick-42500",
+      );
+      expect(catalogWebsiteHref("HTTPS://origenlab.cl/productos/foo")).toBe(
+        "https://origenlab.cl/productos/foo",
+      );
+    });
+
+    it("returns null for empty or missing slugs", () => {
+      expect(catalogWebsiteHref(null)).toBeNull();
+      expect(catalogWebsiteHref(undefined)).toBeNull();
+      expect(catalogWebsiteHref("")).toBeNull();
+      expect(catalogWebsiteHref("   ")).toBeNull();
+    });
+
+    it("rejects dangerous URL schemes and protocol-relative links", () => {
+      expect(catalogWebsiteHref("javascript:alert(1)")).toBeNull();
+      expect(catalogWebsiteHref("data:text/html,<script>alert(1)</script>")).toBeNull();
+      expect(catalogWebsiteHref("vbscript:msgbox(1)")).toBeNull();
+      expect(catalogWebsiteHref("//evil.example/phish")).toBeNull();
+    });
+
+    it("rejects http and malformed absolute URLs", () => {
+      expect(catalogWebsiteHref("http://origenlab.cl/productos/foo")).toBeNull();
+      expect(catalogWebsiteHref("https:")).toBeNull();
+      expect(catalogWebsiteHref("https://")).toBeNull();
+      expect(catalogWebsiteHref("not a url")).toBeNull();
+      expect(catalogWebsiteHref("foo:bar")).toBeNull();
+    });
+
+    it("rejects whitespace tricks, control characters, and unsafe slug shapes", () => {
+      expect(catalogWebsiteHref("blue slick")).toBeNull();
+      expect(catalogWebsiteHref("blueslick\n-42500")).toBeNull();
+      expect(catalogWebsiteHref("blueslick\t-42500")).toBeNull();
+      expect(catalogWebsiteHref("../escape")).toBeNull();
+      expect(catalogWebsiteHref("foo/bar")).toBeNull();
+      expect(catalogWebsiteHref("-leading-hyphen")).toBeNull();
+      expect(catalogWebsiteHref("slug%2ftraversal")).toBeNull();
+    });
+
+    it("rejects https URLs with embedded credentials", () => {
+      expect(catalogWebsiteHref("https://user:pass@origenlab.cl/productos/foo")).toBeNull();
+    });
   });
 });
