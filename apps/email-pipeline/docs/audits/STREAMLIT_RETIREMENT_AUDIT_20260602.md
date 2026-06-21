@@ -16,7 +16,7 @@
 
 | Path | LOC (approx.) | Role |
 |------|---------------|------|
-| [`apps/business_mart_app.py`](../../apps/business_mart_app.py) | 3,619 | Single Streamlit process: sidebar nav, SQLite RO connection, page router, inline SQL for contacts/orgs/documents/equipment |
+| `apps/business_mart_app.py` (removed 2026-06-04) | 3,619 | Single Streamlit process: sidebar nav, SQLite RO connection, page router, inline SQL for contacts/orgs/documents/equipment |
 
 **Run locally (historical — pre-2026-06-04 retirement; do not use):**
 
@@ -260,7 +260,7 @@ Priority extractions (behavior-preserving renames; tests move with modules):
 4. [`README.md`](../../README.md) — ~~drop `uv run --group ui streamlit run apps/business_mart_app.py` primary path~~ **done** (2026-06-04); that launch command is historical only — **do not use**
 5. [`STREAMLIT_DATA_FRESHNESS.md`](../pipeline/STREAMLIT_DATA_FRESHNESS.md) — **migrate** to `DATA_HEALTH.md` (UI-agnostic)  
 6. [`COMMERCIAL_INTEL_V1.md`](../pipeline/COMMERCIAL_INTEL_V1.md), [`CASOS_PARA_REVISAR.md`](../pipeline/CASOS_PARA_REVISAR.md) — operator paths via dashboard/API/CLI  
-7. Root [`AGENTS.md`](../../../AGENTS.md) — operator stack table  
+7. Root [`AGENTS.md`](../../../../AGENTS.md) — operator stack table  
 8. [`apps/dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](../../../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md) — reconcile “Today only” with multi-section `DashboardApp`  
 
 ### Tests
