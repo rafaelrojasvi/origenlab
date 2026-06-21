@@ -2,7 +2,7 @@
 
 Status: canonical  
 Owner: project-maintainers  
-Last reviewed: 2026-05-22
+Last reviewed: 2026-06-17
 
 This file is the source of truth for documentation placement, intent, and lifecycle.
 
@@ -11,6 +11,7 @@ This file is the source of truth for documentation placement, intent, and lifecy
 
 - Monorepo: [README.md](../README.md)
 - Monorepo agent context: [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md)
+- Release process: [RELEASE_PROCESS.md](./RELEASE_PROCESS.md)
 - Web app: [apps/web/README.md](../apps/web/README.md)
 - Web app agent context: [apps/web/docs/APP_CONTEXT.md](../apps/web/docs/APP_CONTEXT.md)
 - Web agent policy: [apps/web/AGENTS.md](../apps/web/AGENTS.md)
@@ -39,6 +40,7 @@ Historical API-3 migration notes (legacy `:8000` removal): [apps/api/docs/archiv
 ### Monorepo
 
 - [MONOREPO.md](./MONOREPO.md) → historical context, keep as archive reference.
+- [RELEASE_PROCESS.md](./RELEASE_PROCESS.md) → **canonical** GitHub Release / tag workflow (changelog snapshots; not package distribution).
 - [business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md](./business/BUSINESS_RULES_QUOTES_AND_SUPPLIERS.md) → **canonical** quote/supplier **truth rules** and proposed entities (cotizaciones, proveedores, research runs vs master data).
 
 ### Operator API (`apps/api`)

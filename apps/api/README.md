@@ -61,23 +61,60 @@ CORS middleware allows **GET, HEAD, OPTIONS** only. See [`../email-pipeline/docs
 
 ## Endpoints
 
-| Method | Path | Phase | Description |
-|--------|------|-------|-------------|
-| GET | `/health` | API-0 | Liveness + `operator-sqlite-readonly` mode |
-| GET | `/operator/status` | API-0 | Operator verdict (delegates to `operator_status_report`) |
-| GET | `/operator/automation-status` | API-0 | Read-only automation health (mail auto-refresh + dashboard auto-mirror local state) |
-| GET | `/emails/recent` | API-1 | Recent canonical Gmail rows (**Postgres read model** `api.v_recent_email` in production; SQLite fallback dev-only) |
-| GET | `/cases/warm` | API-1.1 | Warm commercial case queue (**Postgres read model** `api.v_warm_case` in production; SQLite fallback dev-only) |
-| GET | `/opportunities/equipment` | API-1.2 | Equipment-first operator queue (**Postgres read model** in production; SQLite/CSV fallback dev-only) |
+All routes are **GET-only**. Production serves Postgres read models when `ORIGENLAB_API_BACKEND=postgres`; local dev can fall back to SQLite or CSV fixtures.
+
+### Endpoint groups
+
+| Group | Paths | Purpose |
+|-------|-------|---------|
+| **Health & operator** | `/health`, `/operator/status`, `/operator/automation-status` | Liveness, operator verdict, automation loop health |
+| **Commercial read models** | `/cases/warm`, `/opportunities/equipment`, `/emails/recent` | Dashboard Today, Bandeja, Licitaciones/equipos |
+| **Contacts** | `/contacts/{email}` | Read-only contact drilldown (Today side panel) |
+| **Mirror reporting** | `/mirror/*` | Postgres mirror metadata, deals, catalog, suppressions, audits |
+
+### Route reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Liveness + backend mode |
+| GET | `/operator/status` | Operator verdict (`operator_status_report`) |
+| GET | `/operator/automation-status` | Mail refresh + dashboard mirror local state |
+| GET | `/cases/warm` | Warm commercial case queue (`api.v_warm_case` in production) |
+| GET | `/opportunities/equipment` | Equipment-first operator queue |
+| GET | `/emails/recent` | Recent canonical Gmail rows (`api.v_recent_email`) |
+| GET | `/contacts/{email}` | Contact profile + outreach read model |
+| GET | `/mirror/*` | Postgres mirror reporting (summary, meta, deals, catalog, …) |
 
 **Warm cases read-model boundary:** production serves `api.v_warm_case` through `PostgresWarmCaseRepository` when `ORIGENLAB_API_BACKEND=postgres`. Remote contract checks live in `scripts/remote_response_audit.py` (`require_warm_cases_contract`).
 
 **Recent emails read-model boundary:** production serves `api.v_recent_email` through `PostgresEmailRecentRepository` when `ORIGENLAB_API_BACKEND=postgres`. Remote contract checks live in `scripts/remote_response_audit.py` (`require_recent_emails_contract`).
 
 **Equipment read-model boundary:** production serves `api.v_equipment_opportunity_current` when `ORIGENLAB_API_BACKEND=postgres`. See [`../email-pipeline/docs/architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md`](../email-pipeline/docs/architecture/EQUIPMENT_READ_MODEL_BOUNDARY.md) and the operator runbook [`../email-pipeline/docs/runbooks/EQUIPMENT_READ_MODEL_RUNBOOK.md`](../email-pipeline/docs/runbooks/EQUIPMENT_READ_MODEL_RUNBOOK.md).
-| GET | `/contacts/{email}` | API-1.3 / **Dashboard-2** | Read-only contact profile (SQLite or postgres mirror); used by Today side panel |
 
-OpenAPI: `/docs` when the server is running.
+### Quick `curl` examples (local dev)
+
+With the API on `http://127.0.0.1:8001` and SQLite backend (default):
+
+```bash
+curl -sS 'http://127.0.0.1:8001/health' | jq .
+curl -sS 'http://127.0.0.1:8001/operator/status' | jq .
+curl -sS 'http://127.0.0.1:8001/operator/automation-status' | jq .
+curl -sS 'http://127.0.0.1:8001/cases/warm?limit=5' | jq '.meta, (.items | length)'
+curl -sS 'http://127.0.0.1:8001/opportunities/equipment?limit=5' | jq '.meta, (.items | length)'
+curl -sS 'http://127.0.0.1:8001/emails/recent?limit=5' | jq '.total_returned, (.items | length)'
+curl -sS 'http://127.0.0.1:8001/contacts/buyer%40example.cl' | jq '.contact.email'
+```
+
+Production (`https://api.origenlab.cl`) sits behind **Cloudflare Access**. Unauthenticated requests often get **HTTP 302** to the Access login — that is expected. Use a service token or run [`scripts/remote_smoke.sh`](scripts/remote_smoke.sh) / the remote audit scripts with `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`.
+
+### OpenAPI / interactive docs
+
+| Environment | `/docs` | Notes |
+|-------------|---------|-------|
+| **Local dev** | Available at `http://127.0.0.1:8001/docs` when `ORIGENLAB_ENV` is not `production` | Swagger UI for route discovery |
+| **Production** | **Disabled** | Set `ORIGENLAB_API_DISABLE_DOCS=true` or `ORIGENLAB_ENV=production`; API is not publicly browsable behind Access |
+
+Do not assume production exposes Swagger or ReDoc. Treat [`docs/API_RESPONSE_CONTRACT.md`](docs/API_RESPONSE_CONTRACT.md) and the remote response audit as the contract source for deployed shape.
 
 ## Setup
 
