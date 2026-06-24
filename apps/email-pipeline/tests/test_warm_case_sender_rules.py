@@ -349,6 +349,24 @@ def test_security_notification_spanish_and_english_markers() -> None:
     )
 
 
+def test_security_notification_rejects_spoofed_accounts_google_substrings() -> None:
+    assert not looks_like_security_notification(
+        "no-reply@accounts.google.com.evil.test",
+        "Alerta de seguridad",
+        contact_email="no-reply@accounts.google.com.evil.test",
+    )
+    assert not looks_like_security_notification(
+        "Google <no-reply@evil.test>",
+        "security alert accounts.google.com in body",
+        contact_email="no-reply@evil.test",
+    )
+    assert not looks_like_security_notification(
+        "Google <no-reply@evil.test?accounts.google.com>",
+        "Alerta de seguridad",
+        contact_email="no-reply@evil.test",
+    )
+
+
 def test_cyberday_subject_exact_and_normalized_dash_variants() -> None:
     assert looks_like_cyberday_bulk_campaign_subject(CYBERDAY_CAMPAIGN_SUBJECT)
     variant = CYBERDAY_CAMPAIGN_SUBJECT.replace("—", "–")

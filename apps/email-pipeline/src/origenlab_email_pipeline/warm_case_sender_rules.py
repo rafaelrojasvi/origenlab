@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from email.utils import parseaddr
 
 from origenlab_email_pipeline.business_mart import emails_in
 
@@ -439,8 +440,32 @@ def _google_security_domain_alert(domain: str, sub: str) -> bool:
     return "seguridad" in sub or "security" in sub
 
 
+def _email_domain_matches_base(domain: str, base_domain: str) -> bool:
+    """True when domain is exactly base_domain or a proper subdomain of it."""
+    host = (domain or "").strip().lower()
+    base = (base_domain or "").strip().lower()
+    if not host or not base:
+        return False
+    return host == base or host.endswith(f".{base}")
+
+
+def _sender_email_domain(sender: str | None) -> str:
+    """Parse the sender address domain; ignore display-name substring tricks."""
+    if not sender:
+        return ""
+    _display, addr = parseaddr(sender)
+    candidate = (addr or "").strip().lower()
+    if not candidate:
+        found = emails_in(sender)
+        candidate = found[0] if found else ""
+    return email_domain(candidate)
+
+
 def _google_security_sender_alert(snd: str, sub: str) -> bool:
-    return "accounts.google.com" in snd and ("seguridad" in sub or "security" in sub)
+    domain = _sender_email_domain(snd)
+    if not _email_domain_matches_base(domain, "accounts.google.com"):
+        return False
+    return "seguridad" in sub or "security" in sub
 
 
 def looks_like_system_noise_contact(
