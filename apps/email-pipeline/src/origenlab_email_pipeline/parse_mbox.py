@@ -8,11 +8,101 @@ from email.header import decode_header
 from email.message import Message
 from email.utils import parsedate_to_datetime
 from html import unescape
+from html.parser import HTMLParser
 from typing import Literal
 import hashlib
 
 # Source type for body extraction (Phase 2.1)
 BodySourceType = Literal["plain", "html", "mixed", "empty"]
+
+_SKIP_HTML_TAGS = frozenset({"script", "style"})
+_BLOCK_BREAK_TAGS = frozenset({"br", "hr", "p", "div", "tr", "li"})
+_BLOCK_BREAK_END_TAGS = frozenset({"p", "div", "tr", "li", "hr"})
+
+
+class _HtmlTextExtractor(HTMLParser):
+    """Extract visible text from HTML without regex tag stripping."""
+
+    def __init__(self, *, block_breaks: bool = False) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._block_breaks = block_breaks
+        self._skip_depth = 0
+
+    def _append_word_separator(self) -> None:
+        if self._block_breaks or self._skip_depth:
+            return
+        if self._parts and self._parts[-1] != " ":
+            self._parts.append(" ")
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        lowered = tag.lower()
+        if lowered in _SKIP_HTML_TAGS:
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if self._block_breaks and lowered in _BLOCK_BREAK_TAGS:
+            self._parts.append("\n")
+        else:
+            self._append_word_separator()
+
+    def handle_endtag(self, tag: str) -> None:
+        lowered = tag.lower()
+        if lowered in _SKIP_HTML_TAGS:
+            if self._skip_depth:
+                self._skip_depth -= 1
+            return
+        if self._skip_depth:
+            return
+        if self._block_breaks and lowered in _BLOCK_BREAK_END_TAGS:
+            self._parts.append("\n")
+        else:
+            self._append_word_separator()
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        lowered = tag.lower()
+        if lowered in _SKIP_HTML_TAGS:
+            return
+        if self._skip_depth:
+            return
+        if self._block_breaks and lowered in _BLOCK_BREAK_TAGS:
+            self._parts.append("\n")
+        else:
+            self._append_word_separator()
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
+        if data:
+            self._parts.append(data)
+
+    def handle_comment(self, data: str) -> None:
+        return
+
+    def get_text(self) -> str:
+        return "".join(self._parts)
+
+
+def _extract_html_text(html: str, *, block_breaks: bool = False) -> str:
+    parser = _HtmlTextExtractor(block_breaks=block_breaks)
+    try:
+        parser.feed(html)
+        parser.close()
+    except Exception:
+        return unescape(html)
+    return parser.get_text()
+
+
+def html_to_text(html: str) -> str:
+    """Cheap HTML → plain (no extra deps). Good enough for search / LLM context.
+    Kept for backward compatibility; prefer html_to_text_improved for new code."""
+    if not html or not html.strip():
+        return ""
+    text = unescape(_extract_html_text(html, block_breaks=False))
+    text = re.sub(r"[ \t\r\f\v]+", " ", text)
+    text = re.sub(r"\n\s*\n+", "\n\n", text)
+    return text.strip()
 
 
 def decode_payload(raw: bytes | None, charset: str | None) -> str:
@@ -25,20 +115,6 @@ def decode_payload(raw: bytes | None, charset: str | None) -> str:
         return raw.decode(cs, errors="replace")
     except (LookupError, ValueError):
         return raw.decode("utf-8", errors="replace")
-
-
-def html_to_text(html: str) -> str:
-    """Cheap HTML → plain (no extra deps). Good enough for search / LLM context.
-    Kept for backward compatibility; prefer html_to_text_improved for new code."""
-    if not html or not html.strip():
-        return ""
-    html = re.sub(r"(?is)<(script|style)\b[^>]*>.*?</\1>", " ", html)
-    html = re.sub(r"(?is)<!--.*?-->", " ", html)
-    text = re.sub(r"(?s)<[^>]+>", " ", html)
-    text = unescape(text)
-    text = re.sub(r"[ \t\r\f\v]+", " ", text)
-    text = re.sub(r"\n\s*\n+", "\n\n", text)
-    return text.strip()
 
 
 def _normalize_whitespace(text: str) -> str:
@@ -55,16 +131,7 @@ def html_to_text_improved(html: str) -> str:
     """Improved HTML → plain: remove scripts/styles, preserve line breaks from block elements."""
     if not html or not html.strip():
         return ""
-    # Remove script and style contents (case-insensitive)
-    html = re.sub(r"(?is)<script\b[^>]*>.*?</script>", "\n", html)
-    html = re.sub(r"(?is)<style\b[^>]*>.*?</style>", "\n", html)
-    html = re.sub(r"(?is)<!--.*?-->", " ", html)
-    # Preserve meaningful line breaks before stripping tags
-    for tag in (r"<br\s*/?>", r"</p>", r"</div>", r"</tr>", r"</li>", r"<hr\s*/?>"):
-        html = re.sub(tag, "\n", html, flags=re.I)
-    # Strip remaining tags
-    text = re.sub(r"(?s)<[^>]+>", " ", html)
-    text = unescape(text)
+    text = unescape(_extract_html_text(html, block_breaks=True))
     text = re.sub(r"[ \t\r\f\v]+", " ", text)
     text = re.sub(r" *\n *", "\n", text)
     text = re.sub(r"\n\s*\n+", "\n\n", text)

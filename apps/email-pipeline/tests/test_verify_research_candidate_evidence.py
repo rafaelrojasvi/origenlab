@@ -135,3 +135,29 @@ def test_verify_network_failure_does_not_crash(tmp_path: Path) -> None:
         require_relevance_keywords=True,
     )
     assert "source_url_unreachable" in rows[0]["evidence_warning"]
+
+
+def test_strip_html_to_text_removes_script_and_unescapes_entities() -> None:
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "qa"
+        / "verify_research_candidate_evidence.py"
+    )
+    mod = _load_module(script)
+    html = b"<script>secret()</script><p>lab &amp; servicios</p>"
+    text = mod._strip_html_to_text(html)
+    assert "secret" not in text
+    assert "lab & servicios" in text
+
+
+def test_strip_html_to_text_separates_adjacent_paragraphs() -> None:
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "qa"
+        / "verify_research_candidate_evidence.py"
+    )
+    mod = _load_module(script)
+    text = mod._strip_html_to_text(b"<p>Lab</p><p>Services</p>")
+    assert text == "Lab Services"
