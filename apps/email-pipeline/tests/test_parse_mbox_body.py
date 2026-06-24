@@ -12,6 +12,8 @@ from origenlab_email_pipeline.parse_mbox import (
     body_content,
     decode_payload,
     extract_body_structured,
+    html_to_text,
+    html_to_text_improved,
 )
 
 
@@ -133,3 +135,29 @@ def test_extract_broken_charset_decoding():
     # Explicit decode test
     result = decode_payload(b"hello \xff world", "utf-8")
     assert "hello" in result and "world" in result
+
+
+def test_html_to_text_removes_script_and_style() -> None:
+    html = "<script>alert(1)</script><style>.x{}</style><p>Visible</p>"
+    assert "Visible" in html_to_text(html)
+    assert "alert" not in html_to_text(html)
+    assert ".x" not in html_to_text(html)
+
+
+def test_html_to_text_unescapes_entities() -> None:
+    assert html_to_text("<p>Tom &amp; Jerry &lt;3</p>") == "Tom & Jerry <3"
+
+
+def test_html_to_text_improved_preserves_block_spacing() -> None:
+    html = "<p>Line one</p><div>Line two</div><br><li>Item</li>"
+    text = html_to_text_improved(html)
+    assert "Line one" in text
+    assert "Line two" in text
+    assert "Item" in text
+    assert "\n" in text
+
+
+def test_html_to_text_handles_malformed_html_without_crashing() -> None:
+    malformed = "<p>Hello<script>bad<<div>World</p>"
+    assert "Hello" in html_to_text(malformed)
+    assert html_to_text_improved(malformed)

@@ -114,12 +114,10 @@ def _is_third_party_lead_host(host: str) -> bool:
 
 
 def _strip_html_to_text(content: bytes) -> str:
-    txt = content.decode("utf-8", errors="ignore")
-    txt = re.sub(r"(?is)<script[^>]*>.*?</script>", " ", txt)
-    txt = re.sub(r"(?is)<style[^>]*>.*?</style>", " ", txt)
-    txt = re.sub(r"(?s)<[^>]+>", " ", txt)
-    txt = re.sub(r"\s+", " ", txt)
-    return txt.strip()
+    from origenlab_email_pipeline.parse_mbox import html_to_text
+
+    txt = html_to_text(content.decode("utf-8", errors="ignore"))
+    return re.sub(r"\s+", " ", txt).strip()
 
 
 def _extract_pdf_like_text(content: bytes) -> str:
