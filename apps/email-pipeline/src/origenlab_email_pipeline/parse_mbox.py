@@ -29,6 +29,12 @@ class _HtmlTextExtractor(HTMLParser):
         self._block_breaks = block_breaks
         self._skip_depth = 0
 
+    def _append_word_separator(self) -> None:
+        if self._block_breaks or self._skip_depth:
+            return
+        if self._parts and self._parts[-1] != " ":
+            self._parts.append(" ")
+
     def handle_starttag(self, tag: str, attrs) -> None:
         lowered = tag.lower()
         if lowered in _SKIP_HTML_TAGS:
@@ -38,6 +44,8 @@ class _HtmlTextExtractor(HTMLParser):
             return
         if self._block_breaks and lowered in _BLOCK_BREAK_TAGS:
             self._parts.append("\n")
+        else:
+            self._append_word_separator()
 
     def handle_endtag(self, tag: str) -> None:
         lowered = tag.lower()
@@ -49,6 +57,8 @@ class _HtmlTextExtractor(HTMLParser):
             return
         if self._block_breaks and lowered in _BLOCK_BREAK_END_TAGS:
             self._parts.append("\n")
+        else:
+            self._append_word_separator()
 
     def handle_startendtag(self, tag: str, attrs) -> None:
         lowered = tag.lower()
@@ -58,6 +68,8 @@ class _HtmlTextExtractor(HTMLParser):
             return
         if self._block_breaks and lowered in _BLOCK_BREAK_TAGS:
             self._parts.append("\n")
+        else:
+            self._append_word_separator()
 
     def handle_data(self, data: str) -> None:
         if self._skip_depth:

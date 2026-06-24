@@ -149,3 +149,15 @@ def test_strip_html_to_text_removes_script_and_unescapes_entities() -> None:
     text = mod._strip_html_to_text(html)
     assert "secret" not in text
     assert "lab & servicios" in text
+
+
+def test_strip_html_to_text_separates_adjacent_paragraphs() -> None:
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "qa"
+        / "verify_research_candidate_evidence.py"
+    )
+    mod = _load_module(script)
+    text = mod._strip_html_to_text(b"<p>Lab</p><p>Services</p>")
+    assert text == "Lab Services"

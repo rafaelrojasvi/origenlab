@@ -148,6 +148,10 @@ def test_html_to_text_unescapes_entities() -> None:
     assert html_to_text("<p>Tom &amp; Jerry &lt;3</p>") == "Tom & Jerry <3"
 
 
+def test_html_to_text_separates_adjacent_block_tags() -> None:
+    assert html_to_text("<p>Hello</p><p>World</p>") == "Hello World"
+
+
 def test_html_to_text_improved_preserves_block_spacing() -> None:
     html = "<p>Line one</p><div>Line two</div><br><li>Item</li>"
     text = html_to_text_improved(html)
