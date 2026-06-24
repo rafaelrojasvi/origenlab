@@ -314,12 +314,43 @@ def _normalize_channel_value(channel_type: str, raw: str) -> str:
     return s
 
 
+def _normalize_url_hostname(host: str) -> str:
+    normalized = host.strip().lower().split(":", 1)[0]
+    if normalized.startswith("www."):
+        normalized = normalized[4:]
+    return normalized
+
+
+def _hostname_matches_domain(host: str, domain: str) -> bool:
+    normalized = _normalize_url_hostname(host)
+    base = domain.strip().lower()
+    if not normalized or not base:
+        return False
+    return normalized == base or normalized.endswith(f".{base}")
+
+
+def _url_hostname(value: str) -> str | None:
+    raw = value.strip()
+    if not raw or raw.lower().startswith("//"):
+        return None
+    if not re.match(r"https?://", raw, re.I):
+        return None
+    try:
+        parsed = urlparse(raw)
+    except ValueError:
+        return None
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
+        return None
+    return parsed.hostname.lower()
+
+
 def infer_channel_type(key: str, value: str) -> str:
     kl = key.lower()
     v = value.lower()
     if "@" in value:
         return "email"
-    if "linkedin.com" in v:
+    linkedin_host = _url_hostname(value)
+    if linkedin_host and _hostname_matches_domain(linkedin_host, "linkedin.com"):
         return "linkedin"
     if "form" in kl or "formulario" in kl:
         return "form"

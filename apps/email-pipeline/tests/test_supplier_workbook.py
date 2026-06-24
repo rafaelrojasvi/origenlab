@@ -315,6 +315,11 @@ def test_infer_channel_type() -> None:
     assert infer_channel_type("email contacto", "sales@x.com") == "email"
     assert infer_channel_type("formulario", "https://x.com/f") == "form"
     assert infer_channel_type("teléfono", "+56911112222") == "phone"
+    assert infer_channel_type("linkedin", "https://www.linkedin.com/in/acme-lab") == "linkedin"
+    assert infer_channel_type("linkedin", "https://uk.linkedin.com/company/acme") == "linkedin"
+    assert infer_channel_type("linkedin", "https://linkedin.com.evil.test/profile") == "web"
+    assert infer_channel_type("linkedin", "https://evil.test/?next=linkedin.com") == "web"
+    assert infer_channel_type("linkedin", "not-a-url linkedin.com") == "other"
 
 
 def test_extract_urls_from_row() -> None:

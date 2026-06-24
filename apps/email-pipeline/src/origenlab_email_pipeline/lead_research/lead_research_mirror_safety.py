@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlparse
+
+_MIRROR_URL_RE = re.compile(
+    r"https?://[^\s<>\"')\]]+|www\.[^\s<>\"')\]]+",
+    re.IGNORECASE,
+)
 
 FORBIDDEN_MIRROR_TEXT_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p, re.I)
@@ -14,7 +20,6 @@ FORBIDDEN_MIRROR_TEXT_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"\biban\b",
         r"\bbeneficiario\b",
         r"\brut\b",
-        r"mail\.google",
         r"source_file",
         r"transfer_id",
         r"operation_id",
@@ -73,14 +78,64 @@ class LeadResearchMirrorSafetyError(ValueError):
     """Raised when mirror payload contains forbidden content."""
 
 
+def _normalize_url_hostname(host: str) -> str:
+    normalized = host.strip().lower().split(":", 1)[0]
+    if normalized.startswith("www."):
+        normalized = normalized[4:]
+    return normalized
+
+
+def _is_google_mailbox_host(host: str) -> bool:
+    normalized = _normalize_url_hostname(host)
+    return normalized == "mail.google.com" or normalized.endswith(".mail.google.com")
+
+
+def _is_google_web_property_host(host: str) -> bool:
+    normalized = _normalize_url_hostname(host)
+    if _is_google_mailbox_host(normalized):
+        return True
+    return normalized == "google.com" or normalized.endswith(".google.com")
+
+
+def _parse_mirror_url_token(raw: str):
+    token = raw.strip().rstrip(").,;]\"'")
+    if token.lower().startswith("www."):
+        token = f"https://{token}"
+    if not re.match(r"https?://", token, re.I):
+        return None
+    try:
+        parsed = urlparse(token)
+    except ValueError:
+        return None
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
+        return None
+    return parsed
+
+
+def _iter_mirror_urls(value: str):
+    for match in _MIRROR_URL_RE.finditer(value):
+        parsed = _parse_mirror_url_token(match.group(0))
+        if parsed is not None:
+            yield parsed
+
+
+def _is_forbidden_gmail_mirror_url(parsed) -> bool:
+    host = parsed.hostname or ""
+    if _is_google_mailbox_host(host):
+        return True
+    path = parsed.path or ""
+    return path.startswith("/mail/u/") and _is_google_web_property_host(host)
+
+
 def assert_mirror_text_safe(value: str, *, field: str) -> None:
     for pattern in FORBIDDEN_MIRROR_TEXT_PATTERNS:
         if pattern.search(value):
             raise LeadResearchMirrorSafetyError(
                 f"forbidden pattern in {field}: matched {pattern.pattern!r}"
             )
-    if "mail.google.com" in value.lower() or "/mail/u/" in value.lower():
-        raise LeadResearchMirrorSafetyError(f"forbidden gmail URL in {field}")
+    for parsed in _iter_mirror_urls(value):
+        if _is_forbidden_gmail_mirror_url(parsed):
+            raise LeadResearchMirrorSafetyError(f"forbidden gmail URL in {field}")
 
 
 def assert_mirror_row_safe(row: dict[str, Any], *, table: str) -> None:
