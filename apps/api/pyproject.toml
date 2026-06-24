@@ -9,7 +9,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2",
-    "pydantic-settings>=2",
+    "pydantic-settings>=2.14.2",
     # Imported at app startup by /mirror route dependencies.
     "psycopg[binary]>=3.2",
 ]

@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "orjson>=3.9",
     "pydantic>=2",
-    "pydantic-settings>=2",
+    "pydantic-settings>=2.14.2",
     "python-dotenv>=1",
     "tqdm>=4.66",
     "pymupdf>=1.24",
