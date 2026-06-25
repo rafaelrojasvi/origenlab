@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from origenlab_api.schemas.operator import PathInfo
+
 
 class CronNote(BaseModel):
     note: str
@@ -14,7 +16,7 @@ class CronNote(BaseModel):
 class OperatorAutomationStatusResponse(BaseModel):
     generated_at_utc: str
     active_current_dir: str
-    active_current_dir_info: dict[str, Any] | None = None
+    active_current_dir_info: PathInfo | None = None
     path_redaction_applied: bool = True
     verdict: str
     daily_core: dict[str, Any] = Field(default_factory=dict)
