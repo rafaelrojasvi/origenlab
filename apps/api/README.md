@@ -1,6 +1,8 @@
 # OrigenLab API (`apps/api`)
 
 > **Operator handoff (v1 freeze):** [../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md](../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md)
+>
+> **Portfolio demo guide:** [docs/PORTFOLIO_DEMO_GUIDE.md](docs/PORTFOLIO_DEMO_GUIDE.md)
 
 Read-only **operator API** over SQLite and `reports/out/active/current`. This app is separated from `apps/email-pipeline` so daily ingest, DNR refresh, and mutation CLIs stay unchanged.
 
@@ -217,95 +219,3 @@ GitHub Actions workflow: [`.github/workflows/api.yml`](../../.github/workflows/a
 CI `./scripts/validate.sh` mirrors the build step with a no-dev import smoke before pytest.
 
 ### Remote production smoke
-
-`./scripts/remote_smoke.sh` checks a deployed API (default `https://api.origenlab.cl`) behind Cloudflare Access.
-
-Unauthenticated `GET /health` often returns **HTTP 302** to `cloudflareaccess.com` when Access is enabled — that is expected protection, not an API outage. Authenticated checks use Cloudflare **service tokens** (`CF-Access-Client-Id` / `CF-Access-Client-Secret` headers). Configure a **Service Auth** policy in Cloudflare Access for the token used by this script.
-
-```bash
-cd apps/api
-./scripts/remote_smoke.sh
-```
-
-Protection-only (no production secrets; exits 0 after Check A):
-
-```bash
-cd apps/api
-./scripts/remote_smoke.sh
-```
-
-Authenticated health (requires service token env vars):
-
-```bash
-cd apps/api
-CF_ACCESS_CLIENT_ID=... \
-CF_ACCESS_CLIENT_SECRET=... \
-./scripts/remote_smoke.sh
-```
-
-Optional operator route (still read-only; adds `GET /operator/status`):
-
-```bash
-cd apps/api
-ORIGENLAB_REMOTE_SMOKE_OPERATOR=1 \
-CF_ACCESS_CLIENT_ID=... \
-CF_ACCESS_CLIENT_SECRET=... \
-./scripts/remote_smoke.sh
-```
-
-Override base URL for staging or local smoke:
-
-```bash
-ORIGENLAB_API_BASE_URL=http://127.0.0.1:8001 ./scripts/remote_smoke.sh
-```
-
-## Dashboard v1–v2 backend matrix
-
-Dashboard v1 + **Dashboard-2 contact drilldown** use **this app only** (`apps/api` on port **8001**).
-
-| Backend | Env | Smoke |
-|---------|-----|-------|
-| SQLite (default) | `ORIGENLAB_API_BACKEND` unset or `sqlite` | `dashboard_v1_http_smoke.py --expect-backend sqlite` |
-| Postgres mirror | `ORIGENLAB_API_BACKEND=postgres` + disposable `ORIGENLAB_POSTGRES_URL` | `--expect-backend postgres` |
-
-`dashboard_v1_http_smoke.py` also calls **`GET /contacts/{email}`** (email from warm/equipment rows; skips with WARN if none).
-
-Full procedure: [`../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md`](../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md) · matrix detail: [`../dashboard/docs/BACKEND_MATRIX_VALIDATION.md`](../dashboard/docs/BACKEND_MATRIX_VALIDATION.md).
-
-**Freeze validation:** SQLite and disposable Postgres (`:5433`, fresh DB) contact smokes **passed**. Gmail / production scratch Postgres not used.
-
-```bash
-# SQLite smoke (TestClient + contact route)
-uv run python scripts/dashboard_v1_http_smoke.py --expect-backend sqlite
-
-# Postgres smoke (disposable ORIGENLAB_POSTGRES_URL only)
-ORIGENLAB_API_BACKEND=postgres ORIGENLAB_POSTGRES_URL='postgresql+psycopg://…@127.0.0.1:5433/origenlab_dashboard2_test' \
-  uv run python scripts/dashboard_v1_http_smoke.py --expect-backend postgres
-```
-
-Dashboard HTTP smokes: `npm run smoke:contacts`, `EXPECT_BACKEND=postgres npm run smoke:contacts`, `npm run smoke:proxy` — see dashboard README.
-
-**After postgres validation:** unset `ORIGENLAB_API_BACKEND` and postgres URLs; restart this app on SQLite (`ORIGENLAB_SQLITE_PATH` only).
-
-## API-3 mirror relocation (Phase 6 complete)
-
-Postgres mirror reporting lives under **`GET /mirror/*`** on this app. Legacy email-pipeline `:8000` API **removed** — [docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md](docs/API-3_PHASE6_LEGACY_REMOVAL_COMPLETE.md). **Strict gate:** `scripts/api3_phase6_grep_gate.sh`.
-
-Mirror reporting smoke (GET only; requires this app on :8001 + disposable `ORIGENLAB_POSTGRES_URL`):
-
-```bash
-cd apps/dashboard && npm run smoke:mirror
-```
-
-**Live mirror smoke** (disposable Postgres on `:5433`; `:8001` only):
-
-```bash
-apps/api/scripts/run_mirror_dual_server_parity.sh
-```
-
-Report (historical): [docs/archive/api3/API-3_PHASE3B_LIVE_PARITY_REPORT.md](docs/archive/api3/API-3_PHASE3B_LIVE_PARITY_REPORT.md).
-
-```bash
-cd apps/api
-uv run python scripts/mirror_parity_smoke.py --mirror-base http://127.0.0.1:8001
-```
