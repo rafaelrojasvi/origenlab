@@ -15,13 +15,19 @@ from origenlab_email_pipeline.postgres_dashboard_api.schemas import (
 )
 
 
+def _configured_marker(value: str) -> str:
+    return "<configured>" if str(value or "").strip() else "<not configured>"
+
+
 def build_health_dependencies_response(
     *,
     postgres_url: str,
     postgres_url_redacted: str,
     sqlite_path: Path,
 ) -> HealthDependenciesResponse:
+    """Build demo-safe dependency health without leaking infra URLs or local paths."""
     deps: list[DependencyStatus] = []
+    _ = postgres_url_redacted  # kept for shared API compatibility; response uses a safer marker.
 
     try:
         with postgres_connection(postgres_url) as conn:
@@ -58,7 +64,7 @@ def build_health_dependencies_response(
             DependencyStatus(
                 name="sqlite",
                 status="skipped",
-                detail=f"file not found: {sqlite_path}",
+                detail="sqlite file not configured or not found",
             )
         )
 
@@ -72,5 +78,5 @@ def build_health_dependencies_response(
     return HealthDependenciesResponse(
         status=overall,  # type: ignore[arg-type]
         dependencies=deps,
-        postgres_url_redacted=postgres_url_redacted,
+        postgres_url_redacted=_configured_marker(postgres_url),
     )
