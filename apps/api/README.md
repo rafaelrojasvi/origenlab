@@ -1,6 +1,8 @@
 # OrigenLab API (`apps/api`)
 
 > **Operator handoff (v1 freeze):** [../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md](../dashboard/docs/V1_FREEZE_OPERATOR_HANDOFF.md)
+>
+> **Portfolio demo guide:** [docs/PORTFOLIO_DEMO_GUIDE.md](docs/PORTFOLIO_DEMO_GUIDE.md)
 
 Read-only **operator API** over SQLite and `reports/out/active/current`. This app is separated from `apps/email-pipeline` so daily ingest, DNR refresh, and mutation CLIs stay unchanged.
 
